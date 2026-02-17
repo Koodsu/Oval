@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  podMembers PodMember[]
+  messages   Message[]
+}
+
+model Activity {
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  defaultLocation String
+  createdAt       DateTime @default(now())
+
+  pods Pod[]
+}
+
+// PodStatus values: "FORMING" | "LOCKED" | "COMPLETED"
+
+model Pod {
+  id         String   @id @default(uuid())
+  activityId String
+  meetupTime DateTime
+  location   String
+  status     String   @default("FORMING")
+  createdAt  DateTime @default(now())
+
+  activity   Activity    @relation(fields: [activityId], references: [id])
+  members    PodMember[]
+  messages   Message[]
+}
+
+model PodMember {
+  id       String   @id @default(uuid())
+  podId    String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  pod  Pod  @relation(fields: [podId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([podId, userId])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  podId     String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  pod  Pod  @relation(fields: [podId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
