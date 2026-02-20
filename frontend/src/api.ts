@@ -53,6 +53,9 @@ export const getActivities = () =>
   request<import('./types').Activity[]>('/activities');
 
 // Pods
+export const getMyPods = () =>
+  request<import('./types').Pod[]>('/pods/mine');
+
 export const getPodsByActivity = (activityId: string) =>
   request<import('./types').Pod[]>(`/pods?activityId=${activityId}`);
 

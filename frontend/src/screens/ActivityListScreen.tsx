@@ -3,15 +3,15 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Alert,
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { getActivities } from '../api';
 import { Activity } from '../types';
@@ -21,10 +21,9 @@ import ActivityCard from '../components/ActivityCard';
 import FadeIn from '../components/FadeIn';
 import { colors, spacing, typography } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ActivityList'>;
-
-export default function ActivityListScreen({ navigation }: Props) {
-  const { signOut, user } = useAuth();
+export default function ActivityListScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +66,6 @@ export default function ActivityListScreen({ navigation }: Props) {
             <Text style={styles.subtitle}>Find your next crew</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-          <Ionicons name="log-out-outline" size={22} color={colors.textTertiary} />
-        </TouchableOpacity>
       </View>
 
       {/* Section */}
@@ -146,16 +142,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...typography.caption,
-  },
-  signOutButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   sectionTitle: {
     ...typography.label,
