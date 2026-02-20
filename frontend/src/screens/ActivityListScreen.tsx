@@ -9,16 +9,23 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { getActivities } from '../api';
 import { Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
+import Avatar from '../components/Avatar';
+import ActivityCard from '../components/ActivityCard';
+import FadeIn from '../components/FadeIn';
+import { colors, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActivityList'>;
 
 export default function ActivityListScreen({ navigation }: Props) {
   const { signOut, user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,29 +49,37 @@ export default function ActivityListScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1a1a1a" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
+  const firstName = user?.name?.split(' ')[0] ?? '';
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Bridge</Text>
-          <Text style={styles.subtitle}>Hey, {user?.name?.split(' ')[0]} 👋</Text>
+        <View style={styles.headerLeft}>
+          <Avatar name={user?.name ?? 'U'} size={42} />
+          <View style={styles.headerText}>
+            <Text style={styles.greeting}>Hey, {firstName}</Text>
+            <Text style={styles.subtitle}>Find your next crew</Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={signOut}>
-          <Text style={styles.signOut}>Sign out</Text>
+        <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
+          <Ionicons name="log-out-outline" size={22} color={colors.textTertiary} />
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>What do you want to do?</Text>
+      {/* Section */}
+      <Text style={styles.sectionTitle}>Explore Activities</Text>
 
       <FlatList
         data={activities}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -72,31 +87,27 @@ export default function ActivityListScreen({ navigation }: Props) {
               setRefreshing(true);
               fetchActivities();
             }}
+            tintColor={colors.primary}
           />
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              navigation.navigate('PodList', {
-                activityId: item.id,
-                activityTitle: item.title,
-              })
-            }
-            activeOpacity={0.75}
-          >
-            <View style={styles.cardContent}>
-              <View style={styles.cardText}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardDesc}>{item.description}</Text>
-                <Text style={styles.cardLocation}>📍 {item.defaultLocation}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </TouchableOpacity>
+        renderItem={({ item, index }) => (
+          <FadeIn delay={index * 70}>
+            <ActivityCard
+              activity={item}
+              onPress={() =>
+                navigation.navigate('PodList', {
+                  activityId: item.id,
+                  activityTitle: item.title,
+                })
+              }
+            />
+          </FadeIn>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>No activities available yet.</Text>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="leaf-outline" size={48} color={colors.border} />
+            <Text style={styles.emptyText}>No activities available yet</Text>
+          </View>
         }
       />
     </View>
@@ -106,96 +117,62 @@ export default function ActivityListScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.bg,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.bg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 2,
-  },
-  signOut: {
-    fontSize: 14,
-    color: '#aaa',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#888',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardContent: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm + 4,
   },
-  cardText: {
-    flex: 1,
+  headerText: {
+    gap: 2,
   },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 4,
+  greeting: {
+    ...typography.h2,
   },
-  cardDesc: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 6,
+  subtitle: {
+    ...typography.caption,
   },
-  cardLocation: {
-    fontSize: 13,
-    color: '#999',
+  signOutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  chevron: {
-    fontSize: 26,
-    color: '#ccc',
-    marginLeft: 10,
-    fontWeight: '300',
+  sectionTitle: {
+    ...typography.label,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
-  empty: {
-    textAlign: 'center',
-    color: '#aaa',
-    marginTop: 60,
+  list: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    marginTop: 80,
+    gap: spacing.md,
+  },
+  emptyText: {
+    ...typography.caption,
     fontSize: 15,
   },
 });

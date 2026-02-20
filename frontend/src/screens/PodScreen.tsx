@@ -10,26 +10,26 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { getPod, getMessages, sendMessage } from '../api';
 import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
+import Avatar, { AvatarStack } from '../components/Avatar';
+import StatusBadge from '../components/StatusBadge';
+import { colors, spacing, radii, shadows, typography } from '../theme';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
-
-const STATUS_COLORS: Record<string, string> = {
-  FORMING: '#f59e0b',
-  LOCKED: '#3b82f6',
-  COMPLETED: '#6b7280',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  FORMING: 'Forming',
-  LOCKED: 'Locked',
-  COMPLETED: 'Completed',
-};
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -41,6 +41,16 @@ function formatTime(iso: string) {
   });
 }
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function PodScreen({ route }: Props) {
   const { podId } = route.params;
   const { user } = useAuth();
@@ -50,6 +60,7 @@ export default function PodScreen({ route }: Props) {
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [headerExpanded, setHeaderExpanded] = useState(true);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -80,25 +91,30 @@ export default function PodScreen({ route }: Props) {
     };
     init();
 
-    // Poll messages every 3 seconds
     pollRef.current = setInterval(fetchMessages, 3000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [fetchPod, fetchMessages]);
 
+  const toggleHeader = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setHeaderExpanded(!headerExpanded);
+  };
+
   const handleSend = async () => {
     const text = messageText.trim();
     if (!text) return;
     setMessageText('');
     setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const msg = await sendMessage(podId, text);
       setMessages((prev) => [...prev, msg]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send message');
-      setMessageText(text); // restore on failure
+      setMessageText(text);
     } finally {
       setSending(false);
     }
@@ -107,89 +123,167 @@ export default function PodScreen({ route }: Props) {
   if (loading || !pod) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1a1a1a" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
-
-  const statusColor = STATUS_COLORS[pod.status] ?? '#888';
-  const memberCount = pod.members.length;
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 95 : 0}
     >
-      {/* Pod Info Header */}
-      <View style={styles.infoSection}>
-        <View style={styles.titleRow}>
-          <Text style={styles.activityTitle}>{pod.activity?.title ?? 'Pod'}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{STATUS_LABELS[pod.status]}</Text>
+      {/* Collapsible Pod Info Header */}
+      <TouchableOpacity
+        style={[styles.infoSection, shadows.sm]}
+        onPress={toggleHeader}
+        activeOpacity={0.8}
+      >
+        <View style={styles.infoTopRow}>
+          <View style={styles.infoTitleArea}>
+            <Text style={styles.activityTitle} numberOfLines={1}>
+              {pod.activity?.title ?? 'Pod'}
+            </Text>
+            <StatusBadge status={pod.status} size="md" />
           </View>
+          <Ionicons
+            name={headerExpanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textTertiary}
+          />
         </View>
 
-        <Text style={styles.meta}>🕐 {formatTime(pod.meetupTime)}</Text>
-        <Text style={styles.meta}>📍 {pod.location}</Text>
-
-        <View style={styles.membersRow}>
-          <Text style={styles.membersLabel}>Members {memberCount}/4</Text>
-          <View style={styles.membersList}>
-            {pod.members.map((m) => (
-              <View key={m.id} style={styles.memberChip}>
-                <Text style={styles.memberChipText}>
-                  {m.user.name.split(' ')[0]}
-                  {m.user.id === user?.id ? ' (you)' : ''}
-                </Text>
-              </View>
-            ))}
+        {headerExpanded && (
+          <View style={styles.infoExpanded}>
+            <View style={styles.metaRow}>
+              <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+              <Text style={styles.metaText}>{formatTime(pod.meetupTime)}</Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+              <Text style={styles.metaText}>{pod.location}</Text>
+            </View>
+            <View style={styles.membersSection}>
+              <Text style={styles.membersLabel}>
+                Members {pod.members.length}/4
+              </Text>
+              <AvatarStack
+                members={pod.members}
+                currentUserId={user?.id}
+                size={30}
+              />
+            </View>
           </View>
-        </View>
-      </View>
+        )}
+      </TouchableOpacity>
 
-      {/* Chat */}
+      {/* Chat Messages */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.chatList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <Text style={styles.emptyChat}>No messages yet. Say hi!</Text>
+          <View style={styles.emptyChatContainer}>
+            <Ionicons name="chatbubbles-outline" size={48} color={colors.border} />
+            <Text style={styles.emptyChatTitle}>No messages yet</Text>
+            <Text style={styles.emptyChatSubtitle}>Say hi to your pod!</Text>
+          </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const isMe = item.user.id === user?.id;
+          const showAvatar =
+            !isMe &&
+            (index === 0 || messages[index - 1].user.id !== item.user.id);
+          const isLastInGroup =
+            index === messages.length - 1 ||
+            messages[index + 1].user.id !== item.user.id;
+
           return (
-            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-              {!isMe && <Text style={styles.senderName}>{item.user.name}</Text>}
-              <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
+            <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
+              {!isMe && (
+                <View style={styles.avatarSlot}>
+                  {showAvatar ? (
+                    <Avatar name={item.user.name} size={28} />
+                  ) : null}
+                </View>
+              )}
+              <View style={styles.bubbleColumn}>
+                {showAvatar && !isMe && (
+                  <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
+                )}
+                {isMe ? (
+                  <LinearGradient
+                    colors={[...colors.chatMe]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                      styles.bubble,
+                      styles.bubbleMe,
+                      !isLastInGroup && styles.bubbleMeGrouped,
+                    ]}
+                  >
+                    <Text style={styles.bubbleTextMe}>{item.content}</Text>
+                  </LinearGradient>
+                ) : (
+                  <View
+                    style={[
+                      styles.bubble,
+                      styles.bubbleThem,
+                      !isLastInGroup && styles.bubbleThemGrouped,
+                    ]}
+                  >
+                    <Text style={styles.bubbleTextThem}>{item.content}</Text>
+                  </View>
+                )}
+                {isLastInGroup && (
+                  <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
+                    {timeAgo(item.createdAt)}
+                  </Text>
+                )}
+              </View>
             </View>
           );
         }}
       />
 
-      {/* Message Input */}
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.textInput}
-          placeholder="Message..."
-          placeholderTextColor="#aaa"
-          value={messageText}
-          onChangeText={setMessageText}
-          multiline
-          maxLength={500}
-        />
+      {/* Input Bar */}
+      <View style={[styles.inputBar, shadows.sm]}>
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Message..."
+            placeholderTextColor={colors.textTertiary}
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+            maxLength={500}
+          />
+        </View>
         <TouchableOpacity
-          style={[styles.sendButton, (!messageText.trim() || sending) && styles.sendButtonDisabled]}
           onPress={handleSend}
           disabled={!messageText.trim() || sending}
+          activeOpacity={0.7}
         >
-          {sending ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.sendButtonText}>Send</Text>
-          )}
+          <LinearGradient
+            colors={
+              !messageText.trim() || sending
+                ? ['#cbd5e1', '#cbd5e1']
+                : [...colors.gradient]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.sendButton}
+          >
+            {sending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="send" size={18} color="#fff" />
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -199,146 +293,181 @@ export default function PodScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.bg,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.bg,
   },
+
+  // Info Header
   infoSection: {
-    backgroundColor: '#fff',
-    padding: 16,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.borderLight,
   },
-  titleRow: {
+  infoTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+  },
+  infoTitleArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+    flex: 1,
+    marginRight: spacing.sm,
   },
   activityTitle: {
+    ...typography.h3,
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
     flex: 1,
-    marginRight: 10,
   },
-  statusBadge: {
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  infoExpanded: {
+    marginTop: spacing.sm + 4,
   },
-  statusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  meta: {
-    fontSize: 13,
-    color: '#555',
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 4,
   },
-  membersRow: {
-    marginTop: 10,
+  metaText: {
+    ...typography.caption,
+    fontSize: 13,
+  },
+  membersSection: {
+    marginTop: spacing.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   membersLabel: {
+    ...typography.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 6,
+    color: colors.textSecondary,
   },
-  membersList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  memberChip: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  memberChipText: {
-    fontSize: 13,
-    color: '#333',
-  },
+
+  // Chat
   chatList: {
-    padding: 16,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  emptyChat: {
-    textAlign: 'center',
-    color: '#aaa',
-    marginTop: 40,
-    fontSize: 14,
+  emptyChatContainer: {
+    alignItems: 'center',
+    marginTop: 80,
+    gap: spacing.sm,
   },
-  bubble: {
-    maxWidth: '75%',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginBottom: 8,
+  emptyChatTitle: {
+    ...typography.h3,
+    color: colors.textSecondary,
   },
-  bubbleThem: {
-    backgroundColor: '#fff',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
+  emptyChatSubtitle: {
+    ...typography.caption,
   },
-  bubbleMe: {
-    backgroundColor: '#1a1a1a',
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-  },
-  senderName: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 3,
-  },
-  bubbleText: {
-    fontSize: 15,
-    color: '#1a1a1a',
-    lineHeight: 21,
-  },
-  bubbleTextMe: {
-    color: '#fff',
-  },
-  inputRow: {
+  messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 10,
-    backgroundColor: '#fff',
+    marginBottom: 3,
+  },
+  messageRowMe: {
+    justifyContent: 'flex-end',
+  },
+  avatarSlot: {
+    width: 32,
+    marginRight: 6,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  bubbleColumn: {
+    maxWidth: '75%',
+  },
+  senderName: {
+    ...typography.tiny,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 2,
+    marginLeft: 4,
+  },
+  bubble: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  bubbleMe: {
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 6,
+  },
+  bubbleMeGrouped: {
+    borderBottomRightRadius: 18,
+    borderTopRightRadius: 18,
+  },
+  bubbleThem: {
+    backgroundColor: colors.chatThem,
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 6,
+  },
+  bubbleThemGrouped: {
+    borderBottomLeftRadius: 18,
+    borderTopLeftRadius: 18,
+  },
+  bubbleTextMe: {
+    ...typography.body,
+    color: '#ffffff',
+  },
+  bubbleTextThem: {
+    ...typography.body,
+    color: colors.text,
+  },
+  timestamp: {
+    ...typography.tiny,
+    fontSize: 10,
+    marginTop: 2,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  timestampMe: {
+    textAlign: 'right',
+    marginRight: 4,
+    marginLeft: 0,
+  },
+
+  // Input Bar
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    gap: 8,
+    borderTopColor: colors.borderLight,
+    gap: spacing.sm,
+  },
+  inputWrapper: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
   },
   textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
     fontSize: 15,
-    color: '#1a1a1a',
+    color: colors.text,
+    paddingVertical: 10,
     maxHeight: 100,
+    lineHeight: 20,
   },
   sendButton: {
-    backgroundColor: '#1a1a1a',
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 60,
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
+    justifyContent: 'center',
   },
 });

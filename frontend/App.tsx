@@ -12,6 +12,7 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import ActivityListScreen from './src/screens/ActivityListScreen';
 import PodListScreen from './src/screens/PodListScreen';
 import PodScreen from './src/screens/PodScreen';
+import { colors } from './src/theme';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -28,8 +29,8 @@ function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#1a1a1a" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -38,33 +39,40 @@ function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: '#fff' },
-          headerTintColor: '#1a1a1a',
-          headerTitleStyle: { fontWeight: '700' },
+          headerStyle: { backgroundColor: colors.bg },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
           headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+          contentStyle: { backgroundColor: colors.bg },
+          animation: 'slide_from_right',
         }}
       >
         {user ? (
-          // Authenticated screens
           <>
             <Stack.Screen
               name="ActivityList"
               component={ActivityListScreen}
-              options={{ title: 'Bridge', headerShown: false }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="PodList"
               component={PodListScreen}
-              options={({ route }) => ({ title: route.params.activityTitle })}
+              options={({ route }) => ({
+                title: route.params.activityTitle,
+                headerLargeTitle: false,
+              })}
             />
             <Stack.Screen
               name="Pod"
               component={PodScreen}
-              options={{ title: 'Your Pod' }}
+              options={{
+                title: 'Your Pod',
+                headerBlurEffect: 'light',
+              }}
             />
           </>
         ) : (
-          // Auth screens
           <>
             <Stack.Screen
               name="Login"
@@ -74,7 +82,7 @@ function AppNavigator() {
             <Stack.Screen
               name="Register"
               component={RegisterScreen}
-              options={{ title: 'Register' }}
+              options={{ headerShown: false }}
             />
           </>
         )}

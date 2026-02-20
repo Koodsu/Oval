@@ -5,15 +5,19 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { register } from '../api';
 import { useAuth } from '../context/AuthContext';
+import GradientButton from '../components/GradientButton';
+import { colors, spacing, radii, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
@@ -23,6 +27,7 @@ export default function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -41,97 +46,181 @@ export default function RegisterScreen({ navigation }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <LinearGradient
+      colors={['#eef2ff', '#e0e7ff', '#f5f3ff']}
+      style={styles.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
     >
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Jump in and meet people.</Text>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <View style={styles.heroSection}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="git-network-outline" size={32} color={colors.primary} />
+            </View>
+            <Text style={styles.brand}>Bridge</Text>
+            <Text style={styles.tagline}>Jump in and meet people</Text>
+          </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Name"
-        placeholderTextColor="#888"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#888"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#888"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+          <View style={[styles.card, shadows.lg]}>
+            <Text style={styles.cardTitle}>Create account</Text>
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Create Account</Text>
-        )}
-      </TouchableOpacity>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Full name"
+                placeholderTextColor={colors.textTertiary}
+                value={name}
+                onChangeText={setName}
+                autoCorrect={false}
+              />
+            </View>
 
-      <TouchableOpacity onPress={() => navigation.goBack()}>
-        <Text style={styles.link}>Already have an account? Log in</Text>
-      </TouchableOpacity>
-    </KeyboardAvoidingView>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="mail-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={colors.textTertiary}
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={18}
+                  color={colors.textTertiary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <GradientButton
+              title="Create Account"
+              onPress={handleRegister}
+              loading={loading}
+              disabled={loading}
+            />
+
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.linkButton}
+            >
+              <Text style={styles.linkText}>
+                Already have an account?{' '}
+                <Text style={styles.linkBold}>Log in</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
     flex: 1,
-    backgroundColor: '#fff',
+  },
+  gradient: {
+    flex: 1,
+  },
+  scroll: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxl,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 6,
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
-  subtitle: {
+  logoCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    ...shadows.md,
+  },
+  brand: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  tagline: {
     fontSize: 15,
-    color: '#666',
-    marginBottom: 36,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  inputIcon: {
+    marginRight: spacing.sm,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1a1a1a',
-    marginBottom: 14,
-  },
-  button: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
+    flex: 1,
     paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    color: colors.text,
   },
-  link: {
-    textAlign: 'center',
-    color: '#555',
+  eyeButton: {
+    padding: spacing.xs,
+  },
+  linkButton: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  linkText: {
     fontSize: 14,
+    color: colors.textSecondary,
+  },
+  linkBold: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
