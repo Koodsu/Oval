@@ -14,12 +14,15 @@ Bridge is a structured micro-group formation app for college students. Users bro
 6. [Auth Flow](#6-auth-flow)
 7. [Pod Lifecycle](#7-pod-lifecycle)
 8. [Frontend Structure](#8-frontend-structure)
-9. [Navigation Structure](#9-navigation-structure)
-10. [State Management](#10-state-management)
-11. [How Frontend Talks to Backend](#11-how-frontend-talks-to-backend)
-12. [API Request Lifecycle](#12-api-request-lifecycle)
-13. [Chat — Polling Architecture](#13-chat--polling-architecture)
-14. [Key Design Decisions](#14-key-design-decisions)
+9. [Design System](#9-design-system)
+10. [Component Library](#10-component-library)
+11. [Screen-by-Screen UI](#11-screen-by-screen-ui)
+12. [Navigation Structure](#12-navigation-structure)
+13. [State Management](#13-state-management)
+14. [How Frontend Talks to Backend](#14-how-frontend-talks-to-backend)
+15. [API Request Lifecycle](#15-api-request-lifecycle)
+16. [Chat — Polling Architecture](#16-chat--polling-architecture)
+17. [Key Design Decisions](#17-key-design-decisions)
 
 ---
 
@@ -55,45 +58,65 @@ The frontend and backend are separate workspaces within the same repo. They comm
 ## 2. Repository Structure
 
 ```
-Bridge/                        ← git repo root
+Bridge/                          ← project root
   .gitignore
   README.md
-  ARCHITECTURE.md
+  ARCHITECTURE.md                ← this file
   backend/
     src/
-      server.ts                ← Express app entry point
-      prisma.ts                ← Singleton PrismaClient
+      server.ts                  ← Express app entry point
+      prisma.ts                  ← Singleton PrismaClient
       middleware/
-        auth.ts                ← JWT verification middleware
+        auth.ts                  ← JWT verification middleware
       routes/
-        auth.ts                ← POST /auth/register, /login
-        activities.ts          ← GET /activities
-        pods.ts                ← GET /pods, POST /pods/join, GET /pods/:id
-        messages.ts            ← GET/POST /pods/:id/messages
+        auth.ts                  ← POST /auth/register, /login
+        activities.ts            ← GET /activities
+        pods.ts                  ← GET /pods/mine, GET /pods, POST /pods/join, GET /pods/:id
+        messages.ts              ← GET/POST /pods/:id/messages
     prisma/
-      schema.prisma            ← Database schema
-      seed.ts                  ← Activity seed data
-      dev.db                   ← SQLite database file (gitignored)
-      migrations/              ← Prisma migration history
+      schema.prisma              ← Database schema
+      seed.ts                    ← Activity seed data
+      dev.db                     ← SQLite database file (gitignored)
+      migrations/                ← Prisma migration history
     package.json
     tsconfig.json
   frontend/
-    App.tsx                    ← Navigation root + AuthProvider
-    index.ts                   ← Expo entry point
+    App.tsx                      ← Navigation root + AuthProvider + bottom tab bar
+    index.ts                     ← Expo entry point
+    app.json                     ← Expo config
     src/
-      api.ts                   ← All HTTP calls to backend
-      types.ts                 ← Shared TypeScript interfaces
+      api.ts                     ← All HTTP calls to backend
+      types.ts                   ← Shared TypeScript interfaces
+      theme.ts                   ← Design system: colors, spacing, typography, shadows
       context/
-        AuthContext.tsx         ← JWT + user session state
+        AuthContext.tsx           ← JWT + user session state
+      components/
+        Avatar.tsx               ← Initials-based colored avatar circles + AvatarStack
+        GradientButton.tsx       ← Primary action button with linear gradient
+        StatusBadge.tsx          ← Colored pill for pod status (FORMING/LOCKED/COMPLETED)
+        ActivityCard.tsx         ← Rich card for an activity (icon, title, location)
+        PodCard.tsx              ← Rich card for a pod (avatars, progress bar, actions)
+        FadeIn.tsx               ← Staggered fade+slide entrance animation wrapper
       screens/
-        LoginScreen.tsx
-        RegisterScreen.tsx
-        ActivityListScreen.tsx
-        PodListScreen.tsx
-        PodScreen.tsx
+        LoginScreen.tsx          ← Email + password login (gradient background, glass card)
+        RegisterScreen.tsx       ← Name + email + password registration
+        ActivityListScreen.tsx   ← Explore tab: browse all activities (animated cards)
+        MyActivitiesScreen.tsx   ← My Activities tab: user's pods grouped by status
+        SearchScreen.tsx         ← Search tab: filter activities by name/location
+        ProfileScreen.tsx        ← Profile tab: user info, stats, sign out
+        PodListScreen.tsx        ← Pods for one activity (create/join, avatar stacks)
+        PodScreen.tsx            ← Pod detail + chat (collapsible header, gradient bubbles)
     package.json
     tsconfig.json
 ```
+
+### What changed from earlier versions
+
+The original frontend was 5 screen files, `api.ts`, `types.ts`, and `AuthContext.tsx` — no design system, no reusable components, just inline `StyleSheet.create()` with hardcoded hex colors in every screen. The redesign added:
+
+- `theme.ts` — a single source of truth for all visual constants
+- `components/` — 6 reusable components that screens compose instead of inlining
+- New dependencies for gradients, icons, haptics, and blur
 
 ---
 
@@ -192,6 +215,7 @@ Activities
   GET  /activities            → Activity[]
 
 Pods
+  GET  /pods/mine             → Pod[] (all pods the current user is a member of)
   GET  /pods?activityId=      → Pod[] (all pods for an activity)
   POST /pods/join             body: { podId }      → join existing pod
                               body: { activityId } → create new pod
@@ -313,33 +337,423 @@ If a match is found, the request returns 409 Conflict. A user can be in multiple
 
 ## 8. Frontend Structure
 
+### Dependencies
+
+These are the key packages and what they do. All versions are pinned for Expo SDK 54 compatibility.
+
+| Package | What it does |
+|---------|-------------|
+| `expo` ~54.0.33 | Framework and build toolchain |
+| `react` 19.1.0 / `react-native` 0.81.5 | UI runtime |
+| `@react-navigation/native` ^7 | Screen navigation and routing |
+| `@react-navigation/native-stack` ^7 | Native stack navigator (iOS UINavigationController, Android Fragment) |
+| `@react-navigation/bottom-tabs` ^7 | Bottom tab bar navigator for the four main app tabs |
+| `@react-native-async-storage/async-storage` | Persistent key-value storage for JWT token and user session |
+| `expo-linear-gradient` | `<LinearGradient>` component for gradient backgrounds and buttons |
+| `expo-blur` | Frosted-glass blur effects |
+| `expo-haptics` | Tactile vibration feedback on button presses |
+| `@expo/vector-icons` | Ionicons, MaterialIcons, and other icon sets bundled with Expo |
+
 ### File responsibilities
 
-| File | Responsibility |
-|------|---------------|
-| `App.tsx` | Navigation container, route definitions, auth gate |
-| `src/types.ts` | TypeScript interfaces matching backend response shapes |
-| `src/api.ts` | All HTTP calls, token injection, error normalization |
-| `src/context/AuthContext.tsx` | Session persistence, sign in/out, `useAuth()` hook |
-| `src/screens/LoginScreen.tsx` | Email + password login form |
-| `src/screens/RegisterScreen.tsx` | Name + email + password registration form |
-| `src/screens/ActivityListScreen.tsx` | Browse all activities |
-| `src/screens/PodListScreen.tsx` | All pods for one activity, create/join actions |
-| `src/screens/PodScreen.tsx` | Pod detail, member list, chat with polling |
-
-### Screen responsibilities
-
-**ActivityListScreen** — fetches and lists all activities. Each card is tappable and navigates to `PodListScreen`, passing `activityId` and `activityTitle` as params. No join logic here — this screen is purely a directory.
-
-**PodListScreen** — fetches all pods for the given activity. Sorts them FORMING → LOCKED → COMPLETED. Renders a "Create a New Pod" button at the top and a card for each pod. Each card shows the status, member count, member name chips with empty "open" slots for remaining spots, meetup time, and location. The action button on a card adapts: "Join Pod" if joinable, "View Pod →" if already a member, nothing if full or not FORMING.
-
-**PodScreen** — the core experience screen. On mount, fetches pod info and messages in parallel, then starts a 3-second polling interval for messages. The interval is stored in a `useRef` and cleaned up in the `useEffect` return function when the component unmounts. Chat messages are displayed in a `FlatList` with auto-scroll on new content. Sending a message optimistically appends it to local state while the API call is in flight.
+| File | What it does |
+|------|-------------|
+| `App.tsx` | Navigation container, bottom tab bar, route definitions, auth gate, global screen styling |
+| `src/types.ts` | TypeScript interfaces matching backend response shapes (`User`, `Activity`, `Pod`, `PodMember`, `Message`) |
+| `src/api.ts` | All HTTP calls to the backend, token injection into headers, error normalization |
+| `src/theme.ts` | Design system — every color, spacing value, font size, border radius, and shadow used in the app |
+| `src/context/AuthContext.tsx` | Session persistence (AsyncStorage), sign in/out functions, `useAuth()` hook |
+| `src/components/Avatar.tsx` | Initials-based colored circle + `AvatarStack` (overlapping row of avatars) |
+| `src/components/GradientButton.tsx` | Primary action button with gradient fill, supports loading/disabled/icon/outline variants |
+| `src/components/StatusBadge.tsx` | Colored pill showing pod status (green FORMING, blue LOCKED, gray COMPLETED) |
+| `src/components/ActivityCard.tsx` | Tappable card for one activity — icon circle, title, description, location |
+| `src/components/PodCard.tsx` | Card for one pod — avatar stack, progress bar, meetup info, contextual action button |
+| `src/components/FadeIn.tsx` | Animation wrapper — children fade in and slide up with a spring, optional delay for staggering |
+| `src/screens/LoginScreen.tsx` | Login form on a gradient background with a white card |
+| `src/screens/RegisterScreen.tsx` | Registration form, same visual style as login |
+| `src/screens/ActivityListScreen.tsx` | Explore tab — custom header with user avatar, animated list of activity cards |
+| `src/screens/MyActivitiesScreen.tsx` | My Activities tab — user's pods grouped into "Active" and "Past" sections |
+| `src/screens/SearchScreen.tsx` | Search tab — real-time filtering of activities by name, description, or location |
+| `src/screens/ProfileScreen.tsx` | Profile tab — user avatar/name/email, pod stats, sign out with confirmation |
+| `src/screens/PodListScreen.tsx` | All pods for one activity, gradient "Start a Pod" button, animated pod cards |
+| `src/screens/PodScreen.tsx` | Pod detail + real-time chat — collapsible info header, gradient message bubbles, pill input |
 
 ---
 
-## 9. Navigation Structure
+## 9. Design System
 
-React Navigation v7 with a single native stack navigator. The stack is conditionally populated based on whether a `user` exists in `AuthContext`.
+All visual constants live in `src/theme.ts`. Every screen and component imports from this file — there are zero hardcoded colors or font sizes in `StyleSheet.create()` calls. If you want to change the look of the entire app (say, switch to a dark theme), you only need to edit `theme.ts`.
+
+### Colors
+
+```
+Primary gradient:    #6366f1 (indigo) → #8b5cf6 (violet)
+Background:          #f8f9fb (very light gray, almost white)
+Card surface:        #ffffff
+Primary text:        #0f172a (near-black)
+Secondary text:      #64748b (medium gray)
+Tertiary text:       #94a3b8 (light gray, used for timestamps and hints)
+Border:              #e2e8f0
+```
+
+Status colors — each pod state has a foreground color and a light background:
+
+```
+FORMING:   green (#22c55e) on light green (#dcfce7)
+LOCKED:    blue  (#3b82f6) on light blue  (#dbeafe)
+COMPLETED: gray  (#94a3b8) on light gray  (#f1f5f9)
+```
+
+Chat bubble colors:
+
+```
+"Me" bubbles:    gradient from #6366f1 → #7c3aed (indigo to purple)
+"Them" bubbles:  #f1f5f9 (light gray)
+```
+
+Avatar palette — 8 vibrant colors. Which color a user gets is determined by hashing their name, so the same person always gets the same color:
+
+```
+#6366f1  #ec4899  #f59e0b  #22c55e  #3b82f6  #8b5cf6  #14b8a6  #f97316
+```
+
+### Spacing
+
+An 8-point grid. Every margin, padding, and gap in the app is one of these values:
+
+```
+xs: 4    sm: 8    md: 16    lg: 24    xl: 32    xxl: 40    xxxl: 56
+```
+
+### Typography
+
+A scale of named text styles that screens spread into their StyleSheets:
+
+```
+hero:     34px, weight 800, tight letter spacing  — brand name on auth screens
+h1:       28px, weight 700                        — (reserved for future large headings)
+h2:       22px, weight 700                        — screen-level headings ("Hey, Brady")
+h3:       17px, weight 600                        — card titles
+body:     15px, weight 400, 22px line height      — paragraph text, chat messages
+bodyBold: 15px, weight 600                        — emphasized body text
+caption:  13px, weight 500, secondary color       — metadata (location, time, descriptions)
+tiny:     11px, weight 500, tertiary color        — timestamps, small labels
+label:    12px, weight 700, uppercase, tracked    — section headers ("EXPLORE ACTIVITIES")
+```
+
+### Border radii
+
+```
+sm: 8    md: 12    lg: 16    xl: 20    pill: 999
+```
+
+Cards use `lg` (16). Buttons use `md` (12). Chips and avatars use `pill` (999, which makes any rectangle into a circle/capsule).
+
+### Shadows
+
+Three tiers, defined per-platform (iOS uses `shadowColor`/`shadowOpacity`/`shadowRadius`, Android uses `elevation`):
+
+```
+sm:  subtle, barely visible     — input bars, info sections
+md:  standard card shadow       — activity cards, pod cards, logo circle
+lg:  prominent, floating feel   — auth card (the white card on the gradient background)
+```
+
+---
+
+## 10. Component Library
+
+The `src/components/` directory contains 6 reusable building blocks. None of them call the API or manage data — they are pure presentational components that receive props and render UI.
+
+### Avatar + AvatarStack
+
+`Avatar` renders a colored circle with the first letter of a person's name. The background color is deterministic: a hash of the name string picks from an 8-color palette, so "Alice" is always the same color everywhere in the app.
+
+Props: `name` (string), `size` (number, default 36), `isYou` (boolean, adds a white ring).
+
+`AvatarStack` renders multiple avatars overlapping horizontally (like GitHub's collaborator row). Each avatar overlaps the previous one by 30% of its width. Renders up to `max` avatars (default 4).
+
+Props: `members` (array of `{ id, user: { id, name } }`), `currentUserId` (highlights your avatar), `size`, `max`.
+
+### GradientButton
+
+The primary call-to-action button. Renders a `LinearGradient` (indigo → violet) with white text inside a `TouchableOpacity`. When disabled or loading, the gradient is replaced with a flat gray. Every press triggers a medium haptic impact via `expo-haptics`.
+
+Props: `title`, `onPress`, `loading`, `disabled`, `icon` (Ionicons name), `variant` (`'primary'` or `'outline'`), `size` (`'md'` or `'lg'`).
+
+The `outline` variant renders a bordered button with the primary color instead of a gradient fill.
+
+### StatusBadge
+
+A small pill that shows a pod's current state. It has a colored dot on the left and an uppercase label on the right. The background is a light tint of the status color (green for FORMING, blue for LOCKED, gray for COMPLETED).
+
+Props: `status` (string), `size` (`'sm'` or `'md'`).
+
+### ActivityCard
+
+A tappable card representing one activity. Layout:
+
+```
+┌──────────────────────────────────────────┐
+│  [icon circle]  Title                  › │
+│                 Description              │
+│                 📍 Location              │
+└──────────────────────────────────────────┘
+```
+
+The icon circle's color and icon are picked from a lookup table keyed by activity title (e.g., "Morning Coffee Walk" gets a coffee icon in amber, "Study Group Sprint" gets a book icon in indigo). Unknown activities get a sparkle icon.
+
+Pressing a card triggers a light haptic impact.
+
+### PodCard
+
+A card representing one pod. Layout:
+
+```
+┌──────────────────────────────────────────┐
+│  [avatar] [avatar] [avatar]    [FORMING] │
+│  ████████████░░░░░░░░░░░░░               │
+│  2/4 members · 2 spots open             │
+│  🕐 Sat, Feb 22, 3:00 PM               │
+│  📍 Campus Quad                          │
+│                          [Join Pod]      │
+└──────────────────────────────────────────┘
+```
+
+The top row shows an `AvatarStack` on the left and a `StatusBadge` on the right. Below that is a thin progress bar (filled portion = `memberCount / 4`). The action area at the bottom adapts: if you are already a member, it shows "View Pod →" as a link; if the pod is joinable, it shows a gradient "Join Pod" button; if the pod is full, it shows "Pod is full" in gray.
+
+### FadeIn
+
+A lightweight animation wrapper using React Native's built-in `Animated` API. On mount, the children fade from opacity 0 → 1 and slide up 14px → 0px, using a spring animation. An optional `delay` prop (in milliseconds) enables staggered entrances when wrapping items in a list — each item can delay by `index * 70ms` so they cascade in one after another.
+
+This replaces the `react-native-reanimated` library (which was removed because its native binary version must match the Expo Go client exactly, and mismatches cause crashes at launch).
+
+---
+
+## 11. Screen-by-Screen UI
+
+### LoginScreen + RegisterScreen
+
+Both auth screens share the same visual structure:
+
+```
+┌─────────────────────────────────────┐
+│     Soft gradient background        │
+│     (light indigo → light violet)   │
+│                                     │
+│         [Bridge logo circle]        │
+│            Bridge                   │
+│     Meet new people, one pod        │
+│           at a time                 │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │  Welcome back                 │  │
+│  │                               │  │
+│  │  [📧] Email                   │  │
+│  │  [🔒] Password          [👁]  │  │
+│  │                               │  │
+│  │  ┌─────────────────────────┐  │  │
+│  │  │        Log In           │  │  │
+│  │  └─────────────────────────┘  │  │
+│  │                               │  │
+│  │  Don't have an account?       │  │
+│  │  Sign up                      │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+The background is a `LinearGradient` from `#eef2ff` → `#e0e7ff` → `#f5f3ff` (very soft indigo/violet tones). The white card in the center has `radii.xl` (20px) rounded corners and a `shadows.lg` shadow for a floating effect.
+
+Each input field is a row: an Ionicons icon on the left (`mail-outline`, `lock-closed-outline`, `person-outline`), a `TextInput` in the middle, and for the password field, a show/hide eye toggle on the right. The whole row has a light background (`colors.bg`) with a 1px border.
+
+The submit button is a `GradientButton`. Below it, a link navigates between Login and Register.
+
+The whole screen is wrapped in a `KeyboardAvoidingView` + `ScrollView` so the card scrolls up when the keyboard opens on small devices.
+
+### ActivityListScreen (Explore Tab)
+
+```
+┌─────────────────────────────────────┐
+│  [avatar] Hey, Brady                │
+│           Find your next crew       │
+│                                     │
+│  EXPLORE ACTIVITIES                 │
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │ [☕] Morning Coffee Walk      › ││
+│  │     Meet at a campus café...    ││
+│  │     📍 Memorial Union           ││
+│  └─────────────────────────────────┘│
+│  ┌─────────────────────────────────┐│
+│  │ [📖] Study Group Sprint      › ││
+│  │     Find a study partner...     ││
+│  │     📍 Main Library             ││
+│  └─────────────────────────────────┘│
+│  ...                                │
+├─────────────────────────────────────┤
+│ [🧭] Explore  [📅] My  [🔍] [👤] │
+└─────────────────────────────────────┘
+```
+
+This screen opts out of React Navigation's native header (`headerShown: false`) and renders its own. The custom header shows the user's `Avatar` (initials circle) on the left with a greeting and subtitle. Sign-out has moved to the Profile tab.
+
+Below the header is a `FlatList` of `ActivityCard` components, each wrapped in a `FadeIn` with a staggered delay. The first card appears immediately, the second 70ms later, the third 140ms later, and so on — creating a cascading entrance effect.
+
+Pull-to-refresh is enabled with a tinted refresh indicator (indigo instead of the default gray).
+
+### MyActivitiesScreen (My Activities Tab)
+
+```
+┌─────────────────────────────────────┐
+│  My Activities                      │
+│  Pods you've joined                 │
+│                                     │
+│  ACTIVE PODS                        │
+│  ┌─────────────────────────────────┐│
+│  │ [A][B][C]           [FORMING]  ││
+│  │ ████████████░░░░░░░░           ││
+│  │ 3/4 members                    ││
+│  │ 🕐 Sat, Feb 22, 3:00 PM       ││
+│  │ 📍 Memorial Union              ││
+│  │                    View Pod →  ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  PAST PODS                          │
+│  ...                                │
+├─────────────────────────────────────┤
+│ [🧭] Explore  [📅] My  [🔍] [👤] │
+└─────────────────────────────────────┘
+```
+
+Fetches all pods the current user is a member of via `GET /pods/mine`. Pods are grouped into two sections: "Active Pods" (FORMING and LOCKED) and "Past Pods" (COMPLETED). Each pod is rendered as a `PodCard` with `isMember: true`, so the action area shows "View Pod →" instead of a join button. Tapping navigates to the Pod detail/chat screen. An empty state with a people icon is shown if the user has no pods yet.
+
+### SearchScreen (Search Tab)
+
+```
+┌─────────────────────────────────────┐
+│  Search                             │
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │ 🔍 Search activities, loc...   ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │ [☕] Morning Coffee Walk      › ││
+│  │     ...                         ││
+│  └─────────────────────────────────┘│
+│  ...                                │
+├─────────────────────────────────────┤
+│ [🧭] Explore  [📅] My  [🔍] [👤] │
+└─────────────────────────────────────┘
+```
+
+Loads all activities on mount, then filters them in real-time as the user types. Matching is case-insensitive against the activity title, description, and location. Results are rendered as `ActivityCard` components — tapping one navigates to `PodList`. A clear button (×) appears in the search bar when there is input. The search bar is styled as a bordered pill with a search icon and uses the design system colors.
+
+### ProfileScreen (Profile Tab)
+
+```
+┌─────────────────────────────────────┐
+│  Profile                            │
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │         [Large Avatar]          ││
+│  │          Brady Smith            ││
+│  │       brady@school.edu          ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  STATS                              │
+│  ┌─────────┐┌─────────┐┌─────────┐ │
+│  │ [👥]    ││ [✓]     ││ [★]     │ │
+│  │   2     ││   3     ││   5     │ │
+│  │ Active  ││ Done    ││ Total   │ │
+│  └─────────┘└─────────┘└─────────┘ │
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │          Sign Out               ││
+│  └─────────────────────────────────┘│
+├─────────────────────────────────────┤
+│ [🧭] Explore  [📅] My  [🔍] [👤] │
+└─────────────────────────────────────┘
+```
+
+Shows the user's avatar (large, 72px), name, and email in a white card. Below is a stats row with three cards showing active pods, completed pods, and total pods — data fetched from `GET /pods/mine`. The sign-out button is an outline-variant `GradientButton` that shows a confirmation `Alert` before signing out.
+
+### PodListScreen
+
+```
+┌─────────────────────────────────────┐
+│  ← Morning Coffee Walk              │  ← native navigation header
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │  ⊕  Start a Pod                ││  ← gradient button
+│  └─────────────────────────────────┘│
+│                                     │
+│  OPEN PODS                          │
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │ [A][B][C]           [FORMING]  ││
+│  │ ████████████░░░░░░░░           ││
+│  │ 3/4 members · 1 spot open      ││
+│  │ 🕐 Sat, Feb 22, 3:00 PM       ││
+│  │ 📍 Memorial Union              ││
+│  │                    [Join Pod]   ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  PAST PODS                          │
+│  ...                                │
+└─────────────────────────────────────┘
+```
+
+Uses the native navigation header (title comes from route params). The list has a `GradientButton` at the top ("Start a Pod" with a plus icon). Pods are sorted FORMING first, then LOCKED, then COMPLETED. A section divider ("PAST PODS") appears between the last FORMING pod and the first non-FORMING pod.
+
+Each pod is a `PodCard` wrapped in `FadeIn` with staggered delay. The "Start a Pod" button also fades in.
+
+When a user taps "Join Pod", the button shows a loading spinner and the `actionId` state prevents any other button from being pressed simultaneously. After joining, `navigation.replace('Pod', ...)` replaces the current screen (see Navigation section for why).
+
+### PodScreen (Chat)
+
+```
+┌─────────────────────────────────────┐
+│  ← Your Pod                         │  ← native navigation header
+│                                     │
+│  ┌─────────────────────────────────┐│  ← collapsible info header
+│  │ Morning Coffee Walk  [LOCKED] ▼││
+│  │ 🕐 Sat, Feb 22, 3:00 PM       ││
+│  │ 📍 Memorial Union              ││
+│  │ Members 4/4    [A][B][C][D]    ││
+│  └─────────────────────────────────┘│
+│                                     │
+│           Alice                     │
+│  [A]  ┌──────────────┐             │
+│       │ Hey everyone! │             │
+│       └──────────────┘             │
+│              2m ago                 │
+│                                     │
+│       ┌────────────────────┐        │
+│       │ Super excited to   │  [me]  │
+│       │ meet up tomorrow!  │        │
+│       └────────────────────┘        │
+│                    just now         │
+│                                     │
+│  ┌──────────────────────┐ ┌──────┐  │
+│  │ Message...           │ │ send │  │
+│  └──────────────────────┘ └──────┘  │
+└─────────────────────────────────────┘
+```
+
+The screen is split into three vertical sections:
+
+**Collapsible info header** — a `TouchableOpacity` at the top. When tapped, it toggles between showing just the activity title + status badge, or the full detail (meetup time, location, member avatar stack). The expand/collapse is animated with `LayoutAnimation.easeInEaseOut`. A chevron icon (up/down) hints that it's tappable.
+
+**Chat message list** — a `FlatList` of messages. Messages from the current user ("me") render as indigo-to-purple gradient bubbles aligned to the right. Messages from others ("them") render as light gray bubbles aligned to the left, with a small `Avatar` and sender name. Consecutive messages from the same person are grouped: the avatar and name only show on the first message in a group, and the timestamp (relative, like "2m ago") only shows on the last message in a group. Bubble corners are adjusted within groups — the tail corner is rounded for middle messages and flat for the last message, creating a modern grouped-bubble effect.
+
+**Input bar** — a pill-shaped `TextInput` on the left, and a circular gradient send button on the right. The send button's gradient turns to flat gray when disabled (empty input or sending in progress). Pressing send triggers a medium haptic impact. On failure, the typed text is restored into the input.
+
+---
+
+## 12. Navigation Structure
+
+React Navigation v7 with a native stack navigator wrapping a bottom tab navigator. The stack is conditionally populated based on whether a `user` exists in `AuthContext`. When authenticated, the first screen in the stack is a 4-tab bottom tab bar.
 
 ```
 App
@@ -349,32 +763,77 @@ App
                 └─ Stack.Navigator
                       │
                       ├─ [user === null]
-                      │    ├─ Login         (no header)
-                      │    └─ Register
+                      │    ├─ Login              (no header)
+                      │    └─ Register           (no header)
                       │
                       └─ [user !== null]
-                           ├─ ActivityList  (no header — custom header in component)
-                           ├─ PodList       (header title = activityTitle param)
-                           └─ Pod           (header title = "Your Pod")
+                           ├─ MainTabs           (Tab.Navigator, no stack header)
+                           │    ├─ Explore        → ActivityListScreen  (🧭 compass)
+                           │    ├─ MyActivities   → MyActivitiesScreen  (📅 calendar)
+                           │    ├─ Search         → SearchScreen        (🔍 search)
+                           │    └─ Profile        → ProfileScreen       (👤 person)
+                           ├─ PodList             (header title = activityTitle param)
+                           └─ Pod                 (header title = "Your Pod", blur effect)
 ```
+
+### Tab bar
+
+The tab bar lives at the bottom of the screen and is always visible on the four main tabs. When a user navigates to `PodList` or `Pod`, those screens push on top of the tab bar (they are in the parent stack, not inside the tab navigator), so the tab bar is hidden during detail views.
+
+Tab bar styling:
+- White background (`colors.surface`) with a subtle top border (`colors.border`, 0.5px)
+- Active tab: indigo (`colors.primary`), filled icon variant (e.g. `compass`)
+- Inactive tab: light gray (`colors.textTertiary`), outline icon variant (e.g. `compass-outline`)
+- Labels: 11px, weight 600
+- iOS: upward shadow for depth. Android: elevation 8
+
+### Tab icons
+
+Each tab has a filled (active) and outline (inactive) icon from Ionicons:
+
+| Tab | Active icon | Inactive icon |
+|-----|------------|---------------|
+| Explore | `compass` | `compass-outline` |
+| My Activities | `calendar` | `calendar-outline` |
+| Search | `search` | `search-outline` |
+| Profile | `person` | `person-outline` |
+
+### Global stack screen options
+
+All stack screens share these defaults set on `Stack.Navigator`:
+
+- `headerStyle`: background matches `colors.bg` (the off-white app background)
+- `headerTintColor`: `colors.primary` (indigo) — this colors the back arrow
+- `headerTitleStyle`: weight 700, `colors.text` — bold dark title text
+- `headerShadowVisible: false` — no border line under the header
+- `headerBackButtonDisplayMode: 'minimal'` — back arrow only, no title text next to it
+- `contentStyle`: background matches `colors.bg` so there is no white flash during transitions
+- `animation: 'slide_from_right'` — iOS-style push/pop transition
 
 ### Route params
 
 ```typescript
+type MainTabParamList = {
+  Explore: undefined;
+  MyActivities: undefined;
+  Search: undefined;
+  Profile: undefined;
+};
+
 type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  ActivityList: undefined;
+  MainTabs: undefined;
   PodList: { activityId: string; activityTitle: string };
   Pod: { podId: string };
 };
 ```
 
-Params are typed end-to-end: passing wrong params or missing a required param is a TypeScript compile error. Each screen declares its props as `NativeStackScreenProps<RootStackParamList, 'ScreenName'>`, which gives typed access to both `navigation` and `route.params`.
+Params are typed end-to-end: passing wrong params or missing a required param is a TypeScript compile error. Screens inside the tab navigator that need to navigate to parent stack screens (e.g., from Explore to PodList) use `useNavigation<NativeStackNavigationProp<RootStackParamList>>()`. React Navigation automatically bubbles `navigate()` calls up to the parent stack when the tab navigator does not have a matching screen name.
 
 ### Auth gate mechanism
 
-`AppNavigator` reads `user` from `AuthContext`. When `user` is `null`, only `Login` and `Register` exist in the stack — there is no way to navigate to app screens. When `user` is set (after sign-in or session restore), only `ActivityList`, `PodList`, and `Pod` exist. React Navigation automatically shows the first screen in whichever set is active. This means there is no explicit `navigate('Login')` or `navigate('ActivityList')` call on auth state change — the navigator re-renders with a different set of screens and snaps to the first one.
+`AppNavigator` reads `user` from `AuthContext`. When `user` is `null`, only `Login` and `Register` exist in the stack — there is no way to navigate to app screens. When `user` is set (after sign-in or session restore), `MainTabs`, `PodList`, and `Pod` exist. React Navigation automatically shows the first screen in whichever set is active (`MainTabs`, which starts on the Explore tab). This means there is no explicit `navigate('Login')` or `navigate('MainTabs')` call on auth state change — the navigator re-renders with a different set of screens and snaps to the first one.
 
 ### `navigation.replace` vs `navigation.navigate`
 
@@ -382,7 +841,7 @@ After joining or creating a pod, `PodListScreen` uses `navigation.replace('Pod',
 
 ---
 
-## 10. State Management
+## 13. State Management
 
 Bridge uses no external state management library (no Redux, no Zustand). All state is local React state or React Context.
 
@@ -401,8 +860,9 @@ Both are kept in sync by `signIn` and `signOut`.
 Everything else is local `useState` in each screen:
 - `activities`, `pods`, `messages` — data fetched from the API
 - `loading`, `refreshing`, `sending` — UI state for loading indicators
-- `joiningId`, `actionId` — which item is currently being acted on (for per-button loading states)
+- `actionId` — which item is currently being acted on (for per-button loading states)
 - `messageText` — the controlled input value for the chat box
+- `headerExpanded` — whether the PodScreen info header is expanded or collapsed
 
 ### No prop drilling
 
@@ -410,7 +870,7 @@ Screens access `useAuth()` directly rather than receiving user data as props. AP
 
 ---
 
-## 11. How Frontend Talks to Backend
+## 14. How Frontend Talks to Backend
 
 All communication goes through `src/api.ts`. No screen ever calls `fetch()` directly.
 
@@ -440,13 +900,16 @@ This wrapper handles three things:
 
 ---
 
-## 12. API Request Lifecycle
+## 15. API Request Lifecycle
 
 A complete trace of what happens when a user taps "Join Pod":
 
 ```
-1. User taps "Join Pod" button in PodListScreen
-   └─ setActionId(pod.id)  ← disables button, shows spinner
+1. User taps "Join Pod" button on a PodCard in PodListScreen
+   └─ PodCard calls onJoin prop
+   └─ PodListScreen.handleJoin runs
+   └─ setActionId(pod.id)  ← disables all buttons, shows spinner on this one
+   └─ Haptics.impactAsync(Medium)  ← tactile feedback
 
 2. joinPod(pod.id) called in api.ts
    └─ request<Pod>('/pods/join', { method: 'POST', body: JSON.stringify({ podId }) })
@@ -491,7 +954,7 @@ A complete trace of what happens when a user taps "Join Pod":
 
 ---
 
-## 13. Chat — Polling Architecture
+## 16. Chat — Polling Architecture
 
 Bridge uses HTTP polling rather than WebSockets. Every 3 seconds, `PodScreen` calls `GET /pods/:id/messages` and replaces the local messages array with the server response.
 
@@ -520,11 +983,11 @@ PodScreen unmounts
 
 ### Sending a message
 
-When the user taps Send, the message is immediately appended to local state (`setMessages(prev => [...prev, msg])`) after the API confirms it was saved. The input is cleared before the API call resolves so the UI feels instant. If the call fails, the input text is restored. The next poll will also confirm the message is present (or not, if it failed).
+When the user taps the send button, the input is cleared immediately so the UI feels instant. A medium haptic impact fires. After the API confirms the message was saved, it is appended to local state (`setMessages(prev => [...prev, msg])`). If the call fails, the typed text is restored into the input and an alert is shown. The next poll will also confirm the message is present (or not, if it failed).
 
 ---
 
-## 14. Key Design Decisions
+## 17. Key Design Decisions
 
 ### SQLite over PostgreSQL
 
@@ -540,7 +1003,7 @@ The LOCKED → COMPLETED transition happens when `GET /pods/:id` is called after
 
 ### `POST /pods/join` handles both create and join
 
-Rather than two separate endpoints (`POST /pods` for create, `POST /pods/:id/join` for join), both actions go through `POST /pods/join`. The presence or absence of `podId` in the request body determines which path executes. This keeps the API surface minimal (a PRD constraint) while supporting both user actions.
+Rather than two separate endpoints (`POST /pods` for create, `POST /pods/:id/join` for join), both actions go through `POST /pods/join`. The presence or absence of `podId` in the request body determines which path executes. This keeps the API surface minimal while supporting both user actions.
 
 ### JWT secret has a dev default
 
@@ -557,3 +1020,15 @@ The JWT token lives in a plain module variable, not in `useState` or `useContext
 ### `@types/express` pinned to v4 (not v5)
 
 The runtime is Express 4, but `npm install` was initially pulling `@types/express@5`, which changed the type of `req.params` values from `string` to `string | string[]`. This broke TypeScript compilation. The fix was pinning `"@types/express": "^4.17.21"` in `package.json`. Always match your `@types` version to your runtime version.
+
+### Centralized design system instead of inline styles
+
+Every color, spacing value, font size, border radius, and shadow is defined once in `theme.ts` and imported everywhere. This means changing the primary color from indigo to, say, emerald green is a single-line edit that propagates everywhere. It also means a new developer can read `theme.ts` to understand the entire visual vocabulary of the app without opening any screen files.
+
+### Built-in Animated API instead of react-native-reanimated
+
+The entrance animations use React Native's built-in `Animated` module (in `FadeIn.tsx`) rather than `react-native-reanimated`. Reanimated is a more powerful library, but it includes a native binary that must exactly match the version embedded in the Expo Go client. A version mismatch causes an instant crash on app launch. The built-in `Animated` API has no native dependency, runs on the JS thread, and is more than sufficient for simple fade+slide entrance animations. If you later eject to a custom dev client (via `npx expo prebuild`), you can swap back to reanimated for more complex gesture-driven animations.
+
+### Haptic feedback on actions
+
+`expo-haptics` provides tactile vibrations on iOS (and on Android devices that support it). Light impacts fire when tapping activity cards and pod cards. Medium impacts fire on "Join Pod" and "Send" — the higher-impact actions. This is a small detail but it makes the app feel more native and responsive.

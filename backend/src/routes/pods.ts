@@ -8,6 +8,31 @@ const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
 
+// GET /pods/mine
+router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+
+  try {
+    const pods = await prisma.pod.findMany({
+      where: {
+        members: { some: { userId } },
+      },
+      include: {
+        activity: true,
+        members: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(pods);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /pods?activityId=
 // Returns all pods for an activity (all statuses)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
