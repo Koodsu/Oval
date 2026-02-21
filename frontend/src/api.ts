@@ -49,15 +49,20 @@ export const login = (email: string, password: string) =>
   });
 
 // Activities
-export const getActivities = () =>
-  request<import('./types').Activity[]>('/activities');
+export const getActivities = (category?: string) =>
+  request<import('./types').Activity[]>(
+    category ? `/activities?category=${encodeURIComponent(category)}` : '/activities'
+  );
 
 // Pods
 export const getMyPods = () =>
   request<import('./types').Pod[]>('/pods/mine');
 
-export const getPodsByActivity = (activityId: string) =>
-  request<import('./types').Pod[]>(`/pods?activityId=${activityId}`);
+export const getPodsByActivity = (activityId: string, sort?: string) => {
+  const params = new URLSearchParams({ activityId });
+  if (sort) params.set('sort', sort);
+  return request<import('./types').Pod[]>(`/pods?${params.toString()}`);
+};
 
 // Join an existing pod by its ID
 export const joinPod = (podId: string) =>

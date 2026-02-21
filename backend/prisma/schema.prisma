@@ -22,6 +22,7 @@ model Activity {
   id              String   @id @default(uuid())
   title           String
   description     String
+  category        String   @default("Social")
   defaultLocation String
   createdAt       DateTime @default(now())
 
