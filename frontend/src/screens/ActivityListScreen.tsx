@@ -18,6 +18,7 @@ import { Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import ActivityCard from '../components/ActivityCard';
+import CategoryFilter from '../components/CategoryFilter';
 import FadeIn from '../components/FadeIn';
 import { colors, spacing, typography } from '../theme';
 
@@ -28,10 +29,11 @@ export default function ActivityListScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const fetchActivities = useCallback(async () => {
+  const fetchActivities = useCallback(async (category?: string | null) => {
     try {
-      const data = await getActivities();
+      const data = await getActivities(category ?? undefined);
       setActivities(data);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load activities');
@@ -42,8 +44,8 @@ export default function ActivityListScreen() {
   }, []);
 
   useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    fetchActivities(selectedCategory);
+  }, [fetchActivities, selectedCategory]);
 
   if (loading) {
     return (
@@ -68,9 +70,6 @@ export default function ActivityListScreen() {
         </View>
       </View>
 
-      {/* Section */}
-      <Text style={styles.sectionTitle}>Explore Activities</Text>
-
       <FlatList
         data={activities}
         keyExtractor={(item) => item.id}
@@ -81,10 +80,19 @@ export default function ActivityListScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              fetchActivities();
+              fetchActivities(selectedCategory);
             }}
             tintColor={colors.primary}
           />
+        }
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.sectionTitle}>Explore Activities</Text>
+            <CategoryFilter
+              selected={selectedCategory}
+              onSelect={(cat) => setSelectedCategory(cat)}
+            />
+          </View>
         }
         renderItem={({ item, index }) => (
           <FadeIn delay={index * 70}>
@@ -145,7 +153,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.label,
-    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
   list: {

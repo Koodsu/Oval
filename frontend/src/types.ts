@@ -8,6 +8,7 @@ export interface Activity {
   id: string;
   title: string;
   description: string;
+  category: string;
   defaultLocation: string;
   createdAt: string;
 }

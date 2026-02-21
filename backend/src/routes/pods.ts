@@ -44,6 +44,13 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
+    const { sort } = req.query;
+
+    let orderBy: Record<string, string> = { createdAt: 'desc' };
+    if (sort === 'starting_soon') {
+      orderBy = { meetupTime: 'asc' };
+    }
+
     const pods = await prisma.pod.findMany({
       where: { activityId },
       include: {
@@ -51,10 +58,15 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
           include: { user: { select: { id: true, name: true } } },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
     });
 
-    res.json(pods);
+    let result = pods;
+    if (sort === 'most_members') {
+      result = [...pods].sort((a, b) => b.members.length - a.members.length);
+    }
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

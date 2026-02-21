@@ -7,8 +7,11 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { getPodsByActivity, joinPod, createPod } from '../api';
@@ -17,9 +20,17 @@ import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
 import GradientButton from '../components/GradientButton';
 import FadeIn from '../components/FadeIn';
-import { colors, spacing, typography } from '../theme';
+import { colors, spacing, radii, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PodList'>;
+
+type SortOption = 'starting_soon' | 'date_posted' | 'most_members';
+
+const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'starting_soon', label: 'Starting Soon', icon: 'time-outline' },
+  { key: 'date_posted', label: 'Date Posted', icon: 'calendar-outline' },
+  { key: 'most_members', label: 'Most Members', icon: 'people-outline' },
+];
 
 export default function PodListScreen({ route, navigation }: Props) {
   const { activityId } = route.params;
@@ -29,22 +40,19 @@ export default function PodListScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('starting_soon');
 
   const fetchPods = useCallback(async () => {
     try {
-      const data = await getPodsByActivity(activityId);
-      const sorted = [...data].sort((a, b) => {
-        const order: Record<string, number> = { FORMING: 0, LOCKED: 1, COMPLETED: 2 };
-        return (order[a.status] ?? 3) - (order[b.status] ?? 3);
-      });
-      setPods(sorted);
+      const data = await getPodsByActivity(activityId, sortBy);
+      setPods(data);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load pods');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activityId]);
+  }, [activityId, sortBy]);
 
   useEffect(() => {
     fetchPods();
@@ -76,9 +84,6 @@ export default function PodListScreen({ route, navigation }: Props) {
 
   const isAlreadyMember = (pod: Pod) =>
     pod.members.some((m) => m.user.id === user?.id);
-
-  const formingPods = pods.filter((p) => p.status === 'FORMING');
-  const otherPods = pods.filter((p) => p.status !== 'FORMING');
 
   if (loading) {
     return (
@@ -117,9 +122,37 @@ export default function PodListScreen({ route, navigation }: Props) {
               />
             </FadeIn>
 
-            {formingPods.length > 0 && (
-              <Text style={styles.sectionLabel}>Open Pods</Text>
-            )}
+            {/* Sort options */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sortRow}
+            >
+              {SORT_OPTIONS.map((opt) => {
+                const isActive = sortBy === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.sortChip, isActive && styles.sortChipActive]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSortBy(opt.key);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={opt.icon}
+                      size={14}
+                      color={isActive ? colors.textInverse : colors.textSecondary}
+                    />
+                    <Text style={[styles.sortText, isActive && styles.sortTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             {pods.length === 0 && (
               <View style={styles.emptyContainer}>
                 <Ionicons name="people-outline" size={48} color={colors.border} />
@@ -139,11 +172,6 @@ export default function PodListScreen({ route, navigation }: Props) {
               isJoining={actionId === item.id}
               isMember={isAlreadyMember(item)}
             />
-            {item.status === 'FORMING' &&
-              index < pods.length - 1 &&
-              pods[index + 1].status !== 'FORMING' && (
-                <Text style={styles.sectionLabel}>Past Pods</Text>
-              )}
           </FadeIn>
         )}
       />
@@ -166,10 +194,34 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
   },
-  sectionLabel: {
-    ...typography.label,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm + 4,
+  sortRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  sortChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.md - 2,
+    paddingVertical: spacing.sm - 2,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sortText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  sortTextActive: {
+    color: colors.textInverse,
   },
   emptyContainer: {
     alignItems: 'center',

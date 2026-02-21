@@ -46,7 +46,7 @@ Bridge is a structured micro-group formation app for college students. Users bro
                                   │  Prisma ORM
 ┌─────────────────────────────────▼───────────────────┐
 │              SQLite Database (dev.db)               │
-│         5 tables: User, Activity, Pod,              │
+│         5 tables: User, Activity, Pod,               │
 │                   PodMember, Message                │
 └─────────────────────────────────────────────────────┘
 ```
@@ -70,8 +70,8 @@ Bridge/                          ← project root
         auth.ts                  ← JWT verification middleware
       routes/
         auth.ts                  ← POST /auth/register, /login
-        activities.ts            ← GET /activities
-        pods.ts                  ← GET /pods/mine, GET /pods, POST /pods/join, GET /pods/:id
+        activities.ts            ← GET /activities, GET /activities?category=
+        pods.ts                  ← GET /pods/mine, GET /pods?activityId=&sort=, POST /pods/join, GET /pods/:id
         messages.ts              ← GET/POST /pods/:id/messages
     prisma/
       schema.prisma              ← Database schema
@@ -88,23 +88,26 @@ Bridge/                          ← project root
       api.ts                     ← All HTTP calls to backend
       types.ts                   ← Shared TypeScript interfaces
       theme.ts                   ← Design system: colors, spacing, typography, shadows
+      constants/
+        categories.ts            ← Category names and metadata (icons, colors)
       context/
         AuthContext.tsx           ← JWT + user session state
       components/
         Avatar.tsx               ← Initials-based colored avatar circles + AvatarStack
         GradientButton.tsx       ← Primary action button with linear gradient
         StatusBadge.tsx          ← Colored pill for pod status (FORMING/LOCKED/COMPLETED)
-        ActivityCard.tsx         ← Rich card for an activity (icon, title, location)
+        ActivityCard.tsx         ← Rich card for an activity (icon, title, category, location)
+        CategoryFilter.tsx       ← Horizontal scrollable category filter chips
         PodCard.tsx              ← Rich card for a pod (avatars, progress bar, actions)
         FadeIn.tsx               ← Staggered fade+slide entrance animation wrapper
       screens/
         LoginScreen.tsx          ← Email + password login (gradient background, glass card)
         RegisterScreen.tsx       ← Name + email + password registration
-        ActivityListScreen.tsx   ← Explore tab: browse all activities (animated cards)
+        ActivityListScreen.tsx   ← Explore tab: browse activities with category filter
         MyActivitiesScreen.tsx   ← My Activities tab: user's pods grouped by status
-        SearchScreen.tsx         ← Search tab: filter activities by name/location
+        SearchScreen.tsx         ← Search tab: filter activities by text + category
         ProfileScreen.tsx        ← Profile tab: user info, stats, sign out
-        PodListScreen.tsx        ← Pods for one activity (create/join, avatar stacks)
+        PodListScreen.tsx        ← Pods for one activity (create/join, sort options)
         PodScreen.tsx            ← Pod detail + chat (collapsible header, gradient bubbles)
     package.json
     tsconfig.json
@@ -115,8 +118,11 @@ Bridge/                          ← project root
 The original frontend was 5 screen files, `api.ts`, `types.ts`, and `AuthContext.tsx` — no design system, no reusable components, just inline `StyleSheet.create()` with hardcoded hex colors in every screen. The redesign added:
 
 - `theme.ts` — a single source of truth for all visual constants
-- `components/` — 6 reusable components that screens compose instead of inlining
+- `components/` — 7 reusable components (including `CategoryFilter`) that screens compose instead of inlining
+- `constants/categories.ts` — category metadata (icons, colors) for the 10 activity categories
 - New dependencies for gradients, icons, haptics, and blur
+
+Later updates expanded activities from 5 to ~47 across 10 categories, added category filtering on Explore and Search, and added pod sorting (Starting Soon, Date Posted, Most Members) on PodList.
 
 ---
 
@@ -163,10 +169,11 @@ The schema lives in `prisma/schema.prisma` with SQLite as the provider.
 │ id (PK)  │       │ id (PK)  │       │ id (PK)   │
 │ name     │       │ title    │       │ activityId│──→ Activity
 │ email    │       │ desc     │       │ meetupTime│
-│ password │       │ location │       │ location  │
-│ createdAt│       │ createdAt│       │ status    │
-└────┬─────┘       └──────────┘       │ createdAt │
-     │                                └─────┬─────┘
+│ password │       │ category │       │ location  │
+│ createdAt│       │ defaultLoc│       │ status    │
+└────┬─────┘       │ createdAt│       │ createdAt │
+                   └──────────┘       └─────┬─────┘
+     │                                     │
      │         ┌──────────────┐             │
      └────────→│  PodMember   │←────────────┘
                ├──────────────┤
@@ -198,7 +205,7 @@ The schema lives in `prisma/schema.prisma` with SQLite as the provider.
 
 ### Seed data
 
-`prisma/seed.ts` inserts 5 activities on first run (Morning Coffee Walk, Study Group Sprint, Frisbee on the Lawn, Lunch Together, Evening Campus Walk). The seed is idempotent: it checks if any activities exist before inserting. The Prisma `"seed"` script in `package.json` means `prisma migrate dev` runs the seed automatically after applying migrations.
+`prisma/seed.ts` inserts ~47 activities across 10 categories on first run. Categories include Sports & Fitness, Food & Drink, Academic, Arts & Creative, Social, Outdoors, Music & Entertainment, Wellness, Gaming, and Volunteering. The seed clears existing activities (and cascading pods/messages) before re-inserting, so running `npx prisma db seed` resets the catalog. The Prisma `"seed"` script in `package.json` means `prisma migrate dev` runs the seed automatically after applying migrations.
 
 ---
 
@@ -212,11 +219,13 @@ Auth
   POST /auth/login            body: { email, password }
 
 Activities
-  GET  /activities            → Activity[]
+  GET  /activities            → Activity[] (all activities)
+  GET  /activities?category= → Activity[] (filtered by category)
 
 Pods
   GET  /pods/mine             → Pod[] (all pods the current user is a member of)
   GET  /pods?activityId=      → Pod[] (all pods for an activity)
+  GET  /pods?activityId=&sort= → Pod[] (sort: date_posted | starting_soon | most_members)
   POST /pods/join             body: { podId }      → join existing pod
                               body: { activityId } → create new pod
   GET  /pods/:id              → Pod (with lazy COMPLETED check)
@@ -359,23 +368,24 @@ These are the key packages and what they do. All versions are pinned for Expo SD
 | File | What it does |
 |------|-------------|
 | `App.tsx` | Navigation container, bottom tab bar, route definitions, auth gate, global screen styling |
-| `src/types.ts` | TypeScript interfaces matching backend response shapes (`User`, `Activity`, `Pod`, `PodMember`, `Message`) |
+| `src/types.ts` | TypeScript interfaces matching backend response shapes (`User`, `Activity` with `category`, `Pod`, `PodMember`, `Message`) |
 | `src/api.ts` | All HTTP calls to the backend, token injection into headers, error normalization |
 | `src/theme.ts` | Design system — every color, spacing value, font size, border radius, and shadow used in the app |
 | `src/context/AuthContext.tsx` | Session persistence (AsyncStorage), sign in/out functions, `useAuth()` hook |
 | `src/components/Avatar.tsx` | Initials-based colored circle + `AvatarStack` (overlapping row of avatars) |
 | `src/components/GradientButton.tsx` | Primary action button with gradient fill, supports loading/disabled/icon/outline variants |
 | `src/components/StatusBadge.tsx` | Colored pill showing pod status (green FORMING, blue LOCKED, gray COMPLETED) |
-| `src/components/ActivityCard.tsx` | Tappable card for one activity — icon circle, title, description, location |
+| `src/components/ActivityCard.tsx` | Tappable card for one activity — icon, title, category label, description, location (icons/colors from category) |
+| `src/components/CategoryFilter.tsx` | Horizontal scrollable row of category chips; "All" plus one per category; selection drives filtered activity list |
 | `src/components/PodCard.tsx` | Card for one pod — avatar stack, progress bar, meetup info, contextual action button |
 | `src/components/FadeIn.tsx` | Animation wrapper — children fade in and slide up with a spring, optional delay for staggering |
 | `src/screens/LoginScreen.tsx` | Login form on a gradient background with a white card |
 | `src/screens/RegisterScreen.tsx` | Registration form, same visual style as login |
-| `src/screens/ActivityListScreen.tsx` | Explore tab — custom header with user avatar, animated list of activity cards |
+| `src/screens/ActivityListScreen.tsx` | Explore tab — custom header, category filter, animated list of activity cards (filtered by selected category) |
 | `src/screens/MyActivitiesScreen.tsx` | My Activities tab — user's pods grouped into "Active" and "Past" sections |
-| `src/screens/SearchScreen.tsx` | Search tab — real-time filtering of activities by name, description, or location |
+| `src/screens/SearchScreen.tsx` | Search tab — category filter + real-time text filtering of activities by name, description, or location |
 | `src/screens/ProfileScreen.tsx` | Profile tab — user avatar/name/email, pod stats, sign out with confirmation |
-| `src/screens/PodListScreen.tsx` | All pods for one activity, gradient "Start a Pod" button, animated pod cards |
+| `src/screens/PodListScreen.tsx` | All pods for one activity — "Start a Pod" button, sort options (Starting Soon, Date Posted, Most Members), pod cards |
 | `src/screens/PodScreen.tsx` | Pod detail + real-time chat — collapsible info header, gradient message bubbles, pill input |
 
 ---
@@ -495,15 +505,19 @@ A tappable card representing one activity. Layout:
 
 ```
 ┌──────────────────────────────────────────┐
-│  [icon circle]  Title                  › │
-│                 Description              │
-│                 📍 Location              │
+│  [icon]  Title              Category  › │
+│          Description                     │
+│          📍 Location                     │
 └──────────────────────────────────────────┘
 ```
 
-The icon circle's color and icon are picked from a lookup table keyed by activity title (e.g., "Morning Coffee Walk" gets a coffee icon in amber, "Study Group Sprint" gets a book icon in indigo). Unknown activities get a sparkle icon.
+The icon circle's color and icon come from `CATEGORY_META` in `constants/categories.ts`, keyed by `activity.category`. Each category (e.g., Sports & Fitness, Food & Drink) has an icon and accent color. Unknown categories fall back to a sparkle icon and primary color. The category appears as a small colored label next to the title.
 
 Pressing a card triggers a light haptic impact.
+
+### CategoryFilter
+
+A horizontally scrollable row of pill-shaped chips. The first chip is "All" (shows all activities); the rest are the 10 categories from `constants/categories.ts`. Each chip shows an icon and label. The selected chip is highlighted (colored background); unselected chips have a light gray border. Tapping a chip updates the selected category; the scroll position stays put. No scroll-to-start behavior on selection.
 
 ### PodCard
 
@@ -578,16 +592,12 @@ The whole screen is wrapped in a `KeyboardAvoidingView` + `ScrollView` so the ca
 │           Find your next crew       │
 │                                     │
 │  EXPLORE ACTIVITIES                 │
+│  [All] [Sports & Fitness] [Food…]  │  ← horizontal category filter
 │                                     │
 │  ┌─────────────────────────────────┐│
-│  │ [☕] Morning Coffee Walk      › ││
-│  │     Meet at a campus café...    ││
-│  │     📍 Memorial Union           ││
-│  └─────────────────────────────────┘│
-│  ┌─────────────────────────────────┐│
-│  │ [📖] Study Group Sprint      › ││
-│  │     Find a study partner...     ││
-│  │     📍 Main Library             ││
+│  │ [☕] Morning Coffee Walk   Food › ││
+│  │     Meet at a campus café...     ││
+│  │     📍 Memorial Union            ││
 │  └─────────────────────────────────┘│
 │  ...                                │
 ├─────────────────────────────────────┤
@@ -595,9 +605,9 @@ The whole screen is wrapped in a `KeyboardAvoidingView` + `ScrollView` so the ca
 └─────────────────────────────────────┘
 ```
 
-This screen opts out of React Navigation's native header (`headerShown: false`) and renders its own. The custom header shows the user's `Avatar` (initials circle) on the left with a greeting and subtitle. Sign-out has moved to the Profile tab.
+This screen opts out of React Navigation's native header (`headerShown: false`) and renders its own. The custom header shows the user's `Avatar` (initials circle) on the left with a greeting and subtitle.
 
-Below the header is a `FlatList` of `ActivityCard` components, each wrapped in a `FadeIn` with a staggered delay. The first card appears immediately, the second 70ms later, the third 140ms later, and so on — creating a cascading entrance effect.
+Below the header is a `FlatList` whose `ListHeaderComponent` contains the "EXPLORE ACTIVITIES" label and a `CategoryFilter` (horizontal scrollable category chips). Tapping a category fetches activities for that category via `GET /activities?category=`. The filter scroll position is preserved when switching categories. The list of `ActivityCard` components follows, each wrapped in `FadeIn` with a staggered delay.
 
 Pull-to-refresh is enabled with a tinted refresh indicator (indigo instead of the default gray).
 
@@ -636,6 +646,7 @@ Fetches all pods the current user is a member of via `GET /pods/mine`. Pods are 
 │  ┌─────────────────────────────────┐│
 │  │ 🔍 Search activities, loc...   ││
 │  └─────────────────────────────────┘│
+│  [All] [Sports & Fitness] [Food…]  │  ← category filter
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │ [☕] Morning Coffee Walk      › ││
@@ -647,7 +658,7 @@ Fetches all pods the current user is a member of via `GET /pods/mine`. Pods are 
 └─────────────────────────────────────┘
 ```
 
-Loads all activities on mount, then filters them in real-time as the user types. Matching is case-insensitive against the activity title, description, and location. Results are rendered as `ActivityCard` components — tapping one navigates to `PodList`. A clear button (×) appears in the search bar when there is input. The search bar is styled as a bordered pill with a search icon and uses the design system colors.
+Loads activities on mount (optionally filtered by selected category via `GET /activities?category=`). Filters them in real-time as the user types — matching is case-insensitive against the activity title, description, and location. A `CategoryFilter` sits below the search bar; category and text filters combine. Results are rendered as `ActivityCard` components — tapping one navigates to `PodList`. A clear button (×) appears in the search bar when there is input. The search bar is styled as a bordered pill with a search icon.
 
 ### ProfileScreen (Profile Tab)
 
@@ -687,8 +698,7 @@ Shows the user's avatar (large, 72px), name, and email in a white card. Below is
 │  ┌─────────────────────────────────┐│
 │  │  ⊕  Start a Pod                ││  ← gradient button
 │  └─────────────────────────────────┘│
-│                                     │
-│  OPEN PODS                          │
+│  [Starting Soon] [Date Posted] [Most Members]  ← sort options
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │ [A][B][C]           [FORMING]  ││
@@ -698,13 +708,11 @@ Shows the user's avatar (large, 72px), name, and email in a white card. Below is
 │  │ 📍 Memorial Union              ││
 │  │                    [Join Pod]   ││
 │  └─────────────────────────────────┘│
-│                                     │
-│  PAST PODS                          │
 │  ...                                │
 └─────────────────────────────────────┘
 ```
 
-Uses the native navigation header (title comes from route params). The list has a `GradientButton` at the top ("Start a Pod" with a plus icon). Pods are sorted FORMING first, then LOCKED, then COMPLETED. A section divider ("PAST PODS") appears between the last FORMING pod and the first non-FORMING pod.
+Uses the native navigation header (title comes from route params). The list has a `GradientButton` at the top ("Start a Pod" with a plus icon). Below it is a horizontal row of sort chips: **Starting Soon** (default), **Date Posted**, and **Most Members**. Sorting is done server-side via `GET /pods?activityId=&sort=`.
 
 Each pod is a `PodCard` wrapped in `FadeIn` with staggered delay. The "Start a Pod" button also fades in.
 
@@ -859,6 +867,8 @@ Both are kept in sync by `signIn` and `signOut`.
 
 Everything else is local `useState` in each screen:
 - `activities`, `pods`, `messages` — data fetched from the API
+- `selectedCategory` — which category filter is active on Explore/Search (null = "All")
+- `sortBy` — pod sort option on PodListScreen (starting_soon, date_posted, most_members)
 - `loading`, `refreshing`, `sending` — UI state for loading indicators
 - `actionId` — which item is currently being acted on (for per-button loading states)
 - `messageText` — the controlled input value for the chat box

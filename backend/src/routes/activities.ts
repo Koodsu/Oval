@@ -3,10 +3,14 @@ import prisma from '../prisma';
 
 const router = Router();
 
-// GET /activities
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+// GET /activities?category=
+router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const { category } = req.query;
+    const where = category && typeof category === 'string' ? { category } : {};
+
     const activities = await prisma.activity.findMany({
+      where,
       orderBy: { createdAt: 'asc' },
     });
     res.json(activities);

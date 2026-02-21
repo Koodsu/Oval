@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -16,6 +17,7 @@ import { RootStackParamList } from '../../App';
 import { getActivities } from '../api';
 import { Activity } from '../types';
 import ActivityCard from '../components/ActivityCard';
+import CategoryFilter from '../components/CategoryFilter';
 import FadeIn from '../components/FadeIn';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
@@ -24,22 +26,25 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const fetchActivities = useCallback(async () => {
+  const fetchActivities = useCallback(async (category?: string | null) => {
     try {
-      const data = await getActivities();
+      const data = await getActivities(category ?? undefined);
       setActivities(data);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load activities');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    fetchActivities(selectedCategory);
+  }, [fetchActivities, selectedCategory]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return activities;
@@ -95,6 +100,22 @@ export default function SearchScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchActivities(selectedCategory);
+            }}
+            tintColor={colors.primary}
+          />
+        }
+        ListHeaderComponent={
+          <CategoryFilter
+            selected={selectedCategory}
+            onSelect={(cat) => setSelectedCategory(cat)}
+          />
+        }
         renderItem={({ item, index }) => (
           <FadeIn delay={index * 70}>
             <ActivityCard
