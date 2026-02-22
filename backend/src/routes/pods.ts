@@ -1,12 +1,20 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { LOCATION_BY_CATEGORY } from '../config/locations';
 
 const router = Router();
 
 const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
+
+function getMaxMeetupTime(): Date {
+  const max = new Date();
+  max.setDate(max.getDate() + 7);
+  max.setHours(23, 59, 59, 999);
+  return max;
+}
 
 // GET /pods/mine
 router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -33,10 +41,10 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
-// GET /pods?activityId=
-// Returns all pods for an activity (all statuses)
+// GET /pods?activityId=&sort=&locationType=
+// Returns FORMING pods for an activity (locked pods excluded from browse)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { activityId } = req.query;
+  const { activityId, sort, locationType } = req.query;
 
   if (!activityId || typeof activityId !== 'string') {
     res.status(400).json({ error: 'activityId query parameter is required' });
@@ -44,7 +52,16 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
-    const { sort } = req.query;
+    const where: Record<string, unknown> = {
+      activityId,
+      status: FORMING,
+    };
+    if (
+      typeof locationType === 'string' &&
+      (locationType === 'public' || locationType === 'private')
+    ) {
+      where.locationType = locationType;
+    }
 
     let orderBy: Record<string, string> = { createdAt: 'desc' };
     if (sort === 'starting_soon') {
@@ -52,8 +69,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const pods = await prisma.pod.findMany({
-      where: { activityId },
+      where,
       include: {
+        activity: true,
         members: {
           include: { user: { select: { id: true, name: true } } },
         },
@@ -103,7 +121,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         return;
       }
 
-      if (pod.members.length >= 4) {
+      if (pod.members.length >= pod.maxMembers) {
         res.status(409).json({ error: 'This pod is full' });
         return;
       }
@@ -127,7 +145,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       await prisma.podMember.create({ data: { podId, userId } });
 
       const memberCount = await prisma.podMember.count({ where: { podId } });
-      if (memberCount >= 4) {
+      if (memberCount >= pod.maxMembers) {
         await prisma.pod.update({ where: { id: podId }, data: { status: LOCKED } });
       }
 
@@ -135,6 +153,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         where: { id: podId },
         include: {
           activity: true,
+          creator: { select: { id: true } },
           members: { include: { user: { select: { id: true, name: true } } } },
         },
       });
@@ -166,13 +185,55 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    const minMembers = Math.max(2, Math.min(10, Number(req.body.minMembers) || 2));
+    const maxMembers = Math.max(minMembers, Math.min(10, Number(req.body.maxMembers) || 4));
+    const locType = req.body.locationType === 'private' ? 'private' : 'public';
+    const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+
+    let meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (req.body.meetupTime) {
+      const parsed = new Date(req.body.meetupTime);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: 'Invalid meetupTime' });
+        return;
+      }
+      const now = new Date();
+      const maxTime = getMaxMeetupTime();
+      if (parsed <= now) {
+        res.status(400).json({ error: 'Meetup time must be in the future' });
+        return;
+      }
+      if (parsed > maxTime) {
+        res.status(400).json({ error: 'Meetup time cannot be more than 1 week from now' });
+        return;
+      }
+      meetupTime = parsed;
+    }
+
+    let location: string;
+    if (locType === 'public') {
+      const allowed = LOCATION_BY_CATEGORY[activity.category] ?? [];
+      location = locationInput || activity.defaultLocation;
+      if (allowed.length > 0 && !allowed.includes(location)) {
+        res.status(400).json({
+          error: 'Invalid public location. Must be from the activity category list.',
+        });
+        return;
+      }
+    } else {
+      location = locationInput || 'Address to be shared';
+    }
+
     const newPod = await prisma.pod.create({
       data: {
         activityId,
         meetupTime,
-        location: activity.defaultLocation,
+        location,
+        locationType: locType,
+        minMembers,
+        maxMembers,
         status: FORMING,
+        creatorId: userId,
       },
     });
 
@@ -182,11 +243,100 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       where: { id: newPod.id },
       include: {
         activity: true,
+        creator: { select: { id: true } },
         members: { include: { user: { select: { id: true, name: true } } } },
       },
     });
 
     res.status(201).json(updatedPod);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/lock – creator only; lock when memberCount >= minMembers
+router.post('/:id/lock', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const creatorId = pod.creatorId ?? pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can lock the pod' });
+      return;
+    }
+    if (pod.status !== FORMING) {
+      res.status(409).json({ error: 'Pod is already locked or completed' });
+      return;
+    }
+    if (pod.members.length < pod.minMembers) {
+      res.status(400).json({ error: `Need at least ${pod.minMembers} members to lock` });
+      return;
+    }
+
+    const updated = await prisma.pod.update({
+      where: { id },
+      data: { status: LOCKED },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: { id: true, name: true } } } },
+      },
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/unlock – creator only; unlock when memberCount < maxMembers
+router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const creatorId = pod.creatorId ?? pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can unlock the pod' });
+      return;
+    }
+    if (pod.status !== LOCKED) {
+      res.status(409).json({ error: 'Pod is not locked' });
+      return;
+    }
+    if (pod.members.length >= pod.maxMembers) {
+      res.status(400).json({ error: 'Cannot unlock a full pod' });
+      return;
+    }
+
+    const updated = await prisma.pod.update({
+      where: { id },
+      data: { status: FORMING },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: { id: true, name: true } } } },
+      },
+    });
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -202,6 +352,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       where: { id },
       include: {
         activity: true,
+        creator: { select: { id: true } },
         members: {
           include: { user: { select: { id: true, name: true } } },
         },
@@ -220,6 +371,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
         data: { status: COMPLETED },
         include: {
           activity: true,
+          creator: { select: { id: true } },
           members: {
             include: { user: { select: { id: true, name: true } } },
           },

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPodsByActivity, joinPod, createPod } from '../api';
+import { getPodsByActivity, joinPod } from '../api';
 import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
@@ -25,6 +25,7 @@ import { colors, spacing, radii, typography } from '../theme';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodList'>;
 
 type SortOption = 'starting_soon' | 'date_posted' | 'most_members';
+type LocationFilter = 'all' | 'public' | 'private';
 
 const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'starting_soon', label: 'Starting Soon', icon: 'time-outline' },
@@ -32,8 +33,14 @@ const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Ionicon
   { key: 'most_members', label: 'Most Members', icon: 'people-outline' },
 ];
 
+const LOCATION_FILTERS: { key: LocationFilter; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'all', label: 'All', icon: 'list-outline' },
+  { key: 'public', label: 'Public', icon: 'business-outline' },
+  { key: 'private', label: 'Private', icon: 'location-outline' },
+];
+
 export default function PodListScreen({ route, navigation }: Props) {
-  const { activityId } = route.params;
+  const { activityId, activityTitle, activityCategory } = route.params;
   const { user } = useAuth();
 
   const [pods, setPods] = useState<Pod[]>([]);
@@ -41,10 +48,15 @@ export default function PodListScreen({ route, navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('starting_soon');
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>('all');
 
   const fetchPods = useCallback(async () => {
     try {
-      const data = await getPodsByActivity(activityId, sortBy);
+      const data = await getPodsByActivity(
+        activityId,
+        sortBy,
+        locationFilter
+      );
       setPods(data);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load pods');
@@ -52,7 +64,7 @@ export default function PodListScreen({ route, navigation }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activityId, sortBy]);
+  }, [activityId, sortBy, locationFilter]);
 
   useEffect(() => {
     fetchPods();
@@ -70,16 +82,12 @@ export default function PodListScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleCreate = async () => {
-    setActionId('new');
-    try {
-      const pod = await createPod(activityId);
-      navigation.replace('Pod', { podId: pod.id });
-    } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create pod');
-    } finally {
-      setActionId(null);
-    }
+  const handleCreate = () => {
+    navigation.navigate('CreatePod', {
+      activityId,
+      activityTitle,
+      activityCategory: activityCategory ?? 'Social',
+    });
   };
 
   const isAlreadyMember = (pod: Pod) =>
@@ -116,11 +124,41 @@ export default function PodListScreen({ route, navigation }: Props) {
               <GradientButton
                 title="Start a Pod"
                 onPress={handleCreate}
-                loading={actionId === 'new'}
                 disabled={actionId !== null}
                 icon="add-circle-outline"
               />
             </FadeIn>
+
+            {/* Location filter */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sortRow}
+            >
+              {LOCATION_FILTERS.map((opt) => {
+                const isActive = locationFilter === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.sortChip, isActive && styles.sortChipActive]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setLocationFilter(opt.key);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={opt.icon}
+                      size={14}
+                      color={isActive ? colors.textInverse : colors.textSecondary}
+                    />
+                    <Text style={[styles.sortText, isActive && styles.sortTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             {/* Sort options */}
             <ScrollView

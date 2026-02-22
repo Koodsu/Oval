@@ -58,9 +58,14 @@ export const getActivities = (category?: string) =>
 export const getMyPods = () =>
   request<import('./types').Pod[]>('/pods/mine');
 
-export const getPodsByActivity = (activityId: string, sort?: string) => {
+export const getPodsByActivity = (
+  activityId: string,
+  sort?: string,
+  locationType?: 'all' | 'public' | 'private'
+) => {
   const params = new URLSearchParams({ activityId });
   if (sort) params.set('sort', sort);
+  if (locationType && locationType !== 'all') params.set('locationType', locationType);
   return request<import('./types').Pod[]>(`/pods?${params.toString()}`);
 };
 
@@ -72,11 +77,28 @@ export const joinPod = (podId: string) =>
   });
 
 // Create a brand new pod for an activity (you become the first member)
-export const createPod = (activityId: string) =>
+export interface CreatePodOptions {
+  minMembers?: number;
+  maxMembers?: number;
+  meetupTime?: string; // ISO string
+  locationType?: 'public' | 'private';
+  location?: string;
+}
+export const createPod = (activityId: string, options?: CreatePodOptions) =>
   request<import('./types').Pod>('/pods/join', {
     method: 'POST',
-    body: JSON.stringify({ activityId }),
+    body: JSON.stringify({ activityId, ...options }),
   });
+
+// Get public location options for an activity's category
+export const getActivityLocations = (activityId: string) =>
+  request<string[]>(`/activities/${activityId}/locations`);
+
+// Lock/unlock pod (creator only)
+export const lockPod = (podId: string) =>
+  request<import('./types').Pod>(`/pods/${podId}/lock`, { method: 'POST' });
+export const unlockPod = (podId: string) =>
+  request<import('./types').Pod>(`/pods/${podId}/unlock`, { method: 'POST' });
 
 export const getPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}`);
