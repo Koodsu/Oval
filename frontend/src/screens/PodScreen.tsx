@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPod, getMessages, sendMessage } from '../api';
+import { getPod, getMessages, sendMessage, lockPod, unlockPod } from '../api';
 import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
@@ -60,6 +60,7 @@ export default function PodScreen({ route }: Props) {
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [locking, setLocking] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(true);
 
   const flatListRef = useRef<FlatList>(null);
@@ -128,6 +129,40 @@ export default function PodScreen({ route }: Props) {
     );
   }
 
+  const creatorId = pod.creatorId ?? pod.members[0]?.user?.id;
+  const isCreator = user?.id === creatorId;
+  const memberCount = pod.members.length;
+  const maxMembers = pod.maxMembers ?? 4;
+  const minMembers = pod.minMembers ?? 2;
+  const canLock = isCreator && pod.status === 'FORMING' && memberCount >= minMembers;
+  const canUnlock = isCreator && pod.status === 'LOCKED' && memberCount < maxMembers;
+
+  const handleLock = async () => {
+    if (!canLock) return;
+    setLocking(true);
+    try {
+      const updated = await lockPod(podId);
+      setPod(updated);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to lock pod');
+    } finally {
+      setLocking(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!canUnlock) return;
+    setLocking(true);
+    try {
+      const updated = await unlockPod(podId);
+      setPod(updated);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to unlock pod');
+    } finally {
+      setLocking(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -161,12 +196,16 @@ export default function PodScreen({ route }: Props) {
               <Text style={styles.metaText}>{formatTime(pod.meetupTime)}</Text>
             </View>
             <View style={styles.metaRow}>
-              <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+              <Ionicons
+                name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+                size={14}
+                color={colors.textTertiary}
+              />
               <Text style={styles.metaText}>{pod.location}</Text>
             </View>
             <View style={styles.membersSection}>
               <Text style={styles.membersLabel}>
-                Members {pod.members.length}/4
+                Members {memberCount}/{maxMembers}
               </Text>
               <AvatarStack
                 members={pod.members}
@@ -174,6 +213,42 @@ export default function PodScreen({ route }: Props) {
                 size={30}
               />
             </View>
+            {(canLock || canUnlock) && (
+              <View style={styles.lockRow}>
+                {canLock && (
+                  <TouchableOpacity
+                    style={styles.lockButton}
+                    onPress={handleLock}
+                    disabled={locking}
+                  >
+                    {locking ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
+                        <Text style={styles.lockButtonText}>Lock Pod</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {canUnlock && (
+                  <TouchableOpacity
+                    style={styles.lockButton}
+                    onPress={handleUnlock}
+                    disabled={locking}
+                  >
+                    {locking ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
+                        <Text style={styles.lockButtonText}>Unlock Pod</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
         )}
       </TouchableOpacity>
@@ -350,6 +425,27 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  lockRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  lockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  lockButtonText: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.primary,
   },
 
   // Chat

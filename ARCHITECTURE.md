@@ -1,6 +1,6 @@
-# Bridge v0.1 — Architecture
+# Bridge — Architecture
 
-Bridge is a structured micro-group formation app for college students. Users browse activities, join or create pods of up to 4 people, meet up, and chat within their pod. This document explains how everything is built and why.
+Bridge is a structured micro-group formation app for college students. Users browse activities, join or create pods (small groups of 2–10 people), meet up, and chat within their pod. When creating a pod, users can customize group size, meetup time (up to 1 week out), and location (public OSU buildings or a private address). This document explains how everything is built and why — it assumes you've taken an intro CS course and are comfortable with concepts like APIs, databases, and React.
 
 ---
 
@@ -51,7 +51,9 @@ Bridge is a structured micro-group formation app for college students. Users bro
 └─────────────────────────────────────────────────────┘
 ```
 
-The frontend and backend are separate workspaces within the same repo. They communicate over a local HTTP connection. There is no WebSocket layer — chat uses polling.
+The frontend and backend are separate workspaces within the same repo. They communicate over a local HTTP connection. There is no WebSocket layer — chat uses polling (the app asks the server for new messages every few seconds instead of keeping a live connection).
+
+**Terms you'll see in this doc:** *JWT* = JSON Web Token, a string that proves you're logged in (like a temporary pass); *ORM* = Object-Relational Mapping, e.g. Prisma turns database rows into JavaScript objects; *endpoint* = a URL + HTTP method (e.g. `GET /pods`) that the server responds to.
 
 ---
 
@@ -66,12 +68,16 @@ Bridge/                          ← project root
     src/
       server.ts                  ← Express app entry point
       prisma.ts                  ← Singleton PrismaClient
+      config/
+        locations.ts             ← OSU building names by activity category (editable)
       middleware/
         auth.ts                  ← JWT verification middleware
       routes/
         auth.ts                  ← POST /auth/register, /login
-        activities.ts            ← GET /activities, GET /activities?category=
-        pods.ts                  ← GET /pods/mine, GET /pods?activityId=&sort=, POST /pods/join, GET /pods/:id
+        activities.ts            ← GET /activities, GET /activities?category=, GET /activities/:id/locations
+        pods.ts                  ← GET /pods/mine, GET /pods?activityId=&sort=&locationType=,
+                                   POST /pods/join, POST /pods/:id/lock, POST /pods/:id/unlock,
+                                   GET /pods/:id
         messages.ts              ← GET/POST /pods/:id/messages
     prisma/
       schema.prisma              ← Database schema
@@ -107,8 +113,9 @@ Bridge/                          ← project root
         MyActivitiesScreen.tsx   ← My Activities tab: user's pods grouped by status
         SearchScreen.tsx         ← Search tab: filter activities by text + category
         ProfileScreen.tsx        ← Profile tab: user info, stats, sign out
-        PodListScreen.tsx        ← Pods for one activity (create/join, sort options)
-        PodScreen.tsx            ← Pod detail + chat (collapsible header, gradient bubbles)
+        PodListScreen.tsx        ← Pods for one activity (create/join, sort + location filter)
+        CreatePodScreen.tsx      ← Form to create a pod (group size, time, location)
+        PodScreen.tsx            ← Pod detail + chat (collapsible header, Lock/Unlock, gradient bubbles)
     package.json
     tsconfig.json
 ```
@@ -122,7 +129,7 @@ The original frontend was 5 screen files, `api.ts`, `types.ts`, and `AuthContext
 - `constants/categories.ts` — category metadata (icons, colors) for the 10 activity categories
 - New dependencies for gradients, icons, haptics, and blur
 
-Later updates expanded activities from 5 to ~47 across 10 categories, added category filtering on Explore and Search, and added pod sorting (Starting Soon, Date Posted, Most Members) on PodList.
+Later updates expanded activities from 5 to ~47 across 10 categories, added category filtering on Explore and Search, and added pod sorting (Starting Soon, Date Posted, Most Members) on PodList. A major update added pod customization: min/max members (preset chips like 2–4, 3–6), meetup time picker (max 1 week out), public vs private location with OSU building dropdowns, a dedicated CreatePodScreen, lock/unlock controls for pod creators, and location filtering when browsing pods.
 
 ---
 
@@ -156,6 +163,12 @@ A single `PrismaClient` instance is created once and imported by every route fil
 
 Every protected route passes through `requireAuth` before the handler runs. It reads the JWT from the `Authorization` header, verifies it, and attaches `req.user = { userId, email }` to the request object. The extended `AuthRequest` type makes `req.user` available with TypeScript type safety in route handlers.
 
+### Location config — `config/locations.ts`
+
+This file maps each activity category (e.g., "Sports & Fitness", "Food & Drink") to a list of Ohio State University building names. When a user creates a pod for an activity, the frontend fetches `GET /activities/:id/locations`, which returns the buildings for that activity's category. The user picks one from a dropdown (or chips) for public locations, or types a custom address for private locations.
+
+**Why a separate config file?** So you can add or change OSU buildings without touching route logic. Edit `LOCATION_BY_CATEGORY` in `locations.ts` — it's a plain object: `{ "Sports & Fitness": ["RPAC", "North Rec", ...], "Food & Drink": ["Traditions at Scott", ...], ... }`.
+
 ---
 
 ## 4. Database Models
@@ -170,9 +183,13 @@ The schema lives in `prisma/schema.prisma` with SQLite as the provider.
 │ name     │       │ title    │       │ activityId│──→ Activity
 │ email    │       │ desc     │       │ meetupTime│
 │ password │       │ category │       │ location  │
-│ createdAt│       │ defaultLoc│       │ status    │
-└────┬─────┘       │ createdAt│       │ createdAt │
-                   └──────────┘       └─────┬─────┘
+│ createdAt│       │ defaultLoc│       │ locationType│  "public" | "private"
+└────┬─────┘       │ createdAt│       │ minMembers │  2–10 (default 2)
+     │             └──────────┘       │ maxMembers │  2–10 (default 4)
+     │                               │ status    │
+     │                               │ creatorId │──→ User (who created it)
+     │                               │ createdAt │
+     │                               └─────┬─────┘
      │                                     │
      │         ┌──────────────┐             │
      └────────→│  PodMember   │←────────────┘
@@ -203,6 +220,13 @@ The schema lives in `prisma/schema.prisma` with SQLite as the provider.
 - `Pod.status` is a plain `String` field (not an enum). SQLite does not support Prisma enums. Valid values are enforced in application code as the constants `"FORMING"`, `"LOCKED"`, and `"COMPLETED"`
 - All primary keys are UUIDs generated by the application (`@default(uuid())`), not auto-increment integers. This is safer for distributed systems and avoids leaking record counts
 
+### Pod customization fields (added in v0.2)
+
+Pods now store more than just meetup time and location:
+- **locationType** — `"public"` means the location is an OSU building from a predefined list; `"private"` means the creator typed a custom address
+- **minMembers** and **maxMembers** — the pod locks when it has between min and max people (creator can manually lock); it auto-locks when full (reaches maxMembers)
+- **creatorId** — the user who created the pod; only they can lock or unlock it (when the pod isn't full). If the database has old pods without creatorId, the app falls back to the first member by join date
+
 ### Seed data
 
 `prisma/seed.ts` inserts ~47 activities across 10 categories on first run. Categories include Sports & Fitness, Food & Drink, Academic, Arts & Creative, Social, Outdoors, Music & Entertainment, Wellness, Gaming, and Volunteering. The seed clears existing activities (and cascading pods/messages) before re-inserting, so running `npx prisma db seed` resets the catalog. The Prisma `"seed"` script in `package.json` means `prisma migrate dev` runs the seed automatically after applying migrations.
@@ -219,16 +243,21 @@ Auth
   POST /auth/login            body: { email, password }
 
 Activities
-  GET  /activities            → Activity[] (all activities)
-  GET  /activities?category= → Activity[] (filtered by category)
+  GET  /activities              → Activity[] (all activities)
+  GET  /activities?category=    → Activity[] (filtered by category)
+  GET  /activities/:id/locations → string[] (OSU building names for this activity's category)
 
 Pods
-  GET  /pods/mine             → Pod[] (all pods the current user is a member of)
-  GET  /pods?activityId=      → Pod[] (all pods for an activity)
-  GET  /pods?activityId=&sort= → Pod[] (sort: date_posted | starting_soon | most_members)
-  POST /pods/join             body: { podId }      → join existing pod
-                              body: { activityId } → create new pod
-  GET  /pods/:id              → Pod (with lazy COMPLETED check)
+  GET  /pods/mine               → Pod[] (all pods the current user is a member of)
+  GET  /pods?activityId=        → Pod[] (FORMING pods only — locked pods are hidden from browse)
+  GET  /pods?activityId=&sort=  → sort: date_posted | starting_soon | most_members
+  GET  /pods?activityId=&locationType= → filter: all | public | private
+  POST /pods/join                body: { podId }      → join existing pod
+                                 body: { activityId, minMembers?, maxMembers?, meetupTime?,
+                                         locationType?, location? } → create new pod
+  POST /pods/:id/lock            → Lock pod (creator only, requires memberCount >= minMembers)
+  POST /pods/:id/unlock          → Unlock pod (creator only, requires memberCount < maxMembers)
+  GET  /pods/:id                 → Pod (with lazy COMPLETED check)
 
 Messages
   GET  /pods/:id/messages     → Message[]
@@ -237,7 +266,7 @@ Messages
 
 ### Response shapes
 
-Every successful response returns JSON. Errors return `{ error: string }` with an appropriate HTTP status code. Pod responses always include the nested `activity` object and `members` array (each member includes `user.id` and `user.name`). Message responses include `user.id` and `user.name`. Passwords are never returned.
+Every successful response returns JSON. Errors return `{ error: string }` with an appropriate HTTP status code. Pod responses include the nested `activity` object, `members` array (each with `user.id` and `user.name`), and `creator` (or `creatorId`) so the frontend can show Lock/Unlock only to the creator. They also include `minMembers`, `maxMembers`, and `locationType`. Message responses include `user.id` and `user.name`. Passwords are never returned.
 
 ---
 
@@ -290,30 +319,37 @@ JWT secret defaults to `'bridge_dev_secret'` if the `JWT_SECRET` environment var
 
 ## 7. Pod Lifecycle
 
-A pod moves through three states in one direction only — it never goes backward.
+A pod moves through three states. Unlike v0.1, LOCKED is now reachable both automatically (when full) and manually (when the creator chooses).
 
 ```
          User creates pod
                │
                ▼
           ┌─────────┐
-          │ FORMING │  ← open, 1–3 members, anyone can join
+          │ FORMING │  ← open, anyone can join (until full)
           └────┬────┘
-               │  4th member joins
+               │  Auto-lock: memberCount >= maxMembers (e.g. 4th person joins a 2–4 pod)
+               │  Manual lock: creator taps "Lock Pod" when memberCount >= minMembers
                ▼
           ┌────────┐
-          │ LOCKED │  ← closed, no new members, chat active
+          │ LOCKED │  ← closed, hidden from browse list, chat active
           └────┬───┘
+               │  Creator can unlock (if memberCount < maxMembers) → back to FORMING
                │  meetupTime < now  (checked lazily on GET /pods/:id)
                ▼
          ┌───────────┐
-         │ COMPLETED │  ← meetup happened, read-only
+         │ COMPLETED │  ← meetup happened, read-only (final state)
          └───────────┘
 ```
 
-### FORMING → LOCKED (eager, on join)
+### FORMING → LOCKED (two ways)
 
-When `POST /pods/join` adds a member, it immediately counts total members with `prisma.podMember.count()`. If the count reaches 4, it runs `prisma.pod.update({ status: 'LOCKED' })` in the same request before returning. The locking is synchronous within the request — the response the client receives already reflects the locked state.
+1. **Auto-lock (on join)** — When someone joins and the pod reaches `maxMembers` (e.g., 4th person in a 2–4 pod), the server immediately sets `status = 'LOCKED'` in the same request.
+2. **Manual lock (creator only)** — The creator can tap "Lock Pod" anytime the pod has at least `minMembers` (e.g., 2 people in a 2–4 pod). This hides the pod from the browse list so no one else can join, but chat stays active. Use case: "We have enough people, let's lock it and plan."
+
+### LOCKED → FORMING (manual unlock)
+
+If the pod is locked but not full, the creator can tap "Unlock Pod" to reopen it. It will reappear in the browse list. You cannot unlock a full pod (that would be confusing).
 
 ### LOCKED → COMPLETED (lazy, on read)
 
@@ -325,7 +361,7 @@ if (pod.status === 'LOCKED' && pod.meetupTime < new Date()) {
 }
 ```
 
-The transition happens the first time any client fetches the pod after the meetup time passes. This is called lazy evaluation — state is updated on demand rather than proactively. It is simpler to reason about and requires no scheduler, at the cost of the status being slightly stale until someone reads it.
+The transition happens the first time any client fetches the pod after the meetup time passes. This is called **lazy evaluation** — the server updates state only when someone asks for it, instead of running a scheduler. Simpler to build, at the cost of the status being slightly stale until someone reads it.
 
 ### One active pod per activity per user
 
@@ -341,6 +377,10 @@ prisma.podMember.findFirst({
 ```
 
 If a match is found, the request returns 409 Conflict. A user can be in multiple pods across different activities, but only one active pod per activity.
+
+### Browse list shows only FORMING pods
+
+When you list pods for an activity (`GET /pods?activityId=`), the server only returns pods with `status === 'FORMING'`. Locked pods disappear from that list — they still exist, and members can still see them in "My Activities" and chat, but new people cannot find or join them.
 
 ---
 
@@ -358,6 +398,7 @@ These are the key packages and what they do. All versions are pinned for Expo SD
 | `@react-navigation/native-stack` ^7 | Native stack navigator (iOS UINavigationController, Android Fragment) |
 | `@react-navigation/bottom-tabs` ^7 | Bottom tab bar navigator for the four main app tabs |
 | `@react-native-async-storage/async-storage` | Persistent key-value storage for JWT token and user session |
+| `@react-native-community/datetimepicker` | Native date/time picker for meetup time in CreatePodScreen |
 | `expo-linear-gradient` | `<LinearGradient>` component for gradient backgrounds and buttons |
 | `expo-blur` | Frosted-glass blur effects |
 | `expo-haptics` | Tactile vibration feedback on button presses |
@@ -385,8 +426,9 @@ These are the key packages and what they do. All versions are pinned for Expo SD
 | `src/screens/MyActivitiesScreen.tsx` | My Activities tab — user's pods grouped into "Active" and "Past" sections |
 | `src/screens/SearchScreen.tsx` | Search tab — category filter + real-time text filtering of activities by name, description, or location |
 | `src/screens/ProfileScreen.tsx` | Profile tab — user avatar/name/email, pod stats, sign out with confirmation |
-| `src/screens/PodListScreen.tsx` | All pods for one activity — "Start a Pod" button, sort options (Starting Soon, Date Posted, Most Members), pod cards |
-| `src/screens/PodScreen.tsx` | Pod detail + real-time chat — collapsible info header, gradient message bubbles, pill input |
+| `src/screens/PodListScreen.tsx` | All pods for one activity — "Start a Pod" (navigates to CreatePod), location filter (All/Public/Private), sort options, pod cards |
+| `src/screens/CreatePodScreen.tsx` | Form to create a pod — group size presets (2–3, 2–4, 3–6, etc.), meetup date/time picker (max 1 week out), public/private location with OSU building chips or address input |
+| `src/screens/PodScreen.tsx` | Pod detail + chat — collapsible header, Lock/Unlock buttons (creator only), member count (e.g. 3/6), gradient message bubbles, pill input |
 
 ---
 
@@ -527,14 +569,14 @@ A card representing one pod. Layout:
 ┌──────────────────────────────────────────┐
 │  [avatar] [avatar] [avatar]    [FORMING] │
 │  ████████████░░░░░░░░░░░░░               │
-│  2/4 members · 2 spots open             │
+│  2/6 members · 4 spots open             │  ← uses pod.maxMembers (not hardcoded 4)
 │  🕐 Sat, Feb 22, 3:00 PM               │
-│  📍 Campus Quad                          │
+│  🏢 RPAC  (or 📍 123 Main St for private)│  ← icon differs by locationType
 │                          [Join Pod]      │
 └──────────────────────────────────────────┘
 ```
 
-The top row shows an `AvatarStack` on the left and a `StatusBadge` on the right. Below that is a thin progress bar (filled portion = `memberCount / 4`). The action area at the bottom adapts: if you are already a member, it shows "View Pod →" as a link; if the pod is joinable, it shows a gradient "Join Pod" button; if the pod is full, it shows "Pod is full" in gray.
+The top row shows an `AvatarStack` on the left and a `StatusBadge` on the right. The progress bar uses `memberCount / pod.maxMembers` — pods can have different max sizes (2–10). The location icon is a building icon for public locations, a pin for private. The action area adapts: if you're a member, "View Pod →"; if joinable, "Join Pod"; if full, "Pod is full".
 
 ### FadeIn
 
@@ -696,27 +738,54 @@ Shows the user's avatar (large, 72px), name, and email in a white card. Below is
 │  ← Morning Coffee Walk              │  ← native navigation header
 │                                     │
 │  ┌─────────────────────────────────┐│
-│  │  ⊕  Start a Pod                ││  ← gradient button
+│  │  ⊕  Start a Pod                ││  ← navigates to CreatePodScreen
 │  └─────────────────────────────────┘│
+│  [All] [Public] [Private]            ← location filter (which pods to show)
 │  [Starting Soon] [Date Posted] [Most Members]  ← sort options
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │ [A][B][C]           [FORMING]  ││
 │  │ ████████████░░░░░░░░           ││
-│  │ 3/4 members · 1 spot open      ││
+│  │ 3/6 members · 3 spots open     ││
 │  │ 🕐 Sat, Feb 22, 3:00 PM       ││
-│  │ 📍 Memorial Union              ││
+│  │ 🏢 RPAC                        ││
 │  │                    [Join Pod]   ││
 │  └─────────────────────────────────┘│
 │  ...                                │
 └─────────────────────────────────────┘
 ```
 
-Uses the native navigation header (title comes from route params). The list has a `GradientButton` at the top ("Start a Pod" with a plus icon). Below it is a horizontal row of sort chips: **Starting Soon** (default), **Date Posted**, and **Most Members**. Sorting is done server-side via `GET /pods?activityId=&sort=`.
+Uses the native navigation header (title from route params). "Start a Pod" navigates to `CreatePodScreen` — it does not create a pod immediately. Below that are two filter rows: **location** (All, Public, Private) and **sort** (Starting Soon, Date Posted, Most Members). Both are passed to `GET /pods?activityId=&locationType=&sort=`.
 
-Each pod is a `PodCard` wrapped in `FadeIn` with staggered delay. The "Start a Pod" button also fades in.
+Each pod is a `PodCard`. When a user taps "Join Pod", the button shows a loading spinner; after joining, `navigation.replace('Pod', ...)` replaces the current screen (see Navigation section for why).
 
-When a user taps "Join Pod", the button shows a loading spinner and the `actionId` state prevents any other button from being pressed simultaneously. After joining, `navigation.replace('Pod', ...)` replaces the current screen (see Navigation section for why).
+### CreatePodScreen
+
+```
+┌─────────────────────────────────────┐
+│  ← Create Pod                        │
+│                                     │
+│  ACTIVITY                            │
+│  Morning Coffee Walk                 │
+│                                     │
+│  GROUP SIZE                          │
+│  [2–3] [2–4] [3–4] [3–6] [4–6] ...  │  ← preset chips (one tap picks min+max)
+│                                     │
+│  MEETUP TIME                         │
+│  [📅 Sat, Feb 23, 12:00 PM      ›]  │  ← tap to open date/time picker (max 1 week out)
+│                                     │
+│  LOCATION                            │
+│  [Public] [Private]                  │  ← toggle
+│  [RPAC] [North Rec] [Jesse Owens…]  │  ← if Public: horizontal chips of OSU buildings
+│  or [Enter address_____________]     │  ← if Private: text input
+│                                     │
+│  ┌─────────────────────────────────┐│
+│  │         Create Pod              ││
+│  └─────────────────────────────────┘│
+└─────────────────────────────────────┘
+```
+
+A dedicated form screen. Group size uses **preset chips** (2–3, 2–4, 3–6, etc.) instead of sliders — each chip sets both min and max in one tap, avoiding the "sliders moving each other" problem. Meetup time uses `@react-native-community/datetimepicker`; the maximum selectable time is 1 week from now (same weekday at 11:59 PM). For location, the user picks Public (dropdown of OSU buildings from `GET /activities/:id/locations`) or Private (freeform address). On submit, `createPod(activityId, { minMembers, maxMembers, meetupTime, locationType, location })` is called, then `navigation.replace('Pod', { podId })`.
 
 ### PodScreen (Chat)
 
@@ -727,8 +796,9 @@ When a user taps "Join Pod", the button shows a loading spinner and the `actionI
 │  ┌─────────────────────────────────┐│  ← collapsible info header
 │  │ Morning Coffee Walk  [LOCKED] ▼││
 │  │ 🕐 Sat, Feb 22, 3:00 PM       ││
-│  │ 📍 Memorial Union              ││
-│  │ Members 4/4    [A][B][C][D]    ││
+│  │ 🏢 RPAC  (or 📍 123 Main St)  ││
+│  │ Members 3/6    [A][B][C]       ││  ← uses pod.maxMembers
+│  │ [Lock Pod]  or  [Unlock Pod]   ││  ← only if you're the creator
 │  └─────────────────────────────────┘│
 │                                     │
 │           Alice                     │
@@ -751,7 +821,7 @@ When a user taps "Join Pod", the button shows a loading spinner and the `actionI
 
 The screen is split into three vertical sections:
 
-**Collapsible info header** — a `TouchableOpacity` at the top. When tapped, it toggles between showing just the activity title + status badge, or the full detail (meetup time, location, member avatar stack). The expand/collapse is animated with `LayoutAnimation.easeInEaseOut`. A chevron icon (up/down) hints that it's tappable.
+**Collapsible info header** — a `TouchableOpacity` at the top. When tapped, it toggles between showing just the activity title + status badge, or the full detail (meetup time, location, member avatar stack with count like "3/6"). If you're the pod creator, you may also see **Lock Pod** (when FORMING and you have at least minMembers) or **Unlock Pod** (when LOCKED and not full). The expand/collapse is animated with `LayoutAnimation.easeInEaseOut`. A chevron icon (up/down) hints that it's tappable.
 
 **Chat message list** — a `FlatList` of messages. Messages from the current user ("me") render as indigo-to-purple gradient bubbles aligned to the right. Messages from others ("them") render as light gray bubbles aligned to the left, with a small `Avatar` and sender name. Consecutive messages from the same person are grouped: the avatar and name only show on the first message in a group, and the timestamp (relative, like "2m ago") only shows on the last message in a group. Bubble corners are adjusted within groups — the tail corner is rounded for middle messages and flat for the last message, creating a modern grouped-bubble effect.
 
@@ -781,6 +851,7 @@ App
                            │    ├─ Search         → SearchScreen        (🔍 search)
                            │    └─ Profile        → ProfileScreen       (👤 person)
                            ├─ PodList             (header title = activityTitle param)
+                           ├─ CreatePod           (header title = "Create Pod"; reached from PodList)
                            └─ Pod                 (header title = "Your Pod", blur effect)
 ```
 
@@ -832,7 +903,8 @@ type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   MainTabs: undefined;
-  PodList: { activityId: string; activityTitle: string };
+  PodList: { activityId: string; activityTitle: string; activityCategory?: string };
+  CreatePod: { activityId: string; activityTitle: string; activityCategory: string };
   Pod: { podId: string };
 };
 ```
@@ -845,7 +917,7 @@ Params are typed end-to-end: passing wrong params or missing a required param is
 
 ### `navigation.replace` vs `navigation.navigate`
 
-After joining or creating a pod, `PodListScreen` uses `navigation.replace('Pod', ...)` instead of `navigation.navigate`. This replaces the current screen in the stack rather than pushing on top of it, so pressing back from the Pod screen returns to the Activity List instead of the Pod List. This prevents the user from accidentally pressing back and re-joining.
+After joining a pod (or after creating one in `CreatePodScreen`), the app uses `navigation.replace('Pod', ...)` instead of `navigation.navigate`. Replace swaps the current screen for the new one rather than pushing on top — so pressing back from the Pod screen returns to the Explore tab (or wherever you came from), not the Pod List or Create Pod form. This prevents accidentally going back and re-joining or re-submitting the create form.
 
 ---
 
@@ -868,6 +940,7 @@ Both are kept in sync by `signIn` and `signOut`.
 Everything else is local `useState` in each screen:
 - `activities`, `pods`, `messages` — data fetched from the API
 - `selectedCategory` — which category filter is active on Explore/Search (null = "All")
+- `locationFilter` — pod location filter on PodListScreen (all, public, private)
 - `sortBy` — pod sort option on PodListScreen (starting_soon, date_posted, most_members)
 - `loading`, `refreshing`, `sending` — UI state for loading indicators
 - `actionId` — which item is currently being acted on (for per-button loading states)
@@ -912,7 +985,7 @@ This wrapper handles three things:
 
 ## 15. API Request Lifecycle
 
-A complete trace of what happens when a user taps "Join Pod":
+A complete trace of what happens when a user taps "Join Pod" (the create-flow is similar: user fills CreatePodScreen, taps "Create Pod", `POST /pods/join` with `activityId` and optional `minMembers`, `maxMembers`, `meetupTime`, `locationType`, `location`):
 
 ```
 1. User taps "Join Pod" button on a PodCard in PodListScreen
@@ -941,10 +1014,10 @@ A complete trace of what happens when a user taps "Join Pod":
 
 5. Route handler runs (pods.ts)
    ├─ reads podId from req.body
-   ├─ prisma.pod.findUnique(podId) → validates pod exists, is FORMING, has room
+   ├─ prisma.pod.findUnique(podId) → validates pod exists, is FORMING, has room (memberCount < pod.maxMembers)
    ├─ prisma.podMember.findFirst() → validates user not already in active pod
    ├─ prisma.podMember.create({ podId, userId }) → adds user
-   ├─ prisma.podMember.count() → if 4, update pod status to LOCKED
+   ├─ prisma.podMember.count() → if count >= pod.maxMembers, update pod status to LOCKED
    └─ prisma.pod.findUnique() → fetch full pod with activity + members
 
 6. Response sent:
@@ -1042,3 +1115,11 @@ The entrance animations use React Native's built-in `Animated` module (in `FadeI
 ### Haptic feedback on actions
 
 `expo-haptics` provides tactile vibrations on iOS (and on Android devices that support it). Light impacts fire when tapping activity cards and pod cards. Medium impacts fire on "Join Pod" and "Send" — the higher-impact actions. This is a small detail but it makes the app feel more native and responsive.
+
+### Group size presets instead of sliders
+
+When creating a pod, min and max members are chosen via preset chips (2–3, 2–4, 3–6, etc.) rather than two sliders. Earlier designs used sliders, but adjusting one would shift the other's range (e.g., "min can't exceed max-1"), which felt janky. Presets avoid that: one tap sets both values, and there's no coupling between controls. This pattern is common in booking and event apps.
+
+### Editable location config
+
+OSU building names live in `backend/src/config/locations.ts`, not in the database. To add a new building or change the list for a category, you edit that file — no migration, no API changes. The `GET /activities/:id/locations` endpoint reads the activity's category from the database and returns the matching list from the config.

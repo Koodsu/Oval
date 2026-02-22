@@ -25,9 +25,14 @@ export interface Pod {
   activityId: string;
   meetupTime: string;
   location: string;
+  locationType: 'public' | 'private';
+  minMembers: number;
+  maxMembers: number;
   status: 'FORMING' | 'LOCKED' | 'COMPLETED';
+  creatorId?: string | null;
   createdAt: string;
   activity?: Activity;
+  creator?: { id: string } | null;
   members: PodMember[];
 }
 

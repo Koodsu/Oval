@@ -102,6 +102,7 @@ export default function ActivityListScreen() {
                 navigation.navigate('PodList', {
                   activityId: item.id,
                   activityTitle: item.title,
+                  activityCategory: item.category,
                 })
               }
             />

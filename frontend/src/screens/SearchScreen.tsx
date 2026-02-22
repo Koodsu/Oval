@@ -124,6 +124,7 @@ export default function SearchScreen() {
                 navigation.navigate('PodList', {
                   activityId: item.id,
                   activityTitle: item.title,
+                  activityCategory: item.category,
                 })
               }
             />

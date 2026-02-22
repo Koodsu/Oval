@@ -36,9 +36,10 @@ export default function PodCard({
   isMember,
 }: PodCardProps) {
   const memberCount = pod.members.length;
+  const maxMembers = pod.maxMembers ?? 4;
   const isForming = pod.status === 'FORMING';
-  const canJoin = isForming && memberCount < 4 && !isMember;
-  const progress = memberCount / 4;
+  const canJoin = isForming && memberCount < maxMembers && !isMember;
+  const progress = memberCount / maxMembers;
 
   const handleView = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -61,8 +62,8 @@ export default function PodCard({
         <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
       </View>
       <Text style={styles.memberLabel}>
-        {memberCount}/4 members
-        {memberCount < 4 && isForming ? ` · ${4 - memberCount} spots open` : ''}
+        {memberCount}/{maxMembers} members
+        {memberCount < maxMembers && isForming ? ` · ${maxMembers - memberCount} spots open` : ''}
       </Text>
 
       {/* Meta */}
@@ -71,7 +72,11 @@ export default function PodCard({
         <Text style={styles.metaText}>{formatTime(pod.meetupTime)}</Text>
       </View>
       <View style={styles.metaRow}>
-        <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+        <Ionicons
+          name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+          size={14}
+          color={colors.textTertiary}
+        />
         <Text style={styles.metaText}>{pod.location}</Text>
       </View>
 
@@ -92,7 +97,7 @@ export default function PodCard({
             size="md"
           />
         </View>
-      ) : !isMember && isForming && memberCount >= 4 ? (
+      ) : !isMember && isForming && memberCount >= maxMembers ? (
         <Text style={styles.fullText}>Pod is full</Text>
       ) : null}
     </TouchableOpacity>
