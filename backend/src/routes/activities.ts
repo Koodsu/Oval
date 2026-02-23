@@ -1,8 +1,24 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
-import { LOCATION_BY_CATEGORY } from '../config/locations';
+import { getLocationsForCategory } from '../config/locations';
 
 const router = Router();
+
+// GET /activities/locations?category= – locations by category (must be before /:id/locations)
+router.get('/locations', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { category } = req.query;
+    if (!category || typeof category !== 'string') {
+      res.status(400).json({ error: 'category query parameter is required' });
+      return;
+    }
+    const locations = getLocationsForCategory(category);
+    res.json(locations);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /activities/:id/locations – buildings for this activity's category
 router.get('/:id/locations', async (req: Request, res: Response): Promise<void> => {
@@ -13,7 +29,10 @@ router.get('/:id/locations', async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ error: 'Activity not found' });
       return;
     }
-    const locations = LOCATION_BY_CATEGORY[activity.category] ?? [];
+    let locations = getLocationsForCategory(activity.category);
+    if (activity.defaultLocation && !locations.includes(activity.defaultLocation)) {
+      locations = [activity.defaultLocation, ...locations];
+    }
     res.json(locations);
   } catch (err) {
     console.error(err);

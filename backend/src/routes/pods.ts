@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { LOCATION_BY_CATEGORY } from '../config/locations';
+import { getLocationsForCategory } from '../config/locations';
 
 const router = Router();
 
@@ -183,6 +183,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     const maxMembers = Math.max(minMembers, Math.min(10, Number(req.body.maxMembers) || 4));
     const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
 
+    if (!locationInput) {
+      res.status(400).json({ error: 'Location is required. Please select a location before creating a pod.' });
+      return;
+    }
+
     let meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     if (req.body.meetupTime) {
       const parsed = new Date(req.body.meetupTime);
@@ -203,9 +208,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       meetupTime = parsed;
     }
 
-    const allowed = LOCATION_BY_CATEGORY[activity.category] ?? [];
-    const location = locationInput || activity.defaultLocation;
-    if (allowed.length > 0 && !allowed.includes(location)) {
+    let allowed = getLocationsForCategory(activity.category);
+    if (activity.defaultLocation && !allowed.includes(activity.defaultLocation)) {
+      allowed = [activity.defaultLocation, ...allowed];
+    }
+    if (allowed.length > 0 && !allowed.includes(locationInput)) {
       res.status(400).json({
         error: 'Invalid location. Must be from the activity category list.',
       });
@@ -216,7 +223,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       data: {
         activityId,
         meetupTime,
-        location,
+        location: locationInput,
         locationType: 'public',
         minMembers,
         maxMembers,
