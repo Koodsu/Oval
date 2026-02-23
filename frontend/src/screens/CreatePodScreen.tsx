@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -56,9 +55,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
   const maxMembers = groupSizePreset.max;
   const [meetupTime, setMeetupTime] = useState(getDefaultMeetupTime);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [locationType, setLocationType] = useState<'public' | 'private'>('public');
-  const [publicLocation, setPublicLocation] = useState('');
-  const [privateAddress, setPrivateAddress] = useState('');
+  const [location, setLocation] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -71,8 +68,8 @@ export default function CreatePodScreen({ route, navigation }: Props) {
   }, [activityId]);
 
   useEffect(() => {
-    if (locations.length > 0 && !publicLocation) {
-      setPublicLocation(locations[0]);
+    if (locations.length > 0 && !location) {
+      setLocation(locations[0]);
     }
   }, [locations]);
 
@@ -84,19 +81,10 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       return;
     }
 
-    let location: string;
-    if (locationType === 'public') {
-      location = publicLocation || locations[0] || '';
-      if (!location && locations.length > 0) {
-        Alert.alert('Error', 'Please select a location');
-        return;
-      }
-    } else {
-      location = privateAddress.trim();
-      if (!location) {
-        Alert.alert('Error', 'Please enter an address');
-        return;
-      }
+    const selectedLocation = location || locations[0] || '';
+    if (!selectedLocation && locations.length > 0) {
+      Alert.alert('Error', 'Please select a location');
+      return;
     }
 
     const maxTime = getMaxMeetupTime();
@@ -111,8 +99,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
         minMembers: min,
         maxMembers: max,
         meetupTime: meetupTime.toISOString(),
-        locationType,
-        location,
+        location: selectedLocation,
       });
       navigation.replace('Pod', { podId: pod.id });
     } catch (err: unknown) {
@@ -192,68 +179,29 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       )}
 
       <Text style={styles.sectionLabel}>Location</Text>
-      <View style={styles.locationTypeRow}>
-        <TouchableOpacity
-          style={[styles.locationTypeBtn, locationType === 'public' && styles.locationTypeActive]}
-          onPress={() => setLocationType('public')}
-        >
-          <Ionicons
-            name="business-outline"
-            size={18}
-            color={locationType === 'public' ? colors.textInverse : colors.textSecondary}
-          />
-          <Text style={[styles.locationTypeText, locationType === 'public' && styles.locationTypeTextActive]}>
-            Public
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.locationTypeBtn, locationType === 'private' && styles.locationTypeActive]}
-          onPress={() => setLocationType('private')}
-        >
-          <Ionicons
-            name="location-outline"
-            size={18}
-            color={locationType === 'private' ? colors.textInverse : colors.textSecondary}
-          />
-          <Text style={[styles.locationTypeText, locationType === 'private' && styles.locationTypeTextActive]}>
-            Private
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {locationType === 'public' ? (
-        loadingLocations ? (
-          <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
-        ) : locations.length === 0 ? (
-          <Text style={styles.hint}>No public locations for this activity.</Text>
-        ) : (
-          <View style={styles.pickerWrapper}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {locations.map((loc) => (
-                <TouchableOpacity
-                  key={loc}
-                  style={[styles.locationChip, publicLocation === loc && styles.locationChipActive]}
-                  onPress={() => setPublicLocation(loc)}
-                >
-                  <Text
-                    style={[styles.locationChipText, publicLocation === loc && styles.locationChipTextActive]}
-                    numberOfLines={1}
-                  >
-                    {loc}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )
+      {loadingLocations ? (
+        <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
+      ) : locations.length === 0 ? (
+        <Text style={styles.hint}>No locations available for this activity.</Text>
       ) : (
-        <TextInput
-          style={[styles.input, styles.addressInput]}
-          value={privateAddress}
-          onChangeText={setPrivateAddress}
-          placeholder="Enter address"
-          placeholderTextColor={colors.textTertiary}
-        />
+        <View style={styles.pickerWrapper}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {locations.map((loc) => (
+              <TouchableOpacity
+                key={loc}
+                style={[styles.locationChip, location === loc && styles.locationChipActive]}
+                onPress={() => setLocation(loc)}
+              >
+                <Text
+                  style={[styles.locationChipText, location === loc && styles.locationChipTextActive]}
+                  numberOfLines={1}
+                >
+                  {loc}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       <View style={styles.submitRow}>
@@ -310,22 +258,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   dateText: { ...typography.body, flex: 1 },
-  locationTypeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  locationTypeBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  locationTypeActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  locationTypeText: { ...typography.bodyBold, color: colors.textSecondary },
-  locationTypeTextActive: { color: colors.textInverse },
   pickerWrapper: { marginBottom: spacing.lg },
   locationChip: {
     paddingHorizontal: spacing.md,
@@ -339,7 +271,6 @@ const styles = StyleSheet.create({
   locationChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   locationChipText: { ...typography.body, fontSize: 14, color: colors.text },
   locationChipTextActive: { color: colors.textInverse },
-  addressInput: { marginBottom: spacing.lg },
   hint: { ...typography.caption, marginBottom: spacing.lg },
   loader: { marginBottom: spacing.lg },
   submitRow: { marginTop: spacing.xl },

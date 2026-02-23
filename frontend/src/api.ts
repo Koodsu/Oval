@@ -58,14 +58,9 @@ export const getActivities = (category?: string) =>
 export const getMyPods = () =>
   request<import('./types').Pod[]>('/pods/mine');
 
-export const getPodsByActivity = (
-  activityId: string,
-  sort?: string,
-  locationType?: 'all' | 'public' | 'private'
-) => {
+export const getPodsByActivity = (activityId: string, sort?: string) => {
   const params = new URLSearchParams({ activityId });
   if (sort) params.set('sort', sort);
-  if (locationType && locationType !== 'all') params.set('locationType', locationType);
   return request<import('./types').Pod[]>(`/pods?${params.toString()}`);
 };
 
@@ -81,7 +76,6 @@ export interface CreatePodOptions {
   minMembers?: number;
   maxMembers?: number;
   meetupTime?: string; // ISO string
-  locationType?: 'public' | 'private';
   location?: string;
 }
 export const createPod = (activityId: string, options?: CreatePodOptions) =>

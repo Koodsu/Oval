@@ -41,10 +41,10 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
-// GET /pods?activityId=&sort=&locationType=
+// GET /pods?activityId=&sort=
 // Returns FORMING pods for an activity (locked pods excluded from browse)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { activityId, sort, locationType } = req.query;
+  const { activityId, sort } = req.query;
 
   if (!activityId || typeof activityId !== 'string') {
     res.status(400).json({ error: 'activityId query parameter is required' });
@@ -56,12 +56,6 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       activityId,
       status: FORMING,
     };
-    if (
-      typeof locationType === 'string' &&
-      (locationType === 'public' || locationType === 'private')
-    ) {
-      where.locationType = locationType;
-    }
 
     let orderBy: Record<string, string> = { createdAt: 'desc' };
     if (sort === 'starting_soon') {
@@ -187,7 +181,6 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
 
     const minMembers = Math.max(2, Math.min(10, Number(req.body.minMembers) || 2));
     const maxMembers = Math.max(minMembers, Math.min(10, Number(req.body.maxMembers) || 4));
-    const locType = req.body.locationType === 'private' ? 'private' : 'public';
     const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
 
     let meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -210,18 +203,13 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       meetupTime = parsed;
     }
 
-    let location: string;
-    if (locType === 'public') {
-      const allowed = LOCATION_BY_CATEGORY[activity.category] ?? [];
-      location = locationInput || activity.defaultLocation;
-      if (allowed.length > 0 && !allowed.includes(location)) {
-        res.status(400).json({
-          error: 'Invalid public location. Must be from the activity category list.',
-        });
-        return;
-      }
-    } else {
-      location = locationInput || 'Address to be shared';
+    const allowed = LOCATION_BY_CATEGORY[activity.category] ?? [];
+    const location = locationInput || activity.defaultLocation;
+    if (allowed.length > 0 && !allowed.includes(location)) {
+      res.status(400).json({
+        error: 'Invalid location. Must be from the activity category list.',
+      });
+      return;
     }
 
     const newPod = await prisma.pod.create({
@@ -229,7 +217,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         activityId,
         meetupTime,
         location,
-        locationType: locType,
+        locationType: 'public',
         minMembers,
         maxMembers,
         status: FORMING,
