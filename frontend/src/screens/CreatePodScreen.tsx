@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RootStackParamList } from '../../App';
-import { createPod, getActivityLocations } from '../api';
+import { createPod, getActivityLocations, getLocationsByCategory } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography } from '../theme';
 
@@ -61,17 +61,29 @@ export default function CreatePodScreen({ route, navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    getActivityLocations(activityId)
-      .then(setLocations)
-      .catch(() => setLocations([]))
-      .finally(() => setLoadingLocations(false));
-  }, [activityId]);
-
-  useEffect(() => {
-    if (locations.length > 0 && !location) {
-      setLocation(locations[0]);
-    }
-  }, [locations]);
+    setLoadingLocations(true);
+    const loadLocations = async () => {
+      try {
+        const locs = await getActivityLocations(activityId);
+        if (locs.length > 0) {
+          setLocations(locs);
+          setLoadingLocations(false);
+          return;
+        }
+      } catch {
+        // Fall through to category fallback
+      }
+      try {
+        const locs = await getLocationsByCategory(activityCategory ?? 'Social');
+        setLocations(locs);
+      } catch {
+        setLocations([]);
+      } finally {
+        setLoadingLocations(false);
+      }
+    };
+    loadLocations();
+  }, [activityId, activityCategory]);
 
   const handleSubmit = async () => {
     const min = Math.max(2, Math.min(10, minMembers));
@@ -81,9 +93,9 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       return;
     }
 
-    const selectedLocation = location || locations[0] || '';
-    if (!selectedLocation && locations.length > 0) {
-      Alert.alert('Error', 'Please select a location');
+    const selectedLocation = location?.trim() || '';
+    if (!selectedLocation) {
+      Alert.alert('Error', 'Please select a location before creating a pod.');
       return;
     }
 
@@ -182,7 +194,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       {loadingLocations ? (
         <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
       ) : locations.length === 0 ? (
-        <Text style={styles.hint}>No locations available for this activity.</Text>
+        <Text style={styles.hint}>No locations available for this activity. Please add locations in backend/src/config/locations.ts</Text>
       ) : (
         <View style={styles.pickerWrapper}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -209,7 +221,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
           title="Create Pod"
           onPress={handleSubmit}
           loading={submitting}
-          disabled={submitting}
+          disabled={submitting || locations.length === 0 || !location?.trim()}
           icon="checkmark-circle-outline"
         />
       </View>

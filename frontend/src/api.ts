@@ -88,6 +88,10 @@ export const createPod = (activityId: string, options?: CreatePodOptions) =>
 export const getActivityLocations = (activityId: string) =>
   request<string[]>(`/activities/${activityId}/locations`);
 
+// Get locations by category (fallback when activity lookup fails)
+export const getLocationsByCategory = (category: string) =>
+  request<string[]>(`/activities/locations?category=${encodeURIComponent(category)}`);
+
 // Lock/unlock pod (creator only)
 export const lockPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}/lock`, { method: 'POST' });
