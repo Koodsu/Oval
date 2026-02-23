@@ -1,6 +1,6 @@
 # Bridge — Architecture
 
-Bridge is a structured micro-group formation app for college students. Users browse activities, join or create pods (small groups of 2–10 people), meet up, and chat within their pod. When creating a pod, users can customize group size, meetup time (up to 1 week out), and location (public OSU buildings or a private address). This document explains how everything is built and why — it assumes you've taken an intro CS course and are comfortable with concepts like APIs, databases, and React.
+Bridge is a structured micro-group formation app for college students. Users browse activities, join or create pods (small groups of 2–10 people), meet up, and chat within their pod. When creating a pod, users can customize group size, meetup time (up to 1 week out), and location (OSU buildings from the activity's category). This document explains how everything is built and why — it assumes you've taken an intro CS course and are comfortable with concepts like APIs, databases, and React.
 
 ---
 
@@ -75,7 +75,7 @@ Bridge/                          ← project root
       routes/
         auth.ts                  ← POST /auth/register, /login
         activities.ts            ← GET /activities, GET /activities?category=, GET /activities/:id/locations
-        pods.ts                  ← GET /pods/mine, GET /pods?activityId=&sort=&locationType=,
+        pods.ts                  ← GET /pods/mine, GET /pods?activityId=&sort=,
                                    POST /pods/join, POST /pods/:id/lock, POST /pods/:id/unlock,
                                    GET /pods/:id
         messages.ts              ← GET/POST /pods/:id/messages
@@ -113,7 +113,7 @@ Bridge/                          ← project root
         MyActivitiesScreen.tsx   ← My Activities tab: user's pods grouped by status
         SearchScreen.tsx         ← Search tab: filter activities by text + category
         ProfileScreen.tsx        ← Profile tab: user info, stats, sign out
-        PodListScreen.tsx        ← Pods for one activity (create/join, sort + location filter)
+        PodListScreen.tsx        ← Pods for one activity (create/join, sort options)
         CreatePodScreen.tsx      ← Form to create a pod (group size, time, location)
         PodScreen.tsx            ← Pod detail + chat (collapsible header, Lock/Unlock, gradient bubbles)
     package.json
@@ -129,7 +129,7 @@ The original frontend was 5 screen files, `api.ts`, `types.ts`, and `AuthContext
 - `constants/categories.ts` — category metadata (icons, colors) for the 10 activity categories
 - New dependencies for gradients, icons, haptics, and blur
 
-Later updates expanded activities from 5 to ~47 across 10 categories, added category filtering on Explore and Search, and added pod sorting (Starting Soon, Date Posted, Most Members) on PodList. A major update added pod customization: min/max members (preset chips like 2–4, 3–6), meetup time picker (max 1 week out), public vs private location with OSU building dropdowns, a dedicated CreatePodScreen, lock/unlock controls for pod creators, and location filtering when browsing pods.
+Later updates expanded activities from 5 to ~47 across 10 categories, added category filtering on Explore and Search, and added pod sorting (Starting Soon, Date Posted, Most Members) on PodList. A major update added pod customization: min/max members (preset chips like 2–4, 3–6), meetup time picker (max 1 week out), OSU building location picker, a dedicated CreatePodScreen, and lock/unlock controls for pod creators.
 
 ---
 
@@ -165,7 +165,7 @@ Every protected route passes through `requireAuth` before the handler runs. It r
 
 ### Location config — `config/locations.ts`
 
-This file maps each activity category (e.g., "Sports & Fitness", "Food & Drink") to a list of Ohio State University building names. When a user creates a pod for an activity, the frontend fetches `GET /activities/:id/locations`, which returns the buildings for that activity's category. The user picks one from a dropdown (or chips) for public locations, or types a custom address for private locations.
+This file maps each activity category (e.g., "Sports & Fitness", "Food & Drink") to a list of Ohio State University building names. When a user creates a pod for an activity, the frontend fetches `GET /activities/:id/locations`, which returns the buildings for that activity's category. The user picks one from chips for the meetup location.
 
 **Why a separate config file?** So you can add or change OSU buildings without touching route logic. Edit `LOCATION_BY_CATEGORY` in `locations.ts` — it's a plain object: `{ "Sports & Fitness": ["RPAC", "North Rec", ...], "Food & Drink": ["Traditions at Scott", ...], ... }`.
 
@@ -223,7 +223,7 @@ The schema lives in `prisma/schema.prisma` with SQLite as the provider.
 ### Pod customization fields (added in v0.2)
 
 Pods now store more than just meetup time and location:
-- **locationType** — `"public"` means the location is an OSU building from a predefined list; `"private"` means the creator typed a custom address
+- **locationType** — always `"public"` for new pods (OSU building from predefined list); legacy `"private"` may exist for older pods
 - **minMembers** and **maxMembers** — the pod locks when it has between min and max people (creator can manually lock); it auto-locks when full (reaches maxMembers)
 - **creatorId** — the user who created the pod; only they can lock or unlock it (when the pod isn't full). If the database has old pods without creatorId, the app falls back to the first member by join date
 
@@ -251,10 +251,9 @@ Pods
   GET  /pods/mine               → Pod[] (all pods the current user is a member of)
   GET  /pods?activityId=        → Pod[] (FORMING pods only — locked pods are hidden from browse)
   GET  /pods?activityId=&sort=  → sort: date_posted | starting_soon | most_members
-  GET  /pods?activityId=&locationType= → filter: all | public | private
   POST /pods/join                body: { podId }      → join existing pod
                                  body: { activityId, minMembers?, maxMembers?, meetupTime?,
-                                         locationType?, location? } → create new pod
+                                         location? } → create new pod (location from OSU building list)
   POST /pods/:id/lock            → Lock pod (creator only, requires memberCount >= minMembers)
   POST /pods/:id/unlock          → Unlock pod (creator only, requires memberCount < maxMembers)
   GET  /pods/:id                 → Pod (with lazy COMPLETED check)
@@ -426,8 +425,8 @@ These are the key packages and what they do. All versions are pinned for Expo SD
 | `src/screens/MyActivitiesScreen.tsx` | My Activities tab — user's pods grouped into "Active" and "Past" sections |
 | `src/screens/SearchScreen.tsx` | Search tab — category filter + real-time text filtering of activities by name, description, or location |
 | `src/screens/ProfileScreen.tsx` | Profile tab — user avatar/name/email, pod stats, sign out with confirmation |
-| `src/screens/PodListScreen.tsx` | All pods for one activity — "Start a Pod" (navigates to CreatePod), location filter (All/Public/Private), sort options, pod cards |
-| `src/screens/CreatePodScreen.tsx` | Form to create a pod — group size presets (2–3, 2–4, 3–6, etc.), meetup date/time picker (max 1 week out), public/private location with OSU building chips or address input |
+| `src/screens/PodListScreen.tsx` | All pods for one activity — "Start a Pod" (navigates to CreatePod), sort options, pod cards |
+| `src/screens/CreatePodScreen.tsx` | Form to create a pod — group size presets (2–3, 2–4, 3–6, etc.), meetup date/time picker (max 1 week out), OSU building location chips |
 | `src/screens/PodScreen.tsx` | Pod detail + chat — collapsible header, Lock/Unlock buttons (creator only), member count (e.g. 3/6), gradient message bubbles, pill input |
 
 ---
@@ -571,12 +570,12 @@ A card representing one pod. Layout:
 │  ████████████░░░░░░░░░░░░░               │
 │  2/6 members · 4 spots open             │  ← uses pod.maxMembers (not hardcoded 4)
 │  🕐 Sat, Feb 22, 3:00 PM               │
-│  🏢 RPAC  (or 📍 123 Main St for private)│  ← icon differs by locationType
+│  🏢 RPAC                        │  ← OSU building from category list
 │                          [Join Pod]      │
 └──────────────────────────────────────────┘
 ```
 
-The top row shows an `AvatarStack` on the left and a `StatusBadge` on the right. The progress bar uses `memberCount / pod.maxMembers` — pods can have different max sizes (2–10). The location icon is a building icon for public locations, a pin for private. The action area adapts: if you're a member, "View Pod →"; if joinable, "Join Pod"; if full, "Pod is full".
+The top row shows an `AvatarStack` on the left and a `StatusBadge` on the right. The progress bar uses `memberCount / pod.maxMembers` — pods can have different max sizes (2–10). The location shows the OSU building name. The action area adapts: if you're a member, "View Pod →"; if joinable, "Join Pod"; if full, "Pod is full".
 
 ### FadeIn
 
@@ -740,7 +739,6 @@ Shows the user's avatar (large, 72px), name, and email in a white card. Below is
 │  ┌─────────────────────────────────┐│
 │  │  ⊕  Start a Pod                ││  ← navigates to CreatePodScreen
 │  └─────────────────────────────────┘│
-│  [All] [Public] [Private]            ← location filter (which pods to show)
 │  [Starting Soon] [Date Posted] [Most Members]  ← sort options
 │                                     │
 │  ┌─────────────────────────────────┐│
@@ -755,7 +753,7 @@ Shows the user's avatar (large, 72px), name, and email in a white card. Below is
 └─────────────────────────────────────┘
 ```
 
-Uses the native navigation header (title from route params). "Start a Pod" navigates to `CreatePodScreen` — it does not create a pod immediately. Below that are two filter rows: **location** (All, Public, Private) and **sort** (Starting Soon, Date Posted, Most Members). Both are passed to `GET /pods?activityId=&locationType=&sort=`.
+Uses the native navigation header (title from route params). "Start a Pod" navigates to `CreatePodScreen` — it does not create a pod immediately. Below that are sort options (Starting Soon, Date Posted, Most Members), passed to `GET /pods?activityId=&sort=`.
 
 Each pod is a `PodCard`. When a user taps "Join Pod", the button shows a loading spinner; after joining, `navigation.replace('Pod', ...)` replaces the current screen (see Navigation section for why).
 
@@ -775,9 +773,7 @@ Each pod is a `PodCard`. When a user taps "Join Pod", the button shows a loading
 │  [📅 Sat, Feb 23, 12:00 PM      ›]  │  ← tap to open date/time picker (max 1 week out)
 │                                     │
 │  LOCATION                            │
-│  [Public] [Private]                  │  ← toggle
-│  [RPAC] [North Rec] [Jesse Owens…]  │  ← if Public: horizontal chips of OSU buildings
-│  or [Enter address_____________]     │  ← if Private: text input
+│  [RPAC] [North Rec] [Jesse Owens…]  │  ← horizontal chips of OSU buildings for this category
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │         Create Pod              ││
@@ -785,7 +781,7 @@ Each pod is a `PodCard`. When a user taps "Join Pod", the button shows a loading
 └─────────────────────────────────────┘
 ```
 
-A dedicated form screen. Group size uses **preset chips** (2–3, 2–4, 3–6, etc.) instead of sliders — each chip sets both min and max in one tap, avoiding the "sliders moving each other" problem. Meetup time uses `@react-native-community/datetimepicker`; the maximum selectable time is 1 week from now (same weekday at 11:59 PM). For location, the user picks Public (dropdown of OSU buildings from `GET /activities/:id/locations`) or Private (freeform address). On submit, `createPod(activityId, { minMembers, maxMembers, meetupTime, locationType, location })` is called, then `navigation.replace('Pod', { podId })`.
+A dedicated form screen. Group size uses **preset chips** (2–3, 2–4, 3–6, etc.) instead of sliders — each chip sets both min and max in one tap, avoiding the "sliders moving each other" problem. Meetup time uses `@react-native-community/datetimepicker`; the maximum selectable time is 1 week from now (same weekday at 11:59 PM). For location, the user selects an OSU building from chips (from `GET /activities/:id/locations`). On submit, `createPod(activityId, { minMembers, maxMembers, meetupTime, location })` is called, then `navigation.replace('Pod', { podId })`.
 
 ### PodScreen (Chat)
 
@@ -796,7 +792,7 @@ A dedicated form screen. Group size uses **preset chips** (2–3, 2–4, 3–6, 
 │  ┌─────────────────────────────────┐│  ← collapsible info header
 │  │ Morning Coffee Walk  [LOCKED] ▼││
 │  │ 🕐 Sat, Feb 22, 3:00 PM       ││
-│  │ 🏢 RPAC  (or 📍 123 Main St)  ││
+│  │ 🏢 RPAC                       ││
 │  │ Members 3/6    [A][B][C]       ││  ← uses pod.maxMembers
 │  │ [Lock Pod]  or  [Unlock Pod]   ││  ← only if you're the creator
 │  └─────────────────────────────────┘│
@@ -940,7 +936,6 @@ Both are kept in sync by `signIn` and `signOut`.
 Everything else is local `useState` in each screen:
 - `activities`, `pods`, `messages` — data fetched from the API
 - `selectedCategory` — which category filter is active on Explore/Search (null = "All")
-- `locationFilter` — pod location filter on PodListScreen (all, public, private)
 - `sortBy` — pod sort option on PodListScreen (starting_soon, date_posted, most_members)
 - `loading`, `refreshing`, `sending` — UI state for loading indicators
 - `actionId` — which item is currently being acted on (for per-button loading states)
@@ -985,7 +980,7 @@ This wrapper handles three things:
 
 ## 15. API Request Lifecycle
 
-A complete trace of what happens when a user taps "Join Pod" (the create-flow is similar: user fills CreatePodScreen, taps "Create Pod", `POST /pods/join` with `activityId` and optional `minMembers`, `maxMembers`, `meetupTime`, `locationType`, `location`):
+A complete trace of what happens when a user taps "Join Pod" (the create-flow is similar: user fills CreatePodScreen, taps "Create Pod", `POST /pods/join` with `activityId` and optional `minMembers`, `maxMembers`, `meetupTime`, `location`):
 
 ```
 1. User taps "Join Pod" button on a PodCard in PodListScreen
