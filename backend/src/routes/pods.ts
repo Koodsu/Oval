@@ -294,6 +294,68 @@ router.post('/:id/lock', requireAuth, async (req: AuthRequest, res: Response): P
   }
 });
 
+// POST /pods/:id/leave – remove current user from pod; disband if empty
+router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+
+    const membership = pod.members.find((m) => m.userId === userId);
+    if (!membership) {
+      res.status(403).json({ error: 'You are not a member of this pod' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.podMember.delete({ where: { id: membership.id } });
+      const remainingCount = await tx.podMember.count({ where: { podId: id } });
+      if (remainingCount === 0) {
+        await tx.message.deleteMany({ where: { podId: id } });
+        await tx.pod.delete({ where: { id } });
+      } else if (pod.creatorId === userId) {
+        const nextCreator = await tx.podMember.findFirst({
+          where: { podId: id },
+          orderBy: { joinedAt: 'asc' },
+        });
+        if (nextCreator) {
+          await tx.pod.update({
+            where: { id },
+            data: { creatorId: nextCreator.userId },
+          });
+        }
+      }
+    });
+
+    const remainingCount = await prisma.podMember.count({ where: { podId: id } });
+    if (remainingCount === 0) {
+      res.json({ left: true, podDeleted: true });
+      return;
+    }
+
+    const updatedPod = await prisma.pod.findUnique({
+      where: { id },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: { id: true, name: true } } } },
+      },
+    });
+    res.json({ left: true, podDeleted: false, pod: updatedPod });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /pods/:id/unlock – creator only; unlock when memberCount < maxMembers
 router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;

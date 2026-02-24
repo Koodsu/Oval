@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPod, getMessages, sendMessage, lockPod, unlockPod } from '../api';
+import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod } from '../api';
 import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
@@ -51,7 +51,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export default function PodScreen({ route }: Props) {
+export default function PodScreen({ route, navigation }: Props) {
   const { podId } = route.params;
   const { user } = useAuth();
 
@@ -61,6 +61,7 @@ export default function PodScreen({ route }: Props) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(true);
 
   const flatListRef = useRef<FlatList>(null);
@@ -163,6 +164,34 @@ export default function PodScreen({ route }: Props) {
     }
   };
 
+  const handleLeave = () => {
+    Alert.alert(
+      'Leave Pod',
+      'Are you sure you want to leave this pod? If you\'re the last member, the pod will be disbanded.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setLeaving(true);
+            try {
+              const res = await leavePod(podId);
+              navigation.goBack();
+              if (res.podDeleted) {
+                // Pod was disbanded - user is already navigated back
+              }
+            } catch (err: unknown) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to leave pod');
+            } finally {
+              setLeaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -213,42 +242,58 @@ export default function PodScreen({ route }: Props) {
                 size={30}
               />
             </View>
-            {(canLock || canUnlock) && (
-              <View style={styles.lockRow}>
-                {canLock && (
-                  <TouchableOpacity
-                    style={styles.lockButton}
-                    onPress={handleLock}
-                    disabled={locking}
-                  >
-                    {locking ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <>
-                        <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
-                        <Text style={styles.lockButtonText}>Lock Pod</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+            <View style={styles.lockRow}>
+              {(canLock || canUnlock) && (
+                <>
+                  {canLock && (
+                    <TouchableOpacity
+                      style={styles.lockButton}
+                      onPress={handleLock}
+                      disabled={locking}
+                    >
+                      {locking ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
+                          <Text style={styles.lockButtonText}>Lock Pod</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  {canUnlock && (
+                    <TouchableOpacity
+                      style={styles.lockButton}
+                      onPress={handleUnlock}
+                      disabled={locking}
+                    >
+                      {locking ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
+                          <Text style={styles.lockButtonText}>Unlock Pod</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+              <TouchableOpacity
+                style={[styles.lockButton, styles.leaveButton]}
+                onPress={handleLeave}
+                disabled={leaving}
+              >
+                {leaving ? (
+                  <ActivityIndicator size="small" color={colors.red} />
+                ) : (
+                  <>
+                    <Ionicons name="exit-outline" size={16} color={colors.red} />
+                    <Text style={styles.leaveButtonText}>Leave Pod</Text>
+                  </>
                 )}
-                {canUnlock && (
-                  <TouchableOpacity
-                    style={styles.lockButton}
-                    onPress={handleUnlock}
-                    disabled={locking}
-                  >
-                    {locking ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <>
-                        <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
-                        <Text style={styles.lockButtonText}>Unlock Pod</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </TouchableOpacity>
@@ -446,6 +491,15 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.primary,
+  },
+  leaveButton: {
+    borderColor: colors.red,
+    backgroundColor: '#fef2f2',
+  },
+  leaveButtonText: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.red,
   },
 
   // Chat

@@ -98,6 +98,15 @@ export const lockPod = (podId: string) =>
 export const unlockPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}/unlock`, { method: 'POST' });
 
+// Leave a pod (disbands if empty)
+export interface LeavePodResponse {
+  left: boolean;
+  podDeleted: boolean;
+  pod?: import('./types').Pod;
+}
+export const leavePod = (podId: string) =>
+  request<LeavePodResponse>(`/pods/${podId}/leave`, { method: 'POST' });
+
 export const getPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}`);
 

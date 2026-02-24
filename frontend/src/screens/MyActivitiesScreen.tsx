@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../../App';
@@ -40,9 +40,11 @@ export default function MyActivitiesScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchPods();
-  }, [fetchPods]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchPods();
+    }, [fetchPods])
+  );
 
   const activePods = pods.filter((p) => p.status === 'FORMING' || p.status === 'LOCKED');
   const pastPods = pods.filter((p) => p.status === 'COMPLETED');

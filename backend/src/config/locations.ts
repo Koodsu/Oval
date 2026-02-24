@@ -16,8 +16,6 @@ export const LOCATION_BY_CATEGORY: Record<string, string[]> = {
     'Jesse Owens West',
     'Adventure Recreation Center',
     'Aquatic Center',
-    'Coffey Road Park',
-    'Fred Beekman Park',
     'Lincoln Tower Park',
   ],
   'Food & Drink': [
