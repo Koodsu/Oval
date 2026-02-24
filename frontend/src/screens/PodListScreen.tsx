@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPodsByActivity, joinPod, createPod } from '../api';
+import { getPodsByActivity, joinPod } from '../api';
 import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
@@ -33,7 +33,7 @@ const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Ionicon
 ];
 
 export default function PodListScreen({ route, navigation }: Props) {
-  const { activityId } = route.params;
+  const { activityId, activityTitle, activityCategory } = route.params;
   const { user } = useAuth();
 
   const [pods, setPods] = useState<Pod[]>([]);
@@ -70,16 +70,12 @@ export default function PodListScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleCreate = async () => {
-    setActionId('new');
-    try {
-      const pod = await createPod(activityId);
-      navigation.replace('Pod', { podId: pod.id });
-    } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create pod');
-    } finally {
-      setActionId(null);
-    }
+  const handleCreate = () => {
+    navigation.navigate('CreatePod', {
+      activityId,
+      activityTitle,
+      activityCategory: activityCategory ?? 'Social',
+    });
   };
 
   const isAlreadyMember = (pod: Pod) =>
@@ -116,7 +112,6 @@ export default function PodListScreen({ route, navigation }: Props) {
               <GradientButton
                 title="Start a Pod"
                 onPress={handleCreate}
-                loading={actionId === 'new'}
                 disabled={actionId !== null}
                 icon="add-circle-outline"
               />

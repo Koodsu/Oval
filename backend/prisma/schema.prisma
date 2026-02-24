@@ -14,8 +14,9 @@ model User {
   password  String
   createdAt DateTime @default(now())
 
-  podMembers PodMember[]
-  messages   Message[]
+  podMembers  PodMember[]
+  messages    Message[]
+  createdPods Pod[]
 }
 
 model Activity {
@@ -32,16 +33,21 @@ model Activity {
 // PodStatus values: "FORMING" | "LOCKED" | "COMPLETED"
 
 model Pod {
-  id         String   @id @default(uuid())
-  activityId String
-  meetupTime DateTime
-  location   String
-  status     String   @default("FORMING")
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  activityId   String
+  meetupTime   DateTime
+  location     String
+  locationType String   @default("public") // "public" | "private"
+  minMembers   Int      @default(2)
+  maxMembers   Int      @default(4)
+  status       String   @default("FORMING")
+  creatorId    String?
+  createdAt    DateTime @default(now())
 
-  activity   Activity    @relation(fields: [activityId], references: [id])
-  members    PodMember[]
-  messages   Message[]
+  activity Activity    @relation(fields: [activityId], references: [id])
+  creator  User?       @relation(fields: [creatorId], references: [id])
+  members  PodMember[]
+  messages Message[]
 }
 
 model PodMember {

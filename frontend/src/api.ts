@@ -72,11 +72,40 @@ export const joinPod = (podId: string) =>
   });
 
 // Create a brand new pod for an activity (you become the first member)
-export const createPod = (activityId: string) =>
+export interface CreatePodOptions {
+  minMembers?: number;
+  maxMembers?: number;
+  meetupTime?: string; // ISO string
+  location?: string;
+}
+export const createPod = (activityId: string, options?: CreatePodOptions) =>
   request<import('./types').Pod>('/pods/join', {
     method: 'POST',
-    body: JSON.stringify({ activityId }),
+    body: JSON.stringify({ activityId, ...options }),
   });
+
+// Get public location options for an activity's category
+export const getActivityLocations = (activityId: string) =>
+  request<string[]>(`/activities/${activityId}/locations`);
+
+// Get locations by category (fallback when activity lookup fails)
+export const getLocationsByCategory = (category: string) =>
+  request<string[]>(`/activities/locations?category=${encodeURIComponent(category)}`);
+
+// Lock/unlock pod (creator only)
+export const lockPod = (podId: string) =>
+  request<import('./types').Pod>(`/pods/${podId}/lock`, { method: 'POST' });
+export const unlockPod = (podId: string) =>
+  request<import('./types').Pod>(`/pods/${podId}/unlock`, { method: 'POST' });
+
+// Leave a pod (disbands if empty)
+export interface LeavePodResponse {
+  left: boolean;
+  podDeleted: boolean;
+  pod?: import('./types').Pod;
+}
+export const leavePod = (podId: string) =>
+  request<LeavePodResponse>(`/pods/${podId}/leave`, { method: 'POST' });
 
 export const getPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}`);

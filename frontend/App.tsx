@@ -16,6 +16,7 @@ import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import PodListScreen from './src/screens/PodListScreen';
+import CreatePodScreen from './src/screens/CreatePodScreen';
 import PodScreen from './src/screens/PodScreen';
 import { colors } from './src/theme';
 
@@ -30,7 +31,8 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   MainTabs: undefined;
-  PodList: { activityId: string; activityTitle: string };
+  PodList: { activityId: string; activityTitle: string; activityCategory?: string };
+  CreatePod: { activityId: string; activityTitle: string; activityCategory: string };
   Pod: { podId: string };
 };
 
@@ -138,6 +140,11 @@ function AppNavigator() {
                 title: route.params.activityTitle,
                 headerLargeTitle: false,
               })}
+            />
+            <Stack.Screen
+              name="CreatePod"
+              component={CreatePodScreen}
+              options={{ title: 'Create Pod' }}
             />
             <Stack.Screen
               name="Pod"
