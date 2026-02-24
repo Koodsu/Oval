@@ -46,12 +46,19 @@ export default function PodCard({
     onView();
   };
 
+  const activityTitle = pod.activity?.title;
+
   return (
     <TouchableOpacity
       style={[styles.card, shadows.md]}
       onPress={isMember ? handleView : undefined}
       activeOpacity={isMember ? 0.7 : 1}
     >
+      {activityTitle ? (
+        <Text style={styles.activityTitle} numberOfLines={1}>
+          {activityTitle}
+        </Text>
+      ) : null}
       <View style={styles.topRow}>
         <AvatarStack members={pod.members} currentUserId={currentUserId} size={34} />
         <StatusBadge status={pod.status} />
@@ -110,6 +117,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     padding: spacing.md,
     marginBottom: spacing.sm + 4,
+  },
+  activityTitle: {
+    ...typography.h3,
+    marginBottom: spacing.sm,
   },
   topRow: {
     flexDirection: 'row',
