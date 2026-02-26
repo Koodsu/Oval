@@ -25,8 +25,11 @@ app.get('/health', (_req, res) => {
 
 const PORT = process.env.PORT ?? 3000;
 
-app.listen(PORT, () => {
-  console.log(`Bridge backend running on port ${PORT}`);
-});
+// Only start listening when run directly (not when imported for tests)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Bridge backend running on port ${PORT}`);
+  });
+}
 
 export default app;
