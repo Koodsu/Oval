@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -312,7 +313,7 @@ async function main() {
   await prisma.podMember.deleteMany();
   await prisma.pod.deleteMany();
   await prisma.activity.deleteMany();
-  await prisma.block.deleteMany();
+  await (prisma as any).block.deleteMany();
 
   await prisma.activity.createMany({ data: activities });
   console.log(`Seeded ${activities.length} activities.`);
