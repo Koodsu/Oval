@@ -5,12 +5,40 @@ import prisma from '../prisma';
 
 const router = Router();
 
+const MIN_PASSWORD_LENGTH = 8;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string): boolean {
+  return typeof email === 'string' && EMAIL_REGEX.test(email.trim());
+}
+
 // POST /auth/register
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  const { name, email, password } = req.body;
+  const rawName = req.body?.name;
+  const rawEmail = req.body?.email;
+  const rawPassword = req.body?.password;
+
+  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+  const password = typeof rawPassword === 'string' ? rawPassword : '';
 
   if (!name || !email || !password) {
     res.status(400).json({ error: 'name, email, and password are required' });
+    return;
+  }
+
+  if (name.length < 2) {
+    res.status(400).json({ error: 'Name must be at least 2 characters' });
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    res.status(400).json({ error: 'Invalid email format' });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     return;
   }
 
@@ -38,10 +66,19 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
 // POST /auth/login
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  const { email, password } = req.body;
+  const rawEmail = req.body?.email;
+  const rawPassword = req.body?.password;
+
+  const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+  const password = typeof rawPassword === 'string' ? rawPassword : '';
 
   if (!email || !password) {
     res.status(400).json({ error: 'email and password are required' });
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    res.status(400).json({ error: 'Invalid email format' });
     return;
   }
 

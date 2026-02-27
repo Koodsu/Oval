@@ -51,7 +51,7 @@ describe('Messages API (integration)', () => {
       const { token: otherToken } = await registerAndGetToken(
         'Stranger',
         `stranger-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       await request(app)
@@ -73,6 +73,16 @@ describe('Messages API (integration)', () => {
       expect(res.body.content).toBe('Hello, pod!');
       expect(res.body.user).toBeDefined();
       expect(res.body.user.name).toBeDefined();
+    });
+
+    it('rejects message exceeding max length', async () => {
+      const longContent = 'x'.repeat(2001);
+      const res = await request(app)
+        .post(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: longContent })
+        .expect(400);
+      expect(res.body.error).toContain('2000');
     });
 
     it('rejects empty content', async () => {
@@ -109,7 +119,7 @@ describe('Messages API (integration)', () => {
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'Block Msg B',
         `block-msg-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       await request(app)
