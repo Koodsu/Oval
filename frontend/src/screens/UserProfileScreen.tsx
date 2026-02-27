@@ -12,14 +12,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
 import { blockUser } from '../api';
+import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import ReportModal from '../components/ReportModal';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
 
 export default function UserProfileScreen({ route, navigation }: Props) {
   const { userId, name } = route.params;
+  const { user } = useAuth();
   const [blocking, setBlocking] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const isOwnProfile = user?.id === userId;
 
   const handleBlock = () => {
     Alert.alert(
@@ -54,8 +59,19 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         <Text style={styles.name}>{name}</Text>
       </View>
 
+      {!isOwnProfile && (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.reportButton, shadows.sm]}
+          onPress={() => setReportModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="flag-outline" size={20} color={colors.textSecondary} />
+          <Text style={styles.reportButtonText}>Report User</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
-        style={[styles.blockButton, shadows.sm]}
+        style={[styles.actionButton, styles.blockButton, shadows.sm]}
         onPress={handleBlock}
         disabled={blocking}
         activeOpacity={0.8}
@@ -69,6 +85,13 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           </>
         )}
       </TouchableOpacity>
+
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        onSuccess={() => Alert.alert('Report submitted', 'Thanks.')}
+        targetUserId={userId}
+      />
     </View>
   );
 }
@@ -89,16 +112,28 @@ const styles = StyleSheet.create({
   name: {
     ...typography.h2,
   },
-  blockButton: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    marginTop: spacing.xl,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: '#fef2f2',
     borderRadius: radii.md,
+  },
+  reportButton: {
+    marginTop: spacing.xl,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reportButtonText: {
+    ...typography.bodyBold,
+    color: colors.textSecondary,
+  },
+  blockButton: {
+    marginTop: spacing.md,
+    backgroundColor: '#fef2f2',
     borderWidth: 1,
     borderColor: colors.red,
   },

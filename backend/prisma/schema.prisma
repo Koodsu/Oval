@@ -14,11 +14,13 @@ model User {
   password  String
   createdAt DateTime @default(now())
 
-  podMembers   PodMember[]
-  messages     Message[]
-  createdPods  Pod[]
-  blocksGiven  Block[] @relation("Blocker")
-  blocksReceived Block[] @relation("Blocked")
+  podMembers      PodMember[]
+  messages        Message[]
+  createdPods     Pod[]
+  blocksGiven     Block[] @relation("Blocker")
+  blocksReceived  Block[] @relation("Blocked")
+  reportsGiven    Report[] @relation("ReportReporter")
+  reportsReceived Report[] @relation("ReportTarget")
 }
 
 model Block {
@@ -64,6 +66,7 @@ model Pod {
   creator  User?       @relation(fields: [creatorId], references: [id])
   members  PodMember[]
   messages Message[]
+  reports  Report[]
 }
 
 model PodMember {
@@ -85,6 +88,32 @@ model Message {
   content   String
   createdAt DateTime @default(now())
 
-  pod  Pod  @relation(fields: [podId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  pod     Pod     @relation(fields: [podId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  reports Report[]
+}
+
+model Report {
+  id           String    @id @default(uuid())
+  reporterId   String
+  targetUserId String?
+  podId        String?
+  messageId    String?
+  reason       String
+  details      String?
+  status       String    @default("OPEN")
+  adminNotes   String?
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+
+  reporter User     @relation("ReportReporter", fields: [reporterId], references: [id])
+  target   User?    @relation("ReportTarget", fields: [targetUserId], references: [id])
+  pod      Pod?     @relation(fields: [podId], references: [id])
+  message  Message? @relation(fields: [messageId], references: [id])
+
+  @@index([reporterId, createdAt])
+  @@index([status, createdAt])
+  @@index([podId])
+  @@index([messageId])
+  @@index([targetUserId])
 }

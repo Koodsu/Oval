@@ -120,6 +120,58 @@ export const sendMessage = (podId: string, content: string) =>
     body: JSON.stringify({ content }),
   });
 
+// Reports
+export const REPORT_REASONS = [
+  'HARASSMENT',
+  'HATE',
+  'SPAM',
+  'NUDITY_SEXUAL',
+  'VIOLENCE_THREATS',
+  'SELF_HARM',
+  'SCAM_FRAUD',
+  'ILLEGAL',
+  'OTHER',
+] as const;
+
+export const REPORT_REASON_LABELS: Record<string, string> = {
+  HARASSMENT: 'Harassment or bullying',
+  HATE: 'Hate speech or symbols',
+  SPAM: 'Spam',
+  NUDITY_SEXUAL: 'Nudity or sexual content',
+  VIOLENCE_THREATS: 'Violence or threats',
+  SELF_HARM: 'Self-harm',
+  SCAM_FRAUD: 'Scam or fraud',
+  ILLEGAL: 'Illegal activity',
+  OTHER: 'Other',
+};
+
+export interface CreateReportPayload {
+  podId?: string;
+  messageId?: string;
+  targetUserId?: string;
+  reason: string;
+  details?: string;
+}
+
+export const createReport = (payload: CreateReportPayload) =>
+  request<{ reportId: string; status: string }>('/reports', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export interface MyReport {
+  id: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  podId?: string | null;
+  messageId?: string | null;
+  targetUserId?: string | null;
+}
+
+export const getMyReports = () =>
+  request<MyReport[]>('/reports/mine');
+
 // Blocking
 export const blockUser = (userId: string) =>
   request<{ success: boolean; blockId?: string; createdAt?: string }>(`/users/${userId}/block`, {

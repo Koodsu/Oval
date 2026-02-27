@@ -19,6 +19,7 @@ import PodListScreen from './src/screens/PodListScreen';
 import CreatePodScreen from './src/screens/CreatePodScreen';
 import PodScreen from './src/screens/PodScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
+import MyReportsScreen from './src/screens/MyReportsScreen';
 import { colors } from './src/theme';
 
 export type MainTabParamList = {
@@ -36,6 +37,7 @@ export type RootStackParamList = {
   CreatePod: { activityId: string; activityTitle: string; activityCategory: string };
   Pod: { podId: string };
   UserProfile: { userId: string; name: string };
+  MyReports: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -160,6 +162,11 @@ function AppNavigator() {
               name="UserProfile"
               component={UserProfileScreen}
               options={{ title: 'Profile' }}
+            />
+            <Stack.Screen
+              name="MyReports"
+              component={MyReportsScreen}
+              options={{ title: 'My Reports' }}
             />
           </>
         ) : (

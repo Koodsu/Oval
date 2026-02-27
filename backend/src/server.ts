@@ -5,6 +5,8 @@ import activitiesRoutes from './routes/activities';
 import podsRoutes from './routes/pods';
 import messagesRoutes from './routes/messages';
 import usersRoutes from './routes/users';
+import reportsRoutes from './routes/reports';
+import adminReportsRoutes from './routes/adminReports';
 
 const app = express();
 
@@ -15,6 +17,8 @@ app.use('/auth', authRoutes);
 app.use('/activities', activitiesRoutes);
 app.use('/pods', podsRoutes);
 app.use('/users', usersRoutes);
+app.use('/reports', reportsRoutes);
+app.use('/admin/reports', adminReportsRoutes);
 
 // Messages are nested under pods: /pods/:id/messages
 // We use a separate router with mergeParams so :id is accessible
