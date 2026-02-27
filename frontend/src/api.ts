@@ -26,10 +26,10 @@ async function request<T>(
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const data = await res.json();
+  const data = res.status === 204 ? {} : await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error ?? `Request failed: ${res.status}`);
+    throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);
   }
 
   return data as T;
@@ -118,4 +118,15 @@ export const sendMessage = (podId: string, content: string) =>
   request<import('./types').Message>(`/pods/${podId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content }),
+  });
+
+// Blocking
+export const blockUser = (userId: string) =>
+  request<{ success: boolean; blockId?: string; createdAt?: string }>(`/users/${userId}/block`, {
+    method: 'POST',
+  });
+
+export const unblockUser = (userId: string) =>
+  request<{ success?: boolean }>(`/users/${userId}/block`, {
+    method: 'DELETE',
   });

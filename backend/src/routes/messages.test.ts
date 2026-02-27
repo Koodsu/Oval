@@ -6,6 +6,7 @@ import { registerAndGetToken } from '../test/helpers';
 
 describe('Messages API (integration)', () => {
   let token: string;
+  let userId: string;
   let podId: string;
 
   beforeEach(async () => {
@@ -15,6 +16,7 @@ describe('Messages API (integration)', () => {
       'password123'
     );
     token = t;
+    userId = user.id;
 
     const activity = await prisma.activity.findFirst({
       where: { category: 'Academic' },
@@ -101,6 +103,30 @@ describe('Messages API (integration)', () => {
 
       expect(res.body).toHaveLength(1);
       expect(res.body[0].content).toBe('First message');
+    });
+
+    it('cannot message when blocked relationship exists', async () => {
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Block Msg B',
+        `block-msg-b-${Date.now()}@example.com`,
+        'pass'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ podId })
+        .expect(201);
+
+      await prisma.block.create({
+        data: { blockerId: userB.id, blockedId: userId },
+      });
+
+      await request(app)
+        .post(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Should fail' })
+        .expect(403);
     });
   });
 });

@@ -240,6 +240,12 @@ export default function PodScreen({ route, navigation }: Props) {
                 members={pod.members}
                 currentUserId={user?.id}
                 size={30}
+                onMemberPress={(m) =>
+                  navigation.navigate('UserProfile', {
+                    userId: m.user.id,
+                    name: m.user.name,
+                  })
+                }
               />
             </View>
             <View style={styles.lockRow}>
@@ -327,13 +333,33 @@ export default function PodScreen({ route, navigation }: Props) {
               {!isMe && (
                 <View style={styles.avatarSlot}>
                   {showAvatar ? (
-                    <Avatar name={item.user.name} size={28} />
+                    <TouchableOpacity
+                      onPress={() =>
+                        navigation.navigate('UserProfile', {
+                          userId: item.user.id,
+                          name: item.user.name,
+                        })
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <Avatar name={item.user.name} size={28} />
+                    </TouchableOpacity>
                   ) : null}
                 </View>
               )}
               <View style={styles.bubbleColumn}>
                 {showAvatar && !isMe && (
-                  <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      navigation.navigate('UserProfile', {
+                        userId: item.user.id,
+                        name: item.user.name,
+                      })
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
+                  </TouchableOpacity>
                 )}
                 {isMe ? (
                   <LinearGradient
