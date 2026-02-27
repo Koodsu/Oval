@@ -308,6 +308,7 @@ const activities = [
 
 async function main() {
   // Clear existing data to re-seed with categories
+  await prisma.report.deleteMany();
   await prisma.message.deleteMany();
   await prisma.podMember.deleteMany();
   await prisma.pod.deleteMany();
