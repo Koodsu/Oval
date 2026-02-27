@@ -25,8 +25,14 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const data = res.status === 204 ? {} : await res.json();
+  let res: Response;
+  let data: unknown;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    data = res.status === 204 ? {} : await res.json();
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : 'Network request failed');
+  }
 
   if (!res.ok) {
     throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);

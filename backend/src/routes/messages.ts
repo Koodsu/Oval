@@ -52,8 +52,15 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const userId = req.user!.userId;
   const { content } = req.body;
 
-  if (!content || typeof content !== 'string' || content.trim() === '') {
+  const trimmed = typeof content === 'string' ? content.trim() : '';
+  if (!trimmed) {
     res.status(400).json({ error: 'content is required' });
+    return;
+  }
+
+  const MAX_MESSAGE_LENGTH = 2000;
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    res.status(400).json({ error: `Message cannot exceed ${MAX_MESSAGE_LENGTH} characters` });
     return;
   }
 
@@ -81,7 +88,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     }
 
     const message = await prisma.message.create({
-      data: { podId, userId, content: content.trim() },
+      data: { podId, userId, content: trimmed },
       include: { user: { select: { id: true, name: true } } },
     });
 

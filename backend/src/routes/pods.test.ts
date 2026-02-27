@@ -162,7 +162,7 @@ describe('Pods API (integration)', () => {
       const { token: token2 } = await registerAndGetToken(
         'Joiner',
         `joiner-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const joinRes = await request(app)
@@ -218,12 +218,12 @@ describe('Pods API (integration)', () => {
       const { token: tokenA, user: userA } = await registerAndGetToken(
         'Blocked A',
         `block-pod-a-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'Blocked B',
         `block-pod-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const meetupTime = new Date(Date.now() + 86400000);
@@ -267,12 +267,12 @@ describe('Pods API (integration)', () => {
       const { token: tokenA } = await registerAndGetToken(
         'Browse A',
         `browse-a-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'Browse B',
         `browse-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const meetupTime = new Date(Date.now() + 86400000);
@@ -305,12 +305,12 @@ describe('Pods API (integration)', () => {
       const { token: tokenA } = await registerAndGetToken(
         'Join Block A',
         `join-block-a-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'Join Block B',
         `join-block-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const meetupTime = new Date(Date.now() + 86400000);
@@ -340,12 +340,12 @@ describe('Pods API (integration)', () => {
       const { token: tokenA } = await registerAndGetToken(
         'View Block A',
         `view-block-a-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'View Block B',
         `view-block-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const meetupTime = new Date(Date.now() + 86400000);
@@ -374,12 +374,12 @@ describe('Pods API (integration)', () => {
       const { token: tokenA, user: userA } = await registerAndGetToken(
         'Cleanup A',
         `cleanup-a-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
       const { token: tokenB, user: userB } = await registerAndGetToken(
         'Cleanup B',
         `cleanup-b-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const meetupTime = new Date(Date.now() + 86400000);

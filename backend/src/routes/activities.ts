@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { getLocationsForCategory } from '../config/locations';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
 // GET /activities/locations?category= – locations by category (must be before /:id/locations)
-router.get('/locations', async (req: Request, res: Response): Promise<void> => {
+router.get('/locations', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { category } = req.query;
     if (!category || typeof category !== 'string') {
@@ -21,7 +22,7 @@ router.get('/locations', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /activities/:id/locations – buildings for this activity's category
-router.get('/:id/locations', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/locations', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const activity = await prisma.activity.findUnique({ where: { id } });
@@ -41,7 +42,7 @@ router.get('/:id/locations', async (req: Request, res: Response): Promise<void> 
 });
 
 // GET /activities?category=
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { category } = req.query;
     const where = category && typeof category === 'string' ? { category } : {};
