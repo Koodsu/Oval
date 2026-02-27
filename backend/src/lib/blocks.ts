@@ -10,7 +10,7 @@ export async function hasBlockingRelationship(
 ): Promise<boolean> {
   if (userIdA === userIdB) return false;
 
-  const count = await prisma.block.count({
+  const count = await (prisma as any).block.count({
     where: {
       OR: [
         { blockerId: userIdA, blockedId: userIdB },
@@ -25,7 +25,7 @@ export async function hasBlockingRelationship(
  * Returns user IDs that have a blocking relationship with the given user.
  */
 export async function getBlockedUserIds(userId: string): Promise<Set<string>> {
-  const blocks = await prisma.block.findMany({
+  const blocks = await (prisma as any).block.findMany({
     where: {
       OR: [{ blockerId: userId }, { blockedId: userId }],
     },
