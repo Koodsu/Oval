@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
 import GradientButton from '../components/GradientButton';
 import FadeIn from '../components/FadeIn';
+import GuidelinesModal from '../components/GuidelinesModal';
 import { colors, spacing, radii, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PodList'>;
@@ -34,13 +35,14 @@ const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Ionicon
 
 export default function PodListScreen({ route, navigation }: Props) {
   const { activityId, activityTitle, activityCategory } = route.params;
-  const { user } = useAuth();
+  const { user, hasAcceptedGuidelines, acceptGuidelines } = useAuth();
 
   const [pods, setPods] = useState<Pod[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('starting_soon');
+  const [pendingAction, setPendingAction] = useState<{ type: 'join'; podId: string } | { type: 'create' } | null>(null);
 
   const fetchPods = useCallback(async () => {
     try {
@@ -58,7 +60,7 @@ export default function PodListScreen({ route, navigation }: Props) {
     fetchPods();
   }, [fetchPods]);
 
-  const handleJoin = async (podId: string) => {
+  const executeJoin = async (podId: string) => {
     setActionId(podId);
     try {
       const pod = await joinPod(podId);
@@ -70,12 +72,43 @@ export default function PodListScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleCreate = () => {
+  const handleJoin = (podId: string) => {
+    if (!hasAcceptedGuidelines) {
+      setPendingAction({ type: 'join', podId });
+    } else {
+      executeJoin(podId);
+    }
+  };
+
+  const executeCreate = () => {
     navigation.navigate('CreatePod', {
       activityId,
       activityTitle,
       activityCategory: activityCategory ?? 'Social',
     });
+  };
+
+  const handleCreate = () => {
+    if (!hasAcceptedGuidelines) {
+      setPendingAction({ type: 'create' });
+    } else {
+      executeCreate();
+    }
+  };
+
+  const handleGuidelinesAccept = async () => {
+    await acceptGuidelines();
+    const action = pendingAction;
+    setPendingAction(null);
+    if (action?.type === 'join') {
+      executeJoin(action.podId);
+    } else if (action?.type === 'create') {
+      executeCreate();
+    }
+  };
+
+  const handleGuidelinesClose = () => {
+    setPendingAction(null);
   };
 
   const isAlreadyMember = (pod: Pod) =>
@@ -169,6 +202,12 @@ export default function PodListScreen({ route, navigation }: Props) {
             />
           </FadeIn>
         )}
+      />
+
+      <GuidelinesModal
+        visible={pendingAction !== null}
+        onAccept={handleGuidelinesAccept}
+        onClose={handleGuidelinesClose}
       />
     </View>
   );

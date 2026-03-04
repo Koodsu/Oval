@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -308,10 +309,12 @@ const activities = [
 
 async function main() {
   // Clear existing data to re-seed with categories
+  await prisma.report.deleteMany();
   await prisma.message.deleteMany();
   await prisma.podMember.deleteMany();
   await prisma.pod.deleteMany();
   await prisma.activity.deleteMany();
+  await prisma.block.deleteMany();
 
   await prisma.activity.createMany({ data: activities });
   console.log(`Seeded ${activities.length} activities.`);

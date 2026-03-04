@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { hasBlockingRelationship } from '../lib/blocks';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router({ mergeParams: true });
 
@@ -10,20 +12,26 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   const userId = req.user!.userId;
 
   try {
-    // Verify pod exists
-    const pod = await prisma.pod.findUnique({ where: { id: podId } });
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      include: { members: true },
+    });
     if (!pod) {
       res.status(404).json({ error: 'Pod not found' });
       return;
     }
 
-    // Verify user is a member of the pod
-    const membership = await prisma.podMember.findUnique({
-      where: { podId_userId: { podId, userId } },
-    });
+    const membership = pod.members.find((m) => m.userId === userId);
     if (!membership) {
       res.status(403).json({ error: 'You are not a member of this pod' });
       return;
+    }
+
+    for (const m of pod.members) {
+      if (await hasBlockingRelationship(userId, m.userId)) {
+        res.status(403).json({ error: "You can't view messages in this pod." });
+        return;
+      }
     }
 
     const messages = await prisma.message.findMany({
@@ -45,32 +53,48 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const userId = req.user!.userId;
   const { content } = req.body;
 
-  if (!content || typeof content !== 'string' || content.trim() === '') {
+  const trimmed = typeof content === 'string' ? content.trim() : '';
+  if (!trimmed) {
     res.status(400).json({ error: 'content is required' });
     return;
   }
 
+  const MAX_MESSAGE_LENGTH = 2000;
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    res.status(400).json({ error: `Message cannot exceed ${MAX_MESSAGE_LENGTH} characters` });
+    return;
+  }
+
   try {
-    // Verify pod exists
-    const pod = await prisma.pod.findUnique({ where: { id: podId } });
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      include: { members: true },
+    });
     if (!pod) {
       res.status(404).json({ error: 'Pod not found' });
       return;
     }
 
-    // Verify user is a member of the pod
-    const membership = await prisma.podMember.findUnique({
-      where: { podId_userId: { podId, userId } },
-    });
+    const membership = pod.members.find((m) => m.userId === userId);
     if (!membership) {
       res.status(403).json({ error: 'You are not a member of this pod' });
       return;
     }
 
+    for (const m of pod.members) {
+      if (await hasBlockingRelationship(userId, m.userId)) {
+        res.status(403).json({ error: "You can't send messages in this pod." });
+        return;
+      }
+    }
+
     const message = await prisma.message.create({
-      data: { podId, userId, content: content.trim() },
+      data: { podId, userId, content: trimmed },
       include: { user: { select: { id: true, name: true } } },
     });
+
+    // Fire-and-forget: notify other pod members of the new message
+    NotificationService.notifyNewMessage(podId, userId).catch(() => {});
 
     res.status(201).json(message);
   } catch (err) {

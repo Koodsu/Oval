@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setToken } from '../api';
+import * as Notifications from 'expo-notifications';
+import { setToken, setOnUnauthorized, registerPushToken } from '../api';
 import { User } from '../types';
 
 interface AuthContextValue {
@@ -8,28 +9,69 @@ interface AuthContextValue {
   token: string | null;
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (user: User) => Promise<void>;
   isLoading: boolean;
+  hasAcceptedGuidelines: boolean;
+  acceptGuidelines: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
+
+async function registerForPushNotifications(): Promise<void> {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') return;
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    await registerPushToken(tokenData.data);
+  } catch {
+    // Push token registration is best-effort; never block sign-in
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
+
+  const signOut = useCallback(async () => {
+    await AsyncStorage.multiRemove(['token', 'user']);
+    setToken(null);
+    setTokenState(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    // Wire up the 401 callback so expired tokens trigger automatic sign-out
+    setOnUnauthorized(signOut);
+    return () => setOnUnauthorized(null);
+  }, [signOut]);
 
   useEffect(() => {
     // Restore session from storage on startup
-    AsyncStorage.multiGet(['token', 'user']).then(([tokenEntry, userEntry]) => {
-      const storedToken = tokenEntry[1];
-      const storedUser = userEntry[1];
-      if (storedToken && storedUser) {
-        setTokenState(storedToken);
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      }
-      setIsLoading(false);
-    });
+    AsyncStorage.multiGet(['token', 'user', 'guidelinesAccepted']).then(
+      ([tokenEntry, userEntry, guidelinesEntry]) => {
+        const storedToken = tokenEntry[1];
+        const storedUser = userEntry[1];
+        if (storedToken && storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            if (parsed?.id && parsed?.name && parsed?.email) {
+              setTokenState(storedToken);
+              setToken(storedToken);
+              setUser(parsed);
+              // Re-register push token in case it changed since last session
+              registerForPushNotifications();
+            }
+          } catch {
+            // Corrupted user data - clear and require re-login
+            AsyncStorage.multiRemove(['token', 'user']);
+          }
+        }
+        setHasAcceptedGuidelines(guidelinesEntry[1] === 'true');
+        setIsLoading(false);
+      },
+    );
   }, []);
 
   const signIn = async (newToken: string, newUser: User) => {
@@ -40,17 +82,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
+    // Register push token after successful sign-in
+    registerForPushNotifications();
   };
 
-  const signOut = async () => {
-    await AsyncStorage.multiRemove(['token', 'user']);
-    setToken(null);
-    setTokenState(null);
-    setUser(null);
+  const updateUser = async (newUser: User) => {
+    await AsyncStorage.setItem('user', JSON.stringify(newUser));
+    setUser(newUser);
   };
+
+  const acceptGuidelines = async () => {
+    await AsyncStorage.setItem('guidelinesAccepted', 'true');
+    setHasAcceptedGuidelines(true);
+  };
+
 
   return (
-    <AuthContext.Provider value={{ user, token, signIn, signOut, isLoading }}>
+    <AuthContext.Provider
+      value={{ user, token, signIn, signOut, updateUser, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
+    >
       {children}
     </AuthContext.Provider>
   );
