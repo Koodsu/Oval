@@ -9,6 +9,8 @@ interface AuthContextValue {
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
   isLoading: boolean;
+  hasAcceptedGuidelines: boolean;
+  acceptGuidelines: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
@@ -17,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
 
   const signOut = useCallback(async () => {
     await AsyncStorage.multiRemove(['token', 'user']);
@@ -32,24 +35,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signOut]);
 
   useEffect(() => {
-    AsyncStorage.multiGet(['token', 'user']).then(([tokenEntry, userEntry]) => {
-      const storedToken = tokenEntry[1];
-      const storedUser = userEntry[1];
-      if (storedToken && storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          if (parsed?.id && parsed?.name && parsed?.email) {
-            setTokenState(storedToken);
-            setToken(storedToken);
-            setUser(parsed);
+    // Restore session from storage on startup
+    AsyncStorage.multiGet(['token', 'user', 'guidelinesAccepted']).then(
+      ([tokenEntry, userEntry, guidelinesEntry]) => {
+        const storedToken = tokenEntry[1];
+        const storedUser = userEntry[1];
+        if (storedToken && storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            if (parsed?.id && parsed?.name && parsed?.email) {
+              setTokenState(storedToken);
+              setToken(storedToken);
+              setUser(parsed);
+            }
+          } catch {
+            // Corrupted user data - clear and require re-login
+            AsyncStorage.multiRemove(['token', 'user']);
           }
-        } catch {
-          // Corrupted user data - clear and require re-login
-          AsyncStorage.multiRemove(['token', 'user']);
         }
-      }
-      setIsLoading(false);
-    });
+        setHasAcceptedGuidelines(guidelinesEntry[1] === 'true');
+        setIsLoading(false);
+      },
+    );
   }, []);
 
   const signIn = async (newToken: string, newUser: User) => {
@@ -62,8 +69,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
   };
 
+  const acceptGuidelines = async () => {
+    await AsyncStorage.setItem('guidelinesAccepted', 'true');
+    setHasAcceptedGuidelines(true);
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, token, signIn, signOut, isLoading }}>
+    <AuthContext.Provider
+      value={{ user, token, signIn, signOut, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
+    >
       {children}
     </AuthContext.Provider>
   );

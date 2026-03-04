@@ -1,3 +1,13 @@
+// Mock AsyncStorage (native module not available in Jest)
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn().mockResolvedValue(null),
+  setItem: jest.fn().mockResolvedValue(undefined),
+  removeItem: jest.fn().mockResolvedValue(undefined),
+  multiGet: jest.fn().mockResolvedValue([]),
+  multiSet: jest.fn().mockResolvedValue(undefined),
+  multiRemove: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock @expo/vector-icons to avoid expo-font/expo-asset dependency in tests
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
