@@ -212,4 +212,208 @@ describe('Pods API (integration)', () => {
       await request(app).get('/pods').query({ activityId }).expect(401);
     });
   });
+
+  describe('Blocking', () => {
+    it('blocked users filtered from pod lists (GET /pods/mine)', async () => {
+      const { token: tokenA, user: userA } = await registerAndGetToken(
+        'Blocked A',
+        `block-pod-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Blocked B',
+        `block-pod-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id;
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ podId })
+        .expect(201);
+
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const mineA = await request(app)
+        .get('/pods/mine')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(mineA.body).toHaveLength(0);
+
+      const mineB = await request(app)
+        .get('/pods/mine')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200);
+      expect(mineB.body).toHaveLength(0);
+    });
+
+    it('blocked users filtered from browse (GET /pods)', async () => {
+      const { token: tokenA } = await registerAndGetToken(
+        'Browse A',
+        `browse-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Browse B',
+        `browse-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const browse = await request(app)
+        .get('/pods')
+        .query({ activityId })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const podIds = browse.body.map((p: { id: string }) => p.id);
+      expect(podIds).not.toContain(createRes.body.id);
+    });
+
+    it('cannot join pod with blocked relationship', async () => {
+      const { token: tokenA } = await registerAndGetToken(
+        'Join Block A',
+        `join-block-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Join Block B',
+        `join-block-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ podId: createRes.body.id })
+        .expect(403);
+    });
+
+    it('GET /pods/:id returns 404 when blocked', async () => {
+      const { token: tokenA } = await registerAndGetToken(
+        'View Block A',
+        `view-block-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'View Block B',
+        `view-block-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      await request(app)
+        .get(`/pods/${createRes.body.id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(404);
+    });
+
+    it('cleanup: blocking removes both users from shared pod', async () => {
+      const { token: tokenA, user: userA } = await registerAndGetToken(
+        'Cleanup A',
+        `cleanup-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Cleanup B',
+        `cleanup-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id;
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ podId })
+        .expect(201);
+
+      const membersBefore = await prisma.podMember.findMany({ where: { podId } });
+      expect(membersBefore).toHaveLength(2);
+
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const membersAfter = await prisma.podMember.findMany({ where: { podId } });
+      expect(membersAfter).toHaveLength(0);
+
+      const podExists = await prisma.pod.findUnique({ where: { id: podId } });
+      expect(podExists).toBeNull();
+    });
+  });
 });

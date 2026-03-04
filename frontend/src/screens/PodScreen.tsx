@@ -23,6 +23,7 @@ import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
 import StatusBadge from '../components/StatusBadge';
+import ReportModal from '../components/ReportModal';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -63,6 +64,12 @@ export default function PodScreen({ route, navigation }: Props) {
   const [locking, setLocking] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(true);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{
+    type: 'message' | 'pod';
+    messageId?: string;
+    podId?: string;
+  } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -164,6 +171,20 @@ export default function PodScreen({ route, navigation }: Props) {
     }
   };
 
+  const openReportMessage = (msg: Message) => {
+    setReportTarget({ type: 'message', messageId: msg.id, podId: msg.podId });
+    setReportModalVisible(true);
+  };
+
+  const openReportPod = () => {
+    setReportTarget({ type: 'pod', podId });
+    setReportModalVisible(true);
+  };
+
+  const handleReportSuccess = () => {
+    Alert.alert('Report submitted', 'Thanks.');
+  };
+
   const handleLeave = () => {
     Alert.alert(
       'Leave Pod',
@@ -240,6 +261,12 @@ export default function PodScreen({ route, navigation }: Props) {
                 members={pod.members}
                 currentUserId={user?.id}
                 size={30}
+                onMemberPress={(m) =>
+                  navigation.navigate('UserProfile', {
+                    userId: m.user.id,
+                    name: m.user.name,
+                  })
+                }
               />
             </View>
             <View style={styles.lockRow}>
@@ -293,6 +320,13 @@ export default function PodScreen({ route, navigation }: Props) {
                   </>
                 )}
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.lockButton, styles.reportButton]}
+                onPress={openReportPod}
+              >
+                <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
+                <Text style={styles.reportButtonText}>Report Pod</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -327,13 +361,33 @@ export default function PodScreen({ route, navigation }: Props) {
               {!isMe && (
                 <View style={styles.avatarSlot}>
                   {showAvatar ? (
-                    <Avatar name={item.user.name} size={28} />
+                    <TouchableOpacity
+                      onPress={() =>
+                        navigation.navigate('UserProfile', {
+                          userId: item.user.id,
+                          name: item.user.name,
+                        })
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <Avatar name={item.user.name} size={28} />
+                    </TouchableOpacity>
                   ) : null}
                 </View>
               )}
               <View style={styles.bubbleColumn}>
                 {showAvatar && !isMe && (
-                  <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      navigation.navigate('UserProfile', {
+                        userId: item.user.id,
+                        name: item.user.name,
+                      })
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
+                  </TouchableOpacity>
                 )}
                 {isMe ? (
                   <LinearGradient
@@ -349,15 +403,18 @@ export default function PodScreen({ route, navigation }: Props) {
                     <Text style={styles.bubbleTextMe}>{item.content}</Text>
                   </LinearGradient>
                 ) : (
-                  <View
+                  <TouchableOpacity
                     style={[
                       styles.bubble,
                       styles.bubbleThem,
                       !isLastInGroup && styles.bubbleThemGrouped,
                     ]}
+                    onLongPress={() => openReportMessage(item)}
+                    activeOpacity={1}
+                    delayLongPress={400}
                   >
                     <Text style={styles.bubbleTextThem}>{item.content}</Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
                 {isLastInGroup && (
                   <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
@@ -406,6 +463,18 @@ export default function PodScreen({ route, navigation }: Props) {
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => {
+          setReportModalVisible(false);
+          setReportTarget(null);
+        }}
+        onSuccess={handleReportSuccess}
+        messageId={reportTarget?.type === 'message' ? reportTarget.messageId : undefined}
+        podId={reportTarget?.podId ?? podId}
+        podOnly={reportTarget?.type === 'pod'}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -500,6 +569,14 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.red,
+  },
+  reportButton: {
+    borderColor: colors.border,
+  },
+  reportButtonText: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.textSecondary,
   },
 
   // Chat

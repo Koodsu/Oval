@@ -5,7 +5,7 @@ export const colors = {
   primaryDark: '#4f46e5',
   violet: '#8b5cf6',
   gradient: ['#6366f1', '#8b5cf6'] as const,
-  gradientSubtle: ['#eef2ff', '#f5f3ff'] as const,
+  gradientSubtle: ['#eef2ff', '#e0e7ff', '#f5f3ff'] as const,
 
   amber: '#f59e0b',
   amberLight: '#fef3c7',

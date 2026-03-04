@@ -32,8 +32,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const data = await res.json();
+  let res: Response;
+  let data: unknown;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    data = res.status === 204 ? {} : await res.json();
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : 'Network request failed');
+  }
 
   if (res.status === 401) {
     onUnauthorized?.();
@@ -41,7 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    throw new Error(data.error ?? `Request failed: ${res.status}`);
+    throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);
   }
 
   return data as T;
@@ -124,4 +130,67 @@ export const sendMessage = (podId: string, content: string) =>
   request<import('./types').Message>(`/pods/${podId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content }),
+  });
+
+// Reports
+export const REPORT_REASONS = [
+  'HARASSMENT',
+  'HATE',
+  'SPAM',
+  'NUDITY_SEXUAL',
+  'VIOLENCE_THREATS',
+  'SELF_HARM',
+  'SCAM_FRAUD',
+  'ILLEGAL',
+  'OTHER',
+] as const;
+
+export const REPORT_REASON_LABELS: Record<string, string> = {
+  HARASSMENT: 'Harassment or bullying',
+  HATE: 'Hate speech or symbols',
+  SPAM: 'Spam',
+  NUDITY_SEXUAL: 'Nudity or sexual content',
+  VIOLENCE_THREATS: 'Violence or threats',
+  SELF_HARM: 'Self-harm',
+  SCAM_FRAUD: 'Scam or fraud',
+  ILLEGAL: 'Illegal activity',
+  OTHER: 'Other',
+};
+
+export interface CreateReportPayload {
+  podId?: string;
+  messageId?: string;
+  targetUserId?: string;
+  reason: string;
+  details?: string;
+}
+
+export const createReport = (payload: CreateReportPayload) =>
+  request<{ reportId: string; status: string }>('/reports', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export interface MyReport {
+  id: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  podId?: string | null;
+  messageId?: string | null;
+  targetUserId?: string | null;
+}
+
+export const getMyReports = () =>
+  request<MyReport[]>('/reports/mine');
+
+// Blocking
+export const blockUser = (userId: string) =>
+  request<{ success: boolean; blockId?: string; createdAt?: string }>(`/users/${userId}/block`, {
+    method: 'POST',
+  });
+
+export const unblockUser = (userId: string) =>
+  request<{ success?: boolean }>(`/users/${userId}/block`, {
+    method: 'DELETE',
   });

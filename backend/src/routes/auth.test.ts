@@ -40,6 +40,33 @@ describe('POST /auth/register', () => {
       .expect(400);
   });
 
+  it('rejects invalid email format', async () => {
+    await request(app)
+      .post('/auth/register')
+      .send({ name: 'Bob', email: 'not-an-email', password: 'password123' })
+      .expect(400);
+
+    await request(app)
+      .post('/auth/register')
+      .send({ name: 'Bob', email: 'missing@domain', password: 'password123' })
+      .expect(400);
+  });
+
+  it('rejects short password', async () => {
+    const res = await request(app)
+      .post('/auth/register')
+      .send({ name: 'Bob', email: 'bob@short-pw.test.com', password: 'short' })
+      .expect(400);
+    expect(res.body.error).toContain('8 characters');
+  });
+
+  it('rejects name shorter than 2 characters', async () => {
+    await request(app)
+      .post('/auth/register')
+      .send({ name: 'A', email: 'a@test.com', password: 'password123' })
+      .expect(400);
+  });
+
   it('rejects duplicate email', async () => {
     const email = 'dup@test-register.com';
     await request(app)

@@ -37,12 +37,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const storedUser = userEntry[1];
       if (storedToken && storedUser) {
         try {
-          const parsedUser = JSON.parse(storedUser) as User;
-          setTokenState(storedToken);
-          setToken(storedToken);
-          setUser(parsedUser);
+          const parsed = JSON.parse(storedUser);
+          if (parsed?.id && parsed?.name && parsed?.email) {
+            setTokenState(storedToken);
+            setToken(storedToken);
+            setUser(parsed);
+          }
         } catch {
-          // Corrupted storage — clear it and fall through to the login screen
+          // Corrupted user data - clear and require re-login
           AsyncStorage.multiRemove(['token', 'user']);
         }
       }
