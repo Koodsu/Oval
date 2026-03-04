@@ -3,6 +3,7 @@ import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router();
 
@@ -166,6 +167,9 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
           members: { include: { user: { select: { id: true, name: true } } } },
         },
       });
+
+      // Fire-and-forget: notify the pod creator that someone joined
+      NotificationService.notifyPodJoin(podId, userId).catch(() => {});
 
       res.status(201).json(updatedPod);
       return;

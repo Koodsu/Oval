@@ -1,8 +1,82 @@
 import { Router, Response } from 'express';
+import { Expo } from 'expo-server-sdk';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { parsePreferences, DEFAULT_PREFS } from '../lib/NotificationService';
 
 const router = Router();
+
+// POST /users/push-token – register Expo push token for current user
+router.post('/push-token', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { token } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+
+  if (!Expo.isExpoPushToken(token)) {
+    res.status(400).json({ error: 'Invalid Expo push token' });
+    return;
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pushToken: token },
+    });
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /users/notifications – update notification preferences for current user
+router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { podJoin, newMessage, meetupReminder } = req.body;
+
+  if (
+    (podJoin !== undefined && typeof podJoin !== 'boolean') ||
+    (newMessage !== undefined && typeof newMessage !== 'boolean') ||
+    (meetupReminder !== undefined && typeof meetupReminder !== 'boolean')
+  ) {
+    res.status(400).json({ error: 'Preference values must be booleans' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPreferences: true },
+    });
+
+    const current = parsePreferences(user?.notificationPreferences);
+    const merged = {
+      ...DEFAULT_PREFS,
+      ...current,
+      ...(podJoin !== undefined && { podJoin }),
+      ...(newMessage !== undefined && { newMessage }),
+      ...(meetupReminder !== undefined && { meetupReminder }),
+    };
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { notificationPreferences: JSON.stringify(merged) },
+      select: { id: true, name: true, email: true, notificationPreferences: true },
+    });
+
+    res.json({
+      ...updated,
+      notificationPreferences: parsePreferences(updated.notificationPreferences),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // POST /users/:id/block – block target user
 router.post('/:id/block', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {

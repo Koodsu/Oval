@@ -194,3 +194,18 @@ export const unblockUser = (userId: string) =>
   request<{ success?: boolean }>(`/users/${userId}/block`, {
     method: 'DELETE',
   });
+
+// Notifications
+export const registerPushToken = (token: string) =>
+  request<{ success: boolean }>('/users/push-token', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const updateNotificationPreferences = (
+  prefs: Partial<import('./types').NotificationPreferences>
+) =>
+  request<import('./types').User>('/users/notifications', {
+    method: 'PATCH',
+    body: JSON.stringify(prefs),
+  });

@@ -1,7 +1,14 @@
+export interface NotificationPreferences {
+  podJoin: boolean;
+  newMessage: boolean;
+  meetupReminder: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  notificationPreferences?: NotificationPreferences;
 }
 
 export interface Activity {

@@ -1,8 +1,157 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
+
+// Prevent real Expo push calls during integration tests
+vi.mock('../lib/NotificationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/NotificationService')>();
+  return {
+    ...actual,
+    NotificationService: {
+      notifyPodJoin: vi.fn().mockResolvedValue(undefined),
+      notifyNewMessage: vi.fn().mockResolvedValue(undefined),
+      sendMeetupReminders: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
+
+describe('Push Token API (integration)', () => {
+  let token: string;
+
+  beforeEach(async () => {
+    const result = await registerAndGetToken(
+      'Token Tester',
+      `push-token-${Date.now()}@example.com`,
+      'password123'
+    );
+    token = result.token;
+  });
+
+  describe('POST /users/push-token', () => {
+    it('rejects unauthenticated requests', async () => {
+      await request(app)
+        .post('/users/push-token')
+        .send({ token: 'ExponentPushToken[xxx]' })
+        .expect(401);
+    });
+
+    it('rejects missing token', async () => {
+      const res = await request(app)
+        .post('/users/push-token')
+        .set('Authorization', `Bearer ${token}`)
+        .send({})
+        .expect(400);
+      expect(res.body.error).toContain('token is required');
+    });
+
+    it('rejects invalid Expo push token format', async () => {
+      const res = await request(app)
+        .post('/users/push-token')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ token: 'not-a-valid-expo-token' })
+        .expect(400);
+      expect(res.body.error).toContain('Invalid Expo push token');
+    });
+
+    it('saves valid Expo push token', async () => {
+      const expoToken = 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]';
+      const res = await request(app)
+        .post('/users/push-token')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ token: expoToken })
+        .expect(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+});
+
+describe('Notification Preferences API (integration)', () => {
+  let token: string;
+  let userId: string;
+
+  beforeEach(async () => {
+    const result = await registerAndGetToken(
+      'Prefs Tester',
+      `notif-prefs-${Date.now()}@example.com`,
+      'password123'
+    );
+    token = result.token;
+    userId = result.user.id;
+  });
+
+  describe('PATCH /users/notifications', () => {
+    it('rejects unauthenticated requests', async () => {
+      await request(app)
+        .patch('/users/notifications')
+        .send({ podJoin: false })
+        .expect(401);
+    });
+
+    it('rejects non-boolean preference values', async () => {
+      const res = await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ podJoin: 'yes' })
+        .expect(400);
+      expect(res.body.error).toContain('booleans');
+    });
+
+    it('updates a single preference and returns all prefs', async () => {
+      const res = await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ podJoin: false })
+        .expect(200);
+
+      expect(res.body.notificationPreferences.podJoin).toBe(false);
+      expect(res.body.notificationPreferences.newMessage).toBe(true);
+      expect(res.body.notificationPreferences.meetupReminder).toBe(true);
+    });
+
+    it('merges multiple preferences', async () => {
+      const res = await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ podJoin: false, meetupReminder: false })
+        .expect(200);
+
+      expect(res.body.notificationPreferences.podJoin).toBe(false);
+      expect(res.body.notificationPreferences.newMessage).toBe(true);
+      expect(res.body.notificationPreferences.meetupReminder).toBe(false);
+    });
+
+    it('persists preferences to the database', async () => {
+      await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ newMessage: false })
+        .expect(200);
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const stored = JSON.parse(user!.notificationPreferences!);
+      expect(stored.newMessage).toBe(false);
+    });
+
+    it('successive updates are cumulative', async () => {
+      await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ podJoin: false })
+        .expect(200);
+
+      const res = await request(app)
+        .patch('/users/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ meetupReminder: false })
+        .expect(200);
+
+      expect(res.body.notificationPreferences.podJoin).toBe(false);
+      expect(res.body.notificationPreferences.meetupReminder).toBe(false);
+    });
+  });
+});
 
 describe('Block API (integration)', () => {
   let tokenA: string;

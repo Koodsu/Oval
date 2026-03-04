@@ -4,6 +4,7 @@ import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 
 import prisma from './prisma';
+import { startReminderScheduler } from './lib/reminderScheduler';
 import authRoutes from './routes/auth';
 import activitiesRoutes from './routes/activities';
 import podsRoutes from './routes/pods';
@@ -65,6 +66,8 @@ if (require.main === module) {
   const server = app.listen(PORT, () => {
     console.log(`Bridge backend running on port ${PORT}`);
   });
+
+  startReminderScheduler();
 
   const gracefulShutdown = () => {
     server.close(() => {

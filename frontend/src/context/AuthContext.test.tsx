@@ -4,7 +4,11 @@ import { Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from './AuthContext';
 
-jest.mock('../api', () => ({ setToken: jest.fn() }));
+jest.mock('../api', () => ({
+  setToken: jest.fn(),
+  setOnUnauthorized: jest.fn(),
+  registerPushToken: jest.fn().mockResolvedValue({ success: true }),
+}));
 
 function TestConsumer() {
   const { hasAcceptedGuidelines, acceptGuidelines, isLoading } = useAuth();

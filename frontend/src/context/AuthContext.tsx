@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setToken, setOnUnauthorized } from '../api';
+import * as Notifications from 'expo-notifications';
+import { setToken, setOnUnauthorized, registerPushToken } from '../api';
 import { User } from '../types';
 
 interface AuthContextValue {
@@ -8,12 +9,24 @@ interface AuthContextValue {
   token: string | null;
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (user: User) => Promise<void>;
   isLoading: boolean;
   hasAcceptedGuidelines: boolean;
   acceptGuidelines: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
+
+async function registerForPushNotifications(): Promise<void> {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') return;
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    await registerPushToken(tokenData.data);
+  } catch {
+    // Push token registration is best-effort; never block sign-in
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -47,6 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setTokenState(storedToken);
               setToken(storedToken);
               setUser(parsed);
+              // Re-register push token in case it changed since last session
+              registerForPushNotifications();
             }
           } catch {
             // Corrupted user data - clear and require re-login
@@ -67,6 +82,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
+    // Register push token after successful sign-in
+    registerForPushNotifications();
+  };
+
+  const updateUser = async (newUser: User) => {
+    await AsyncStorage.setItem('user', JSON.stringify(newUser));
+    setUser(newUser);
   };
 
   const acceptGuidelines = async () => {
@@ -77,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, signIn, signOut, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
+      value={{ user, token, signIn, signOut, updateUser, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
     >
       {children}
     </AuthContext.Provider>

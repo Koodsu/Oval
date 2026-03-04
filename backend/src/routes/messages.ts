@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { hasBlockingRelationship } from '../lib/blocks';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router({ mergeParams: true });
 
@@ -91,6 +92,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       data: { podId, userId, content: trimmed },
       include: { user: { select: { id: true, name: true } } },
     });
+
+    // Fire-and-forget: notify other pod members of the new message
+    NotificationService.notifyNewMessage(podId, userId).catch(() => {});
 
     res.status(201).json(message);
   } catch (err) {
