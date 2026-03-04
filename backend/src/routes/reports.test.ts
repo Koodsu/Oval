@@ -38,7 +38,7 @@ describe('Reports API', () => {
     const { token: otherToken, user: otherUser } = await registerAndGetToken(
       'Other User',
       `other-${Date.now()}@example.com`,
-      'pass'
+      'password123'
     );
     otherUserId = otherUser.id;
 

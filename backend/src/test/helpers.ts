@@ -6,6 +6,7 @@ import app from '../server';
 import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/jwt';
 
 export async function createTestUser(overrides: {
   name?: string;
@@ -24,8 +25,7 @@ export async function createTestUser(overrides: {
 }
 
 export function getAuthToken(userId: string, email: string): string {
-  const secret = process.env.JWT_SECRET ?? 'bridge_dev_secret';
-  return jwt.sign({ userId, email }, secret, { expiresIn: '7d' });
+  return jwt.sign({ userId, email }, getJwtSecret(), { expiresIn: '7d' });
 }
 
 export async function registerAndGetToken(

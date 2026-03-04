@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setToken } from '../api';
+import { setToken, setOnUnauthorized } from '../api';
 import { User } from '../types';
 
 interface AuthContextValue {
@@ -20,6 +20,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
+
+  const signOut = useCallback(async () => {
+    await AsyncStorage.multiRemove(['token', 'user']);
+    setToken(null);
+    setTokenState(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    // Wire up the 401 callback so expired tokens trigger automatic sign-out
+    setOnUnauthorized(signOut);
+    return () => setOnUnauthorized(null);
+  }, [signOut]);
 
   useEffect(() => {
     // Restore session from storage on startup
@@ -56,17 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
   };
 
-  const signOut = async () => {
-    await AsyncStorage.multiRemove(['token', 'user']);
-    setToken(null);
-    setTokenState(null);
-    setUser(null);
-  };
-
   const acceptGuidelines = async () => {
     await AsyncStorage.setItem('guidelinesAccepted', 'true');
     setHasAcceptedGuidelines(true);
   };
+
 
   return (
     <AuthContext.Provider
