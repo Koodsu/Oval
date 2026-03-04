@@ -162,7 +162,7 @@ describe('Pods API (integration)', () => {
       const { token: token2 } = await registerAndGetToken(
         'Joiner',
         `joiner-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       const joinRes = await request(app)

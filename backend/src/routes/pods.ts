@@ -315,12 +315,15 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       return;
     }
 
+    let podDeleted = false;
+
     await prisma.$transaction(async (tx) => {
       await tx.podMember.delete({ where: { id: membership.id } });
       const remainingCount = await tx.podMember.count({ where: { podId: id } });
       if (remainingCount === 0) {
         await tx.message.deleteMany({ where: { podId: id } });
         await tx.pod.delete({ where: { id } });
+        podDeleted = true;
       } else if (pod.creatorId === userId) {
         const nextCreator = await tx.podMember.findFirst({
           where: { podId: id },
@@ -335,8 +338,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       }
     });
 
-    const remainingCount = await prisma.podMember.count({ where: { podId: id } });
-    if (remainingCount === 0) {
+    if (podDeleted) {
       res.json({ left: true, podDeleted: true });
       return;
     }

@@ -44,12 +44,12 @@ describe('POST /auth/register', () => {
     const email = 'dup@test-register.com';
     await request(app)
       .post('/auth/register')
-      .send({ name: 'First', email, password: 'pass' })
+      .send({ name: 'First', email, password: 'password123' })
       .expect(201);
 
     const res = await request(app)
       .post('/auth/register')
-      .send({ name: 'Second', email, password: 'pass' })
+      .send({ name: 'Second', email, password: 'password123' })
       .expect(409);
 
     expect(res.body.error).toContain('already in use');

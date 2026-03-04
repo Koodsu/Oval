@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setToken } from '../api';
+import { setToken, setOnUnauthorized } from '../api';
 import { User } from '../types';
 
 interface AuthContextValue {
@@ -18,15 +18,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const signOut = useCallback(async () => {
+    await AsyncStorage.multiRemove(['token', 'user']);
+    setToken(null);
+    setTokenState(null);
+    setUser(null);
+  }, []);
+
   useEffect(() => {
-    // Restore session from storage on startup
+    // Wire up the 401 callback so expired tokens trigger automatic sign-out
+    setOnUnauthorized(signOut);
+    return () => setOnUnauthorized(null);
+  }, [signOut]);
+
+  useEffect(() => {
     AsyncStorage.multiGet(['token', 'user']).then(([tokenEntry, userEntry]) => {
       const storedToken = tokenEntry[1];
       const storedUser = userEntry[1];
       if (storedToken && storedUser) {
-        setTokenState(storedToken);
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        try {
+          const parsedUser = JSON.parse(storedUser) as User;
+          setTokenState(storedToken);
+          setToken(storedToken);
+          setUser(parsedUser);
+        } catch {
+          // Corrupted storage — clear it and fall through to the login screen
+          AsyncStorage.multiRemove(['token', 'user']);
+        }
       }
       setIsLoading(false);
     });
@@ -40,13 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
-  };
-
-  const signOut = async () => {
-    await AsyncStorage.multiRemove(['token', 'user']);
-    setToken(null);
-    setTokenState(null);
-    setUser(null);
   };
 
   return (

@@ -1,4 +1,7 @@
 import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 
 import authRoutes from './routes/auth';
 import activitiesRoutes from './routes/activities';
@@ -7,25 +10,50 @@ import messagesRoutes from './routes/messages';
 
 const app = express();
 
-app.use(express.json());
+app.use(helmet());
 
-// Routes
-app.use('/auth', authRoutes);
-app.use('/activities', activitiesRoutes);
-app.use('/pods', podsRoutes);
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN ?? '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
+app.use(express.json({ limit: '64kb' }));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+app.use('/auth', authLimiter, authRoutes);
+app.use('/activities', apiLimiter, activitiesRoutes);
+app.use('/pods', apiLimiter, podsRoutes);
 
 // Messages are nested under pods: /pods/:id/messages
-// We use a separate router with mergeParams so :id is accessible
-app.use('/pods/:id/messages', messagesRoutes);
+// Separate router with mergeParams so :id is accessible
+app.use('/pods/:id/messages', apiLimiter, messagesRoutes);
 
-// Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
 const PORT = process.env.PORT ?? 3000;
 
-// Only start listening when run directly (not when imported for tests)
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Bridge backend running on port ${PORT}`);

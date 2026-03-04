@@ -49,7 +49,7 @@ describe('Messages API (integration)', () => {
       const { token: otherToken } = await registerAndGetToken(
         'Stranger',
         `stranger-${Date.now()}@example.com`,
-        'pass'
+        'password123'
       );
 
       await request(app)
