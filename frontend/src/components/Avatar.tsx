@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../theme';
 
 interface AvatarProps {
@@ -44,28 +44,43 @@ export function AvatarStack({
   currentUserId,
   size = 32,
   max = 4,
+  onMemberPress,
 }: {
   members: { id: string; user: { id: string; name: string } }[];
   currentUserId?: string;
   size?: number;
   max?: number;
+  onMemberPress?: (member: { id: string; user: { id: string; name: string } }) => void;
 }) {
   const visible = members.slice(0, max);
   const overlap = size * 0.3;
 
   return (
     <View style={[styles.stack, { height: size }]}>
-      {visible.map((m, i) => (
-        <View
-          key={m.id}
-          style={[
-            styles.stackItem,
-            { marginLeft: i === 0 ? 0 : -overlap, zIndex: visible.length - i },
-          ]}
-        >
-          <Avatar name={m.user.name} size={size} isYou={m.user.id === currentUserId} />
-        </View>
-      ))}
+      {visible.map((m, i) => {
+        const isYou = m.user.id === currentUserId;
+        const content = (
+          <Avatar name={m.user.name} size={size} isYou={isYou} />
+        );
+
+        return (
+          <View
+            key={m.id}
+            style={[
+              styles.stackItem,
+              { marginLeft: i === 0 ? 0 : -overlap, zIndex: visible.length - i },
+            ]}
+          >
+            {onMemberPress && !isYou ? (
+              <TouchableOpacity onPress={() => onMemberPress(m)} activeOpacity={0.7}>
+                {content}
+              </TouchableOpacity>
+            ) : (
+              content
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }

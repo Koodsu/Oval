@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
+import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 
 const router = Router();
 
@@ -21,9 +22,13 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   const userId = req.user!.userId;
 
   try {
+    const blockedIds = await getBlockedUserIds(userId);
     const pods = await prisma.pod.findMany({
       where: {
-        members: { some: { userId } },
+        members: {
+          some: { userId },
+          none: { userId: { in: [...blockedIds] } },
+        },
       },
       include: {
         activity: true,
@@ -52,9 +57,11 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
+    const blockedIds = await getBlockedUserIds(req.user!.userId);
     const where: Record<string, unknown> = {
       activityId,
       status: FORMING,
+      members: { none: { userId: { in: [...blockedIds] } } },
     };
 
     let orderBy: Record<string, string> = { createdAt: 'desc' };
@@ -118,6 +125,14 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       if (pod.members.length >= pod.maxMembers) {
         res.status(409).json({ error: 'This pod is full' });
         return;
+      }
+
+      // Check no blocking relationship with any pod member
+      for (const m of pod.members) {
+        if (await hasBlockingRelationship(userId, m.userId)) {
+          res.status(403).json({ error: "You can't join this pod." });
+          return;
+        }
       }
 
       // Check user is not already in an active pod for this activity
@@ -315,12 +330,15 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       return;
     }
 
+    let podDeleted = false;
+
     await prisma.$transaction(async (tx) => {
       await tx.podMember.delete({ where: { id: membership.id } });
       const remainingCount = await tx.podMember.count({ where: { podId: id } });
       if (remainingCount === 0) {
         await tx.message.deleteMany({ where: { podId: id } });
         await tx.pod.delete({ where: { id } });
+        podDeleted = true;
       } else if (pod.creatorId === userId) {
         const nextCreator = await tx.podMember.findFirst({
           where: { podId: id },
@@ -335,8 +353,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       }
     });
 
-    const remainingCount = await prisma.podMember.count({ where: { podId: id } });
-    if (remainingCount === 0) {
+    if (podDeleted) {
       res.json({ left: true, podDeleted: true });
       return;
     }
@@ -403,6 +420,7 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
 // GET /pods/:id
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
+  const userId = req.user!.userId;
 
   try {
     let pod = await prisma.pod.findUnique({
@@ -419,6 +437,14 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
     if (!pod) {
       res.status(404).json({ error: 'Pod not found' });
       return;
+    }
+
+    // Hide pod if any member has blocking relationship with current user
+    for (const m of pod.members) {
+      if (await hasBlockingRelationship(userId, m.userId)) {
+        res.status(404).json({ error: 'Pod not found' });
+        return;
+      }
     }
 
     // Lazy COMPLETED transition

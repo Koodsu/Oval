@@ -34,6 +34,14 @@ export default function RegisterScreen({ navigation }: Props) {
       Alert.alert('Error', 'All fields are required.');
       return;
     }
+    if (name.trim().length < 2) {
+      Alert.alert('Error', 'Name must be at least 2 characters.');
+      return;
+    }
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters.');
+      return;
+    }
     setLoading(true);
     try {
       const { token, user } = await register(name.trim(), email.trim(), password);
@@ -47,7 +55,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
   return (
     <LinearGradient
-      colors={['#eef2ff', '#e0e7ff', '#f5f3ff']}
+      colors={[...colors.gradientSubtle]}
       style={styles.gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}

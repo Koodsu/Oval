@@ -5,10 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { RootStackParamList } from '../../App';
 import { getMyPods } from '../api';
 import { Pod } from '../types';
 import Avatar from '../components/Avatar';
@@ -18,6 +22,7 @@ import { colors, spacing, radii, typography, shadows } from '../theme';
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [pods, setPods] = useState<Pod[]>([]);
 
   const fetchStats = useCallback(async () => {
@@ -83,6 +88,15 @@ export default function ProfileScreen() {
           <Text style={styles.statLabel}>Total Pods</Text>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.reportsLink}
+        onPress={() => navigation.navigate('MyReports' as never)}
+      >
+        <Ionicons name="flag-outline" size={20} color={colors.primary} />
+        <Text style={styles.reportsLinkText}>My Reports</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+      </TouchableOpacity>
 
       <View style={styles.signOutSection}>
         <GradientButton
@@ -160,6 +174,22 @@ const styles = StyleSheet.create({
   statLabel: {
     ...typography.tiny,
     textAlign: 'center',
+  },
+  reportsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    ...shadows.sm,
+  },
+  reportsLinkText: {
+    ...typography.bodyBold,
+    flex: 1,
+    color: colors.primary,
   },
   signOutSection: {
     paddingHorizontal: spacing.lg,
