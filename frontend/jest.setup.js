@@ -21,3 +21,16 @@ jest.mock('expo-linear-gradient', () => {
     LinearGradient: (props) => React.createElement(View, props, props.children),
   };
 });
+
+// Mock @expo/vector-icons (renders nothing in tests)
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const Icon = ({ name, ...rest }) => React.createElement(Text, rest, name);
+  return {
+    Ionicons: Icon,
+    MaterialIcons: Icon,
+    FontAwesome: Icon,
+    Feather: Icon,
+  };
+});

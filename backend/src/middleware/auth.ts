@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/jwt';
 
 export interface AuthRequest extends Request {
   user?: { userId: string; email: string };
@@ -16,9 +17,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   const token = authHeader.slice(7);
 
   try {
-    const secret = process.env.JWT_SECRET ?? 'bridge_dev_secret';
-
-    const payload = jwt.verify(token, secret) as { userId: string; email: string };
+    const payload = jwt.verify(token, getJwtSecret()) as { userId: string; email: string };
     req.user = { userId: payload.userId, email: payload.email };
     next();
   } catch {
