@@ -75,6 +75,11 @@ export const getActivities = (category?: string) =>
 // Pods
 export const getMyPods = () => request<import('./types').Pod[]>('/pods/mine');
 
+export const fetchFeed = (category?: string) =>
+  request<import('./types').Pod[]>(
+    category ? `/pods/feed?category=${encodeURIComponent(category)}` : '/pods/feed'
+  );
+
 export const getPodsByActivity = (activityId: string, sort?: string) => {
   const params = new URLSearchParams({ activityId });
   if (sort) params.set('sort', sort);

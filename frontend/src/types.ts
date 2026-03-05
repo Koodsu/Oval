@@ -11,6 +11,7 @@ export interface Activity {
   category: string;
   defaultLocation: string;
   createdAt: string;
+  _count?: { pods: number };
 }
 
 export interface PodMember {
