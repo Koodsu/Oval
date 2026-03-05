@@ -93,7 +93,14 @@ function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardPr
         <View style={[styles.feedCardIcon, { backgroundColor: accentColor + '1a' }]}>
           <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={16} color={accentColor} />
         </View>
-        <Text style={styles.feedCardTitle} numberOfLines={2}>{pod.activity?.title ?? 'Pod'}</Text>
+        <View style={styles.feedCardTitleRow}>
+          <Text style={styles.feedCardTitle} numberOfLines={2}>{pod.activity?.title ?? 'Pod'}</Text>
+          {pod.recommended && (
+            <View style={styles.forYouBadge}>
+              <Text style={styles.forYouBadgeText}>For You</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Time */}
@@ -274,6 +281,22 @@ export default function TodayScreen() {
           </View>
         </View>
 
+        {/* Find a Group CTA */}
+        <View style={styles.heroSection}>
+          <TouchableOpacity
+            style={styles.heroButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              navigation.navigate('FindAGroup');
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="flash" size={20} color={colors.textInverse} />
+            <Text style={styles.heroButtonText}>Find a Group</Text>
+          </TouchableOpacity>
+          <Text style={styles.heroSubtext}>See open pods you can join right now</Text>
+        </View>
+
         {/* Happening Today */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Happening Today</Text>
@@ -383,6 +406,33 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.caption,
   },
+  heroSection: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  heroButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    width: '100%',
+    ...shadows.sm,
+  },
+  heroButtonText: {
+    color: colors.textInverse,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  heroSubtext: {
+    ...typography.caption,
+    textAlign: 'center',
+  },
   section: {
     marginBottom: spacing.lg,
   },
@@ -434,11 +484,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  feedCardTitleRow: {
+    flex: 1,
+    gap: 4,
+  },
   feedCardTitle: {
     ...typography.bodyBold,
     fontSize: 14,
-    flex: 1,
     lineHeight: 19,
+  },
+  forYouBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    borderRadius: radii.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  forYouBadgeText: {
+    color: colors.textInverse,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   feedCardMeta: {
     flexDirection: 'row',

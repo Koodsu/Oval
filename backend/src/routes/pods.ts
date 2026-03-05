@@ -46,13 +46,14 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
-// GET /pods/feed — cross-activity discovery feed, soonest first
+// GET /pods/feed — cross-activity discovery feed, soonest first then most-joined
 router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { category, limit = '20' } = req.query;
+  const userId = req.user!.userId;
   const now = new Date();
 
   try {
-    const blockedIds = await getBlockedUserIds(req.user!.userId);
+    const blockedIds = await getBlockedUserIds(userId);
 
     const where: Record<string, unknown> = {
       status: FORMING,
@@ -64,19 +65,36 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       where.activity = { category };
     }
 
-    const pods = await prisma.pod.findMany({
-      where,
-      include: {
-        activity: true,
-        members: {
-          include: { user: { select: { id: true, name: true } } },
+    const [pods, pastMembers] = await Promise.all([
+      prisma.pod.findMany({
+        where,
+        include: {
+          activity: true,
+          members: {
+            include: { user: { select: { id: true, name: true } } },
+          },
         },
-      },
-      orderBy: { meetupTime: 'asc' },
-      take: Math.min(Number(limit) || 20, 50),
+        take: Math.min(Number(limit) || 20, 50),
+      }),
+      prisma.podMember.findMany({
+        where: { userId },
+        include: { pod: { select: { activityId: true } } },
+        take: 20,
+      }),
+    ]);
+
+    const preferredActivityIds = new Set(pastMembers.map((pm) => pm.pod.activityId));
+
+    // v1 matching sort: meetupTime asc, then memberCount desc as tiebreaker
+    pods.sort((a, b) => {
+      const timeDiff = new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return b.members.length - a.members.length;
     });
 
-    res.json(pods);
+    const result = pods.map((p) => ({ ...p, recommended: preferredActivityIds.has(p.activityId) }));
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

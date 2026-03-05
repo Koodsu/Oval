@@ -35,6 +35,7 @@ export interface Pod {
   activity?: Activity;
   creator?: { id: string } | null;
   members: PodMember[];
+  recommended?: boolean;
 }
 
 export interface Message {
