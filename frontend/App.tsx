@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import ActivityListScreen from './src/screens/ActivityListScreen';
+import TodayScreen from './src/screens/TodayScreen';
 import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -23,7 +24,7 @@ import MyReportsScreen from './src/screens/MyReportsScreen';
 import { colors } from './src/theme';
 
 export type MainTabParamList = {
-  Explore: undefined;
+  Today: undefined;
   MyActivities: undefined;
   Search: undefined;
   Profile: undefined;
@@ -44,7 +45,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
-  Explore: { active: 'compass', inactive: 'compass-outline' },
+  Today: { active: 'flash', inactive: 'flash-outline' },
   MyActivities: { active: 'calendar', inactive: 'calendar-outline' },
   Search: { active: 'search', inactive: 'search-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
@@ -83,9 +84,9 @@ function MainTabs() {
       })}
     >
       <Tab.Screen
-        name="Explore"
-        component={ActivityListScreen}
-        options={{ tabBarLabel: 'Explore' }}
+        name="Today"
+        component={TodayScreen}
+        options={{ tabBarLabel: 'Today' }}
       />
       <Tab.Screen
         name="MyActivities"

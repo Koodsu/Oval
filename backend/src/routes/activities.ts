@@ -50,6 +50,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     const activities = await prisma.activity.findMany({
       where,
       orderBy: { createdAt: 'asc' },
+      include: { _count: { select: { pods: { where: { status: 'FORMING' } } } } },
     });
     res.json(activities);
   } catch (err) {

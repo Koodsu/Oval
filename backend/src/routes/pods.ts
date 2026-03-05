@@ -46,6 +46,43 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
+// GET /pods/feed — cross-activity discovery feed, soonest first
+router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { category, limit = '20' } = req.query;
+  const now = new Date();
+
+  try {
+    const blockedIds = await getBlockedUserIds(req.user!.userId);
+
+    const where: Record<string, unknown> = {
+      status: FORMING,
+      meetupTime: { gt: now },
+      members: { none: { userId: { in: [...blockedIds] } } },
+    };
+
+    if (category && typeof category === 'string') {
+      where.activity = { category };
+    }
+
+    const pods = await prisma.pod.findMany({
+      where,
+      include: {
+        activity: true,
+        members: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+      },
+      orderBy: { meetupTime: 'asc' },
+      take: Math.min(Number(limit) || 20, 50),
+    });
+
+    res.json(pods);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /pods?activityId=&sort=
 // Returns FORMING pods for an activity (locked pods excluded from browse)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {

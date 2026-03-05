@@ -125,6 +125,88 @@ describe('Pods API (integration)', () => {
     });
   });
 
+  describe('GET /pods/feed', () => {
+    it('returns empty array when no pods exist', async () => {
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('returns FORMING pods across activities sorted by meetupTime asc', async () => {
+      const soonTime = new Date(Date.now() + 2 * 3600000);
+      const laterTime = new Date(Date.now() + 48 * 3600000);
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: laterTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const { token: token2 } = await registerAndGetToken(
+        'Feed User 2',
+        `feed-user2-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const sportsActivity = await prisma.activity.findFirst({
+        where: { category: 'Sports & Fitness' },
+      });
+      if (!sportsActivity) throw new Error('No Sports activity');
+
+      const sportsLocation = 'RPAC';
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token2}`)
+        .send({
+          activityId: sportsActivity.id,
+          meetupTime: soonTime.toISOString(),
+          location: sportsLocation,
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThanOrEqual(2);
+
+      // Should be sorted by meetupTime ascending
+      const times = res.body.map((p: { meetupTime: string }) => new Date(p.meetupTime).getTime());
+      for (let i = 1; i < times.length; i++) {
+        expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
+      }
+
+      // Should include activity and members
+      expect(res.body[0].activity).toBeDefined();
+      expect(res.body[0].members).toBeDefined();
+    });
+
+    it('filters by category', async () => {
+      const res = await request(app)
+        .get('/pods/feed?category=Academic')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      res.body.forEach((p: { activity: { category: string } }) => {
+        expect(p.activity.category).toBe('Academic');
+      });
+    });
+
+    it('requires auth', async () => {
+      await request(app).get('/pods/feed').expect(401);
+    });
+  });
+
   describe('GET /pods?activityId=', () => {
     it('returns FORMING pods for activity', async () => {
       const res = await request(app)
@@ -368,6 +450,45 @@ describe('Pods API (integration)', () => {
         .get(`/pods/${createRes.body.id}`)
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(404);
+    });
+
+    it('GET /pods/feed excludes pods from blocked users', async () => {
+      const { token: tokenA } = await registerAndGetToken(
+        'Feed Block A',
+        `feed-block-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Feed Block B',
+        `feed-block-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      // Block userB: pod should disappear from A's feed
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const creatorIds = res.body.flatMap((p: { members: { userId: string }[] }) =>
+        p.members.map((m) => m.userId)
+      );
+      expect(creatorIds).not.toContain(userB.id);
     });
 
     it('cleanup: blocking removes both users from shared pod', async () => {
