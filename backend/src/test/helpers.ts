@@ -32,10 +32,12 @@ export async function registerAndGetToken(
   name: string,
   email: string,
   password: string
-): Promise<{ token: string; user: { id: string; name: string; email: string } }> {
+): Promise<{ token: string; user: { id: string; name: string; email: string; verifiedUniversity: boolean; joinedAt: string } }> {
+  // Registration enforces @osu.edu — coerce any test email to that domain
+  const osuEmail = email.includes('@') ? email.split('@')[0] + '@osu.edu' : email + '@osu.edu';
   const res = await request(app)
     .post('/auth/register')
-    .send({ name, email, password })
+    .send({ name, email: osuEmail, password })
     .expect(201);
   return res.body;
 }

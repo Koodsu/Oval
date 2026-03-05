@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -8,11 +9,14 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
+  id                  String    @id @default(uuid())
+  name                String
+  email               String    @unique
+  password            String
+  createdAt           DateTime  @default(now())
+  verifiedUniversity  Boolean   @default(false)
+  emailVerifyCode     String?
+  emailVerifyExpiry   DateTime?
 
   podMembers      PodMember[]
   messages        Message[]

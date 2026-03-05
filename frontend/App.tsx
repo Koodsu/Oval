@@ -22,6 +22,7 @@ import PodScreen from './src/screens/PodScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
 import FindAGroupScreen from './src/screens/FindAGroupScreen';
+import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import { colors } from './src/theme';
 
 export type MainTabParamList = {
@@ -34,6 +35,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
+  VerifyEmail: undefined;
   MainTabs: undefined;
   PodList: { activityId: string; activityTitle: string; activityCategory?: string };
   CreatePod: { activityId: string; activityTitle: string; activityCategory: string };
@@ -200,7 +202,15 @@ function AppNavigator() {
           animation: 'slide_from_right',
         }}
       >
-        {user ? (
+        {user && !user.verifiedUniversity ? (
+          <>
+            <Stack.Screen
+              name="VerifyEmail"
+              component={VerifyEmailScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : user ? (
           <>
             <Stack.Screen
               name="MainTabs"

@@ -8,6 +8,7 @@ interface AuthContextValue {
   token: string | null;
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => Promise<void>;
   isLoading: boolean;
   hasAcceptedGuidelines: boolean;
   acceptGuidelines: () => Promise<void>;
@@ -74,10 +75,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHasAcceptedGuidelines(true);
   };
 
+  const updateUser = async (partial: Partial<User>) => {
+    if (!user) return;
+    const updated = { ...user, ...partial };
+    await AsyncStorage.setItem('user', JSON.stringify(updated));
+    setUser(updated);
+  };
 
   return (
     <AuthContext.Provider
-      value={{ user, token, signIn, signOut, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
+      value={{ user, token, signIn, signOut, updateUser, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
     >
       {children}
     </AuthContext.Provider>

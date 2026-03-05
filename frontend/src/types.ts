@@ -2,6 +2,16 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  verifiedUniversity: boolean;
+  joinedAt: string;
+}
+
+export interface PublicProfile {
+  id: string;
+  name: string;
+  verifiedUniversity: boolean;
+  podsAttended: number;
+  joinedAt: string;
 }
 
 export interface Activity {

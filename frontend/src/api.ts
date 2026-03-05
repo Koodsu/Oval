@@ -55,16 +55,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // Auth
 export const register = (name: string, email: string, password: string) =>
-  request<{ token: string; user: { id: string; name: string; email: string } }>('/auth/register', {
+  request<{ token: string; user: import('./types').User }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, email, password }),
   });
 
 export const login = (email: string, password: string) =>
-  request<{ token: string; user: { id: string; name: string; email: string } }>('/auth/login', {
+  request<{ token: string; user: import('./types').User }>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
+
+export const verifyEmail = (code: string) =>
+  request<{ user: import('./types').User }>('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+
+export const resendVerification = () =>
+  request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
 
 // Activities
 export const getActivities = (category?: string) =>
@@ -191,6 +200,10 @@ export interface MyReport {
 
 export const getMyReports = () =>
   request<MyReport[]>('/reports/mine');
+
+// User public profile
+export const getUserProfile = (userId: string) =>
+  request<import('./types').PublicProfile>(`/users/${userId}`);
 
 // Blocking
 export const blockUser = (userId: string) =>

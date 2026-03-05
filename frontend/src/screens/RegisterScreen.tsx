@@ -215,6 +215,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
+    letterSpacing: 0,
   },
   eyeButton: {
     padding: spacing.xs,

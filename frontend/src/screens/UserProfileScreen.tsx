@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { blockUser } from '../api';
+import { blockUser, getUserProfile } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { PublicProfile } from '../types';
 import Avatar from '../components/Avatar';
 import ReportModal from '../components/ReportModal';
 import { colors, spacing, radii, typography, shadows } from '../theme';
@@ -24,7 +25,16 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const [blocking, setBlocking] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
   const isOwnProfile = user?.id === userId;
+
+  useEffect(() => {
+    getUserProfile(userId)
+      .then(setProfile)
+      .catch(() => {
+        // Profile stats are non-critical, fail silently
+      });
+  }, [userId]);
 
   const handleBlock = () => {
     Alert.alert(
@@ -57,6 +67,31 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       <View style={[styles.card, shadows.md]}>
         <Avatar name={name} size={80} />
         <Text style={styles.name}>{name}</Text>
+
+        {profile?.verifiedUniversity && (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="shield-checkmark" size={13} color={colors.green} />
+            <Text style={styles.verifiedText}>OSU Verified</Text>
+          </View>
+        )}
+
+        <View style={styles.statsRow}>
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>
+              {profile ? profile.podsAttended : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Pods attended</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>
+              {profile
+                ? new Date(profile.joinedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Joined</Text>
+          </View>
+        </View>
       </View>
 
       {!isOwnProfile && (
@@ -111,6 +146,42 @@ const styles = StyleSheet.create({
   },
   name: {
     ...typography.h2,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.greenLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+  },
+  verifiedText: {
+    ...typography.tiny,
+    color: colors.green,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    gap: spacing.lg,
+  },
+  stat: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  statNumber: {
+    ...typography.h3,
+  },
+  statLabel: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
   },
   actionButton: {
     flexDirection: 'row',

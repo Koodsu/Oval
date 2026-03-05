@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     minHeight: 80,
     textAlignVertical: 'top',
+    letterSpacing: 0,
   },
   charCount: {
     ...typography.tiny,

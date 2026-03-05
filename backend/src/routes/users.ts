@@ -4,6 +4,34 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// GET /users/:id — public profile (podsAttended computed from COMPLETED pods)
+router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const targetId = req.params.id;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const podsAttended = await prisma.podMember.count({
+      where: { userId: targetId, pod: { status: 'COMPLETED' } },
+    });
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      verifiedUniversity: user.verifiedUniversity,
+      podsAttended,
+      joinedAt: user.createdAt.toISOString(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /users/:id/block – block target user
 router.post('/:id/block', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const blockerId = req.user!.userId;

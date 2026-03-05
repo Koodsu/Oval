@@ -714,6 +714,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     maxHeight: 100,
     lineHeight: 20,
+    letterSpacing: 0,
   },
   sendButton: {
     width: 40,

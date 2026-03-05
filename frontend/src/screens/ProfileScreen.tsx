@@ -61,7 +61,20 @@ export default function ProfileScreen() {
       <View style={[styles.profileCard, shadows.md]}>
         <Avatar name={user?.name ?? 'U'} size={72} />
         <Text style={styles.name}>{user?.name}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
+        <View style={styles.emailRow}>
+          <Text style={styles.email}>{user?.email}</Text>
+          {user?.verifiedUniversity && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="shield-checkmark" size={13} color={colors.green} />
+              <Text style={styles.verifiedText}>OSU Verified</Text>
+            </View>
+          )}
+        </View>
+        {user?.joinedAt && (
+          <Text style={styles.joinedAt}>
+            Joined {new Date(user.joinedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </Text>
+        )}
       </View>
 
       <Text style={styles.sectionTitle}>Stats</Text>
@@ -138,8 +151,31 @@ const styles = StyleSheet.create({
     ...typography.h2,
     marginTop: spacing.sm,
   },
+  emailRow: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   email: {
     ...typography.caption,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.greenLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+  },
+  verifiedText: {
+    ...typography.tiny,
+    color: colors.green,
+    fontWeight: '600',
+  },
+  joinedAt: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   sectionTitle: {
     ...typography.label,
