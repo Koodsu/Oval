@@ -12,6 +12,7 @@ import {
   Platform,
   LayoutAnimation,
   UIManager,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -185,6 +186,18 @@ export default function PodScreen({ route, navigation }: Props) {
     Alert.alert('Report submitted', 'Thanks.');
   };
 
+  const handleShare = async () => {
+    const url = `https://bridge.app/pod/${podId}`;
+    try {
+      await Share.share({
+        message: `Join my pod on Bridge: ${url}`,
+        url, // iOS only — shows URL separately in share sheet
+      });
+    } catch {
+      // User cancelled or share not available — no-op
+    }
+  };
+
   const handleLeave = () => {
     Alert.alert(
       'Leave Pod',
@@ -306,6 +319,14 @@ export default function PodScreen({ route, navigation }: Props) {
                   )}
                 </>
               )}
+              <TouchableOpacity
+                style={[styles.lockButton, styles.shareButton]}
+                onPress={handleShare}
+                accessibilityLabel="Share pod invite link"
+              >
+                <Ionicons name="share-outline" size={16} color={colors.primary} />
+                <Text style={styles.lockButtonText}>Invite</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.lockButton, styles.leaveButton]}
                 onPress={handleLeave}
@@ -560,6 +581,10 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.primary,
+  },
+  shareButton: {
+    borderColor: colors.primary,
+    backgroundColor: '#eef2ff',
   },
   leaveButton: {
     borderColor: colors.red,

@@ -1,6 +1,6 @@
-import React from 'react';
-import { ActivityIndicator, View, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, View, Platform, Linking } from 'react-native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { enableScreens } from 'react-native-screens';
@@ -45,6 +45,25 @@ export type RootStackParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Supported URL prefixes for deep links
+const LINKING_PREFIXES = ['bridge://', 'https://bridge.app'];
+
+// Extracts a podId from any supported invite URL, returns null if not a pod link
+function extractPodId(url: string): string | null {
+  // Matches bridge://pod/ID or https://bridge.app/pod/ID
+  const match = url.match(/(?:bridge:\/\/|https:\/\/bridge\.app)\/pod\/([^/?#]+)/);
+  return match ? match[1] : null;
+}
+
+const linking = {
+  prefixes: LINKING_PREFIXES,
+  config: {
+    screens: {
+      Pod: 'pod/:podId',
+    },
+  },
+};
 
 const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Today: { active: 'flash', inactive: 'flash-outline' },
@@ -111,6 +130,43 @@ function MainTabs() {
 
 function AppNavigator() {
   const { user, isLoading } = useAuth();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const [pendingPodId, setPendingPodId] = useState<string | null>(null);
+  // Track whether the navigator is ready to accept programmatic navigation
+  const isNavigatorReady = useRef(false);
+
+  // On mount: check if the app was cold-started from an invite link
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        const podId = extractPodId(url);
+        if (podId) setPendingPodId(podId);
+      }
+    });
+
+    // Handle links received while the app is already open
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const podId = extractPodId(url);
+      if (!podId) return;
+      if (isNavigatorReady.current && navigationRef.isReady()) {
+        navigationRef.navigate('Pod', { podId });
+      } else {
+        // Not logged in yet — store and navigate after login
+        setPendingPodId(podId);
+      }
+    });
+
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Once the user logs in and a pending pod link is waiting, navigate to it
+  useEffect(() => {
+    if (user && pendingPodId && isNavigatorReady.current && navigationRef.isReady()) {
+      navigationRef.navigate('Pod', { podId: pendingPodId });
+      setPendingPodId(null);
+    }
+  }, [user, pendingPodId, navigationRef]);
 
   if (isLoading) {
     return (
@@ -121,7 +177,18 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      linking={linking}
+      onReady={() => {
+        isNavigatorReady.current = true;
+        // If there's a pending pod link and the user is already logged in, navigate now
+        if (user && pendingPodId) {
+          navigationRef.navigate('Pod', { podId: pendingPodId });
+          setPendingPodId(null);
+        }
+      }}
+    >
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
