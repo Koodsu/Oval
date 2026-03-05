@@ -214,4 +214,41 @@ describe('TodayScreen', () => {
     fireEvent.press(screen.getByText('Yoga'));
     expect(mockNavigate).toHaveBeenCalledWith('PodList', expect.objectContaining({ activityId: 'act-99' }));
   });
+
+  it('renders the "Find a Group" button', async () => {
+    render(<TodayScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Find a Group')).toBeTruthy();
+    });
+  });
+
+  it('shows helper subtext below the Find a Group button', async () => {
+    render(<TodayScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('See open pods you can join right now')).toBeTruthy();
+    });
+  });
+
+  it('navigates to FindAGroup when Find a Group button is pressed', async () => {
+    mockFetchFeed.mockResolvedValue([]);
+    render(<TodayScreen />);
+    await waitFor(() => screen.getByText('Find a Group'));
+    fireEvent.press(screen.getByText('Find a Group'));
+    expect(mockNavigate).toHaveBeenCalledWith('FindAGroup');
+  });
+
+  it('shows "For You" badge on a recommended pod', async () => {
+    mockFetchFeed.mockResolvedValue([{ ...makePod(), recommended: true }]);
+    render(<TodayScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('For You')).toBeTruthy();
+    });
+  });
+
+  it('does not show "For You" badge when pod is not recommended', async () => {
+    mockFetchFeed.mockResolvedValue([{ ...makePod(), recommended: false }]);
+    render(<TodayScreen />);
+    await waitFor(() => screen.getByText('Study Session'));
+    expect(screen.queryByText('For You')).toBeNull();
+  });
 });
