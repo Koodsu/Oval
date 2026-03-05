@@ -11,10 +11,14 @@ import messagesRoutes from './routes/messages';
 import usersRoutes from './routes/users';
 import reportsRoutes from './routes/reports';
 import adminReportsRoutes from './routes/adminReports';
+import webRoutes from './routes/web';
 
 const app = express();
 
-app.use(helmet());
+app.use(helmet({
+  // Allow inline scripts on the pod landing page
+  contentSecurityPolicy: false,
+}));
 
 app.use(
   cors({
@@ -23,6 +27,10 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// Public web routes: .well-known verification files + pod invite landing page
+// Must be mounted before express.json() and rate limiters so they remain publicly accessible
+app.use(webRoutes);
 
 app.use(express.json({ limit: '64kb' }));
 
