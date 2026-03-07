@@ -201,6 +201,13 @@ export interface MyReport {
 export const getMyReports = () =>
   request<MyReport[]>('/reports/mine');
 
+// Attendance
+export const confirmAttendance = (podId: string) =>
+  request<{ confirmedAt: string }>(`/pods/${podId}/confirm`, { method: 'POST' });
+
+export const reportNoShow = (podId: string, userId: string) =>
+  request<{ reported: boolean }>(`/pods/${podId}/no-show/${userId}`, { method: 'POST' });
+
 // User public profile
 export const getUserProfile = (userId: string) =>
   request<import('./types').PublicProfile>(`/users/${userId}`);
