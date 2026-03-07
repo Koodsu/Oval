@@ -208,6 +208,28 @@ export const confirmAttendance = (podId: string) =>
 export const reportNoShow = (podId: string, userId: string) =>
   request<{ reported: boolean }>(`/pods/${podId}/no-show/${userId}`, { method: 'POST' });
 
+// Notifications
+export const registerPushToken = (token: string) =>
+  request<{ success: boolean }>('/users/push-token', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export interface NotificationPreferences {
+  podJoin: boolean;
+  newMessage: boolean;
+  meetupReminder: boolean;
+}
+
+export const getNotificationPreferences = () =>
+  request<{ preferences: NotificationPreferences }>('/users/notifications');
+
+export const updateNotificationPreferences = (prefs: Partial<NotificationPreferences>) =>
+  request<{ preferences: NotificationPreferences }>('/users/notifications', {
+    method: 'PATCH',
+    body: JSON.stringify(prefs),
+  });
+
 // User public profile
 export const getUserProfile = (userId: string) =>
   request<import('./types').PublicProfile>(`/users/${userId}`);

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Switch,
   TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../../App';
-import { getMyPods } from '../api';
+import { getMyPods, getNotificationPreferences, updateNotificationPreferences, NotificationPreferences } from '../api';
 import { Pod } from '../types';
 import Avatar from '../components/Avatar';
 import GradientButton from '../components/GradientButton';
@@ -24,6 +25,11 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [pods, setPods] = useState<Pod[]>([]);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>({
+    podJoin: true,
+    newMessage: true,
+    meetupReminder: true,
+  });
 
   const fetchStats = useCallback(async () => {
     try {
@@ -34,9 +40,32 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  const fetchNotifPrefs = useCallback(async () => {
+    try {
+      const { preferences } = await getNotificationPreferences();
+      setNotifPrefs(preferences);
+    } catch {
+      // Non-critical
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchNotifPrefs();
+  }, [fetchStats, fetchNotifPrefs]);
+
+  const handleToggleNotif = async (key: keyof NotificationPreferences, value: boolean) => {
+    const optimistic = { ...notifPrefs, [key]: value };
+    setNotifPrefs(optimistic);
+    try {
+      const { preferences } = await updateNotificationPreferences({ [key]: value });
+      setNotifPrefs(preferences);
+    } catch {
+      // Revert on failure
+      setNotifPrefs(notifPrefs);
+      Alert.alert('Error', 'Failed to update notification setting.');
+    }
+  };
 
   const activePods = pods.filter((p) => p.status === 'FORMING' || p.status === 'LOCKED');
   const completedPods = pods.filter((p) => p.status === 'COMPLETED');
@@ -110,6 +139,57 @@ export default function ProfileScreen() {
         <Text style={styles.reportsLinkText}>My Reports</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
       </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Notifications</Text>
+      <View style={[styles.notifCard, shadows.sm]}>
+        <View style={styles.notifRow}>
+          <View style={styles.notifLabelGroup}>
+            <Ionicons name="people-outline" size={18} color={colors.primary} />
+            <View>
+              <Text style={styles.notifLabel}>Pod joins</Text>
+              <Text style={styles.notifSubLabel}>When someone joins your pod</Text>
+            </View>
+          </View>
+          <Switch
+            value={notifPrefs.podJoin}
+            onValueChange={(v) => handleToggleNotif('podJoin', v)}
+            trackColor={{ false: colors.border, true: colors.primary + '55' }}
+            thumbColor={notifPrefs.podJoin ? colors.primary : colors.textTertiary}
+          />
+        </View>
+        <View style={styles.notifDivider} />
+        <View style={styles.notifRow}>
+          <View style={styles.notifLabelGroup}>
+            <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
+            <View>
+              <Text style={styles.notifLabel}>New messages</Text>
+              <Text style={styles.notifSubLabel}>Chat activity in your pods</Text>
+            </View>
+          </View>
+          <Switch
+            value={notifPrefs.newMessage}
+            onValueChange={(v) => handleToggleNotif('newMessage', v)}
+            trackColor={{ false: colors.border, true: colors.primary + '55' }}
+            thumbColor={notifPrefs.newMessage ? colors.primary : colors.textTertiary}
+          />
+        </View>
+        <View style={styles.notifDivider} />
+        <View style={styles.notifRow}>
+          <View style={styles.notifLabelGroup}>
+            <Ionicons name="alarm-outline" size={18} color={colors.primary} />
+            <View>
+              <Text style={styles.notifLabel}>Meetup reminders</Text>
+              <Text style={styles.notifSubLabel}>1 hour before your meetup</Text>
+            </View>
+          </View>
+          <Switch
+            value={notifPrefs.meetupReminder}
+            onValueChange={(v) => handleToggleNotif('meetupReminder', v)}
+            trackColor={{ false: colors.border, true: colors.primary + '55' }}
+            thumbColor={notifPrefs.meetupReminder ? colors.primary : colors.textTertiary}
+          />
+        </View>
+      </View>
 
       <View style={styles.signOutSection}>
         <GradientButton
@@ -230,5 +310,38 @@ const styles = StyleSheet.create({
   signOutSection: {
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xxl,
+  },
+  notifCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    marginHorizontal: spacing.lg,
+    overflow: 'hidden',
+  },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  notifLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+    flex: 1,
+  },
+  notifLabel: {
+    ...typography.bodyBold,
+    fontSize: 14,
+  },
+  notifSubLabel: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  notifDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginLeft: spacing.md,
   },
 });
