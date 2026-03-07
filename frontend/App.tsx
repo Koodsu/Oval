@@ -5,6 +5,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { enableScreens } from 'react-native-screens';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+
+// Show notifications as banners when the app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 enableScreens();
 
@@ -137,7 +147,7 @@ function AppNavigator() {
   // Track whether the navigator is ready to accept programmatic navigation
   const isNavigatorReady = useRef(false);
 
-  // On mount: check if the app was cold-started from an invite link
+  // On mount: check if the app was cold-started from an invite link or notification
   useEffect(() => {
     Linking.getInitialURL().then((url) => {
       if (url) {
@@ -146,8 +156,14 @@ function AppNavigator() {
       }
     });
 
+    // Check if app was opened by tapping a push notification (cold start)
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const podId = response?.notification.request.content.data?.podId as string | undefined;
+      if (podId) setPendingPodId(podId);
+    });
+
     // Handle links received while the app is already open
-    const subscription = Linking.addEventListener('url', ({ url }) => {
+    const linkSub = Linking.addEventListener('url', ({ url }) => {
       const podId = extractPodId(url);
       if (!podId) return;
       if (isNavigatorReady.current && navigationRef.isReady()) {
@@ -158,7 +174,21 @@ function AppNavigator() {
       }
     });
 
-    return () => subscription.remove();
+    // Handle notification taps while the app is open or in the background
+    const notifSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const podId = response.notification.request.content.data?.podId as string | undefined;
+      if (!podId) return;
+      if (isNavigatorReady.current && navigationRef.isReady()) {
+        navigationRef.navigate('Pod', { podId });
+      } else {
+        setPendingPodId(podId);
+      }
+    });
+
+    return () => {
+      linkSub.remove();
+      notifSub.remove();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

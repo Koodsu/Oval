@@ -9,14 +9,16 @@ datasource db {
 }
 
 model User {
-  id                  String    @id @default(uuid())
-  name                String
-  email               String    @unique
-  password            String
-  createdAt           DateTime  @default(now())
-  verifiedUniversity  Boolean   @default(false)
-  emailVerifyCode     String?
-  emailVerifyExpiry   DateTime?
+  id                      String    @id @default(uuid())
+  name                    String
+  email                   String    @unique
+  password                String
+  createdAt               DateTime  @default(now())
+  verifiedUniversity      Boolean   @default(false)
+  emailVerifyCode         String?
+  emailVerifyExpiry       DateTime?
+  pushToken               String?
+  notificationPreferences String?
 
   podMembers        PodMember[]
   messages          Message[]

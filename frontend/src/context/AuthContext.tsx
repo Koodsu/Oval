@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setToken, setOnUnauthorized } from '../api';
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { setToken, setOnUnauthorized, registerPushToken } from '../api';
 import { User } from '../types';
 
 interface AuthContextValue {
@@ -15,6 +17,28 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
+
+/** Request permission and send the Expo push token to the backend. Best-effort: never throws. */
+async function registerForPushNotifications(): Promise<void> {
+  try {
+    if (Platform.OS === 'web') return;
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    await registerPushToken(tokenData.data);
+  } catch {
+    // Best-effort — never block sign-in on notification errors
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -68,6 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
+    // Register for push notifications after token is set (best-effort)
+    registerForPushNotifications();
   };
 
   const acceptGuidelines = async () => {

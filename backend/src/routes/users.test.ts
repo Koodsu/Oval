@@ -94,6 +94,155 @@ describe('GET /users/:id', () => {
   });
 });
 
+describe('POST /users/push-token', () => {
+  it('stores push token for authenticated user', async () => {
+    const { token } = await registerAndGetToken(
+      'Push User',
+      `push-token-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .post('/users/push-token')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ token: 'ExponentPushToken[test-token-abc]' })
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+  });
+
+  it('returns 400 when token is missing', async () => {
+    const { token } = await registerAndGetToken(
+      'Push User 2',
+      `push-token-missing-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .post('/users/push-token')
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(400);
+
+    expect(res.body.error).toBeDefined();
+  });
+
+  it('requires auth', async () => {
+    await request(app)
+      .post('/users/push-token')
+      .send({ token: 'ExponentPushToken[test]' })
+      .expect(401);
+  });
+});
+
+describe('GET /users/notifications', () => {
+  it('returns default preferences for new user', async () => {
+    const { token } = await registerAndGetToken(
+      'Notif User',
+      `notif-get-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .get('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.preferences).toMatchObject({
+      podJoin: true,
+      newMessage: true,
+      meetupReminder: true,
+    });
+  });
+
+  it('requires auth', async () => {
+    await request(app).get('/users/notifications').expect(401);
+  });
+});
+
+describe('PATCH /users/notifications', () => {
+  it('updates meetupReminder preference', async () => {
+    const { token } = await registerAndGetToken(
+      'Notif Patch User',
+      `notif-patch-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: false })
+      .expect(200);
+
+    expect(res.body.preferences.meetupReminder).toBe(false);
+    expect(res.body.preferences.podJoin).toBe(true);
+    expect(res.body.preferences.newMessage).toBe(true);
+  });
+
+  it('updates multiple preferences at once', async () => {
+    const { token } = await registerAndGetToken(
+      'Multi Pref User',
+      `notif-multi-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ podJoin: false, newMessage: false })
+      .expect(200);
+
+    expect(res.body.preferences.podJoin).toBe(false);
+    expect(res.body.preferences.newMessage).toBe(false);
+    expect(res.body.preferences.meetupReminder).toBe(true);
+  });
+
+  it('returns 400 for non-boolean preference value', async () => {
+    const { token } = await registerAndGetToken(
+      'Bad Pref User',
+      `notif-bad-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: 'yes' })
+      .expect(400);
+
+    expect(res.body.error).toBeDefined();
+  });
+
+  it('requires auth', async () => {
+    await request(app)
+      .patch('/users/notifications')
+      .send({ meetupReminder: false })
+      .expect(401);
+  });
+
+  it('persists across GET after PATCH', async () => {
+    const { token } = await registerAndGetToken(
+      'Persist Pref User',
+      `notif-persist-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: false })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.preferences.meetupReminder).toBe(false);
+    expect(res.body.preferences.podJoin).toBe(true);
+  });
+});
+
 describe('Block API (integration)', () => {
   let tokenA: string;
   let userIdA: string;
