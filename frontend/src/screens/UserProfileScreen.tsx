@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { blockUser, getUserProfile } from '../api';
+import { blockUser, getUserProfile, resolveAvatarUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { PublicProfile } from '../types';
 import Avatar from '../components/Avatar';
@@ -65,7 +65,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={[styles.card, shadows.md]}>
-        <Avatar name={name} size={80} />
+        <Avatar name={name} size={80} uri={resolveAvatarUrl(profile?.avatarUrl)} />
         <Text style={styles.name}>{name}</Text>
 
         {profile?.verifiedUniversity && (

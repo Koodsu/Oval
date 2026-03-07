@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
   verifiedUniversity: boolean;
+  avatarUrl?: string | null;
   joinedAt: string;
 }
 
@@ -10,6 +11,7 @@ export interface PublicProfile {
   id: string;
   name: string;
   verifiedUniversity: boolean;
+  avatarUrl?: string | null;
   podsJoined: number;
   podsAttended: number;
   reliabilityScore: number | null;
@@ -31,7 +33,7 @@ export interface PodMember {
   userId: string;
   joinedAt: string;
   confirmedAt?: string | null;
-  user: { id: string; name: string };
+  user: { id: string; name: string; avatarUrl?: string | null };
 }
 
 export interface Pod {
@@ -58,5 +60,5 @@ export interface Message {
   userId: string;
   content: string;
   createdAt: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; avatarUrl?: string | null };
 }

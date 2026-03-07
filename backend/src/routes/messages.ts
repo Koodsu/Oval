@@ -36,7 +36,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
 
     const messages = await prisma.message.findMany({
       where: { podId },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -90,7 +90,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
     const message = await prisma.message.create({
       data: { podId, userId, content: trimmed },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
     });
 
     // Fire-and-forget — don't await so message response isn't delayed

@@ -7,21 +7,34 @@ import {
   Alert,
   Switch,
   TouchableOpacity,
+  ActivityIndicator,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../../App';
-import { getMyPods, getNotificationPreferences, updateNotificationPreferences, NotificationPreferences } from '../api';
+import {
+  getMyPods,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  uploadAvatar,
+  deleteAvatar,
+  resolveAvatarUrl,
+  NotificationPreferences,
+} from '../api';
 import { Pod } from '../types';
 import Avatar from '../components/Avatar';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateUser } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [pods, setPods] = useState<Pod[]>([]);
@@ -30,6 +43,7 @@ export default function ProfileScreen() {
     newMessage: true,
     meetupReminder: true,
   });
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -61,9 +75,120 @@ export default function ProfileScreen() {
       const { preferences } = await updateNotificationPreferences({ [key]: value });
       setNotifPrefs(preferences);
     } catch {
-      // Revert on failure
       setNotifPrefs(notifPrefs);
       Alert.alert('Error', 'Failed to update notification setting.');
+    }
+  };
+
+  const pickAndUploadImage = async (source: 'camera' | 'library') => {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Allow camera access in Settings to take a photo.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.9,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Allow photo library access in Settings.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.9,
+        });
+      }
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      setAvatarUploading(true);
+
+      // Resize + compress to keep upload small (~400×400, JPEG 0.85)
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 400, height: 400 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const { avatarUrl } = await uploadAvatar(manipulated.uri);
+      await updateUser({ avatarUrl });
+    } catch (err) {
+      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    try {
+      setAvatarUploading(true);
+      await deleteAvatar();
+      await updateUser({ avatarUrl: null });
+    } catch {
+      Alert.alert('Error', 'Failed to remove photo.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    const hasPhoto = !!user?.avatarUrl;
+
+    if (Platform.OS === 'ios') {
+      const options = [
+        'Take Photo',
+        'Choose from Library',
+        ...(hasPhoto ? ['Remove Photo'] : []),
+        'Cancel',
+      ];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: options.length - 1,
+          destructiveButtonIndex: hasPhoto ? options.length - 2 : undefined,
+          title: 'Profile Photo',
+        },
+        (index) => {
+          if (index === 0) pickAndUploadImage('camera');
+          else if (index === 1) pickAndUploadImage('library');
+          else if (hasPhoto && index === 2) {
+            Alert.alert('Remove Photo', 'Are you sure you want to remove your profile photo?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: handleRemoveAvatar },
+            ]);
+          }
+        }
+      );
+    } else {
+      // Android: use a simple Alert
+      const buttons: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' }[] = [
+        { text: 'Take Photo', onPress: () => pickAndUploadImage('camera') },
+        { text: 'Choose from Library', onPress: () => pickAndUploadImage('library') },
+      ];
+      if (hasPhoto) {
+        buttons.push({
+          text: 'Remove Photo',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Remove Photo', 'Are you sure?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: handleRemoveAvatar },
+            ]),
+        });
+      }
+      buttons.push({ text: 'Cancel', style: 'cancel' });
+      Alert.alert('Profile Photo', '', buttons);
     }
   };
 
@@ -77,6 +202,8 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const avatarUri = resolveAvatarUrl(user?.avatarUrl);
+
   return (
     <ScrollView
       style={[styles.container, { paddingTop: insets.top }]}
@@ -88,7 +215,25 @@ export default function ProfileScreen() {
       </View>
 
       <View style={[styles.profileCard, shadows.md]}>
-        <Avatar name={user?.name ?? 'U'} size={72} />
+        {/* Tappable avatar with camera badge */}
+        <TouchableOpacity
+          onPress={handleAvatarPress}
+          activeOpacity={0.8}
+          disabled={avatarUploading}
+          style={styles.avatarContainer}
+        >
+          {avatarUploading ? (
+            <View style={[styles.avatarLoader, { width: 88, height: 88, borderRadius: 44 }]}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <Avatar name={user?.name ?? 'U'} size={88} uri={avatarUri} />
+          )}
+          <View style={styles.cameraBadge}>
+            <Ionicons name="camera" size={14} color="#fff" />
+          </View>
+        </TouchableOpacity>
+
         <Text style={styles.name}>{user?.name}</Text>
         <View style={styles.emailRow}>
           <Text style={styles.email}>{user?.email}</Text>
@@ -104,6 +249,7 @@ export default function ProfileScreen() {
             Joined {new Date(user.joinedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </Text>
         )}
+        <Text style={styles.editPhotoHint}>Tap photo to edit</Text>
       </View>
 
       <Text style={styles.sectionTitle}>Stats</Text>
@@ -227,6 +373,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: spacing.xs,
+  },
+  avatarLoader: {
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
   name: {
     ...typography.h2,
     marginTop: spacing.sm,
@@ -256,6 +424,11 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     color: colors.textTertiary,
     marginTop: spacing.xs,
+  },
+  editPhotoHint: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+    marginTop: 2,
   },
   sectionTitle: {
     ...typography.label,

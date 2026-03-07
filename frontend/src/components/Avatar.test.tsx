@@ -22,6 +22,17 @@ describe('Avatar', () => {
     render(<Avatar name="Dave" isYou />);
     expect(screen.getByText('D')).toBeTruthy();
   });
+
+  it('renders an Image when uri is provided instead of initial text', () => {
+    render(<Avatar name="Eve" uri="http://example.com/avatar.jpg" />);
+    // Image is rendered; initial text should not be present
+    expect(screen.queryByText('E')).toBeNull();
+  });
+
+  it('falls back to initials when uri is null', () => {
+    render(<Avatar name="Frank" uri={null} />);
+    expect(screen.getByText('F')).toBeTruthy();
+  });
 });
 
 describe('AvatarStack', () => {

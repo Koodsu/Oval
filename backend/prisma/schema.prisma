@@ -19,6 +19,7 @@ model User {
   emailVerifyExpiry       DateTime?
   pushToken               String?
   notificationPreferences String?
+  avatarUrl               String?
 
   podMembers        PodMember[]
   messages          Message[]

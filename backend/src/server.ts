@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
+import path from 'path';
 
 import prisma from './prisma';
 import { startReminderScheduler } from './lib/reminderScheduler';
@@ -20,6 +21,8 @@ const app = express();
 app.use(helmet({
   // Allow inline scripts on the pod landing page
   contentSecurityPolicy: false,
+  // Allow cross-origin loading of avatar images by the React Native client
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
 app.use(
@@ -33,6 +36,9 @@ app.use(
 // Public web routes: .well-known verification files + pod invite landing page
 // Must be mounted before express.json() and rate limiters so they remain publicly accessible
 app.use(webRoutes);
+
+// Serve uploaded avatars as static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(express.json({ limit: '64kb' }));
 

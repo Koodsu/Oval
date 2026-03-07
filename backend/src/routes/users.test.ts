@@ -243,6 +243,109 @@ describe('PATCH /users/notifications', () => {
   });
 });
 
+describe('GET /users/me', () => {
+  it('returns own profile with avatarUrl for authenticated user', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Me User',
+      `me-get-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .get('/users/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      verifiedUniversity: false,
+      avatarUrl: null,
+      joinedAt: expect.any(String),
+    });
+  });
+
+  it('requires auth', async () => {
+    await request(app).get('/users/me').expect(401);
+  });
+});
+
+describe('PATCH /users/me/avatar', () => {
+  it('returns 400 when no file is attached', async () => {
+    const { token } = await registerAndGetToken(
+      'Avatar User',
+      `avatar-nofile-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+
+    expect(res.body.error).toBeDefined();
+  });
+
+  it('uploads a valid image and returns avatarUrl', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Avatar Upload User',
+      `avatar-upload-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    // Minimal 1×1 pixel PNG (valid image binary)
+    const minimalPng = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d76360f8' +
+      'cfc00000000200016ef7cba40000000049454e44ae426082',
+      'hex'
+    );
+
+    const res = await request(app)
+      .patch('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('avatar', minimalPng, { filename: 'avatar.png', contentType: 'image/png' })
+      .expect(200);
+
+    expect(res.body.avatarUrl).toMatch(/\/uploads\/avatars\//);
+
+    // Verify it was persisted in the DB
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(dbUser?.avatarUrl).toMatch(/\/uploads\/avatars\//);
+  });
+
+  it('requires auth', async () => {
+    await request(app).patch('/users/me/avatar').expect(401);
+  });
+});
+
+describe('DELETE /users/me/avatar', () => {
+  it('removes avatar and returns avatarUrl: null', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Avatar Delete User',
+      `avatar-delete-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    // Seed an avatarUrl directly
+    await prisma.user.update({ where: { id: user.id }, data: { avatarUrl: '/uploads/avatars/fake.jpg' } });
+
+    const res = await request(app)
+      .delete('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.avatarUrl).toBeNull();
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(dbUser?.avatarUrl).toBeNull();
+  });
+
+  it('requires auth', async () => {
+    await request(app).delete('/users/me/avatar').expect(401);
+  });
+});
+
 describe('Block API (integration)', () => {
   let tokenA: string;
   let userIdA: string;
