@@ -1,10 +1,116 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// POST /users/push-token — register Expo push token for this user
+// ── Avatar upload setup ────────────────────────────────────────────────────────
+
+const UPLOAD_DIR = path.join(__dirname, '../../uploads/avatars');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const avatarStorage = multer.diskStorage({
+  destination: UPLOAD_DIR,
+  filename: (req, _file, cb) => {
+    const userId = (req as AuthRequest).user!.userId;
+    cb(null, `${userId}-${Date.now()}.jpg`);
+  },
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Only image files are allowed'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// ── GET /users/me — own full profile ─────────────────────────────────────────
+
+router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      verifiedUniversity: user.verifiedUniversity,
+      avatarUrl: user.avatarUrl ?? null,
+      joinedAt: user.createdAt.toISOString(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── PATCH /users/me/avatar — upload profile picture ───────────────────────────
+
+router.patch(
+  '/me/avatar',
+  requireAuth,
+  avatarUpload.single('avatar'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+    try {
+      // Delete old avatar file if it exists
+      const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+      if (existing?.avatarUrl) {
+        const oldPath = path.join(__dirname, '../../', existing.avatarUrl);
+        fs.unlink(oldPath, () => {}); // best-effort cleanup
+      }
+
+      await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+      res.json({ avatarUrl });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// ── DELETE /users/me/avatar — remove profile picture ──────────────────────────
+
+router.delete('/me/avatar', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+    if (existing?.avatarUrl) {
+      const oldPath = path.join(__dirname, '../../', existing.avatarUrl);
+      fs.unlink(oldPath, () => {});
+    }
+    await prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+    res.json({ avatarUrl: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /users/push-token ─────────────────────────────────────────────────────
+
 router.post('/push-token', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { token } = req.body;
@@ -84,7 +190,7 @@ router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
-// GET /users/:id — public profile (podsAttended computed from COMPLETED pods)
+// GET /users/:id — public profile
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const targetId = req.params.id;
 
@@ -99,7 +205,6 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       where: { userId: targetId, pod: { status: 'COMPLETED' } },
     });
 
-    // Count distinct pods where this user has been reported as a no-show
     const noShowPods = await prisma.noShowReport.groupBy({
       by: ['podId'],
       where: { targetUserId: targetId },
@@ -113,6 +218,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       id: user.id,
       name: user.name,
       verifiedUniversity: user.verifiedUniversity,
+      avatarUrl: user.avatarUrl ?? null,
       podsJoined,
       podsAttended,
       reliabilityScore,

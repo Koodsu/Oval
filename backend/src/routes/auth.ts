@@ -26,6 +26,7 @@ function safeUser(user: {
   name: string;
   email: string;
   verifiedUniversity: boolean;
+  avatarUrl?: string | null;
   createdAt: Date;
 }) {
   return {
@@ -33,6 +34,7 @@ function safeUser(user: {
     name: user.name,
     email: user.email,
     verifiedUniversity: user.verifiedUniversity,
+    avatarUrl: user.avatarUrl ?? null,
     joinedAt: user.createdAt.toISOString(),
   };
 }

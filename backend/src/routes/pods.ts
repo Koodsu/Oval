@@ -34,7 +34,7 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -72,7 +72,7 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
         include: {
           activity: true,
           members: {
-            include: { user: { select: { id: true, name: true } } },
+            include: { user: { select: { id: true, name: true, avatarUrl: true } } },
           },
         },
         take: Math.min(Number(limit) || 20, 50),
@@ -130,7 +130,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
       },
       orderBy,
@@ -219,7 +219,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         include: {
           activity: true,
           creator: { select: { id: true } },
-          members: { include: { user: { select: { id: true, name: true } } } },
+          members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
         },
       });
 
@@ -318,7 +318,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
 
@@ -363,7 +363,7 @@ router.post('/:id/lock', requireAuth, async (req: AuthRequest, res: Response): P
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json(updated);
@@ -427,7 +427,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json({ left: true, podDeleted: false, pod: updatedPod });
@@ -471,7 +471,7 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json(updated);
@@ -487,7 +487,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   const userId = req.user!.userId;
 
   const memberInclude = {
-    include: { user: { select: { id: true, name: true } } },
+    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
   };
 
   try {

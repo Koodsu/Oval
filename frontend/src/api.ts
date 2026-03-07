@@ -2,6 +2,16 @@
 // e.g. 'http://192.168.1.100:3000'
 export const API_BASE = 'http://localhost:3000';
 
+/**
+ * Resolves a stored avatar path (e.g. /uploads/avatars/x.jpg) to a full URL.
+ * Handles relative backend paths and already-absolute URLs.
+ */
+export function resolveAvatarUrl(avatarUrl: string | null | undefined): string | undefined {
+  if (!avatarUrl) return undefined;
+  if (avatarUrl.startsWith('http')) return avatarUrl;
+  return `${API_BASE}${avatarUrl}`;
+}
+
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 
@@ -233,6 +243,51 @@ export const updateNotificationPreferences = (prefs: Partial<NotificationPrefere
 // User public profile
 export const getUserProfile = (userId: string) =>
   request<import('./types').PublicProfile>(`/users/${userId}`);
+
+// Own profile
+export const getMe = () =>
+  request<import('./types').User>('/users/me');
+
+/**
+ * Upload a profile picture. Uses FormData (multipart), not JSON.
+ * `uri` is the local file URI returned by expo-image-picker / expo-image-manipulator.
+ */
+export const uploadAvatar = async (uri: string): Promise<{ avatarUrl: string }> => {
+  const filename = uri.split('/').pop() ?? 'avatar.jpg';
+  const formData = new FormData();
+  formData.append('avatar', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
+
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/users/me/avatar`, {
+      method: 'PATCH',
+      headers,
+      body: formData,
+    });
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : 'Upload failed');
+  }
+
+  if (res.status === 401) {
+    onUnauthorized?.();
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error ?? `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+};
+
+export const deleteAvatar = () =>
+  request<{ avatarUrl: null }>('/users/me/avatar', { method: 'DELETE' });
 
 // Blocking
 export const blockUser = (userId: string) =>
