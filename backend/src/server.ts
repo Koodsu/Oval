@@ -11,6 +11,7 @@ import messagesRoutes from './routes/messages';
 import usersRoutes from './routes/users';
 import reportsRoutes from './routes/reports';
 import adminReportsRoutes from './routes/adminReports';
+import attendanceRoutes from './routes/attendance';
 import webRoutes from './routes/web';
 
 const app = express();
@@ -55,6 +56,7 @@ const apiLimiter = rateLimit({
 app.use('/auth', authLimiter, authRoutes);
 app.use('/activities', apiLimiter, activitiesRoutes);
 app.use('/pods', apiLimiter, podsRoutes);
+app.use('/pods', apiLimiter, attendanceRoutes);
 app.use('/users', apiLimiter, usersRoutes);
 app.use('/reports', apiLimiter, reportsRoutes);
 app.use('/admin/reports', apiLimiter, adminReportsRoutes);

@@ -10,7 +10,9 @@ export interface PublicProfile {
   id: string;
   name: string;
   verifiedUniversity: boolean;
+  podsJoined: number;
   podsAttended: number;
+  reliabilityScore: number | null;
   joinedAt: string;
 }
 
@@ -28,6 +30,7 @@ export interface PodMember {
   id: string;
   userId: string;
   joinedAt: string;
+  confirmedAt?: string | null;
   user: { id: string; name: string };
 }
 
@@ -45,6 +48,7 @@ export interface Pod {
   activity?: Activity;
   creator?: { id: string } | null;
   members: PodMember[];
+  noShowUserIds?: string[];
   recommended?: boolean;
 }
 

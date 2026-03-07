@@ -477,15 +477,17 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   const { id } = req.params;
   const userId = req.user!.userId;
 
+  const memberInclude = {
+    include: { user: { select: { id: true, name: true } } },
+  };
+
   try {
     let pod = await prisma.pod.findUnique({
       where: { id },
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: {
-          include: { user: { select: { id: true, name: true } } },
-        },
+        members: memberInclude,
       },
     });
 
@@ -510,14 +512,24 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
         include: {
           activity: true,
           creator: { select: { id: true } },
-          members: {
-            include: { user: { select: { id: true, name: true } } },
-          },
+          members: memberInclude,
         },
       });
     }
 
-    res.json(pod);
+    // Include no-show user IDs for completed pods so frontend can show attendance status
+    const noShowUserIds =
+      pod.status === COMPLETED
+        ? (
+            await prisma.noShowReport.findMany({
+              where: { podId: id },
+              select: { targetUserId: true },
+              distinct: ['targetUserId'],
+            })
+          ).map((r) => r.targetUserId)
+        : [];
+
+    res.json({ ...pod, noShowUserIds });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

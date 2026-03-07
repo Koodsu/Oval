@@ -15,15 +15,27 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const podsAttended = await prisma.podMember.count({
+    const podsJoined = await prisma.podMember.count({
       where: { userId: targetId, pod: { status: 'COMPLETED' } },
     });
+
+    // Count distinct pods where this user has been reported as a no-show
+    const noShowPods = await prisma.noShowReport.groupBy({
+      by: ['podId'],
+      where: { targetUserId: targetId },
+    });
+    const noShowPodCount = noShowPods.length;
+    const podsAttended = podsJoined - noShowPodCount;
+    const reliabilityScore =
+      podsJoined > 0 ? Math.round((podsAttended / podsJoined) * 100) : null;
 
     res.json({
       id: user.id,
       name: user.name,
       verifiedUniversity: user.verifiedUniversity,
+      podsJoined,
       podsAttended,
+      reliabilityScore,
       joinedAt: user.createdAt.toISOString(),
     });
   } catch (err) {

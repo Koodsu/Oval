@@ -18,13 +18,15 @@ model User {
   emailVerifyCode     String?
   emailVerifyExpiry   DateTime?
 
-  podMembers      PodMember[]
-  messages        Message[]
-  createdPods     Pod[]
-  blocksGiven     Block[] @relation("Blocker")
-  blocksReceived  Block[] @relation("Blocked")
-  reportsGiven    Report[] @relation("ReportReporter")
-  reportsReceived Report[] @relation("ReportTarget")
+  podMembers        PodMember[]
+  messages          Message[]
+  createdPods       Pod[]
+  blocksGiven       Block[]        @relation("Blocker")
+  blocksReceived    Block[]        @relation("Blocked")
+  reportsGiven      Report[]       @relation("ReportReporter")
+  reportsReceived   Report[]       @relation("ReportTarget")
+  noShowsGiven      NoShowReport[] @relation("NoShowReporter")
+  noShowsReceived   NoShowReport[] @relation("NoShowTarget")
 }
 
 model Block {
@@ -66,18 +68,20 @@ model Pod {
   creatorId    String?
   createdAt    DateTime @default(now())
 
-  activity Activity    @relation(fields: [activityId], references: [id])
-  creator  User?       @relation(fields: [creatorId], references: [id])
-  members  PodMember[]
-  messages Message[]
-  reports  Report[]
+  activity      Activity       @relation(fields: [activityId], references: [id])
+  creator       User?          @relation(fields: [creatorId], references: [id])
+  members       PodMember[]
+  messages      Message[]
+  reports       Report[]
+  noShowReports NoShowReport[]
 }
 
 model PodMember {
-  id       String   @id @default(uuid())
-  podId    String
-  userId   String
-  joinedAt DateTime @default(now())
+  id          String    @id @default(uuid())
+  podId       String
+  userId      String
+  joinedAt    DateTime  @default(now())
+  confirmedAt DateTime?
 
   pod  Pod  @relation(fields: [podId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -120,4 +124,20 @@ model Report {
   @@index([podId])
   @@index([messageId])
   @@index([targetUserId])
+}
+
+model NoShowReport {
+  id           String   @id @default(uuid())
+  podId        String
+  reporterId   String
+  targetUserId String
+  createdAt    DateTime @default(now())
+
+  pod      Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
+  reporter User @relation("NoShowReporter", fields: [reporterId], references: [id])
+  target   User @relation("NoShowTarget", fields: [targetUserId], references: [id])
+
+  @@unique([podId, reporterId, targetUserId])
+  @@index([targetUserId])
+  @@index([podId])
 }

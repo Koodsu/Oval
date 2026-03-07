@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod } from '../api';
+import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod, confirmAttendance, reportNoShow } from '../api';
 import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
@@ -65,6 +65,8 @@ export default function PodScreen({ route, navigation }: Props) {
   const [locking, setLocking] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [reportedNoShows, setReportedNoShows] = useState<Set<string>>(new Set());
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportTarget, setReportTarget] = useState<{
     type: 'message' | 'pod';
@@ -146,6 +148,13 @@ export default function PodScreen({ route, navigation }: Props) {
   const canLock = isCreator && pod.status === 'FORMING' && memberCount >= minMembers;
   const canUnlock = isCreator && pod.status === 'LOCKED' && memberCount < maxMembers;
 
+  const myMember = pod.members.find((m) => m.userId === user?.id);
+  const alreadyConfirmed = !!myMember?.confirmedAt;
+  const meetupInFuture = new Date(pod.meetupTime) > new Date();
+  const canConfirm = pod.status === 'LOCKED' && meetupInFuture && !alreadyConfirmed;
+  const confirmedCount = pod.members.filter((m) => m.confirmedAt).length;
+  const otherMembers = pod.members.filter((m) => m.userId !== user?.id);
+
   const handleLock = async () => {
     if (!canLock) return;
     setLocking(true);
@@ -226,6 +235,37 @@ export default function PodScreen({ route, navigation }: Props) {
     );
   };
 
+  const handleConfirmAttendance = async () => {
+    setConfirming(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const { confirmedAt } = await confirmAttendance(podId);
+      setPod((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          members: prev.members.map((m) =>
+            m.userId === user?.id ? { ...m, confirmedAt } : m
+          ),
+        };
+      });
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm attendance');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleReportNoShow = async (targetUserId: string) => {
+    try {
+      await reportNoShow(podId, targetUserId);
+      setReportedNoShows((prev) => new Set([...prev, targetUserId]));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit report');
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -267,9 +307,17 @@ export default function PodScreen({ route, navigation }: Props) {
               <Text style={styles.metaText}>{pod.location}</Text>
             </View>
             <View style={styles.membersSection}>
-              <Text style={styles.membersLabel}>
-                Members {memberCount}/{maxMembers}
-              </Text>
+              <View style={styles.membersLabelRow}>
+                <Text style={styles.membersLabel}>
+                  Members {memberCount}/{maxMembers}
+                </Text>
+                {pod.status === 'LOCKED' && meetupInFuture && confirmedCount > 0 && (
+                  <View style={styles.confirmedBadge}>
+                    <Ionicons name="checkmark-circle" size={12} color={colors.green} />
+                    <Text style={styles.confirmedBadgeText}>{confirmedCount} confirmed</Text>
+                  </View>
+                )}
+              </View>
               <AvatarStack
                 members={pod.members}
                 currentUserId={user?.id}
@@ -348,7 +396,74 @@ export default function PodScreen({ route, navigation }: Props) {
                 <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
                 <Text style={styles.reportButtonText}>Report Pod</Text>
               </TouchableOpacity>
+              {canConfirm && (
+                <TouchableOpacity
+                  style={[styles.lockButton, styles.confirmButton]}
+                  onPress={handleConfirmAttendance}
+                  disabled={confirming}
+                >
+                  {confirming ? (
+                    <ActivityIndicator size="small" color={colors.green} />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={16} color={colors.green} />
+                      <Text style={styles.confirmButtonText}>I'll be there</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+              {alreadyConfirmed && pod.status === 'LOCKED' && meetupInFuture && (
+                <View style={[styles.lockButton, styles.confirmedButton]}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.green} />
+                  <Text style={styles.confirmedButtonText}>You're confirmed</Text>
+                </View>
+              )}
             </View>
+
+            {/* No-show reporting section for completed pods */}
+            {pod.status === 'COMPLETED' && otherMembers.length > 0 && (
+              <View style={styles.noShowSection}>
+                <Text style={styles.noShowTitle}>Did everyone show up?</Text>
+                {otherMembers.map((m) => {
+                  const alreadyReported =
+                    reportedNoShows.has(m.userId) ||
+                    (pod.noShowUserIds ?? []).some(
+                      (id) => id === m.userId
+                    );
+                  return (
+                    <View key={m.userId} style={styles.noShowRow}>
+                      <Text style={styles.noShowName}>{m.user.name.split(' ')[0]}</Text>
+                      {alreadyReported ? (
+                        <View style={styles.noShowReportedBadge}>
+                          <Ionicons name="alert-circle" size={14} color={colors.textTertiary} />
+                          <Text style={styles.noShowReportedText}>No-show reported</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.noShowButton}
+                          onPress={() =>
+                            Alert.alert(
+                              'Report No-Show',
+                              `Mark ${m.user.name.split(' ')[0]} as a no-show for this meetup?`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Report',
+                                  style: 'destructive',
+                                  onPress: () => handleReportNoShow(m.userId),
+                                },
+                              ]
+                            )
+                          }
+                        >
+                          <Text style={styles.noShowButtonText}>Didn't show</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
       </TouchableOpacity>
@@ -552,6 +667,9 @@ const styles = StyleSheet.create({
   },
   membersSection: {
     marginTop: spacing.sm + 2,
+    gap: spacing.sm,
+  },
+  membersLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -561,8 +679,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
   },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.greenLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+  },
+  confirmedBadgeText: {
+    ...typography.tiny,
+    color: colors.green,
+    fontWeight: '600',
+  },
   lockRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.md,
   },
@@ -602,6 +735,68 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  confirmButton: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenLight,
+  },
+  confirmButtonText: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.green,
+  },
+  confirmedButton: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenLight,
+  },
+  confirmedButtonText: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.green,
+  },
+  noShowSection: {
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+  },
+  noShowTitle: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  noShowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  noShowName: {
+    ...typography.body,
+    fontSize: 14,
+  },
+  noShowButton: {
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.red,
+    backgroundColor: '#fef2f2',
+  },
+  noShowButtonText: {
+    ...typography.tiny,
+    color: colors.red,
+    fontWeight: '600',
+  },
+  noShowReportedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  noShowReportedText: {
+    ...typography.tiny,
+    color: colors.textTertiary,
   },
 
   // Chat

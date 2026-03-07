@@ -86,6 +86,17 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           <View style={styles.stat}>
             <Text style={styles.statNumber}>
               {profile
+                ? profile.reliabilityScore !== null
+                  ? `${profile.reliabilityScore}%`
+                  : '—'
+                : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Reliability</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>
+              {profile
                 ? new Date(profile.joinedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
                 : '—'}
             </Text>
