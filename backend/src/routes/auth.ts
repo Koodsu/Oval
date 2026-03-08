@@ -10,8 +10,13 @@ const router = Router();
 
 const MIN_PASSWORD_LENGTH = 8;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const OSU_EMAIL_SUFFIX = '@osu.edu';
+const ALLOWED_EMAIL_SUFFIXES = ['@osu.edu', '@buckeyemail.osu.edu'];
 const VERIFY_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function isAllowedEmail(email: string): boolean {
+  const lower = email.toLowerCase();
+  return ALLOWED_EMAIL_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
 
 function isValidEmail(email: string): boolean {
   return typeof email === 'string' && EMAIL_REGEX.test(email.trim());
@@ -64,8 +69,8 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  if (!email.endsWith(OSU_EMAIL_SUFFIX)) {
-    res.status(400).json({ error: 'Only @osu.edu email addresses are allowed' });
+  if (!isAllowedEmail(email)) {
+    res.status(400).json({ error: 'Only @osu.edu or @buckeyemail.osu.edu email addresses are allowed' });
     return;
   }
 
