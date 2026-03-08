@@ -6,6 +6,7 @@ import FindAGroupScreen from './FindAGroupScreen';
 jest.mock('../api', () => ({
   fetchFeed: jest.fn(),
   joinPod: jest.fn(),
+  resolveAvatarUrl: (url: string | null | undefined) => url ?? undefined,
 }));
 
 // ── Navigation mocks ─────────────────────────────────────────────────────────

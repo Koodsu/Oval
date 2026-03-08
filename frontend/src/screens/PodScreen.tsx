@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod, confirmAttendance, reportNoShow } from '../api';
+import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod, confirmAttendance, reportNoShow, resolveAvatarUrl } from '../api';
 import { Pod, Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
@@ -506,7 +506,7 @@ export default function PodScreen({ route, navigation }: Props) {
                       }
                       activeOpacity={0.7}
                     >
-                      <Avatar name={item.user.name} size={28} />
+                      <Avatar name={item.user.name} size={28} uri={resolveAvatarUrl(item.user.avatarUrl)} />
                     </TouchableOpacity>
                   ) : null}
                 </View>

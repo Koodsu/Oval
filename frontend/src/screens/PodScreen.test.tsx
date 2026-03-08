@@ -12,6 +12,7 @@ jest.mock('../api', () => ({
   lockPod: jest.fn(),
   unlockPod: jest.fn(),
   leavePod: jest.fn(),
+  resolveAvatarUrl: (url: string | null | undefined) => url ?? undefined,
 }));
 
 // ── Navigation mocks ─────────────────────────────────────────────────────────

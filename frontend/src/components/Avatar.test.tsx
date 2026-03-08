@@ -2,6 +2,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import Avatar, { AvatarStack } from './Avatar';
 
+jest.mock('../api', () => ({
+  resolveAvatarUrl: (url: string | null | undefined) => url ?? undefined,
+}));
+
 describe('Avatar', () => {
   it('renders the first letter of the name', () => {
     render(<Avatar name="Alice" />);
