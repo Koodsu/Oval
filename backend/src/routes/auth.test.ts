@@ -32,7 +32,16 @@ describe('POST /auth/register', () => {
     expect(res.body.user.id).toHaveLength(36); // UUID format
   });
 
-  it('rejects non-@osu.edu email', async () => {
+  it('accepts @buckeyemail.osu.edu email', async () => {
+    const email = `buckeye-test-register-${Date.now()}@buckeyemail.osu.edu`;
+    const res = await request(app)
+      .post('/auth/register')
+      .send({ name: 'Buckeye', email, password: 'password123' })
+      .expect(201);
+    expect(res.body.user.email).toBe(email);
+  });
+
+  it('rejects email from other domains', async () => {
     const res = await request(app)
       .post('/auth/register')
       .send({ name: 'Bob', email: 'bob@gmail.com', password: 'password123' })

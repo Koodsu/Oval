@@ -15,6 +15,9 @@ import reportsRoutes from './routes/reports';
 import adminReportsRoutes from './routes/adminReports';
 import attendanceRoutes from './routes/attendance';
 import webRoutes from './routes/web';
+import friendsRoutes from './routes/friends';
+import directMessagesRoutes from './routes/directMessages';
+import podInvitesRoutes from './routes/podInvites';
 
 const app = express();
 
@@ -67,6 +70,11 @@ app.use('/pods', apiLimiter, attendanceRoutes);
 app.use('/users', apiLimiter, usersRoutes);
 app.use('/reports', apiLimiter, reportsRoutes);
 app.use('/admin/reports', apiLimiter, adminReportsRoutes);
+app.use('/friends', apiLimiter, friendsRoutes);
+app.use('/messages', apiLimiter, directMessagesRoutes);
+// Pod invites: /pods/invites and /pods/:id/invite
+// Must be mounted before the pod messages router to avoid :id conflict
+app.use('/pods', apiLimiter, podInvitesRoutes);
 
 // Messages are nested under pods: /pods/:id/messages
 // Separate router with mergeParams so :id is accessible

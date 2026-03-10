@@ -4,8 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -30,6 +31,16 @@ model User {
   reportsReceived   Report[]       @relation("ReportTarget")
   noShowsGiven      NoShowReport[] @relation("NoShowReporter")
   noShowsReceived   NoShowReport[] @relation("NoShowTarget")
+
+  sentFriendRequests     FriendRequest[]       @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[]       @relation("FriendRequestReceiver")
+  friendshipsAsA         Friendship[]          @relation("FriendshipUserA")
+  friendshipsAsB         Friendship[]          @relation("FriendshipUserB")
+  dmThreadsAsA           DirectMessageThread[] @relation("DMThreadUserA")
+  dmThreadsAsB           DirectMessageThread[] @relation("DMThreadUserB")
+  directMessages         DirectMessage[]
+  sentPodInvites         PodInvite[]           @relation("PodInviteSender")
+  receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
 }
 
 model Block {
@@ -77,6 +88,7 @@ model Pod {
   messages      Message[]
   reports       Report[]
   noShowReports NoShowReport[]
+  podInvites    PodInvite[]
 }
 
 model PodMember {
@@ -143,4 +155,87 @@ model NoShowReport {
   @@unique([podId, reporterId, targetUserId])
   @@index([targetUserId])
   @@index([podId])
+}
+
+// FriendRequestStatus values: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED"
+
+model FriendRequest {
+  id          String    @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([senderId, receiverId])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA User @relation("FriendshipUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model DirectMessageThread {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userA    User            @relation("DMThreadUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User            @relation("DMThreadUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages DirectMessage[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model DirectMessage {
+  id        String   @id @default(uuid())
+  threadId  String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  thread DirectMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@index([senderId])
+}
+
+// PodInviteStatus values: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"
+
+model PodInvite {
+  id          String    @id @default(uuid())
+  podId       String
+  senderId    String
+  receiverId  String
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  pod      Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
+  sender   User @relation("PodInviteSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("PodInviteReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([podId, senderId, receiverId])
+  @@index([receiverId])
+  @@index([podId])
+  @@index([senderId])
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../theme';
+import { resolveAvatarUrl } from '../api';
 
 interface AvatarProps {
   name: string;
@@ -71,7 +72,7 @@ export function AvatarStack({
       {visible.map((m, i) => {
         const isYou = m.user.id === currentUserId;
         const content = (
-          <Avatar name={m.user.name} size={size} isYou={isYou} uri={m.user.avatarUrl} />
+          <Avatar name={m.user.name} size={size} isYou={isYou} uri={resolveAvatarUrl(m.user.avatarUrl)} />
         );
 
         return (

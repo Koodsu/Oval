@@ -11,10 +11,13 @@ function getFromEmail(): string {
 }
 
 export async function sendVerificationEmail(to: string, code: string): Promise<void> {
+  // Always log code to terminal for development / debugging
+  console.log(`[Bridge] Verification code for ${to}: ${code}`);
+
   const resend = getResendClient();
 
   if (!resend) {
-    console.log(`[emailService] No RESEND_API_KEY set. Verification code for ${to}: ${code}`);
+    console.log(`[emailService] No RESEND_API_KEY set — email not sent. Use code above.`);
     return;
   }
 
@@ -38,8 +41,8 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
   });
 
   if (result.error) {
-    console.error(`[emailService] Resend error for ${to}:`, result.error);
-    throw new Error(`Email send failed: ${result.error.message}`);
+    console.warn(`[emailService] Resend failed for ${to}: ${result.error.message}. Use code from terminal above.`);
+    return;
   }
 
   console.log(`[emailService] Email sent successfully to ${to} (id: ${result.data?.id})`);

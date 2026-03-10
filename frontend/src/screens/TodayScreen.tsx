@@ -17,7 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { fetchFeed, getActivities, joinPod } from '../api';
+import { fetchFeed, getActivities, joinPod, resolveAvatarUrl } from '../api';
 import { Pod, Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -273,7 +273,7 @@ export default function TodayScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Avatar name={user?.name ?? 'U'} size={42} />
+            <Avatar name={user?.name ?? 'U'} size={42} uri={resolveAvatarUrl(user?.avatarUrl)} />
             <View style={styles.headerText}>
               <Text style={styles.greeting}>Hey, {firstName}</Text>
               <Text style={styles.subtitle}>What's happening today</Text>

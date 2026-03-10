@@ -16,6 +16,71 @@ export interface PublicProfile {
   podsAttended: number;
   reliabilityScore: number | null;
   joinedAt: string;
+  friendCount?: number;
+}
+
+export type FriendRelationshipStatus =
+  | 'NONE'
+  | 'PENDING_SENT'
+  | 'PENDING_RECEIVED'
+  | 'FRIENDS'
+  | 'BLOCKED'
+  | 'SELF';
+
+export interface FriendRelationship {
+  status: FriendRelationshipStatus;
+  requestId?: string;
+}
+
+export interface FriendUser {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  verifiedUniversity: boolean;
+}
+
+export interface FriendRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
+  createdAt: string;
+  respondedAt?: string | null;
+  sender?: FriendUser;
+  receiver?: FriendUser;
+}
+
+export interface DirectMessageThread {
+  id: string;
+  otherUser: FriendUser;
+  lastMessage?: {
+    content: string;
+    createdAt: string;
+    senderId: string;
+  } | null;
+  updatedAt: string;
+}
+
+export interface DirectMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  content: string;
+  createdAt: string;
+  sender: { id: string; name: string; avatarUrl?: string | null };
+}
+
+export interface PodInvite {
+  id: string;
+  podId: string;
+  senderId: string;
+  receiverId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+  createdAt: string;
+  respondedAt?: string | null;
+  pod?: Pod & { activity: Activity };
+  sender?: FriendUser;
+  receiver?: FriendUser;
 }
 
 export interface Activity {

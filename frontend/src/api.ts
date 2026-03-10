@@ -299,3 +299,71 @@ export const unblockUser = (userId: string) =>
   request<{ success?: boolean }>(`/users/${userId}/block`, {
     method: 'DELETE',
   });
+
+// User search
+export const searchUsers = (q: string) =>
+  request<import('./types').FriendUser[]>(`/users/search?q=${encodeURIComponent(q)}`);
+
+// Friends
+export const getFriends = () =>
+  request<import('./types').FriendUser[]>('/friends');
+
+export const getFriendRequests = () =>
+  request<{ incoming: import('./types').FriendRequest[]; outgoing: import('./types').FriendRequest[] }>(
+    '/friends/requests'
+  );
+
+export const getFriendRelationship = (userId: string) =>
+  request<import('./types').FriendRelationship>(`/friends/relationship/${userId}`);
+
+export const sendFriendRequest = (receiverId: string) =>
+  request<import('./types').FriendRequest>('/friends/requests', {
+    method: 'POST',
+    body: JSON.stringify({ receiverId }),
+  });
+
+export const acceptFriendRequest = (id: string) =>
+  request<{ ok: boolean }>(`/friends/requests/${id}/accept`, { method: 'POST' });
+
+export const declineFriendRequest = (id: string) =>
+  request<{ ok: boolean }>(`/friends/requests/${id}/decline`, { method: 'POST' });
+
+export const cancelFriendRequest = (id: string) =>
+  request<void>(`/friends/requests/${id}`, { method: 'DELETE' });
+
+export const unfriend = (userId: string) =>
+  request<void>(`/friends/${userId}`, { method: 'DELETE' });
+
+// Direct messages
+export const getMessageThreads = () =>
+  request<import('./types').DirectMessageThread[]>('/messages/threads');
+
+export const getThreadByUser = (userId: string) =>
+  request<{ id: string; otherUser: import('./types').FriendUser; updatedAt: string }>(
+    `/messages/threads/by-user/${userId}`
+  );
+
+export const getThreadMessages = (threadId: string) =>
+  request<import('./types').DirectMessage[]>(`/messages/threads/${threadId}`);
+
+export const sendDirectMessage = (threadId: string, content: string) =>
+  request<import('./types').DirectMessage>(`/messages/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+
+// Pod invites
+export const getPodInvites = () =>
+  request<import('./types').PodInvite[]>('/pods/invites');
+
+export const sendPodInvite = (podId: string, receiverId: string) =>
+  request<import('./types').PodInvite>(`/pods/${podId}/invite`, {
+    method: 'POST',
+    body: JSON.stringify({ receiverId }),
+  });
+
+export const acceptPodInvite = (id: string) =>
+  request<import('./types').Pod>(`/pods/invites/${id}/accept`, { method: 'POST' });
+
+export const declinePodInvite = (id: string) =>
+  request<void>(`/pods/invites/${id}/decline`, { method: 'POST' });
