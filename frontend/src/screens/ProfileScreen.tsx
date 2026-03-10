@@ -277,9 +277,49 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      <Text style={styles.sectionTitle}>Friends</Text>
+      <View style={[styles.linksCard, shadows.sm]}>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('Friends')}
+        >
+          <Ionicons name="people-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>My Friends</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.linkDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('FriendRequests')}
+        >
+          <Ionicons name="person-add-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Friend Requests</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.linkDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('PodInvites')}
+        >
+          <Ionicons name="mail-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Pod Invites</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.linkDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('UserSearch')}
+        >
+          <Ionicons name="search-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Find People</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionTitle}>Activity</Text>
       <TouchableOpacity
         style={styles.reportsLink}
-        onPress={() => navigation.navigate('MyReports' as never)}
+        onPress={() => navigation.navigate('MyReports')}
       >
         <Ionicons name="flag-outline" size={20} color={colors.primary} />
         <Text style={styles.reportsLinkText}>My Reports</Text>
@@ -464,12 +504,34 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     textAlign: 'center',
   },
+  linksCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    marginHorizontal: spacing.lg,
+    overflow: 'hidden',
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  linkText: {
+    ...typography.bodyBold,
+    flex: 1,
+    color: colors.text,
+  },
+  linkDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginLeft: spacing.md,
+  },
   reportsLink: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.lg,

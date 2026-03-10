@@ -33,12 +33,19 @@ import UserProfileScreen from './src/screens/UserProfileScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
 import FindAGroupScreen from './src/screens/FindAGroupScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
+import FriendsScreen from './src/screens/FriendsScreen';
+import FriendRequestsScreen from './src/screens/FriendRequestsScreen';
+import UserSearchScreen from './src/screens/UserSearchScreen';
+import MessagesInboxScreen from './src/screens/MessagesInboxScreen';
+import DirectMessageThreadScreen from './src/screens/DirectMessageThreadScreen';
+import PodInvitesScreen from './src/screens/PodInvitesScreen';
 import { colors } from './src/theme';
 
 export type MainTabParamList = {
   Today: undefined;
   MyActivities: undefined;
   Search: undefined;
+  Messages: undefined;
   Profile: undefined;
 };
 
@@ -53,6 +60,11 @@ export type RootStackParamList = {
   UserProfile: { userId: string; name: string };
   MyReports: undefined;
   FindAGroup: undefined;
+  Friends: undefined;
+  FriendRequests: undefined;
+  UserSearch: undefined;
+  DirectMessageThread: { threadId: string; otherUserId: string; otherUserName: string };
+  PodInvites: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -81,6 +93,7 @@ const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.
   Today: { active: 'flash', inactive: 'flash-outline' },
   MyActivities: { active: 'calendar', inactive: 'calendar-outline' },
   Search: { active: 'search', inactive: 'search-outline' },
+  Messages: { active: 'chatbubble', inactive: 'chatbubble-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 };
 
@@ -130,6 +143,11 @@ function MainTabs() {
         name="Search"
         component={SearchScreen}
         options={{ tabBarLabel: 'Search' }}
+      />
+      <Tab.Screen
+        name="Messages"
+        component={MessagesInboxScreen}
+        options={{ tabBarLabel: 'Messages' }}
       />
       <Tab.Screen
         name="Profile"
@@ -282,6 +300,31 @@ function AppNavigator() {
               name="FindAGroup"
               component={FindAGroupScreen}
               options={{ title: 'Find a Group' }}
+            />
+            <Stack.Screen
+              name="Friends"
+              component={FriendsScreen}
+              options={{ title: 'Friends' }}
+            />
+            <Stack.Screen
+              name="FriendRequests"
+              component={FriendRequestsScreen}
+              options={{ title: 'Friend Requests' }}
+            />
+            <Stack.Screen
+              name="UserSearch"
+              component={UserSearchScreen}
+              options={{ title: 'Find People' }}
+            />
+            <Stack.Screen
+              name="DirectMessageThread"
+              component={DirectMessageThreadScreen}
+              options={({ route }) => ({ title: route.params.otherUserName })}
+            />
+            <Stack.Screen
+              name="PodInvites"
+              component={PodInvitesScreen}
+              options={{ title: 'Pod Invites' }}
             />
           </>
         ) : (

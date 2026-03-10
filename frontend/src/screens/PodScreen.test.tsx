@@ -12,6 +12,8 @@ jest.mock('../api', () => ({
   lockPod: jest.fn(),
   unlockPod: jest.fn(),
   leavePod: jest.fn(),
+  getFriends: jest.fn().mockResolvedValue([]),
+  sendPodInvite: jest.fn().mockResolvedValue({}),
   resolveAvatarUrl: (url: string | null | undefined) => url ?? undefined,
 }));
 
@@ -110,15 +112,15 @@ async function renderAndLoad() {
 }
 
 describe('PodScreen — share / invite button', () => {
-  it('renders an Invite button after the pod loads', async () => {
+  it('renders a Share button after the pod loads', async () => {
     await renderAndLoad();
-    expect(screen.getByText('Invite')).toBeTruthy();
+    expect(screen.getByText('Share')).toBeTruthy();
   });
 
-  it('calls Share.share with the correct URL when Invite is tapped', async () => {
+  it('calls Share.share with the correct URL when Share is tapped', async () => {
     await renderAndLoad();
 
-    fireEvent.press(screen.getByText('Invite'));
+    fireEvent.press(screen.getByText('Share'));
 
     await waitFor(() => {
       expect(Share.share).toHaveBeenCalledTimes(1);
@@ -131,7 +133,7 @@ describe('PodScreen — share / invite button', () => {
 
   it('share message mentions Bridge', async () => {
     await renderAndLoad();
-    fireEvent.press(screen.getByText('Invite'));
+    fireEvent.press(screen.getByText('Share'));
 
     await waitFor(() => expect(Share.share).toHaveBeenCalled());
 
@@ -145,11 +147,11 @@ describe('PodScreen — share / invite button', () => {
     await renderAndLoad();
 
     await act(async () => {
-      fireEvent.press(screen.getByText('Invite'));
+      fireEvent.press(screen.getByText('Share'));
     });
 
     // Should still be on screen — no error thrown
-    expect(screen.getByText('Invite')).toBeTruthy();
+    expect(screen.getByText('Share')).toBeTruthy();
   });
 
   it('does not throw if Share.share rejects', async () => {
@@ -158,10 +160,10 @@ describe('PodScreen — share / invite button', () => {
     await renderAndLoad();
 
     await act(async () => {
-      fireEvent.press(screen.getByText('Invite'));
+      fireEvent.press(screen.getByText('Share'));
     });
 
-    expect(screen.getByText('Invite')).toBeTruthy();
+    expect(screen.getByText('Share')).toBeTruthy();
   });
 
   it('invite button has an accessibility label', async () => {

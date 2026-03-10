@@ -4,6 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { getBlockedUserIds } from '../lib/blocks';
+import { normalizeUserPair } from '../lib/friendUtils';
+import {
+  cancelPendingRequestsBetween,
+  removeFriendshipIfExists,
+} from '../services/friendService';
 
 const router = Router();
 
@@ -190,6 +196,42 @@ router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
+// GET /users/search?q= — search users by name
+// NOTE: defined before /:id to avoid route conflict
+router.get('/search', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+  if (!q) {
+    res.json([]);
+    return;
+  }
+
+  try {
+    const blockedIds = await getBlockedUserIds(userId);
+    const excluded = new Set([...blockedIds, userId]);
+
+    const users = await prisma.user.findMany({
+      where: {
+        name: { contains: q, mode: 'insensitive' },
+        id: { notIn: [...excluded] },
+      },
+      select: {
+        id: true,
+        name: true,
+        avatarUrl: true,
+        verifiedUniversity: true,
+      },
+      take: 20,
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /users/:id — public profile
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const targetId = req.params.id;
@@ -201,14 +243,15 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const podsJoined = await prisma.podMember.count({
-      where: { userId: targetId, pod: { status: 'COMPLETED' } },
-    });
+    const [podsJoined, noShowPods, friendCount] = await Promise.all([
+      prisma.podMember.count({ where: { userId: targetId, pod: { status: 'COMPLETED' } } }),
+      prisma.noShowReport.groupBy({ by: ['podId'], where: { targetUserId: targetId } }),
+      // Count friendships for this user (appears as userA or userB)
+      prisma.friendship.count({
+        where: { OR: [{ userAId: targetId }, { userBId: targetId }] },
+      }),
+    ]);
 
-    const noShowPods = await prisma.noShowReport.groupBy({
-      by: ['podId'],
-      where: { targetUserId: targetId },
-    });
     const noShowPodCount = noShowPods.length;
     const podsAttended = podsJoined - noShowPodCount;
     const reliabilityScore =
@@ -223,6 +266,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       podsAttended,
       reliabilityScore,
       joinedAt: user.createdAt.toISOString(),
+      friendCount,
     });
   } catch (err) {
     console.error(err);
@@ -255,6 +299,10 @@ router.post('/:id/block', requireAuth, async (req: AuthRequest, res: Response): 
       res.status(200).json({ success: true, blockId: block.id, createdAt: block.createdAt });
       return;
     }
+
+    // Cancel pending friend requests and remove any friendship before creating the block
+    await cancelPendingRequestsBetween(blockerId, blockedId);
+    await removeFriendshipIfExists(blockerId, blockedId);
 
     block = await prisma.$transaction(async (tx) => {
       const created = await tx.block.create({

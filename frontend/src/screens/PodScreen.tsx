@@ -13,14 +13,19 @@ import {
   LayoutAnimation,
   UIManager,
   Share,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod, confirmAttendance, reportNoShow, resolveAvatarUrl } from '../api';
-import { Pod, Message } from '../types';
+import {
+  getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod,
+  confirmAttendance, reportNoShow, resolveAvatarUrl,
+  getFriends, sendPodInvite,
+} from '../api';
+import { Pod, Message, FriendUser } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
 import StatusBadge from '../components/StatusBadge';
@@ -73,6 +78,9 @@ export default function PodScreen({ route, navigation }: Props) {
     messageId?: string;
     podId?: string;
   } | null>(null);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -266,6 +274,33 @@ export default function PodScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleOpenInvite = async () => {
+    try {
+      const myFriends = await getFriends();
+      // Filter out friends already in the pod
+      const memberIds = new Set(pod?.members.map((m) => m.userId) ?? []);
+      setFriends(myFriends.filter((f) => !memberIds.has(f.id)));
+      setInviteModalVisible(true);
+    } catch {
+      Alert.alert('Error', 'Failed to load friends');
+    }
+  };
+
+  const handleSendInvite = async (friend: FriendUser) => {
+    setInvitingId(friend.id);
+    try {
+      await sendPodInvite(podId, friend.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Remove from list so it can't be double-invited
+      setFriends((prev) => prev.filter((f) => f.id !== friend.id));
+      Alert.alert('Invite sent', `${friend.name} has been invited to this pod.`);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send invite');
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -373,8 +408,18 @@ export default function PodScreen({ route, navigation }: Props) {
                 accessibilityLabel="Share pod invite link"
               >
                 <Ionicons name="share-outline" size={16} color={colors.primary} />
-                <Text style={styles.lockButtonText}>Invite</Text>
+                <Text style={styles.lockButtonText}>Share</Text>
               </TouchableOpacity>
+              {pod.status === 'FORMING' && (
+                <TouchableOpacity
+                  style={[styles.lockButton, styles.shareButton]}
+                  onPress={handleOpenInvite}
+                  accessibilityLabel="Invite a friend"
+                >
+                  <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+                  <Text style={styles.lockButtonText}>Invite Friend</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.lockButton, styles.leaveButton]}
                 onPress={handleLeave}
@@ -611,6 +656,54 @@ export default function PodScreen({ route, navigation }: Props) {
         podId={reportTarget?.podId ?? podId}
         podOnly={reportTarget?.type === 'pod'}
       />
+
+      {/* Friend invite modal */}
+      <Modal
+        visible={inviteModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInviteModalVisible(false)}
+      >
+        <View style={styles.inviteModal}>
+          <View style={styles.inviteModalHeader}>
+            <Text style={styles.inviteModalTitle}>Invite a Friend</Text>
+            <TouchableOpacity onPress={() => setInviteModalVisible(false)}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          {friends.length === 0 ? (
+            <View style={styles.inviteEmpty}>
+              <Ionicons name="people-outline" size={40} color={colors.textTertiary} />
+              <Text style={styles.inviteEmptyText}>
+                No friends available to invite. All your friends are already in this pod, or you have no friends yet.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={friends}
+              keyExtractor={(f) => f.id}
+              contentContainerStyle={styles.inviteList}
+              renderItem={({ item }) => (
+                <View style={styles.inviteRow}>
+                  <Avatar name={item.name} size={40} uri={resolveAvatarUrl(item.avatarUrl)} />
+                  <Text style={styles.inviteRowName}>{item.name}</Text>
+                  <TouchableOpacity
+                    style={[styles.inviteBtn, invitingId === item.id && styles.inviteBtnDisabled]}
+                    onPress={() => handleSendInvite(item)}
+                    disabled={invitingId !== null}
+                  >
+                    {invitingId === item.id ? (
+                      <ActivityIndicator size="small" color={colors.textInverse} />
+                    ) : (
+                      <Text style={styles.inviteBtnText}>Invite</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -918,4 +1011,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // Friend invite modal
+  inviteModal: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  inviteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  inviteModalTitle: { ...typography.h3 },
+  inviteEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  inviteEmptyText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  inviteList: { padding: spacing.lg, gap: spacing.sm },
+  inviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+  },
+  inviteRowName: { ...typography.bodyBold, flex: 1 },
+  inviteBtn: {
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  inviteBtnDisabled: { opacity: 0.5 },
+  inviteBtnText: { ...typography.bodyBold, color: colors.textInverse, fontSize: 13 },
 });
