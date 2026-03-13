@@ -59,6 +59,14 @@ export interface DirectMessageThread {
     senderId: string;
   } | null;
   updatedAt: string;
+  hasUnread?: boolean;
+}
+
+export interface DirectMessageReplyTo {
+  id: string;
+  content: string;
+  senderId: string;
+  sender: { id: string; name: string };
 }
 
 export interface DirectMessage {
@@ -68,6 +76,8 @@ export interface DirectMessage {
   content: string;
   createdAt: string;
   sender: { id: string; name: string; avatarUrl?: string | null };
+  reactions?: DirectMessageReaction[];
+  replyTo?: DirectMessageReplyTo | null;
 }
 
 export interface PodInvite {
@@ -119,6 +129,18 @@ export interface Pod {
   recommended?: boolean;
 }
 
+export interface MessageReaction {
+  emoji: string;
+  userId: string;
+}
+
+export interface MessageReplyTo {
+  id: string;
+  content: string;
+  userId: string;
+  user: { id: string; name: string };
+}
+
 export interface Message {
   id: string;
   podId: string;
@@ -126,4 +148,11 @@ export interface Message {
   content: string;
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
+  reactions?: MessageReaction[];
+  replyTo?: MessageReplyTo | null;
+}
+
+export interface DirectMessageReaction {
+  emoji: string;
+  userId: string;
 }

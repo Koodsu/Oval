@@ -9,6 +9,9 @@ jest.mock('../api', () => ({
   getPod: jest.fn(),
   getMessages: jest.fn(),
   sendMessage: jest.fn(),
+  addPodMessageReaction: jest.fn(),
+  removePodMessageReaction: jest.fn(),
+  sendPodTyping: jest.fn(),
   lockPod: jest.fn(),
   unlockPod: jest.fn(),
   leavePod: jest.fn(),
@@ -96,7 +99,7 @@ function buildProps() {
 beforeEach(() => {
   jest.useFakeTimers();
   mockGetPod.mockResolvedValue(makePod());
-  mockGetMessages.mockResolvedValue([]);
+  mockGetMessages.mockResolvedValue({ messages: [], typingUserIds: [] });
   jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction });
 });
 
@@ -178,7 +181,7 @@ describe('PodScreen — loading state', () => {
   it('shows a loading spinner before the pod data arrives', () => {
     // getPod never resolves during this test
     mockGetPod.mockReturnValue(new Promise(() => {}));
-    mockGetMessages.mockReturnValue(new Promise(() => {}));
+    mockGetMessages.mockReturnValue(new Promise<{ messages: unknown[]; typingUserIds: string[] }>(() => {}));
 
     const { UNSAFE_getByType } = render(<PodScreen {...buildProps()} />);
     expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();

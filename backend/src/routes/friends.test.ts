@@ -313,7 +313,8 @@ describe('Direct Messages routes', () => {
       .get(`/messages/threads/${thread.id}`)
       .set('Authorization', `Bearer ${tokenA}`)
       .expect(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(Array.isArray(res.body.messages)).toBe(true);
+    expect(Array.isArray(res.body.typingUserIds)).toBe(true);
   });
 
   it('POST /messages/threads/:id/messages sends a message', async () => {

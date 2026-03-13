@@ -150,13 +150,32 @@ export const leavePod = (podId: string) =>
 
 export const getPod = (podId: string) => request<import('./types').Pod>(`/pods/${podId}`);
 
-export const getMessages = (podId: string) =>
-  request<import('./types').Message[]>(`/pods/${podId}/messages`);
+export interface GetMessagesResponse {
+  messages: import('./types').Message[];
+  typingUserIds: string[];
+}
 
-export const sendMessage = (podId: string, content: string) =>
+export const getMessages = (podId: string) =>
+  request<GetMessagesResponse>(`/pods/${podId}/messages`);
+
+export const sendPodTyping = (podId: string) =>
+  request<{ ok: boolean }>(`/pods/${podId}/typing`, { method: 'POST' });
+
+export const sendMessage = (podId: string, content: string, replyToId?: string) =>
   request<import('./types').Message>(`/pods/${podId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, replyToId: replyToId || undefined }),
+  });
+
+export const addPodMessageReaction = (podId: string, msgId: string, emoji: string) =>
+  request<import('./types').Message>(`/pods/${podId}/messages/${msgId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+
+export const removePodMessageReaction = (podId: string, msgId: string, emoji: string) =>
+  request<import('./types').Message>(`/pods/${podId}/messages/${msgId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
+    method: 'DELETE',
   });
 
 // Reports
@@ -343,14 +362,38 @@ export const getThreadByUser = (userId: string) =>
     `/messages/threads/by-user/${userId}`
   );
 
-export const getThreadMessages = (threadId: string) =>
-  request<import('./types').DirectMessage[]>(`/messages/threads/${threadId}`);
+export interface GetThreadMessagesResponse {
+  messages: import('./types').DirectMessage[];
+  typingUserIds: string[];
+  otherLastReadAt: string | null;
+}
 
-export const sendDirectMessage = (threadId: string, content: string) =>
+export const getThreadMessages = (threadId: string) =>
+  request<GetThreadMessagesResponse>(`/messages/threads/${threadId}`);
+
+export const markDMThreadRead = (threadId: string) =>
+  request<{ ok: boolean }>(`/messages/threads/${threadId}/read`, { method: 'PATCH' });
+
+export const sendDMTyping = (threadId: string) =>
+  request<{ ok: boolean }>(`/messages/threads/${threadId}/typing`, { method: 'POST' });
+
+export const sendDirectMessage = (threadId: string, content: string, replyToId?: string) =>
   request<import('./types').DirectMessage>(`/messages/threads/${threadId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, replyToId: replyToId || undefined }),
   });
+
+export const addDMReaction = (threadId: string, msgId: string, emoji: string) =>
+  request<import('./types').DirectMessage>(`/messages/threads/${threadId}/messages/${msgId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+
+export const removeDMReaction = (threadId: string, msgId: string, emoji: string) =>
+  request<import('./types').DirectMessage>(
+    `/messages/threads/${threadId}/messages/${msgId}/reactions?emoji=${encodeURIComponent(emoji)}`,
+    { method: 'DELETE' }
+  );
 
 // Pod invites
 export const getPodInvites = () =>

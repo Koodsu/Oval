@@ -4,6 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { notifyPodJoin } from '../lib/NotificationService';
+import { setTyping } from '../lib/typingStore';
 
 const router = Router();
 
@@ -475,6 +476,32 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
       },
     });
     res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/typing
+router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id: podId } = req.params;
+  const userId = req.user!.userId;
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const membership = pod.members.find((m) => m.userId === userId);
+    if (!membership) {
+      res.status(403).json({ error: 'Not a member of this pod' });
+      return;
+    }
+    setTyping('pod', podId, userId);
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

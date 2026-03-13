@@ -22,9 +22,11 @@ model User {
   notificationPreferences String?
   avatarUrl               String?
 
-  podMembers        PodMember[]
-  messages          Message[]
-  createdPods       Pod[]
+  podMembers           PodMember[]
+  messages             Message[]
+  messageReactions     MessageReaction[]
+  directMessageReactions DirectMessageReaction[]
+  createdPods          Pod[]
   blocksGiven       Block[]        @relation("Blocker")
   blocksReceived    Block[]        @relation("Blocked")
   reportsGiven      Report[]       @relation("ReportReporter")
@@ -109,11 +111,29 @@ model Message {
   podId     String
   userId    String
   content   String
+  replyToId String?
   createdAt DateTime @default(now())
 
-  pod     Pod     @relation(fields: [podId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
-  reports Report[]
+  pod       Pod               @relation(fields: [podId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]         @relation("MessageReplies")
+  reports   Report[]
+  reactions MessageReaction[]
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 model Report {
@@ -190,11 +210,13 @@ model Friendship {
 }
 
 model DirectMessageThread {
-  id        String   @id @default(uuid())
-  userAId   String
-  userBId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String    @id @default(uuid())
+  userAId          String
+  userBId          String
+  userALastReadAt  DateTime?
+  userBLastReadAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   userA    User            @relation("DMThreadUserA", fields: [userAId], references: [id], onDelete: Cascade)
   userB    User            @relation("DMThreadUserB", fields: [userBId], references: [id], onDelete: Cascade)
@@ -206,17 +228,35 @@ model DirectMessageThread {
 }
 
 model DirectMessage {
-  id        String   @id @default(uuid())
-  threadId  String
-  senderId  String
-  content   String
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  threadId   String
+  senderId   String
+  content    String
+  replyToId  String?
+  createdAt  DateTime @default(now())
 
-  thread DirectMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sender User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  thread     DirectMessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender     User                  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo    DirectMessage?        @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies    DirectMessage[]       @relation("DMReplies")
+  reactions  DirectMessageReaction[]
 
   @@index([threadId, createdAt])
   @@index([senderId])
+}
+
+model DirectMessageReaction {
+  id               String   @id @default(uuid())
+  directMessageId  String
+  userId           String
+  emoji            String
+  createdAt        DateTime @default(now())
+
+  directMessage DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([directMessageId, userId, emoji])
+  @@index([directMessageId])
 }
 
 // PodInviteStatus values: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"

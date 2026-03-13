@@ -44,7 +44,8 @@ describe('Messages API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      expect(res.body).toEqual([]);
+      expect(res.body.messages).toEqual([]);
+      expect(res.body.typingUserIds).toEqual([]);
     });
 
     it('returns 403 for non-member', async () => {
@@ -111,8 +112,8 @@ describe('Messages API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].content).toBe('First message');
+      expect(res.body.messages).toHaveLength(1);
+      expect(res.body.messages[0].content).toBe('First message');
     });
 
     it('cannot message when blocked relationship exists', async () => {

@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   FlatList,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -15,13 +14,14 @@ import {
   Share,
   Modal,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import {
-  getPod, getMessages, sendMessage, lockPod, unlockPod, leavePod,
+  getPod, getMessages, sendMessage, addPodMessageReaction, removePodMessageReaction,
+  sendPodTyping,
+  lockPod, unlockPod, leavePod,
   confirmAttendance, reportNoShow, resolveAvatarUrl,
   getFriends, sendPodInvite,
 } from '../api';
@@ -30,6 +30,7 @@ import { useAuth } from '../context/AuthContext';
 import Avatar, { AvatarStack } from '../components/Avatar';
 import StatusBadge from '../components/StatusBadge';
 import ReportModal from '../components/ReportModal';
+import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -48,14 +49,22 @@ function formatTime(iso: string) {
   });
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+type ChatListItem =
+  | { type: 'date'; id: string; date: string }
+  | { type: 'message'; message: Message; index: number };
+
+function buildChatList(messages: Message[]): ChatListItem[] {
+  const items: ChatListItem[] = [];
+  let lastDate = '';
+  messages.forEach((msg, index) => {
+    const dateStr = msg.createdAt.slice(0, 10);
+    if (dateStr !== lastDate) {
+      lastDate = dateStr;
+      items.push({ type: 'date', id: `date-${dateStr}`, date: msg.createdAt });
+    }
+    items.push({ type: 'message', message: msg, index });
+  });
+  return items;
 }
 
 export default function PodScreen({ route, navigation }: Props) {
@@ -81,9 +90,13 @@ export default function PodScreen({ route, navigation }: Props) {
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [reactionTargetMsgId, setReactionTargetMsgId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{ messageId: string; name: string; content: string } | null>(null);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPod = useCallback(async () => {
     try {
@@ -97,7 +110,8 @@ export default function PodScreen({ route, navigation }: Props) {
   const fetchMessages = useCallback(async () => {
     try {
       const data = await getMessages(podId);
-      setMessages(data);
+      setMessages(data.messages);
+      setTypingUserIds(data.typingUserIds ?? []);
     } catch {
       // silently ignore poll errors
     }
@@ -117,6 +131,32 @@ export default function PodScreen({ route, navigation }: Props) {
     };
   }, [fetchPod, fetchMessages]);
 
+  const handleMessageTextChange = useCallback(
+    (text: string) => {
+      setMessageText(text);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        sendPodTyping(podId).catch(() => {});
+        typingTimeoutRef.current = null;
+      }, 300);
+    },
+    [podId]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, []);
+
+  const typingUserName = useMemo(() => {
+    if (typingUserIds.length === 0) return undefined;
+    const id = typingUserIds[0];
+    const members = pod?.members ?? [];
+    const member = members.find((m) => m.userId === id);
+    return member?.user?.name?.split(' ')[0] ?? 'Someone';
+  }, [typingUserIds, pod?.members]);
+
   const toggleHeader = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setHeaderExpanded(!headerExpanded);
@@ -125,16 +165,20 @@ export default function PodScreen({ route, navigation }: Props) {
   const handleSend = async () => {
     const text = messageText.trim();
     if (!text) return;
+    const replyToId = replyTarget?.messageId;
+    const savedReply = replyTarget;
     setMessageText('');
+    setReplyTarget(null);
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const msg = await sendMessage(podId, text);
+      const msg = await sendMessage(podId, text, replyToId);
       setMessages((prev) => [...prev, msg]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send message');
       setMessageText(text);
+      if (savedReply) setReplyTarget(savedReply);
     } finally {
       setSending(false);
     }
@@ -192,6 +236,20 @@ export default function PodScreen({ route, navigation }: Props) {
   const openReportMessage = (msg: Message) => {
     setReportTarget({ type: 'message', messageId: msg.id, podId: msg.podId });
     setReportModalVisible(true);
+  };
+
+  const handleReactionSelect = async (msgId: string, emoji: string) => {
+    const msg = messages.find((m) => m.id === msgId);
+    if (!msg) return;
+    const myReaction = msg.reactions?.find((r) => r.userId === user?.id && r.emoji === emoji);
+    try {
+      const updated = myReaction
+        ? await removePodMessageReaction(podId, msgId, emoji)
+        : await addPodMessageReaction(podId, msgId, emoji);
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? updated : m)));
+    } catch {
+      // silently ignore
+    }
   };
 
   const openReportPod = () => {
@@ -516,134 +574,105 @@ export default function PodScreen({ route, navigation }: Props) {
       {/* Chat Messages */}
       <FlatList
         ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
+        data={buildChatList(messages)}
+        keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
         contentContainerStyle={styles.chatList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyChatContainer}>
-            <Ionicons name="chatbubbles-outline" size={48} color={colors.border} />
-            <Text style={styles.emptyChatTitle}>No messages yet</Text>
-            <Text style={styles.emptyChatSubtitle}>Say hi to your pod!</Text>
-          </View>
+          <EmptyChatState
+            title="No messages yet"
+            subtitle="Say hi to your pod!"
+          />
         }
-        renderItem={({ item, index }) => {
-          const isMe = item.user.id === user?.id;
+        ListFooterComponent={
+          typingUserIds.length > 0 ? (
+            <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+              <TypingIndicator userName={typingUserName} />
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => {
+          if (item.type === 'date') {
+            return <DateSeparator date={item.date} />;
+          }
+          const { message, index } = item;
+          const isMe = message.user.id === user?.id;
           const showAvatar =
             !isMe &&
-            (index === 0 || messages[index - 1].user.id !== item.user.id);
+            (index === 0 || messages[index - 1].user.id !== message.user.id);
           const isLastInGroup =
             index === messages.length - 1 ||
-            messages[index + 1].user.id !== item.user.id;
+            messages[index + 1].user.id !== message.user.id;
 
           return (
-            <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
-              {!isMe && (
-                <View style={styles.avatarSlot}>
-                  {showAvatar ? (
-                    <TouchableOpacity
-                      onPress={() =>
-                        navigation.navigate('UserProfile', {
-                          userId: item.user.id,
-                          name: item.user.name,
-                        })
-                      }
-                      activeOpacity={0.7}
-                    >
-                      <Avatar name={item.user.name} size={28} uri={resolveAvatarUrl(item.user.avatarUrl)} />
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              )}
-              <View style={styles.bubbleColumn}>
-                {showAvatar && !isMe && (
-                  <TouchableOpacity
-                    onPress={() =>
-                      navigation.navigate('UserProfile', {
-                        userId: item.user.id,
-                        name: item.user.name,
-                      })
-                    }
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.senderName}>{item.user.name.split(' ')[0]}</Text>
-                  </TouchableOpacity>
-                )}
-                {isMe ? (
-                  <LinearGradient
-                    colors={[...colors.chatMe]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[
-                      styles.bubble,
-                      styles.bubbleMe,
-                      !isLastInGroup && styles.bubbleMeGrouped,
-                    ]}
-                  >
-                    <Text style={styles.bubbleTextMe}>{item.content}</Text>
-                  </LinearGradient>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.bubble,
-                      styles.bubbleThem,
-                      !isLastInGroup && styles.bubbleThemGrouped,
-                    ]}
-                    onLongPress={() => openReportMessage(item)}
-                    activeOpacity={1}
-                    delayLongPress={400}
-                  >
-                    <Text style={styles.bubbleTextThem}>{item.content}</Text>
-                  </TouchableOpacity>
-                )}
-                {isLastInGroup && (
-                  <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
-                    {timeAgo(item.createdAt)}
-                  </Text>
-                )}
-              </View>
-            </View>
+            <MessageBubble
+              message={message}
+              isMe={isMe}
+              showAvatar={showAvatar}
+              isLastInGroup={isLastInGroup}
+              currentUserId={user?.id}
+              onLongPress={() => setReactionTargetMsgId(message.id)}
+              onAvatarPress={() =>
+                navigation.navigate('UserProfile', {
+                  userId: message.user.id,
+                  name: message.user.name,
+                })
+              }
+              resolveAvatarUrl={resolveAvatarUrl}
+            />
           );
         }}
       />
 
-      {/* Input Bar */}
-      <View style={[styles.inputBar, shadows.sm]}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Message..."
-            placeholderTextColor={colors.textTertiary}
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-            maxLength={500}
-          />
-        </View>
-        <TouchableOpacity
-          onPress={handleSend}
-          disabled={!messageText.trim() || sending}
-          activeOpacity={0.7}
-        >
-          <LinearGradient
-            colors={
-              !messageText.trim() || sending
-                ? ['#cbd5e1', '#cbd5e1']
-                : [...colors.gradient]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.sendButton}
-          >
-            {sending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Ionicons name="send" size={18} color="#fff" />
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      <ReactionPicker
+        visible={!!reactionTargetMsgId}
+        onClose={() => setReactionTargetMsgId(null)}
+        onSelect={(emoji) => {
+          if (reactionTargetMsgId) {
+            handleReactionSelect(reactionTargetMsgId, emoji);
+            setReactionTargetMsgId(null);
+          }
+        }}
+        onReply={() => {
+          const msg = messages.find((m) => m.id === reactionTargetMsgId);
+          if (msg) {
+            setReplyTarget({
+              messageId: msg.id,
+              name: msg.user.name,
+              content: msg.content,
+            });
+          }
+          setReactionTargetMsgId(null);
+        }}
+        onReport={() => {
+          const msg = messages.find((m) => m.id === reactionTargetMsgId);
+          if (msg) openReportMessage(msg);
+          setReactionTargetMsgId(null);
+        }}
+        myReaction={
+          reactionTargetMsgId
+            ? messages.find((m) => m.id === reactionTargetMsgId)?.reactions?.find(
+                (r) => r.userId === user?.id
+              )?.emoji
+            : undefined
+        }
+      />
+
+      <ChatInput
+        value={messageText}
+        onChangeText={handleMessageTextChange}
+        onSend={handleSend}
+        sending={sending}
+        placeholder="Message..."
+        maxLength={500}
+        replyPreview={
+          replyTarget
+            ? { name: replyTarget.name, content: replyTarget.content }
+            : null
+        }
+        onCancelReply={() => setReplyTarget(null)}
+      />
 
       <ReportModal
         visible={reportModalVisible}
@@ -898,120 +927,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  emptyChatContainer: {
-    alignItems: 'center',
-    marginTop: 80,
-    gap: spacing.sm,
-  },
-  emptyChatTitle: {
-    ...typography.h3,
-    color: colors.textSecondary,
-  },
-  emptyChatSubtitle: {
-    ...typography.caption,
-  },
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 3,
-  },
-  messageRowMe: {
-    justifyContent: 'flex-end',
-  },
-  avatarSlot: {
-    width: 32,
-    marginRight: 6,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  bubbleColumn: {
-    maxWidth: '75%',
-  },
-  senderName: {
-    ...typography.tiny,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 2,
-    marginLeft: 4,
-  },
-  bubble: {
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleMe: {
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 6,
-  },
-  bubbleMeGrouped: {
-    borderBottomRightRadius: 18,
-    borderTopRightRadius: 18,
-  },
-  bubbleThem: {
-    backgroundColor: colors.chatThem,
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 6,
-  },
-  bubbleThemGrouped: {
-    borderBottomLeftRadius: 18,
-    borderTopLeftRadius: 18,
-  },
-  bubbleTextMe: {
-    ...typography.body,
-    color: '#ffffff',
-  },
-  bubbleTextThem: {
-    ...typography.body,
-    color: colors.text,
-  },
-  timestamp: {
-    ...typography.tiny,
-    fontSize: 10,
-    marginTop: 2,
-    marginBottom: 6,
-    marginLeft: 4,
-  },
-  timestampMe: {
-    textAlign: 'right',
-    marginRight: 4,
-    marginLeft: 0,
-  },
-
-  // Input Bar
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    gap: spacing.sm,
-  },
-  inputWrapper: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-  },
-  textInput: {
-    fontSize: 15,
-    color: colors.text,
-    paddingVertical: 10,
-    maxHeight: 100,
-    lineHeight: 20,
-    letterSpacing: 0,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   // Friend invite modal
   inviteModal: {
     flex: 1,
