@@ -1,6 +1,7 @@
-// Change this to your machine's local IP if testing on a physical device
-// e.g. 'http://192.168.1.100:3000'
-export const API_BASE = 'http://localhost:3000';
+// Set EXPO_PUBLIC_API_URL in your .env file (or EAS secrets for production builds).
+// Falls back to localhost for local development.
+// On a physical device, set this to your machine's local IP, e.g. http://192.168.1.100:3000
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 /**
  * Resolves a stored avatar path (e.g. /uploads/avatars/x.jpg) to a full URL.
@@ -32,7 +33,7 @@ export function setOnUnauthorized(cb: (() => void) | null) {
   onUnauthorized = cb;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -45,15 +46,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   let data: unknown;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
     data = res.status === 204 ? {} : await res.json();
   } catch (err) {
+    // Re-throw AbortErrors as-is so callers can detect cancellation
+    if (err instanceof Error && err.name === 'AbortError') throw err;
     throw new Error(err instanceof Error ? err.message : 'Network request failed');
   }
 
   if (res.status === 401) {
     onUnauthorized?.();
-    throw new Error(data.error ?? 'Unauthorized');
+    throw new Error((data as { error?: string }).error ?? 'Unauthorized');
   }
 
   if (!res.ok) {
@@ -86,20 +89,23 @@ export const resendVerification = () =>
   request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
 
 // Activities
-export const getActivities = (category?: string) =>
+export const getActivities = (category?: string, signal?: AbortSignal) =>
   request<import('./types').Activity[]>(
-    category ? `/activities?category=${encodeURIComponent(category)}` : '/activities'
+    category ? `/activities?category=${encodeURIComponent(category)}` : '/activities',
+    {},
+    signal
   );
 
 // Pods
-export const getMyPods = () => request<import('./types').Pod[]>('/pods/mine');
+export const getMyPods = (signal?: AbortSignal) =>
+  request<import('./types').Pod[]>('/pods/mine', {}, signal);
 
-export const fetchFeed = (params: { category?: string; limit?: number } = {}) => {
+export const fetchFeed = (params: { category?: string; limit?: number } = {}, signal?: AbortSignal) => {
   const query = new URLSearchParams();
   if (params.category) query.set('category', params.category);
   if (params.limit) query.set('limit', String(params.limit));
   const qs = query.toString();
-  return request<import('./types').Pod[]>(qs ? `/pods/feed?${qs}` : '/pods/feed');
+  return request<import('./types').Pod[]>(qs ? `/pods/feed?${qs}` : '/pods/feed', {}, signal);
 };
 
 export const getPodsByActivity = (activityId: string, sort?: string) => {
@@ -148,15 +154,16 @@ export interface LeavePodResponse {
 export const leavePod = (podId: string) =>
   request<LeavePodResponse>(`/pods/${podId}/leave`, { method: 'POST' });
 
-export const getPod = (podId: string) => request<import('./types').Pod>(`/pods/${podId}`);
+export const getPod = (podId: string, signal?: AbortSignal) =>
+  request<import('./types').Pod>(`/pods/${podId}`, {}, signal);
 
 export interface GetMessagesResponse {
   messages: import('./types').Message[];
   typingUserIds: string[];
 }
 
-export const getMessages = (podId: string) =>
-  request<GetMessagesResponse>(`/pods/${podId}/messages`);
+export const getMessages = (podId: string, signal?: AbortSignal) =>
+  request<GetMessagesResponse>(`/pods/${podId}/messages`, {}, signal);
 
 export const sendPodTyping = (podId: string) =>
   request<{ ok: boolean }>(`/pods/${podId}/typing`, { method: 'POST' });
@@ -260,8 +267,8 @@ export const updateNotificationPreferences = (prefs: Partial<NotificationPrefere
   });
 
 // User public profile
-export const getUserProfile = (userId: string) =>
-  request<import('./types').PublicProfile>(`/users/${userId}`);
+export const getUserProfile = (userId: string, signal?: AbortSignal) =>
+  request<import('./types').PublicProfile>(`/users/${userId}`, {}, signal);
 
 // Own profile
 export const getMe = () =>

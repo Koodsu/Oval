@@ -18,19 +18,7 @@ import { DirectMessageThread } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import { colors, spacing, radii, typography, shadows } from '../theme';
-
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const isToday =
-    d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear();
-  if (isToday) {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
+import { formatThreadTime } from '../utils/format';
 
 export default function MessagesInboxScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -120,7 +108,7 @@ export default function MessagesInboxScreen() {
                     {hasUnread && <View style={styles.unreadDot} />}
                   </View>
                   {item.lastMessage && (
-                    <Text style={styles.rowTime}>{formatTime(item.lastMessage.createdAt)}</Text>
+                    <Text style={styles.rowTime}>{formatThreadTime(item.lastMessage.createdAt)}</Text>
                   )}
                 </View>
                 {preview ? (

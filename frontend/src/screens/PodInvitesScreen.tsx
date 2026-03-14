@@ -17,10 +17,7 @@ import { getPodInvites, acceptPodInvite, declinePodInvite, resolveAvatarUrl } fr
 import { PodInvite } from '../types';
 import Avatar from '../components/Avatar';
 import { colors, spacing, radii, typography, shadows } from '../theme';
-
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
+import { formatInviteTime } from '../utils/format';
 
 export default function PodInvitesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -100,7 +97,7 @@ export default function PodInvitesScreen() {
                 <Text style={styles.cardSender}>{item.sender?.name}</Text>
                 <Text style={styles.cardSubtitle}>invited you to a pod</Text>
               </View>
-              <Text style={styles.cardTime}>{formatTime(item.createdAt)}</Text>
+              <Text style={styles.cardTime}>{formatInviteTime(item.createdAt)}</Text>
             </View>
 
             {activity && (

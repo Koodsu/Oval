@@ -1,6 +1,7 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import morgan from 'morgan';
 import { rateLimit } from 'express-rate-limit';
 import path from 'path';
 
@@ -30,11 +31,25 @@ app.use(helmet({
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ?? '*',
+    origin: (() => {
+      if (process.env.NODE_ENV === 'production') {
+        if (!process.env.CORS_ORIGIN) {
+          throw new Error('CORS_ORIGIN environment variable is required in production');
+        }
+        return process.env.CORS_ORIGIN;
+      }
+      // In dev/test, allow override but default to localhost (never wildcard)
+      return process.env.CORS_ORIGIN ?? 'http://localhost:3000';
+    })(),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// HTTP request logging — skip in test to keep output clean
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+}
 
 // Public web routes: .well-known verification files + pod invite landing page
 // Must be mounted before express.json() and rate limiters so they remain publicly accessible
@@ -82,6 +97,20 @@ app.use('/pods/:id/messages', apiLimiter, messagesRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// 404 — no route matched
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Centralized error handler — catches anything forwarded via next(err) or
+// unhandled rejections in asyncHandler-wrapped routes
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[error]', err.message, err.stack);
+  const status = (err as Error & { status?: number }).status ?? 500;
+  res.status(status).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = process.env.PORT ?? 3000;

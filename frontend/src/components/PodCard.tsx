@@ -7,16 +7,7 @@ import { Pod } from '../types';
 import { AvatarStack } from './Avatar';
 import StatusBadge from './StatusBadge';
 import GradientButton from './GradientButton';
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import { formatPodTime } from '../utils/format';
 
 interface PodCardProps {
   pod: Pod;
@@ -76,7 +67,7 @@ export default function PodCard({
       {/* Meta */}
       <View style={styles.metaRow}>
         <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-        <Text style={styles.metaText}>{formatTime(pod.meetupTime)}</Text>
+        <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
       </View>
       <View style={styles.metaRow}>
         <Ionicons
