@@ -35,10 +35,19 @@ router.get('/.well-known/assetlinks.json', (_req: Request, res: Response) => {
   ]);
 });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Web landing page for pod invite links
 // Shown to users who don't have the app installed
 router.get('/pod/:podId', (req: Request, res: Response) => {
   const { podId } = req.params;
+
+  // Validate podId before embedding in HTML to prevent XSS
+  if (!UUID_RE.test(podId)) {
+    res.status(400).send('Invalid pod ID');
+    return;
+  }
+
   const deepLink = `bridge://pod/${podId}`;
   const universalLink = `https://bridge.app/pod/${podId}`;
 
@@ -147,8 +156,8 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
   </div>
 
   <script>
-    var deepLink = "${deepLink}";
-    var universalLink = "${universalLink}";
+    var deepLink = ${JSON.stringify(deepLink)};
+    var universalLink = ${JSON.stringify(universalLink)};
 
     document.getElementById('openBtn').addEventListener('click', function () {
       // Try to open the app via custom scheme; fall through to store after timeout

@@ -21,25 +21,9 @@ import GuidelinesModal from '../components/GuidelinesModal';
 import FadeIn from '../components/FadeIn';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 import { CATEGORY_META } from '../constants/categories';
+import { formatMeetupTime } from '../utils/format';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function formatMeetupTime(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
-  const weekEnd = new Date(todayStart.getTime() + 7 * 86_400_000);
-  const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-
-  if (date < tomorrowStart) return `Today ${timeStr}`;
-  if (date < new Date(tomorrowStart.getTime() + 86_400_000)) return `Tomorrow ${timeStr}`;
-  if (date < weekEnd) {
-    const dayStr = date.toLocaleDateString(undefined, { weekday: 'short' });
-    return `${dayStr} ${timeStr}`;
-  }
-  return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${timeStr}`;
-}
 
 interface DiscoveryPodCardProps {
   pod: Pod;

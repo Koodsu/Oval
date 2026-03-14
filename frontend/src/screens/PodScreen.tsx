@@ -32,22 +32,13 @@ import StatusBadge from '../components/StatusBadge';
 import ReportModal from '../components/ReportModal';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
 import { colors, spacing, radii, shadows, typography } from '../theme';
+import { formatPodTime } from '../utils/format';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 type ChatListItem =
   | { type: 'date'; id: string; date: string }
@@ -389,7 +380,7 @@ export default function PodScreen({ route, navigation }: Props) {
           <View style={styles.infoExpanded}>
             <View style={styles.metaRow}>
               <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-              <Text style={styles.metaText}>{formatTime(pod.meetupTime)}</Text>
+              <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
             </View>
             <View style={styles.metaRow}>
               <Ionicons

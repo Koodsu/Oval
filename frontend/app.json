@@ -21,12 +21,15 @@
           "color": "#6d28d9",
           "sounds": []
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bridge.app",
-      "associatedDomains": ["applinks:bridge.app"]
+      "associatedDomains": [
+        "applinks:bridge.app"
+      ]
     },
     "android": {
       "package": "com.bridge.app",
@@ -47,7 +50,10 @@
               "pathPrefix": "/pod"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },

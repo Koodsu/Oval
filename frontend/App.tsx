@@ -40,6 +40,7 @@ import MessagesInboxScreen from './src/screens/MessagesInboxScreen';
 import DirectMessageThreadScreen from './src/screens/DirectMessageThreadScreen';
 import PodInvitesScreen from './src/screens/PodInvitesScreen';
 import { colors } from './src/theme';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 export type MainTabParamList = {
   Today: undefined;
@@ -348,8 +349,10 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppNavigator />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppNavigator />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

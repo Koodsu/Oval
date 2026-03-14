@@ -1,20 +1,19 @@
 /**
  * Returns the JWT secret from the environment.
- * Logs a warning in development if the secret is not set;
- * throws in production so the server fails fast rather than
- * running with a publicly-known fallback secret.
+ * Throws at startup in every environment except test — fail fast
+ * rather than silently running with a known fallback secret.
  */
 export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('JWT_SECRET environment variable is required in production');
+    if (process.env.NODE_ENV === 'test') {
+      return 'bridge_test_secret_do_not_use_in_prod';
     }
-    console.warn(
-      '[bridge] WARNING: JWT_SECRET is not set. Using insecure default. Set JWT_SECRET in your .env file.'
+    throw new Error(
+      'JWT_SECRET environment variable is required. Add it to your .env file.\n' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
     );
-    return 'bridge_dev_secret';
   }
 
   return secret;
