@@ -5,6 +5,11 @@ export interface User {
   verifiedUniversity: boolean;
   avatarUrl?: string | null;
   joinedAt: string;
+  classYear?: string | null;
+  major?: string | null;
+  bio?: string | null;
+  clubs?: string[];
+  instagramHandle?: string | null;
 }
 
 export interface PublicProfile {
@@ -17,6 +22,11 @@ export interface PublicProfile {
   reliabilityScore: number | null;
   joinedAt: string;
   friendCount?: number;
+  classYear?: string | null;
+  major?: string | null;
+  bio?: string | null;
+  clubs?: string[];
+  instagramHandle?: string | null;
 }
 
 export type FriendRelationshipStatus =

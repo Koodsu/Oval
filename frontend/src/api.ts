@@ -67,10 +67,10 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
 }
 
 // Auth
-export const register = (name: string, email: string, password: string) =>
+export const register = (name: string, email: string, password: string, classYear: string, major: string) =>
   request<{ token: string; user: import('./types').User }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, classYear, major }),
   });
 
 export const login = (email: string, password: string) =>
@@ -273,6 +273,18 @@ export const getUserProfile = (userId: string, signal?: AbortSignal) =>
 // Own profile
 export const getMe = () =>
   request<import('./types').User>('/users/me');
+
+export const updateProfile = (data: {
+  classYear?: string;
+  major?: string;
+  bio?: string | null;
+  clubs?: string[];
+  instagramHandle?: string | null;
+}) =>
+  request<import('./types').User>('/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 
 /**
  * Upload a profile picture. Uses FormData (multipart), not JSON.
