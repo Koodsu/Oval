@@ -17,12 +17,13 @@ import { RootStackParamList } from '../../App';
 import { register } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
+import MajorPickerModal from '../components/MajorPickerModal';
 import { colors, spacing, radii, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 const CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
-const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+const CUSTOM_MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 
 export default function RegisterScreen({ navigation }: Props) {
   const { signIn } = useAuth();
@@ -30,23 +31,31 @@ export default function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [classYear, setClassYear] = useState('');
-  const [major, setMajor] = useState('');
-  const [majorError, setMajorError] = useState('');
+  // pickedMajor = the value selected in the modal (could be 'Other' or a real major)
+  const [pickedMajor, setPickedMajor] = useState('');
+  // customMajor = free text typed when 'Other' is selected
+  const [customMajor, setCustomMajor] = useState('');
+  const [customMajorError, setCustomMajorError] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const validateMajor = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return '';
-    if (trimmed.length < 2) return 'Major must be at least 2 characters';
-    if (trimmed.length > 60) return 'Major must be 60 characters or fewer';
-    if (!MAJOR_REGEX.test(trimmed)) return 'Major can only contain letters and common punctuation';
-    return '';
+  // The actual major value to send: custom text if "Other", else the picked preset
+  const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
+
+  const handleMajorSelect = (value: string) => {
+    setPickedMajor(value);
+    setCustomMajorError('');
+    setPickerVisible(false);
   };
 
-  const handleMajorChange = (value: string) => {
-    setMajor(value);
-    if (majorError) setMajorError(validateMajor(value));
+  const validateCustomMajor = (value: string) => {
+    const t = value.trim();
+    if (!t) return 'Please specify your major';
+    if (t.length < 2) return 'Major must be at least 2 characters';
+    if (t.length > 60) return 'Major must be 60 characters or fewer';
+    if (!CUSTOM_MAJOR_REGEX.test(t)) return 'Major can only contain letters and common punctuation';
+    return '';
   };
 
   const handleRegister = async () => {
@@ -66,18 +75,20 @@ export default function RegisterScreen({ navigation }: Props) {
       Alert.alert('Error', 'Please select your class year.');
       return;
     }
-    const mError = validateMajor(major);
-    if (!major.trim()) {
-      Alert.alert('Error', 'Please enter your major.');
+    if (!pickedMajor) {
+      Alert.alert('Error', 'Please select your major.');
       return;
     }
-    if (mError) {
-      setMajorError(mError);
-      return;
+    if (pickedMajor === 'Other') {
+      const err = validateCustomMajor(customMajor);
+      if (err) {
+        setCustomMajorError(err);
+        return;
+      }
     }
     setLoading(true);
     try {
-      const { token, user } = await register(name.trim(), email.trim(), password, classYear, major.trim());
+      const { token, user } = await register(name.trim(), email.trim(), password, classYear, effectiveMajor);
       await signIn(token, user);
     } catch (err: unknown) {
       Alert.alert('Registration Failed', err instanceof Error ? err.message : 'Unknown error');
@@ -174,20 +185,46 @@ export default function RegisterScreen({ navigation }: Props) {
               ))}
             </View>
 
-            <View style={[styles.inputWrapper, majorError ? styles.inputWrapperError : null]}>
+            <TouchableOpacity
+              style={styles.inputWrapper}
+              onPress={() => setPickerVisible(true)}
+              activeOpacity={0.7}
+            >
               <Ionicons name="school-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Major (e.g. Computer Science)"
-                placeholderTextColor={colors.textTertiary}
-                value={major}
-                onChangeText={handleMajorChange}
-                onBlur={() => setMajorError(validateMajor(major))}
-                maxLength={60}
-                autoCorrect={false}
-              />
-            </View>
-            {majorError ? <Text style={styles.errorText}>{majorError}</Text> : null}
+              <Text style={[styles.input, !pickedMajor && styles.inputPlaceholder]}>
+                {pickedMajor || 'Major'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+
+            {pickedMajor === 'Other' && (
+              <>
+                <View style={[styles.inputWrapper, customMajorError ? styles.inputWrapperError : null]}>
+                  <Ionicons name="create-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Specify your major"
+                    placeholderTextColor={colors.textTertiary}
+                    value={customMajor}
+                    onChangeText={(v) => {
+                      setCustomMajor(v);
+                      if (customMajorError) setCustomMajorError(validateCustomMajor(v));
+                    }}
+                    maxLength={60}
+                    autoCorrect={false}
+                    autoFocus
+                  />
+                </View>
+                {customMajorError ? <Text style={styles.errorText}>{customMajorError}</Text> : null}
+              </>
+            )}
+
+            <MajorPickerModal
+              visible={pickerVisible}
+              selected={pickedMajor}
+              onSelect={handleMajorSelect}
+              onClose={() => setPickerVisible(false)}
+            />
 
             <GradientButton
               title="Create Account"
@@ -331,6 +368,9 @@ const styles = StyleSheet.create({
   },
   inputWrapperError: {
     borderColor: colors.red,
+  },
+  inputPlaceholder: {
+    color: colors.textTertiary,
   },
   errorText: {
     fontSize: 12,
