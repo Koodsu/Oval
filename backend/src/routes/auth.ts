@@ -13,6 +13,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ALLOWED_EMAIL_SUFFIXES = ['@osu.edu', '@buckeyemail.osu.edu'];
 const VERIFY_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
+// Allows letters, spaces, &, /, -, comma, period — prevents garbage like "xoixhsiohxo"
+const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+
 function isAllowedEmail(email: string): boolean {
   const lower = email.toLowerCase();
   return ALLOWED_EMAIL_SUFFIXES.some((suffix) => lower.endsWith(suffix));
@@ -33,6 +37,11 @@ function safeUser(user: {
   verifiedUniversity: boolean;
   avatarUrl?: string | null;
   createdAt: Date;
+  classYear?: string | null;
+  major?: string | null;
+  bio?: string | null;
+  clubs?: string | null;
+  instagramHandle?: string | null;
 }) {
   return {
     id: user.id,
@@ -41,6 +50,11 @@ function safeUser(user: {
     verifiedUniversity: user.verifiedUniversity,
     avatarUrl: user.avatarUrl ?? null,
     joinedAt: user.createdAt.toISOString(),
+    classYear: user.classYear ?? null,
+    major: user.major ?? null,
+    bio: user.bio ?? null,
+    clubs: user.clubs ? (() => { try { return JSON.parse(user.clubs!); } catch { return []; } })() : [],
+    instagramHandle: user.instagramHandle ?? null,
   };
 }
 
@@ -49,10 +63,14 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   const rawName = req.body?.name;
   const rawEmail = req.body?.email;
   const rawPassword = req.body?.password;
+  const rawClassYear = req.body?.classYear;
+  const rawMajor = req.body?.major;
 
   const name = typeof rawName === 'string' ? rawName.trim() : '';
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
   const password = typeof rawPassword === 'string' ? rawPassword : '';
+  const classYear = typeof rawClassYear === 'string' ? rawClassYear.trim() : '';
+  const major = typeof rawMajor === 'string' ? rawMajor.trim() : '';
 
   if (!name || !email || !password) {
     res.status(400).json({ error: 'name, email, and password are required' });
@@ -79,6 +97,24 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  if (!classYear || !(VALID_CLASS_YEARS as readonly string[]).includes(classYear)) {
+    res.status(400).json({ error: 'classYear must be one of: Freshman, Sophomore, Junior, Senior, Grad' });
+    return;
+  }
+
+  if (!major || major.length < 2) {
+    res.status(400).json({ error: 'Major must be at least 2 characters' });
+    return;
+  }
+  if (major.length > 60) {
+    res.status(400).json({ error: 'Major must be 60 characters or fewer' });
+    return;
+  }
+  if (!MAJOR_REGEX.test(major)) {
+    res.status(400).json({ error: 'Major can only contain letters, spaces, and common punctuation (&, /, -, comma, period)' });
+    return;
+  }
+
   try {
     const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (existing) {
@@ -97,6 +133,8 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         password: hashed,
         emailVerifyCode: code,
         emailVerifyExpiry: expiry,
+        classYear,
+        major,
       },
     });
 

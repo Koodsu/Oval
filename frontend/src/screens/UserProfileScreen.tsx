@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -247,6 +248,39 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {/* Class year + major */}
+        {(profile?.classYear || profile?.major) && (
+          <Text style={styles.classYearMajor}>
+            {[profile.classYear, profile.major].filter(Boolean).join(' · ')}
+          </Text>
+        )}
+
+        {/* Bio */}
+        {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+
+        {/* Clubs */}
+        {profile?.clubs && profile.clubs.length > 0 && (
+          <View style={styles.clubsRow}>
+            {profile.clubs.map((club, i) => (
+              <View key={i} style={styles.clubChip}>
+                <Text style={styles.clubChipText}>{club}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Instagram */}
+        {profile?.instagramHandle && (
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://instagram.com/${profile.instagramHandle}`)}
+            style={styles.instagramRow}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="logo-instagram" size={14} color={colors.primary} />
+            <Text style={styles.instagramText}>@{profile.instagramHandle}</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.statsRow}>
           <View style={styles.stat}>
             <Text style={styles.statNumber}>{profile ? profile.podsAttended : '—'}</Text>
@@ -359,6 +393,48 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   verifiedText: { ...typography.tiny, color: colors.green, fontWeight: '600' },
+  classYearMajor: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  bio: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginHorizontal: spacing.sm,
+  },
+  clubsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    justifyContent: 'center',
+  },
+  clubChip: {
+    backgroundColor: colors.primary + '12',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.primary + '25',
+  },
+  clubChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  instagramRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  instagramText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',

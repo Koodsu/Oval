@@ -11,6 +11,11 @@ import {
   removeFriendshipIfExists,
 } from '../services/friendService';
 
+const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
+const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
+const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
+
 const router = Router();
 
 // ── Avatar upload setup ────────────────────────────────────────────────────────
@@ -57,6 +62,135 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
       verifiedUniversity: user.verifiedUniversity,
       avatarUrl: user.avatarUrl ?? null,
       joinedAt: user.createdAt.toISOString(),
+      classYear: user.classYear ?? null,
+      major: user.major ?? null,
+      bio: user.bio ?? null,
+      clubs: user.clubs ? (() => { try { return JSON.parse(user.clubs!); } catch { return []; } })() : [],
+      instagramHandle: user.instagramHandle ?? null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── PATCH /users/me — update profile fields ───────────────────────────────────
+
+router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { classYear, major, bio, clubs, instagramHandle } = req.body ?? {};
+
+  const updateData: Record<string, unknown> = {};
+
+  if (classYear !== undefined) {
+    if (typeof classYear !== 'string' || !(VALID_CLASS_YEARS as readonly string[]).includes(classYear)) {
+      res.status(400).json({ error: 'classYear must be one of: Freshman, Sophomore, Junior, Senior, Grad' });
+      return;
+    }
+    updateData.classYear = classYear;
+  }
+
+  if (major !== undefined) {
+    if (typeof major !== 'string') {
+      res.status(400).json({ error: 'major must be a string' });
+      return;
+    }
+    const trimmed = major.trim();
+    if (trimmed.length < 2) {
+      res.status(400).json({ error: 'Major must be at least 2 characters' });
+      return;
+    }
+    if (trimmed.length > 60) {
+      res.status(400).json({ error: 'Major must be 60 characters or fewer' });
+      return;
+    }
+    if (!MAJOR_REGEX.test(trimmed)) {
+      res.status(400).json({ error: 'Major can only contain letters, spaces, and common punctuation (&, /, -, comma, period)' });
+      return;
+    }
+    updateData.major = trimmed;
+  }
+
+  if (bio !== undefined) {
+    if (bio !== null && typeof bio !== 'string') {
+      res.status(400).json({ error: 'bio must be a string or null' });
+      return;
+    }
+    const trimmed = bio === null ? null : bio.trim();
+    if (trimmed !== null && trimmed.length > 120) {
+      res.status(400).json({ error: 'Bio must be 120 characters or fewer' });
+      return;
+    }
+    updateData.bio = trimmed || null;
+  }
+
+  if (clubs !== undefined) {
+    if (!Array.isArray(clubs)) {
+      res.status(400).json({ error: 'clubs must be an array' });
+      return;
+    }
+    if (clubs.length > 5) {
+      res.status(400).json({ error: 'You can add up to 5 clubs' });
+      return;
+    }
+    for (const club of clubs) {
+      if (typeof club !== 'string') {
+        res.status(400).json({ error: 'Each club must be a string' });
+        return;
+      }
+      const t = club.trim();
+      if (t.length < 2 || t.length > 50) {
+        res.status(400).json({ error: 'Each club must be 2–50 characters' });
+        return;
+      }
+      if (!CLUB_REGEX.test(t)) {
+        res.status(400).json({ error: 'Club names can only contain letters, spaces, &, and hyphens' });
+        return;
+      }
+    }
+    updateData.clubs = JSON.stringify(clubs.map((c: string) => c.trim()));
+  }
+
+  if (instagramHandle !== undefined) {
+    if (instagramHandle !== null && typeof instagramHandle !== 'string') {
+      res.status(400).json({ error: 'instagramHandle must be a string or null' });
+      return;
+    }
+    if (instagramHandle !== null) {
+      // Strip leading @ if present
+      const stripped = instagramHandle.replace(/^@/, '').trim();
+      if (!INSTAGRAM_REGEX.test(stripped)) {
+        res.status(400).json({ error: 'Invalid Instagram handle (letters, numbers, periods, underscores only, max 30 chars)' });
+        return;
+      }
+      updateData.instagramHandle = stripped;
+    } else {
+      updateData.instagramHandle = null;
+    }
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ error: 'No valid fields provided' });
+    return;
+  }
+
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+    res.json({
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      verifiedUniversity: updated.verifiedUniversity,
+      avatarUrl: updated.avatarUrl ?? null,
+      joinedAt: updated.createdAt.toISOString(),
+      classYear: updated.classYear ?? null,
+      major: updated.major ?? null,
+      bio: updated.bio ?? null,
+      clubs: updated.clubs ? (() => { try { return JSON.parse(updated.clubs!); } catch { return []; } })() : [],
+      instagramHandle: updated.instagramHandle ?? null,
     });
   } catch (err) {
     console.error(err);
@@ -267,6 +401,11 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       reliabilityScore,
       joinedAt: user.createdAt.toISOString(),
       friendCount,
+      classYear: user.classYear ?? null,
+      major: user.major ?? null,
+      bio: user.bio ?? null,
+      clubs: user.clubs ? (() => { try { return JSON.parse(user.clubs!); } catch { return []; } })() : [],
+      instagramHandle: user.instagramHandle ?? null,
     });
   } catch (err) {
     console.error(err);

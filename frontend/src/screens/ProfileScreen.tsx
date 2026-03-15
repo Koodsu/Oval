@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ActionSheetIOS,
   Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -244,6 +245,40 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+
+        {/* Class year + major */}
+        {(user?.classYear || user?.major) && (
+          <Text style={styles.classYearMajor}>
+            {[user.classYear, user.major].filter(Boolean).join(' · ')}
+          </Text>
+        )}
+
+        {/* Bio */}
+        {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+
+        {/* Clubs */}
+        {user?.clubs && user.clubs.length > 0 && (
+          <View style={styles.clubsRow}>
+            {user.clubs.map((club, i) => (
+              <View key={i} style={styles.clubChip}>
+                <Text style={styles.clubChipText}>{club}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Instagram */}
+        {user?.instagramHandle && (
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://instagram.com/${user.instagramHandle}`)}
+            style={styles.instagramRow}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="logo-instagram" size={14} color={colors.primary} />
+            <Text style={styles.instagramText}>@{user.instagramHandle}</Text>
+          </TouchableOpacity>
+        )}
+
         {user?.joinedAt && (
           <Text style={styles.joinedAt}>
             Joined {new Date(user.joinedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -251,6 +286,16 @@ export default function ProfileScreen() {
         )}
         <Text style={styles.editPhotoHint}>Tap photo to edit</Text>
       </View>
+
+      <TouchableOpacity
+        style={[styles.editProfileButton, shadows.sm]}
+        onPress={() => navigation.navigate('EditProfile')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="create-outline" size={18} color={colors.primary} />
+        <Text style={styles.editProfileText}>Edit Profile</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+      </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Stats</Text>
       <View style={styles.statsRow}>
@@ -469,6 +514,65 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     color: colors.textTertiary,
     marginTop: 2,
+  },
+  classYearMajor: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: spacing.xs,
+  },
+  bio: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginHorizontal: spacing.sm,
+  },
+  clubsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  clubChip: {
+    backgroundColor: colors.primary + '12',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.primary + '25',
+  },
+  clubChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  instagramRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  instagramText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+  },
+  editProfileText: {
+    ...typography.bodyBold,
+    flex: 1,
+    color: colors.primary,
   },
   sectionTitle: {
     ...typography.label,

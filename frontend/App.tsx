@@ -39,6 +39,7 @@ import UserSearchScreen from './src/screens/UserSearchScreen';
 import MessagesInboxScreen from './src/screens/MessagesInboxScreen';
 import DirectMessageThreadScreen from './src/screens/DirectMessageThreadScreen';
 import PodInvitesScreen from './src/screens/PodInvitesScreen';
+import EditProfileScreen from './src/screens/EditProfileScreen';
 import { colors } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -66,6 +67,7 @@ export type RootStackParamList = {
   UserSearch: undefined;
   DirectMessageThread: { threadId: string; otherUserId: string; otherUserName: string };
   PodInvites: undefined;
+  EditProfile: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -326,6 +328,11 @@ function AppNavigator() {
               name="PodInvites"
               component={PodInvitesScreen}
               options={{ title: 'Pod Invites' }}
+            />
+            <Stack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+              options={{ title: 'Edit Profile' }}
             />
           </>
         ) : (

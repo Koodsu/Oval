@@ -21,6 +21,11 @@ model User {
   pushToken               String?
   notificationPreferences String?
   avatarUrl               String?
+  classYear               String?
+  major                   String?
+  bio                     String?
+  clubs                   String?
+  instagramHandle         String?
 
   podMembers           PodMember[]
   messages             Message[]
