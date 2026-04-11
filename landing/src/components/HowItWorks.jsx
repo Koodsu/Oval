@@ -2,7 +2,7 @@ const STEPS = [
   {
     step: '01',
     title: 'PICK WHAT\nYOU\'RE INTO',
-    desc: 'Browse 50+ activities across 10 categories — from pickup basketball to study sessions to hiking Hocking Hills. Filter by today, this week, or right now.',
+    desc: 'Browse 50+ activities across 10 categories — from pickup basketball to study sessions to movie nights. Filter by today, this week, or right now.',
   },
   {
     step: '02',
