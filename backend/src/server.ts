@@ -37,16 +37,15 @@ app.use(
         if (!process.env.CORS_ORIGIN) {
           throw new Error('CORS_ORIGIN environment variable is required in production');
         }
-        return process.env.CORS_ORIGIN;
+        const origins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
+        return origins.length === 1 ? origins[0] : origins;
       }
-      // In dev/test, allow override but default to localhost (never wildcard)
       return process.env.CORS_ORIGIN ?? 'http://localhost:3000';
     })(),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-
 // HTTP request logging — skip in test to keep output clean
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
