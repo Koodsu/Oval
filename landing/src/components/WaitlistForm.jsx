@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const API_URL = import.meta.env.BRIDGE_API_URL ?? 'http://localhost:3000'
+const API_URL = import.meta.env.VITE_BRIDGE_API_URL ?? 'http://localhost:3000'
 
 export default function WaitlistForm({ dark = false }) {
   const [email, setEmail] = useState('')
