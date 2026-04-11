@@ -224,6 +224,9 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         },
       });
 
+      // Fire-and-forget: notify the pod creator that someone joined
+      NotificationService.notifyPodJoin(podId, userId).catch(() => {});
+
       res.status(201).json(updatedPod);
 
       // Notify creator that someone joined (fire-and-forget)
