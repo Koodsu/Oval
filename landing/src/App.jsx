@@ -9,6 +9,7 @@ import Testimonials from './components/Testimonials'
 import FinalCta from './components/FinalCta'
 import Footer from './components/Footer'
 import PrivacyPolicy from './components/PrivacyPolicy'
+import TermsOfUse from './components/TermsOfUse'
 import { useScrollReveal } from './hooks/useScrollReveal'
 
 const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`
@@ -48,6 +49,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfUse />} />
       </Routes>
       <Footer />
     </div>

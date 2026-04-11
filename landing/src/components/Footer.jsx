@@ -20,7 +20,7 @@ export default function Footer() {
           <a href="#" className={LINK_CLASS}>About</a>
           <a href="#waitlist" className={LINK_CLASS}>Waitlist</a>
           <Link to="/privacy" className={LINK_CLASS}>Privacy</Link>
-          <a href="#" className={LINK_CLASS}>Terms</a>
+          <Link to="/terms" className={LINK_CLASS}>Terms</Link>
           <a href="mailto:contactus@joinbridgeapp.com" className={LINK_CLASS}>Contact</a>
         </div>
       </div>
