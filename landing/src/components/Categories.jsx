@@ -35,7 +35,7 @@ export default function Categories() {
       </div>
 
       <p className="reveal text-center text-sm text-white/40 mt-12 font-medium tracking-wide px-8">
-        Ten categories. Hundreds of possibilities. One campus to explore.
+        50+ activities. 10 categories. 1 campus to explore.
       </p>
     </section>
   )
