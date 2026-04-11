@@ -2,7 +2,7 @@ const LINKS = ['About', 'Waitlist', 'Privacy', 'Terms', 'Contact']
 
 export default function Footer() {
   return (
-    <footer className="bg-[#0A0A08] border-t border-white/5 px-8 md:px-16 py-10">
+    <footer className="bg-[#0A0A08] border-t border-white/5 px-5 md:px-16 py-10">
       <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">

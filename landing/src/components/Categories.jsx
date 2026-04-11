@@ -6,11 +6,11 @@ const TICKER_ITEMS = [...CATEGORIES, ...CATEGORIES]
 export default function Categories() {
   return (
     <section className="bg-scarlet py-20 overflow-hidden">
-      <div className="max-w-[1400px] mx-auto px-8 md:px-16 mb-14">
+      <div className="max-w-[1400px] mx-auto px-5 md:px-16 mb-14">
         <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-white/40 mb-5">
           Activities
         </span>
-        <h2 className="reveal font-display text-[clamp(52px,8vw,110px)] tracking-wider leading-[0.88] text-white">
+        <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] tracking-wider leading-[0.92] text-white">
           WHATEVER<br />YOU'RE INTO.
         </h2>
       </div>
