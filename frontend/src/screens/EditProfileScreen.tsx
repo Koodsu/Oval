@@ -16,36 +16,54 @@ import { RootStackParamList } from '../../App';
 import { updateProfile } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
+import MajorPickerModal, { PRESET_MAJORS } from '../components/MajorPickerModal';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
 const CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
-const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+const CUSTOM_MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
 const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
+
+function initMajorState(savedMajor: string | null | undefined): { picked: string; custom: string } {
+  if (!savedMajor) return { picked: '', custom: '' };
+  if (PRESET_MAJORS.includes(savedMajor)) return { picked: savedMajor, custom: '' };
+  return { picked: 'Other', custom: savedMajor };
+}
 
 export default function EditProfileScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
 
+  const initialMajor = initMajorState(user?.major);
   const [classYear, setClassYear] = useState(user?.classYear ?? '');
-  const [major, setMajor] = useState(user?.major ?? '');
+  const [pickedMajor, setPickedMajor] = useState(initialMajor.picked);
+  const [customMajor, setCustomMajor] = useState(initialMajor.custom);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [customMajorError, setCustomMajorError] = useState('');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [clubs, setClubs] = useState<string[]>(user?.clubs ?? []);
   const [clubInput, setClubInput] = useState('');
   const [instagramHandle, setInstagramHandle] = useState(user?.instagramHandle ?? '');
 
-  const [majorError, setMajorError] = useState('');
   const [clubError, setClubError] = useState('');
   const [instagramError, setInstagramError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const validateMajor = (value: string) => {
+  const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
+
+  const handleMajorSelect = (value: string) => {
+    setPickedMajor(value);
+    setCustomMajorError('');
+    setPickerVisible(false);
+  };
+
+  const validateCustomMajor = (value: string) => {
     const t = value.trim();
-    if (!t) return 'Major is required';
+    if (!t) return 'Please specify your major';
     if (t.length < 2) return 'Major must be at least 2 characters';
     if (t.length > 60) return 'Major must be 60 characters or fewer';
-    if (!MAJOR_REGEX.test(t)) return 'Major can only contain letters and common punctuation';
+    if (!CUSTOM_MAJOR_REGEX.test(t)) return 'Major can only contain letters and common punctuation';
     return '';
   };
 
@@ -88,14 +106,20 @@ export default function EditProfileScreen({ navigation }: Props) {
   };
 
   const handleSave = async () => {
-    const mError = validateMajor(major);
-    if (mError) {
-      setMajorError(mError);
-      return;
-    }
     if (!classYear) {
       Alert.alert('Missing field', 'Please select your class year.');
       return;
+    }
+    if (!pickedMajor) {
+      Alert.alert('Missing field', 'Please select your major.');
+      return;
+    }
+    if (pickedMajor === 'Other') {
+      const err = validateCustomMajor(customMajor);
+      if (err) {
+        setCustomMajorError(err);
+        return;
+      }
     }
     if (instagramHandle && !INSTAGRAM_REGEX.test(instagramHandle)) {
       setInstagramError('Invalid handle — letters, numbers, periods, underscores only');
@@ -106,7 +130,7 @@ export default function EditProfileScreen({ navigation }: Props) {
     try {
       const updated = await updateProfile({
         classYear,
-        major: major.trim(),
+        major: effectiveMajor,
         bio: bio.trim() || null,
         clubs,
         instagramHandle: instagramHandle.trim() || null,
@@ -153,23 +177,45 @@ export default function EditProfileScreen({ navigation }: Props) {
         {/* Major */}
         <View style={[styles.section, shadows.sm]}>
           <Text style={styles.sectionTitle}>Major</Text>
-          <View style={[styles.inputWrapper, majorError ? styles.inputWrapperError : null]}>
+          <TouchableOpacity
+            style={styles.inputWrapper}
+            onPress={() => setPickerVisible(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="school-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Computer Science"
-              placeholderTextColor={colors.textTertiary}
-              value={major}
-              onChangeText={(v) => {
-                setMajor(v);
-                if (majorError) setMajorError(validateMajor(v));
-              }}
-              onBlur={() => setMajorError(validateMajor(major))}
-              maxLength={60}
-              autoCorrect={false}
-            />
-          </View>
-          {majorError ? <Text style={styles.errorText}>{majorError}</Text> : null}
+            <Text style={[styles.input, !pickedMajor && styles.inputPlaceholder]}>
+              {pickedMajor || 'Select your major'}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+          </TouchableOpacity>
+
+          {pickedMajor === 'Other' && (
+            <>
+              <View style={[styles.inputWrapper, customMajorError ? styles.inputWrapperError : null]}>
+                <Ionicons name="create-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Specify your major"
+                  placeholderTextColor={colors.textTertiary}
+                  value={customMajor}
+                  onChangeText={(v) => {
+                    setCustomMajor(v);
+                    if (customMajorError) setCustomMajorError(validateCustomMajor(v));
+                  }}
+                  maxLength={60}
+                  autoCorrect={false}
+                />
+              </View>
+              {customMajorError ? <Text style={styles.errorText}>{customMajorError}</Text> : null}
+            </>
+          )}
+
+          <MajorPickerModal
+            visible={pickerVisible}
+            selected={pickedMajor}
+            onSelect={handleMajorSelect}
+            onClose={() => setPickerVisible(false)}
+          />
         </View>
 
         {/* Bio */}
@@ -347,6 +393,9 @@ const styles = StyleSheet.create({
   },
   inputWrapperError: {
     borderColor: colors.red,
+  },
+  inputPlaceholder: {
+    color: colors.textTertiary,
   },
   inputIcon: {
     marginRight: spacing.sm,

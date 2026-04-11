@@ -12,7 +12,7 @@ import {
 } from '../services/friendService';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
-const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
 const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
 

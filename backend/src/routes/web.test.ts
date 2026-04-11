@@ -77,7 +77,7 @@ describe('Web / invite-link routes (public)', () => {
   });
 
   describe('GET /pod/:podId', () => {
-    const podId = 'test-pod-123';
+    const podId = '00000000-0000-4000-8000-000000000001';
 
     it('returns 200 with HTML content-type', async () => {
       const res = await request(app)
@@ -118,12 +118,18 @@ describe('Web / invite-link routes (public)', () => {
     });
 
     it('works with different pod IDs', async () => {
-      const otherId = 'clx99abc123';
+      const otherId = '11111111-2222-4333-a444-555555555555';
       const res = await request(app)
         .get(`/pod/${otherId}`)
         .expect(200);
 
       expect(res.text).toContain(`bridge://pod/${otherId}`);
+    });
+
+    it('rejects non-UUID pod IDs', async () => {
+      await request(app)
+        .get('/pod/not-a-valid-uuid')
+        .expect(400);
     });
   });
 });

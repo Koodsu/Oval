@@ -14,8 +14,8 @@ const ALLOWED_EMAIL_SUFFIXES = ['@osu.edu', '@buckeyemail.osu.edu'];
 const VERIFY_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
-// Allows letters, spaces, &, /, -, comma, period — prevents garbage like "xoixhsiohxo"
-const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.]+$/;
+// Allows letters, spaces, &, /, -, comma, period, parentheses — prevents garbage like "xoixhsiohxo"
+const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 
 function isAllowedEmail(email: string): boolean {
   const lower = email.toLowerCase();
