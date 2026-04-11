@@ -26,13 +26,13 @@ export default function WaitlistForm({ dark = false }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex max-w-md">
+    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row max-w-md">
       <input
         type="email"
         required
         placeholder="your@osu.edu"
         aria-label="Email address"
-        className={`flex-1 min-w-0 text-sm px-4 py-3.5 outline-none border-2 border-r-0 font-medium transition-colors ${
+        className={`flex-1 min-w-0 text-sm px-4 py-3.5 outline-none border-2 sm:border-r-0 border-b-0 sm:border-b-2 font-medium transition-colors ${
           dark
             ? 'bg-white/5 border-white/15 text-white placeholder:text-white/30 focus:border-white/40'
             : 'bg-white border-ink/25 text-ink placeholder:text-warm-gray focus:border-scarlet'
@@ -40,7 +40,7 @@ export default function WaitlistForm({ dark = false }) {
       />
       <button
         type="submit"
-        className="bg-scarlet text-white font-bold text-sm px-6 py-3.5 border-2 border-scarlet tracking-wide whitespace-nowrap transition-all duration-150 hover:bg-scarlet-bright active:scale-[0.98] flex items-center gap-2"
+        className="bg-scarlet text-white font-bold text-sm px-6 py-3.5 border-2 border-scarlet tracking-wide whitespace-nowrap transition-all duration-150 hover:bg-scarlet-bright active:scale-[0.98] flex items-center justify-center gap-2"
       >
         Get Early Access
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">

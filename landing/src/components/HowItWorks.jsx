@@ -18,14 +18,14 @@ const STEPS = [
 
 export default function HowItWorks() {
   return (
-    <section className="py-24 px-8 md:px-16 bg-cream-dark">
+    <section className="py-24 px-5 md:px-16 bg-cream-dark">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="mb-16">
           <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-warm-gray mb-5">
             How it works
           </span>
-          <h2 className="reveal font-display text-[clamp(52px,8vw,110px)] tracking-wider leading-[0.88] text-ink">
+          <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] tracking-wider leading-[0.92] text-ink">
             THREE STEPS.<br />
             <span className="text-scarlet">ZERO EXCUSES.</span>
           </h2>
@@ -36,7 +36,7 @@ export default function HowItWorks() {
           {STEPS.map(({ step, title, desc }, i) => (
             <div
               key={step}
-              className="reveal relative overflow-hidden bg-cream-dark px-8 py-10"
+              className="reveal relative overflow-hidden bg-cream-dark px-6 py-10 md:px-8"
               style={{ transitionDelay: `${i * 100}ms` }}
             >
               {/* Watermark step number */}
@@ -52,7 +52,7 @@ export default function HowItWorks() {
                   Step {step}
                 </div>
                 <div className="w-8 h-0.5 bg-scarlet mb-6" />
-                <h3 className="font-display text-[clamp(26px,3vw,42px)] tracking-wider text-ink leading-[0.92] mb-5 whitespace-pre-line">
+                <h3 className="font-display text-[clamp(22px,3vw,42px)] tracking-wider text-ink leading-[0.92] mb-5 whitespace-pre-line">
                   {title}
                 </h3>
                 <p className="text-sm text-warm-gray leading-relaxed">{desc}</p>

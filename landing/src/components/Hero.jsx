@@ -56,7 +56,7 @@ export default function Hero() {
         BRIDGE
       </div>
 
-      <div className="relative px-8 md:px-16 pt-16 pb-16 max-w-[1400px] mx-auto w-full">
+      <div className="relative px-5 md:px-16 pt-16 pb-16 max-w-[1400px] mx-auto w-full">
         {/* Eyebrow */}
         <div
           className="flex items-center gap-2.5 mb-7 transition-all duration-500"
@@ -80,7 +80,7 @@ export default function Hero() {
           ].map(({ text, color }, i) => (
             <span
               key={text}
-              className={`block text-[clamp(72px,13vw,190px)] ${color} transition-all duration-700`}
+              className={`block text-[clamp(52px,13vw,190px)] ${color} transition-all duration-700`}
               style={{
                 opacity: ready ? 1 : 0,
                 transform: ready ? 'translateY(0)' : 'translateY(48px)',
@@ -128,13 +128,17 @@ export default function Hero() {
 
           {/* Right column: sticker cards */}
           <div
-            className="relative w-full lg:w-72 h-60 flex-shrink-0"
-            style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.5s ease 0.56s' }}
+            className="relative w-full lg:w-72 h-60 flex-shrink-0 mx-auto lg:mx-0"
+            style={{
+              maxWidth: '320px',
+              opacity: ready ? 1 : 0,
+              transition: 'opacity 0.5s ease 0.56s',
+            }}
           >
             {ACTIVITY_CARDS.map(({ emoji, title, meta, tag, tagColor, rotate, top, left }, i) => (
               <div
                 key={title}
-                className="absolute bg-white border-2 border-ink shadow-[5px_5px_0_0_#0D0D0B] px-4 py-3 w-56 transition-all"
+                className="absolute bg-white border-2 border-ink shadow-[5px_5px_0_0_#0D0D0B] px-4 py-3 w-52 sm:w-56 transition-all"
                 style={{
                   top,
                   left,

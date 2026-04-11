@@ -6,7 +6,7 @@ export function useScrollReveal() {
       (entries) => entries.forEach((e) => {
         if (e.isIntersecting) e.target.classList.add('visible')
       }),
-      { threshold: 0.1 }
+      { threshold: 0.05, rootMargin: '0px 0px -40px 0px' }
     )
 
     const els = document.querySelectorAll('.reveal')

@@ -2,14 +2,14 @@ import { TESTIMONIALS } from '../data/testimonials'
 
 export default function Testimonials() {
   return (
-    <section className="py-24 px-8 md:px-16 bg-cream">
+    <section className="py-24 px-5 md:px-16 bg-cream">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="mb-16">
           <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-warm-gray mb-5">
             Early Feedback
           </span>
-          <h2 className="reveal font-display text-[clamp(52px,8vw,110px)] tracking-wider leading-[0.88] text-ink">
+          <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] tracking-wider leading-[0.92] text-ink">
             BUCKEYES<br />
             <span className="text-scarlet">ARE EXCITED.</span>
           </h2>
@@ -20,7 +20,7 @@ export default function Testimonials() {
           {TESTIMONIALS.map(({ quote, name, role, initials, gradient }, i) => (
             <div
               key={name}
-              className="reveal bg-cream px-8 py-10 relative"
+              className="reveal bg-cream px-6 py-10 md:px-8 relative"
               style={{ transitionDelay: `${i * 90}ms` }}
             >
               {/* Decorative open-quote */}

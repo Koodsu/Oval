@@ -41,14 +41,14 @@ const SMALL_CARDS = [
 
 export default function FeatureBento() {
   return (
-    <section className="py-24 px-8 md:px-16 bg-ink">
+    <section className="py-24 px-5 md:px-16 bg-ink">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="mb-16">
           <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet mb-5">
             Why Bridge
           </span>
-          <h2 className="reveal font-display text-[clamp(52px,8vw,110px)] tracking-wider leading-[0.88]">
+          <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] tracking-wider leading-[0.92]">
             <span className="text-white">BUILT</span><br />
             <span className="text-white/20">DIFFERENT.</span>
           </h2>
@@ -58,12 +58,12 @@ export default function FeatureBento() {
         <div className="grid grid-cols-12 gap-px bg-white/6">
 
           {/* Big card: real-time pods */}
-          <div className="reveal col-span-12 md:col-span-7 bg-ink p-8 transition-colors duration-200 hover:bg-white/[0.025]">
+          <div className="reveal col-span-12 md:col-span-7 bg-ink p-6 md:p-8 transition-colors duration-200 hover:bg-white/[0.025]">
             <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet mb-5">
               Real-time pods
             </div>
             <div className="w-6 h-0.5 bg-scarlet mb-5" />
-            <h3 className="font-display text-[clamp(28px,3.5vw,50px)] tracking-wider text-white leading-tight mb-4">
+            <h3 className="font-display text-[clamp(24px,3.5vw,50px)] tracking-wider text-white leading-tight mb-4">
               HAPPENING TODAY
             </h3>
             <p className="text-sm text-white/35 leading-relaxed mb-8 max-w-sm">
@@ -95,12 +95,12 @@ export default function FeatureBento() {
           </div>
 
           {/* Buckeyes-only card */}
-          <div className="reveal col-span-12 md:col-span-5 bg-ink p-8 transition-colors duration-200 hover:bg-white/[0.025]">
+          <div className="reveal col-span-12 md:col-span-5 bg-ink p-6 md:p-8 transition-colors duration-200 hover:bg-white/[0.025]">
             <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet mb-5">
               OSU-only
             </div>
             <div className="w-6 h-0.5 bg-scarlet mb-5" />
-            <h3 className="font-display text-[clamp(28px,3.5vw,50px)] tracking-wider text-white leading-tight mb-4">
+            <h3 className="font-display text-[clamp(24px,3.5vw,50px)] tracking-wider text-white leading-tight mb-4">
               BUCKEYES<br />ONLY.
             </h3>
             <p className="text-sm text-white/35 leading-relaxed mb-8">
@@ -124,7 +124,7 @@ export default function FeatureBento() {
           {SMALL_CARDS.map(({ num, title, desc }, i) => (
             <div
               key={num}
-              className="reveal col-span-12 md:col-span-4 bg-ink p-8 transition-colors duration-200 hover:bg-white/[0.025]"
+              className="reveal col-span-12 md:col-span-4 bg-ink p-6 md:p-8 transition-colors duration-200 hover:bg-white/[0.025]"
               style={{ transitionDelay: `${i * 80}ms` }}
             >
               <div

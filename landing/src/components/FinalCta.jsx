@@ -2,7 +2,7 @@ import WaitlistForm from './WaitlistForm'
 
 export default function FinalCta() {
   return (
-    <section id="waitlist" className="relative overflow-hidden py-28 px-8 md:px-16 bg-ink">
+    <section id="waitlist" className="relative overflow-hidden py-28 px-5 md:px-16 bg-ink">
       {/* Left scarlet edge */}
       <div className="absolute left-0 top-0 w-1 h-full bg-scarlet" />
 
@@ -20,10 +20,8 @@ export default function FinalCta() {
           Limited Spots
         </span>
 
-        <h2 className="reveal font-display text-[clamp(52px,9vw,130px)] tracking-wider leading-[0.88] text-white mb-14">
-          DON'T LET YOUR<br />
-          BEST COLLEGE<br />
-          MEMORIES STAY<br />
+        <h2 className="reveal font-display text-[clamp(36px,9vw,130px)] tracking-wider leading-[0.92] text-white mb-14">
+          DON'T LET YOUR BEST COLLEGE MEMORIES STAY{' '}
           <span className="text-scarlet">IN THE GROUP CHAT.</span>
         </h2>
 
