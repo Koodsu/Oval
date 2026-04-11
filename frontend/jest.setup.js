@@ -32,6 +32,15 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
+// Mock expo-notifications (no real push tokens in tests)
+jest.mock('expo-notifications', () => ({
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
+  getExpoPushTokenAsync: jest.fn().mockResolvedValue({ data: 'ExponentPushToken[test]' }),
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  setNotificationHandler: jest.fn(),
+}));
+
 // Mock @expo/vector-icons (renders nothing in tests)
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');

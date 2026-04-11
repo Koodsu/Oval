@@ -121,6 +121,8 @@ if (require.main === module) {
     startReminderScheduler();
   });
 
+  startReminderScheduler();
+
   const gracefulShutdown = () => {
     server.close(() => {
       prisma.$disconnect().then(() => process.exit(0));
