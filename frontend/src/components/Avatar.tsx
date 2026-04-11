@@ -1,11 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../theme';
+import { resolveAvatarUrl } from '../api';
 
 interface AvatarProps {
   name: string;
   size?: number;
   isYou?: boolean;
+  uri?: string | null;
 }
 
 function hashName(name: string): number {
@@ -16,10 +18,12 @@ function hashName(name: string): number {
   return Math.abs(hash);
 }
 
-export default function Avatar({ name, size = 36, isYou = false }: AvatarProps) {
+export default function Avatar({ name, size = 36, isYou = false, uri }: AvatarProps) {
+  const [imageError, setImageError] = useState(false);
   const bg = colors.avatarPalette[hashName(name) % colors.avatarPalette.length];
   const initial = name.charAt(0).toUpperCase();
   const fontSize = size * 0.42;
+  const showImage = !!uri && !imageError;
 
   return (
     <View
@@ -34,7 +38,15 @@ export default function Avatar({ name, size = 36, isYou = false }: AvatarProps) 
         isYou && styles.youRing,
       ]}
     >
-      <Text style={[styles.initial, { fontSize, lineHeight: size }]}>{initial}</Text>
+      {showImage ? (
+        <Image
+          source={{ uri }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <Text style={[styles.initial, { fontSize, lineHeight: size }]}>{initial}</Text>
+      )}
     </View>
   );
 }
@@ -46,11 +58,11 @@ export function AvatarStack({
   max = 4,
   onMemberPress,
 }: {
-  members: { id: string; user: { id: string; name: string } }[];
+  members: { id: string; user: { id: string; name: string; avatarUrl?: string | null } }[];
   currentUserId?: string;
   size?: number;
   max?: number;
-  onMemberPress?: (member: { id: string; user: { id: string; name: string } }) => void;
+  onMemberPress?: (member: { id: string; user: { id: string; name: string; avatarUrl?: string | null } }) => void;
 }) {
   const visible = members.slice(0, max);
   const overlap = size * 0.3;
@@ -60,7 +72,7 @@ export function AvatarStack({
       {visible.map((m, i) => {
         const isYou = m.user.id === currentUserId;
         const content = (
-          <Avatar name={m.user.name} size={size} isYou={isYou} />
+          <Avatar name={m.user.name} size={size} isYou={isYou} uri={resolveAvatarUrl(m.user.avatarUrl)} />
         );
 
         return (
@@ -89,6 +101,7 @@ const styles = StyleSheet.create({
   circle: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   initial: {
     color: '#ffffff',

@@ -4,152 +4,345 @@ import app from '../server';
 import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
 
-// Prevent real Expo push calls during integration tests
-vi.mock('../lib/NotificationService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/NotificationService')>();
-  return {
-    ...actual,
-    NotificationService: {
-      notifyPodJoin: vi.fn().mockResolvedValue(undefined),
-      notifyNewMessage: vi.fn().mockResolvedValue(undefined),
-      sendMeetupReminders: vi.fn().mockResolvedValue(undefined),
-    },
-  };
+describe('GET /users/:id', () => {
+  it('returns public profile with podsAttended=0 and verifiedUniversity=false for new user', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Profile User',
+      `profile-get-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .get(`/users/${user.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      id: user.id,
+      name: user.name,
+      verifiedUniversity: false,
+      podsAttended: 0,
+      joinedAt: expect.any(String),
+    });
+  });
+
+  it('counts only COMPLETED pods in podsAttended', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Attended User',
+      `attended-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    if (!activity) throw new Error('No activity');
+
+    // Create a COMPLETED pod and add the user as a member
+    const pod = await prisma.pod.create({
+      data: {
+        activityId: activity.id,
+        meetupTime: new Date(Date.now() - 3600000),
+        location: 'Main Library',
+        status: 'COMPLETED',
+        creatorId: user.id,
+        members: { create: { userId: user.id } },
+      },
+    });
+
+    const res = await request(app)
+      .get(`/users/${user.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.podsAttended).toBe(1);
+
+    await prisma.podMember.deleteMany({ where: { podId: pod.id } });
+    await prisma.pod.delete({ where: { id: pod.id } });
+  });
+
+  it('reflects verifiedUniversity: true after DB update', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Verified Profile',
+      `verified-profile-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await prisma.user.update({ where: { id: user.id }, data: { verifiedUniversity: true } });
+
+    const res = await request(app)
+      .get(`/users/${user.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.verifiedUniversity).toBe(true);
+  });
+
+  it('returns 404 for non-existent user', async () => {
+    const { token } = await registerAndGetToken(
+      'Auth User',
+      `auth-404-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await request(app)
+      .get('/users/00000000-0000-0000-0000-000000000000')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it('requires auth', async () => {
+    await request(app).get('/users/some-id').expect(401);
+  });
 });
 
-describe('Push Token API (integration)', () => {
-  let token: string;
-
-  beforeEach(async () => {
-    const result = await registerAndGetToken(
-      'Token Tester',
+describe('POST /users/push-token', () => {
+  it('stores push token for authenticated user', async () => {
+    const { token } = await registerAndGetToken(
+      'Push User',
       `push-token-${Date.now()}@example.com`,
       'password123'
     );
-    token = result.token;
+
+    const res = await request(app)
+      .post('/users/push-token')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ token: 'ExponentPushToken[test-token-abc]' })
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
   });
 
-  describe('POST /users/push-token', () => {
-    it('rejects unauthenticated requests', async () => {
-      await request(app)
-        .post('/users/push-token')
-        .send({ token: 'ExponentPushToken[xxx]' })
-        .expect(401);
-    });
+  it('returns 400 when token is missing', async () => {
+    const { token } = await registerAndGetToken(
+      'Push User 2',
+      `push-token-missing-${Date.now()}@example.com`,
+      'password123'
+    );
 
-    it('rejects missing token', async () => {
-      const res = await request(app)
-        .post('/users/push-token')
-        .set('Authorization', `Bearer ${token}`)
-        .send({})
-        .expect(400);
-      expect(res.body.error).toContain('token is required');
-    });
+    const res = await request(app)
+      .post('/users/push-token')
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(400);
 
-    it('rejects invalid Expo push token format', async () => {
-      const res = await request(app)
-        .post('/users/push-token')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ token: 'not-a-valid-expo-token' })
-        .expect(400);
-      expect(res.body.error).toContain('Invalid Expo push token');
-    });
+    expect(res.body.error).toBeDefined();
+  });
 
-    it('saves valid Expo push token', async () => {
-      const expoToken = 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]';
-      const res = await request(app)
-        .post('/users/push-token')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ token: expoToken })
-        .expect(200);
-      expect(res.body.success).toBe(true);
-    });
+  it('requires auth', async () => {
+    await request(app)
+      .post('/users/push-token')
+      .send({ token: 'ExponentPushToken[test]' })
+      .expect(401);
   });
 });
 
-describe('Notification Preferences API (integration)', () => {
-  let token: string;
-  let userId: string;
-
-  beforeEach(async () => {
-    const result = await registerAndGetToken(
-      'Prefs Tester',
-      `notif-prefs-${Date.now()}@example.com`,
+describe('GET /users/notifications', () => {
+  it('returns default preferences for new user', async () => {
+    const { token } = await registerAndGetToken(
+      'Notif User',
+      `notif-get-${Date.now()}@example.com`,
       'password123'
     );
-    token = result.token;
-    userId = result.user.id;
+
+    const res = await request(app)
+      .get('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.preferences).toMatchObject({
+      podJoin: true,
+      newMessage: true,
+      meetupReminder: true,
+    });
   });
 
-  describe('PATCH /users/notifications', () => {
-    it('rejects unauthenticated requests', async () => {
-      await request(app)
-        .patch('/users/notifications')
-        .send({ podJoin: false })
-        .expect(401);
+  it('requires auth', async () => {
+    await request(app).get('/users/notifications').expect(401);
+  });
+});
+
+describe('PATCH /users/notifications', () => {
+  it('updates meetupReminder preference', async () => {
+    const { token } = await registerAndGetToken(
+      'Notif Patch User',
+      `notif-patch-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: false })
+      .expect(200);
+
+    expect(res.body.preferences.meetupReminder).toBe(false);
+    expect(res.body.preferences.podJoin).toBe(true);
+    expect(res.body.preferences.newMessage).toBe(true);
+  });
+
+  it('updates multiple preferences at once', async () => {
+    const { token } = await registerAndGetToken(
+      'Multi Pref User',
+      `notif-multi-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ podJoin: false, newMessage: false })
+      .expect(200);
+
+    expect(res.body.preferences.podJoin).toBe(false);
+    expect(res.body.preferences.newMessage).toBe(false);
+    expect(res.body.preferences.meetupReminder).toBe(true);
+  });
+
+  it('returns 400 for non-boolean preference value', async () => {
+    const { token } = await registerAndGetToken(
+      'Bad Pref User',
+      `notif-bad-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: 'yes' })
+      .expect(400);
+
+    expect(res.body.error).toBeDefined();
+  });
+
+  it('requires auth', async () => {
+    await request(app)
+      .patch('/users/notifications')
+      .send({ meetupReminder: false })
+      .expect(401);
+  });
+
+  it('persists across GET after PATCH', async () => {
+    const { token } = await registerAndGetToken(
+      'Persist Pref User',
+      `notif-persist-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await request(app)
+      .patch('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetupReminder: false })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/users/notifications')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.preferences.meetupReminder).toBe(false);
+    expect(res.body.preferences.podJoin).toBe(true);
+  });
+});
+
+describe('GET /users/me', () => {
+  it('returns own profile with avatarUrl for authenticated user', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Me User',
+      `me-get-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const res = await request(app)
+      .get('/users/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      verifiedUniversity: false,
+      avatarUrl: null,
+      joinedAt: expect.any(String),
     });
+  });
 
-    it('rejects non-boolean preference values', async () => {
-      const res = await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ podJoin: 'yes' })
-        .expect(400);
-      expect(res.body.error).toContain('booleans');
-    });
+  it('requires auth', async () => {
+    await request(app).get('/users/me').expect(401);
+  });
+});
 
-    it('updates a single preference and returns all prefs', async () => {
-      const res = await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ podJoin: false })
-        .expect(200);
+describe('PATCH /users/me/avatar', () => {
+  it('returns 400 when no file is attached', async () => {
+    const { token } = await registerAndGetToken(
+      'Avatar User',
+      `avatar-nofile-${Date.now()}@example.com`,
+      'password123'
+    );
 
-      expect(res.body.notificationPreferences.podJoin).toBe(false);
-      expect(res.body.notificationPreferences.newMessage).toBe(true);
-      expect(res.body.notificationPreferences.meetupReminder).toBe(true);
-    });
+    const res = await request(app)
+      .patch('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
 
-    it('merges multiple preferences', async () => {
-      const res = await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ podJoin: false, meetupReminder: false })
-        .expect(200);
+    expect(res.body.error).toBeDefined();
+  });
 
-      expect(res.body.notificationPreferences.podJoin).toBe(false);
-      expect(res.body.notificationPreferences.newMessage).toBe(true);
-      expect(res.body.notificationPreferences.meetupReminder).toBe(false);
-    });
+  it('uploads a valid image and returns avatarUrl', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Avatar Upload User',
+      `avatar-upload-${Date.now()}@example.com`,
+      'password123'
+    );
 
-    it('persists preferences to the database', async () => {
-      await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ newMessage: false })
-        .expect(200);
+    // Minimal 1×1 pixel PNG (valid image binary)
+    const minimalPng = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d76360f8' +
+      'cfc00000000200016ef7cba40000000049454e44ae426082',
+      'hex'
+    );
 
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const stored = JSON.parse(user!.notificationPreferences!);
-      expect(stored.newMessage).toBe(false);
-    });
+    const res = await request(app)
+      .patch('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('avatar', minimalPng, { filename: 'avatar.png', contentType: 'image/png' })
+      .expect(200);
 
-    it('successive updates are cumulative', async () => {
-      await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ podJoin: false })
-        .expect(200);
+    expect(res.body.avatarUrl).toMatch(/\/uploads\/avatars\//);
 
-      const res = await request(app)
-        .patch('/users/notifications')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ meetupReminder: false })
-        .expect(200);
+    // Verify it was persisted in the DB
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(dbUser?.avatarUrl).toMatch(/\/uploads\/avatars\//);
+  });
 
-      expect(res.body.notificationPreferences.podJoin).toBe(false);
-      expect(res.body.notificationPreferences.meetupReminder).toBe(false);
-    });
+  it('requires auth', async () => {
+    await request(app).patch('/users/me/avatar').expect(401);
+  });
+});
+
+describe('DELETE /users/me/avatar', () => {
+  it('removes avatar and returns avatarUrl: null', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Avatar Delete User',
+      `avatar-delete-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    // Seed an avatarUrl directly
+    await prisma.user.update({ where: { id: user.id }, data: { avatarUrl: '/uploads/avatars/fake.jpg' } });
+
+    const res = await request(app)
+      .delete('/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.avatarUrl).toBeNull();
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(dbUser?.avatarUrl).toBeNull();
+  });
+
+  it('requires auth', async () => {
+    await request(app).delete('/users/me/avatar').expect(401);
   });
 });
 

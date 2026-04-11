@@ -44,6 +44,14 @@ export default function ActivityCard({ activity, onPress }: ActivityCardProps) {
           <Ionicons name="location-outline" size={12} color={colors.textTertiary} />
           <Text style={styles.location} numberOfLines={1}>{activity.defaultLocation}</Text>
         </View>
+        {(activity._count?.pods ?? 0) > 0 && (
+          <View style={styles.podCountRow}>
+            <View style={styles.podCountDot} />
+            <Text style={styles.podCountText}>
+              {activity._count!.pods} {activity._count!.pods === 1 ? 'pod' : 'pods'} forming
+            </Text>
+          </View>
+        )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.border} style={styles.chevron} />
     </TouchableOpacity>
@@ -98,6 +106,23 @@ const styles = StyleSheet.create({
   location: {
     ...typography.tiny,
     flex: 1,
+  },
+  podCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  podCountDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.green,
+  },
+  podCountText: {
+    ...typography.tiny,
+    color: colors.green,
+    fontWeight: '600',
   },
   chevron: {
     marginLeft: 2,

@@ -3,7 +3,8 @@ import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
-import { NotificationService } from '../lib/NotificationService';
+import { notifyPodJoin } from '../lib/NotificationService';
+import { setTyping } from '../lib/typingStore';
 
 const router = Router();
 
@@ -34,13 +35,68 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     res.json(pods);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /pods/feed — cross-activity discovery feed, soonest first then most-joined
+router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { category, limit = '20' } = req.query;
+  const userId = req.user!.userId;
+  const now = new Date();
+
+  try {
+    const blockedIds = await getBlockedUserIds(userId);
+
+    const where: Record<string, unknown> = {
+      status: FORMING,
+      meetupTime: { gt: now },
+      members: { none: { userId: { in: [...blockedIds] } } },
+    };
+
+    if (category && typeof category === 'string') {
+      where.activity = { category };
+    }
+
+    const [pods, pastMembers] = await Promise.all([
+      prisma.pod.findMany({
+        where,
+        include: {
+          activity: true,
+          members: {
+            include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+          },
+        },
+        take: Math.min(Number(limit) || 20, 50),
+      }),
+      prisma.podMember.findMany({
+        where: { userId },
+        include: { pod: { select: { activityId: true } } },
+        take: 20,
+      }),
+    ]);
+
+    const preferredActivityIds = new Set(pastMembers.map((pm) => pm.pod.activityId));
+
+    // v1 matching sort: meetupTime asc, then memberCount desc as tiebreaker
+    pods.sort((a, b) => {
+      const timeDiff = new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return b.members.length - a.members.length;
+    });
+
+    const result = pods.map((p) => ({ ...p, recommended: preferredActivityIds.has(p.activityId) }));
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -75,7 +131,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
       },
       orderBy,
@@ -164,7 +220,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         include: {
           activity: true,
           creator: { select: { id: true } },
-          members: { include: { user: { select: { id: true, name: true } } } },
+          members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
         },
       });
 
@@ -172,6 +228,14 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       NotificationService.notifyPodJoin(podId, userId).catch(() => {});
 
       res.status(201).json(updatedPod);
+
+      // Notify creator that someone joined (fire-and-forget)
+      if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
+        const joiner = updatedPod.members.find((m) => m.userId === userId);
+        if (joiner) {
+          notifyPodJoin(podId, joiner.user.name).catch(() => {});
+        }
+      }
       return;
     }
 
@@ -258,7 +322,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
 
@@ -303,7 +367,7 @@ router.post('/:id/lock', requireAuth, async (req: AuthRequest, res: Response): P
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json(updated);
@@ -367,7 +431,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json({ left: true, podDeleted: false, pod: updatedPod });
@@ -411,10 +475,36 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
     res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/typing
+router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id: podId } = req.params;
+  const userId = req.user!.userId;
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const membership = pod.members.find((m) => m.userId === userId);
+    if (!membership) {
+      res.status(403).json({ error: 'Not a member of this pod' });
+      return;
+    }
+    setTyping('pod', podId, userId);
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -426,15 +516,17 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   const { id } = req.params;
   const userId = req.user!.userId;
 
+  const memberInclude = {
+    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+  };
+
   try {
     let pod = await prisma.pod.findUnique({
       where: { id },
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: {
-          include: { user: { select: { id: true, name: true } } },
-        },
+        members: memberInclude,
       },
     });
 
@@ -459,14 +551,24 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
         include: {
           activity: true,
           creator: { select: { id: true } },
-          members: {
-            include: { user: { select: { id: true, name: true } } },
-          },
+          members: memberInclude,
         },
       });
     }
 
-    res.json(pod);
+    // Include no-show user IDs for completed pods so frontend can show attendance status
+    const noShowUserIds =
+      pod.status === COMPLETED
+        ? (
+            await prisma.noShowReport.findMany({
+              where: { podId: id },
+              select: { targetUserId: true },
+              distinct: ['targetUserId'],
+            })
+          ).map((r) => r.targetUserId)
+        : [];
+
+    res.json({ ...pod, noShowUserIds });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

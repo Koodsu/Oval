@@ -188,6 +188,7 @@ const styles = StyleSheet.create({
     flex: 1,
     ...typography.body,
     paddingVertical: 0,
+    letterSpacing: 0,
   },
   list: {
     paddingHorizontal: spacing.lg,

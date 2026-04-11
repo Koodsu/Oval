@@ -17,17 +17,46 @@ import { RootStackParamList } from '../../App';
 import { register } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
+import MajorPickerModal from '../components/MajorPickerModal';
 import { colors, spacing, radii, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
+
+const CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
+const CUSTOM_MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 
 export default function RegisterScreen({ navigation }: Props) {
   const { signIn } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [classYear, setClassYear] = useState('');
+  // pickedMajor = the value selected in the modal (could be 'Other' or a real major)
+  const [pickedMajor, setPickedMajor] = useState('');
+  // customMajor = free text typed when 'Other' is selected
+  const [customMajor, setCustomMajor] = useState('');
+  const [customMajorError, setCustomMajorError] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // The actual major value to send: custom text if "Other", else the picked preset
+  const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
+
+  const handleMajorSelect = (value: string) => {
+    setPickedMajor(value);
+    setCustomMajorError('');
+    setPickerVisible(false);
+  };
+
+  const validateCustomMajor = (value: string) => {
+    const t = value.trim();
+    if (!t) return 'Please specify your major';
+    if (t.length < 2) return 'Major must be at least 2 characters';
+    if (t.length > 60) return 'Major must be 60 characters or fewer';
+    if (!CUSTOM_MAJOR_REGEX.test(t)) return 'Major can only contain letters and common punctuation';
+    return '';
+  };
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -42,9 +71,24 @@ export default function RegisterScreen({ navigation }: Props) {
       Alert.alert('Error', 'Password must be at least 8 characters.');
       return;
     }
+    if (!classYear) {
+      Alert.alert('Error', 'Please select your class year.');
+      return;
+    }
+    if (!pickedMajor) {
+      Alert.alert('Error', 'Please select your major.');
+      return;
+    }
+    if (pickedMajor === 'Other') {
+      const err = validateCustomMajor(customMajor);
+      if (err) {
+        setCustomMajorError(err);
+        return;
+      }
+    }
     setLoading(true);
     try {
-      const { token, user } = await register(name.trim(), email.trim(), password);
+      const { token, user } = await register(name.trim(), email.trim(), password, classYear, effectiveMajor);
       await signIn(token, user);
     } catch (err: unknown) {
       Alert.alert('Registration Failed', err instanceof Error ? err.message : 'Unknown error');
@@ -124,6 +168,63 @@ export default function RegisterScreen({ navigation }: Props) {
                 />
               </TouchableOpacity>
             </View>
+
+            <Text style={styles.fieldLabel}>Class Year</Text>
+            <View style={styles.pillRow}>
+              {CLASS_YEARS.map((year) => (
+                <TouchableOpacity
+                  key={year}
+                  style={[styles.pill, classYear === year && styles.pillSelected]}
+                  onPress={() => setClassYear(year)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.pillText, classYear === year && styles.pillTextSelected]}>
+                    {year}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.inputWrapper}
+              onPress={() => setPickerVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="school-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+              <Text style={[styles.input, !pickedMajor && styles.inputPlaceholder]}>
+                {pickedMajor || 'Major'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+
+            {pickedMajor === 'Other' && (
+              <>
+                <View style={[styles.inputWrapper, customMajorError ? styles.inputWrapperError : null]}>
+                  <Ionicons name="create-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Specify your major"
+                    placeholderTextColor={colors.textTertiary}
+                    value={customMajor}
+                    onChangeText={(v) => {
+                      setCustomMajor(v);
+                      if (customMajorError) setCustomMajorError(validateCustomMajor(v));
+                    }}
+                    maxLength={60}
+                    autoCorrect={false}
+                    autoFocus
+                  />
+                </View>
+                {customMajorError ? <Text style={styles.errorText}>{customMajorError}</Text> : null}
+              </>
+            )}
+
+            <MajorPickerModal
+              visible={pickerVisible}
+              selected={pickedMajor}
+              onSelect={handleMajorSelect}
+              onClose={() => setPickerVisible(false)}
+            />
 
             <GradientButton
               title="Create Account"
@@ -215,6 +316,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
+    letterSpacing: 0,
   },
   eyeButton: {
     padding: spacing.xs,
@@ -230,5 +332,51 @@ const styles = StyleSheet.create({
   linkBold: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  pill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm - 2,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  pillSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '15',
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  pillTextSelected: {
+    color: colors.primary,
+  },
+  inputWrapperError: {
+    borderColor: colors.red,
+  },
+  inputPlaceholder: {
+    color: colors.textTertiary,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.red,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
 });

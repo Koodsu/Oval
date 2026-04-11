@@ -2,6 +2,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import Avatar, { AvatarStack } from './Avatar';
 
+jest.mock('../api', () => ({
+  resolveAvatarUrl: (url: string | null | undefined) => url ?? undefined,
+}));
+
 describe('Avatar', () => {
   it('renders the first letter of the name', () => {
     render(<Avatar name="Alice" />);
@@ -21,6 +25,17 @@ describe('Avatar', () => {
   it('renders with isYou flag without crashing', () => {
     render(<Avatar name="Dave" isYou />);
     expect(screen.getByText('D')).toBeTruthy();
+  });
+
+  it('renders an Image when uri is provided instead of initial text', () => {
+    render(<Avatar name="Eve" uri="http://example.com/avatar.jpg" />);
+    // Image is rendered; initial text should not be present
+    expect(screen.queryByText('E')).toBeNull();
+  });
+
+  it('falls back to initials when uri is null', () => {
+    render(<Avatar name="Frank" uri={null} />);
+    expect(screen.getByText('F')).toBeTruthy();
   });
 });
 

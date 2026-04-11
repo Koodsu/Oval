@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../../App';
-import { getActivities } from '../api';
+import { getActivities, resolveAvatarUrl } from '../api';
 import { Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -62,7 +62,7 @@ export default function ActivityListScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Avatar name={user?.name ?? 'U'} size={42} />
+          <Avatar name={user?.name ?? 'U'} size={42} uri={resolveAvatarUrl(user?.avatarUrl)} />
           <View style={styles.headerText}>
             <Text style={styles.greeting}>Hey, {firstName}</Text>
             <Text style={styles.subtitle}>Find your next crew</Text>

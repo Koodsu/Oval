@@ -1,28 +1,53 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id                      String   @id @default(uuid())
+  id                      String    @id @default(uuid())
   name                    String
-  email                   String   @unique
+  email                   String    @unique
   password                String
+  createdAt               DateTime  @default(now())
+  verifiedUniversity      Boolean   @default(false)
+  emailVerifyCode         String?
+  emailVerifyExpiry       DateTime?
   pushToken               String?
-  notificationPreferences String? // JSON-serialized { podJoin, newMessage, meetupReminder }
-  createdAt               DateTime @default(now())
+  notificationPreferences String?
+  avatarUrl               String?
+  classYear               String?
+  major                   String?
+  bio                     String?
+  clubs                   String?
+  instagramHandle         String?
 
-  podMembers      PodMember[]
-  messages        Message[]
-  createdPods     Pod[]
-  blocksGiven     Block[] @relation("Blocker")
-  blocksReceived  Block[] @relation("Blocked")
-  reportsGiven    Report[] @relation("ReportReporter")
-  reportsReceived Report[] @relation("ReportTarget")
+  podMembers           PodMember[]
+  messages             Message[]
+  messageReactions     MessageReaction[]
+  directMessageReactions DirectMessageReaction[]
+  createdPods          Pod[]
+  blocksGiven       Block[]        @relation("Blocker")
+  blocksReceived    Block[]        @relation("Blocked")
+  reportsGiven      Report[]       @relation("ReportReporter")
+  reportsReceived   Report[]       @relation("ReportTarget")
+  noShowsGiven      NoShowReport[] @relation("NoShowReporter")
+  noShowsReceived   NoShowReport[] @relation("NoShowTarget")
+
+  sentFriendRequests     FriendRequest[]       @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[]       @relation("FriendRequestReceiver")
+  friendshipsAsA         Friendship[]          @relation("FriendshipUserA")
+  friendshipsAsB         Friendship[]          @relation("FriendshipUserB")
+  dmThreadsAsA           DirectMessageThread[] @relation("DMThreadUserA")
+  dmThreadsAsB           DirectMessageThread[] @relation("DMThreadUserB")
+  directMessages         DirectMessage[]
+  sentPodInvites         PodInvite[]           @relation("PodInviteSender")
+  receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
 }
 
 model Block {
@@ -64,18 +89,21 @@ model Pod {
   creatorId    String?
   createdAt    DateTime @default(now())
 
-  activity Activity    @relation(fields: [activityId], references: [id])
-  creator  User?       @relation(fields: [creatorId], references: [id])
-  members  PodMember[]
-  messages Message[]
-  reports  Report[]
+  activity      Activity       @relation(fields: [activityId], references: [id])
+  creator       User?          @relation(fields: [creatorId], references: [id])
+  members       PodMember[]
+  messages      Message[]
+  reports       Report[]
+  noShowReports NoShowReport[]
+  podInvites    PodInvite[]
 }
 
 model PodMember {
-  id       String   @id @default(uuid())
-  podId    String
-  userId   String
-  joinedAt DateTime @default(now())
+  id          String    @id @default(uuid())
+  podId       String
+  userId      String
+  joinedAt    DateTime  @default(now())
+  confirmedAt DateTime?
 
   pod  Pod  @relation(fields: [podId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -88,11 +116,29 @@ model Message {
   podId     String
   userId    String
   content   String
+  replyToId String?
   createdAt DateTime @default(now())
 
-  pod     Pod     @relation(fields: [podId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
-  reports Report[]
+  pod       Pod               @relation(fields: [podId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]         @relation("MessageReplies")
+  reports   Report[]
+  reactions MessageReaction[]
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 model Report {
@@ -118,4 +164,123 @@ model Report {
   @@index([podId])
   @@index([messageId])
   @@index([targetUserId])
+}
+
+model NoShowReport {
+  id           String   @id @default(uuid())
+  podId        String
+  reporterId   String
+  targetUserId String
+  createdAt    DateTime @default(now())
+
+  pod      Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
+  reporter User @relation("NoShowReporter", fields: [reporterId], references: [id])
+  target   User @relation("NoShowTarget", fields: [targetUserId], references: [id])
+
+  @@unique([podId, reporterId, targetUserId])
+  @@index([targetUserId])
+  @@index([podId])
+}
+
+// FriendRequestStatus values: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED"
+
+model FriendRequest {
+  id          String    @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([senderId, receiverId])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA User @relation("FriendshipUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model DirectMessageThread {
+  id               String    @id @default(uuid())
+  userAId          String
+  userBId          String
+  userALastReadAt  DateTime?
+  userBLastReadAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  userA    User            @relation("DMThreadUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User            @relation("DMThreadUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages DirectMessage[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model DirectMessage {
+  id         String   @id @default(uuid())
+  threadId   String
+  senderId   String
+  content    String
+  replyToId  String?
+  createdAt  DateTime @default(now())
+
+  thread     DirectMessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender     User                  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo    DirectMessage?        @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies    DirectMessage[]       @relation("DMReplies")
+  reactions  DirectMessageReaction[]
+
+  @@index([threadId, createdAt])
+  @@index([senderId])
+}
+
+model DirectMessageReaction {
+  id               String   @id @default(uuid())
+  directMessageId  String
+  userId           String
+  emoji            String
+  createdAt        DateTime @default(now())
+
+  directMessage DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([directMessageId, userId, emoji])
+  @@index([directMessageId])
+}
+
+// PodInviteStatus values: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"
+
+model PodInvite {
+  id          String    @id @default(uuid())
+  podId       String
+  senderId    String
+  receiverId  String
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  pod      Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
+  sender   User @relation("PodInviteSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("PodInviteReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([podId, senderId, receiverId])
+  @@index([receiverId])
+  @@index([podId])
+  @@index([senderId])
 }

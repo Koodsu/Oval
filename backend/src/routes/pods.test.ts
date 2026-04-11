@@ -125,6 +125,251 @@ describe('Pods API (integration)', () => {
     });
   });
 
+  describe('GET /pods/feed', () => {
+    it('returns empty array when no pods exist', async () => {
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('returns FORMING pods across activities sorted by meetupTime asc', async () => {
+      const soonTime = new Date(Date.now() + 2 * 3600000);
+      const laterTime = new Date(Date.now() + 48 * 3600000);
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: laterTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const { token: token2 } = await registerAndGetToken(
+        'Feed User 2',
+        `feed-user2-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const sportsActivity = await prisma.activity.findFirst({
+        where: { category: 'Sports & Fitness' },
+      });
+      if (!sportsActivity) throw new Error('No Sports activity');
+
+      const sportsLocation = 'RPAC';
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token2}`)
+        .send({
+          activityId: sportsActivity.id,
+          meetupTime: soonTime.toISOString(),
+          location: sportsLocation,
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThanOrEqual(2);
+
+      // Should be sorted by meetupTime ascending
+      const times = res.body.map((p: { meetupTime: string }) => new Date(p.meetupTime).getTime());
+      for (let i = 1; i < times.length; i++) {
+        expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
+      }
+
+      // Should include activity and members
+      expect(res.body[0].activity).toBeDefined();
+      expect(res.body[0].members).toBeDefined();
+    });
+
+    it('filters by category', async () => {
+      const res = await request(app)
+        .get('/pods/feed?category=Academic')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      res.body.forEach((p: { activity: { category: string } }) => {
+        expect(p.activity.category).toBe('Academic');
+      });
+    });
+
+    it('requires auth', async () => {
+      await request(app).get('/pods/feed').expect(401);
+    });
+
+    it('sorts by memberCount desc when two pods have the same meetupTime', async () => {
+      const sameTime = new Date(Date.now() + 3 * 3600000).toISOString();
+
+      const { token: tokenA } = await registerAndGetToken(
+        'Sort A',
+        `sort-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB } = await registerAndGetToken(
+        'Sort B',
+        `sort-b-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenC } = await registerAndGetToken(
+        'Sort C',
+        `sort-c-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const sportsActivity = await prisma.activity.findFirst({
+        where: { category: 'Sports & Fitness' },
+      });
+      if (!sportsActivity) throw new Error('No Sports activity');
+
+      // tokenA creates a pod (1 member)
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ activityId: sportsActivity.id, meetupTime: sameTime, location: 'RPAC' })
+        .expect(201);
+
+      // tokenB creates another pod (1 member), then tokenC joins it (2 members total)
+      const podBRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ activityId, meetupTime: sameTime, location: validLocation })
+        .expect(201);
+
+      // join always returns 201 (same handler, join or create)
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenC}`)
+        .send({ podId: podBRes.body.id })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      // Find the two pods with matching meetupTime
+      const samePods = res.body.filter(
+        (p: { meetupTime: string }) => new Date(p.meetupTime).toISOString() === new Date(sameTime).toISOString()
+      );
+      if (samePods.length >= 2) {
+        expect(samePods[0].members.length).toBeGreaterThanOrEqual(samePods[1].members.length);
+      }
+    });
+
+    it('marks recommended=true for pods in activities the user has previously joined', async () => {
+      const { token: tokenR } = await registerAndGetToken(
+        'Rec User',
+        `rec-user-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const { token: tokenOther } = await registerAndGetToken(
+        'Rec Other',
+        `rec-other-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const sportsActivity = await prisma.activity.findFirst({
+        where: { category: 'Sports & Fitness' },
+      });
+      if (!sportsActivity) throw new Error('No Sports activity');
+
+      // userR creates an academic pod — establishes activity preference in PodMember history
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenR}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 2 * 3600000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      // tokenOther creates a second academic pod (same activityId, different time)
+      // — should be recommended for userR because activityId is in their history
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenOther}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 4 * 3600000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      // tokenOther creates a sports pod — NOT in userR's PodMember history
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenOther}`)
+        .send({
+          activityId: sportsActivity.id,
+          meetupTime: new Date(Date.now() + 6 * 3600000).toISOString(),
+          location: 'RPAC',
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${tokenR}`)
+        .expect(200);
+
+      // Find any academic pod that belongs to tokenOther (not the one userR is in)
+      const academicPods = res.body.filter(
+        (p: { activityId: string }) => p.activityId === activityId
+      );
+      const sportsPod = res.body.find(
+        (p: { activityId: string }) => p.activityId === sportsActivity.id
+      );
+
+      // All academic pods should be recommended because activityId is in userR's history
+      expect(academicPods.length).toBeGreaterThanOrEqual(1);
+      academicPods.forEach((p: { recommended: boolean }) => {
+        expect(p.recommended).toBe(true);
+      });
+
+      // Sports pod is not in userR's history
+      if (sportsPod) {
+        expect(sportsPod.recommended).toBe(false);
+      }
+    });
+
+    it('each pod in the feed has a recommended boolean field', async () => {
+      const { token: tokenNew } = await registerAndGetToken(
+        'Bool Check',
+        `bool-check-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 5 * 3600000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${tokenNew}`)
+        .expect(200);
+
+      res.body.forEach((p: { recommended: unknown }) => {
+        expect(typeof p.recommended).toBe('boolean');
+      });
+    });
+  });
+
   describe('GET /pods?activityId=', () => {
     it('returns FORMING pods for activity', async () => {
       const res = await request(app)
@@ -368,6 +613,45 @@ describe('Pods API (integration)', () => {
         .get(`/pods/${createRes.body.id}`)
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(404);
+    });
+
+    it('GET /pods/feed excludes pods from blocked users', async () => {
+      const { token: tokenA } = await registerAndGetToken(
+        'Feed Block A',
+        `feed-block-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: tokenB, user: userB } = await registerAndGetToken(
+        'Feed Block B',
+        `feed-block-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      // Block userB: pod should disappear from A's feed
+      await request(app)
+        .post(`/users/${userB.id}/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const creatorIds = res.body.flatMap((p: { members: { userId: string }[] }) =>
+        p.members.map((m) => m.userId)
+      );
+      expect(creatorIds).not.toContain(userB.id);
     });
 
     it('cleanup: blocking removes both users from shared pod', async () => {
