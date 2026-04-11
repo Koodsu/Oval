@@ -46,6 +46,8 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+app.options('*', cors());
+
 // HTTP request logging — skip in test to keep output clean
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
