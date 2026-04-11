@@ -602,14 +602,9 @@ export default function PrivacyPolicy() {
         <Section id="contact" title="11. How Can You Contact Us About This Notice?">
           <P>
             If you have questions or comments about this notice, you may email us at{' '}
-            <A href={`mailto:${EMAIL}`}>{EMAIL}</A> or contact us by post at:
+            <A href={`mailto:${EMAIL}`}>{EMAIL}</A>
           </P>
-          <address className="not-italic text-sm text-white/55 leading-relaxed pl-4 border-l border-white/10">
-            Bridge<br />
-            10058 Cartgate Ct<br />
-            Dublin, OH 43017<br />
-            United States
-          </address>
+          
         </Section>
 
         {/* 12. Review/delete */}
