@@ -18,7 +18,7 @@ export default function Footer() {
           {LINKS.map((link) => (
             <a
               key={link}
-              href={link === 'Contact' ? 'mailto:hello@bridge.app' : '#'}
+              href={link === 'Contact' ? 'mailto:contactus@joinbridgeapp.com' : '#'}
               className="text-[11px] font-medium text-white/25 no-underline tracking-[0.12em] uppercase transition-colors duration-150 hover:text-white/60"
             >
               {link}
