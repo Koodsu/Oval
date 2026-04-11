@@ -3,7 +3,7 @@ import { AuthRequest, requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { hasBlockingRelationship } from '../lib/blocks';
 import { areFriends } from '../lib/friendUtils';
-import { notifyPodJoin } from '../lib/NotificationService';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router();
 router.use(requireAuth);
@@ -241,7 +241,7 @@ router.post('/invites/:id/accept', async (req: AuthRequest, res: Response): Prom
     if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
       const joiner = updatedPod.members.find((m) => m.userId === userId);
       if (joiner) {
-        notifyPodJoin(pod.id, joiner.user.name).catch(() => {});
+        NotificationService.notifyPodJoin(pod.id, joiner.userId).catch(() => {});
       }
     }
   } catch {

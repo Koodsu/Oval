@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { hasBlockingRelationship } from '../lib/blocks';
-import { notifyNewMessage } from '../lib/NotificationService';
+import { NotificationService } from '../lib/NotificationService';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 
@@ -132,7 +132,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     });
 
     // Fire-and-forget — don't await so message response isn't delayed
-    notifyNewMessage(podId, userId, message.user.name, trimmed).catch(() => {});
+    NotificationService.notifyNewMessage(podId, userId).catch(() => {});
 
     res.status(201).json(message);
   } catch (err) {
