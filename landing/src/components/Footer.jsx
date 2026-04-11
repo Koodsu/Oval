@@ -1,4 +1,6 @@
-const LINKS = ['About', 'Waitlist', 'Privacy', 'Terms', 'Contact']
+import { Link } from 'react-router-dom'
+
+const LINK_CLASS = 'text-[11px] font-medium text-white/25 no-underline tracking-[0.12em] uppercase transition-colors duration-150 hover:text-white/60'
 
 export default function Footer() {
   return (
@@ -15,20 +17,17 @@ export default function Footer() {
         </div>
 
         <div className="flex flex-wrap gap-6">
-          {LINKS.map((link) => (
-            <a
-              key={link}
-              href={link === 'Contact' ? 'mailto:contactus@joinbridgeapp.com' : '#'}
-              className="text-[11px] font-medium text-white/25 no-underline tracking-[0.12em] uppercase transition-colors duration-150 hover:text-white/60"
-            >
-              {link}
-            </a>
-          ))}
+          <a href="#" className={LINK_CLASS}>About</a>
+          <a href="#waitlist" className={LINK_CLASS}>Waitlist</a>
+          <Link to="/privacy" className={LINK_CLASS}>Privacy</Link>
+          <a href="#" className={LINK_CLASS}>Terms</a>
+          <a href="mailto:contactus@joinbridgeapp.com" className={LINK_CLASS}>Contact</a>
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto mt-8 pt-6 border-t border-white/5">
-        <p className="text-xs text-white/12 tracking-wide">© 2026 Bridge. Made for Buckeyes.</p>
+      <div className="max-w-[1400px] mx-auto mt-8 pt-6 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p className="text-xs text-white/20 tracking-wide">© 2026 Bridge. Made for Buckeyes.</p>
+        <p className="text-xs text-white/20 tracking-wide">Not affiliated with The Ohio State University.</p>
       </div>
     </footer>
   )
