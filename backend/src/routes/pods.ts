@@ -3,7 +3,7 @@ import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
-import { notifyPodJoin } from '../lib/NotificationService';
+import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
 
 const router = Router();
@@ -230,7 +230,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
         const joiner = updatedPod.members.find((m) => m.userId === userId);
         if (joiner) {
-          notifyPodJoin(podId, joiner.user.name).catch(() => {});
+          NotificationService.notifyPodJoin(podId, joiner.userId).catch(() => {});
         }
       }
       return;

@@ -19,6 +19,7 @@ import webRoutes from './routes/web';
 import friendsRoutes from './routes/friends';
 import directMessagesRoutes from './routes/directMessages';
 import podInvitesRoutes from './routes/podInvites';
+import waitlistRoutes from './routes/waitlist';
 
 const app = express();
 
@@ -78,6 +79,15 @@ const apiLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test',
 });
 
+const waitlistLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
 app.use('/auth', authLimiter, authRoutes);
 app.use('/activities', apiLimiter, activitiesRoutes);
 app.use('/pods', apiLimiter, podsRoutes);
@@ -94,6 +104,9 @@ app.use('/pods', apiLimiter, podInvitesRoutes);
 // Messages are nested under pods: /pods/:id/messages
 // Separate router with mergeParams so :id is accessible
 app.use('/pods/:id/messages', apiLimiter, messagesRoutes);
+
+//Waitlist
+app.use('/waitlist', waitlistLimiter, waitlistRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
