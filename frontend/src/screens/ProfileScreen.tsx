@@ -30,6 +30,12 @@ import Avatar from '../components/Avatar';
 import TagPills from '../components/TagPills';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
+const DEFAULT_PREFS: NotificationPreferences = {
+  podJoin: true,
+  newMessage: true,
+  meetupReminder: true,
+};
+
 export default function ProfileScreen() {
   const { user, updateUser } = useAuth();
   const insets = useSafeAreaInsets();
@@ -337,6 +343,39 @@ export default function ProfileScreen() {
         <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     </ScrollView>
+  );
+}
+
+interface NotifRowProps {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  description: string;
+  value: boolean;
+  saving: boolean;
+  onToggle: (value: boolean) => void;
+}
+
+function NotifRow({ icon, label, description, value, saving, onToggle }: NotifRowProps) {
+  return (
+    <View style={styles.prefRow}>
+      <View style={[styles.prefIconWrap, { backgroundColor: colors.primary + '15' }]}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.prefText}>
+        <Text style={styles.prefLabel}>{label}</Text>
+        <Text style={styles.prefDescription}>{description}</Text>
+      </View>
+      {saving ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Switch
+          value={value}
+          onValueChange={onToggle}
+          trackColor={{ false: colors.border, true: colors.primary + '80' }}
+          thumbColor={value ? colors.primary : colors.surface}
+        />
+      )}
+    </View>
   );
 }
 
