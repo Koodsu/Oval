@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Switch,
   TouchableOpacity,
   ActivityIndicator,
   ActionSheetIOS,
@@ -22,28 +21,20 @@ import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../../App';
 import {
   getMyPods,
-  getNotificationPreferences,
-  updateNotificationPreferences,
   uploadAvatar,
   deleteAvatar,
   resolveAvatarUrl,
-  NotificationPreferences,
 } from '../api';
 import { Pod } from '../types';
 import Avatar from '../components/Avatar';
-import GradientButton from '../components/GradientButton';
+import TagPills from '../components/TagPills';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 export default function ProfileScreen() {
-  const { user, signOut, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [pods, setPods] = useState<Pod[]>([]);
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>({
-    podJoin: true,
-    newMessage: true,
-    meetupReminder: true,
-  });
   const [avatarUploading, setAvatarUploading] = useState(false);
 
   const fetchStats = useCallback(async () => {
@@ -55,31 +46,9 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  const fetchNotifPrefs = useCallback(async () => {
-    try {
-      const { preferences } = await getNotificationPreferences();
-      setNotifPrefs(preferences);
-    } catch {
-      // Non-critical
-    }
-  }, []);
-
   useEffect(() => {
     fetchStats();
-    fetchNotifPrefs();
-  }, [fetchStats, fetchNotifPrefs]);
-
-  const handleToggleNotif = async (key: keyof NotificationPreferences, value: boolean) => {
-    const optimistic = { ...notifPrefs, [key]: value };
-    setNotifPrefs(optimistic);
-    try {
-      const { preferences } = await updateNotificationPreferences({ [key]: value });
-      setNotifPrefs(preferences);
-    } catch {
-      setNotifPrefs(notifPrefs);
-      Alert.alert('Error', 'Failed to update notification setting.');
-    }
-  };
+  }, [fetchStats]);
 
   const pickAndUploadImage = async (source: 'camera' | 'library') => {
     try {
@@ -172,7 +141,6 @@ export default function ProfileScreen() {
         }
       );
     } else {
-      // Android: use a simple Alert
       const buttons: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' }[] = [
         { text: 'Take Photo', onPress: () => pickAndUploadImage('camera') },
         { text: 'Choose from Library', onPress: () => pickAndUploadImage('library') },
@@ -195,13 +163,6 @@ export default function ProfileScreen() {
 
   const activePods = pods.filter((p) => p.status === 'FORMING' || p.status === 'LOCKED');
   const completedPods = pods.filter((p) => p.status === 'COMPLETED');
-
-  const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: signOut },
-    ]);
-  };
 
   const avatarUri = resolveAvatarUrl(user?.avatarUrl);
 
@@ -267,6 +228,11 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Interest Tags */}
+        {user?.interestTags && user.interestTags.length > 0 && (
+          <TagPills tags={user.interestTags} style={styles.interestTagsRow} />
+        )}
+
         {/* Instagram */}
         {user?.instagramHandle && (
           <TouchableOpacity
@@ -314,8 +280,8 @@ export default function ProfileScreen() {
           <Text style={styles.statLabel}>Completed</Text>
         </View>
         <View style={[styles.statCard, shadows.sm]}>
-          <View style={[styles.statIcon, { backgroundColor: colors.violet + '15' }]}>
-            <Ionicons name="star" size={20} color={colors.violet} />
+          <View style={[styles.statIcon, { backgroundColor: colors.primary + '15' }]}>
+            <Ionicons name="star" size={20} color={colors.primary} />
           </View>
           <Text style={styles.statNumber}>{pods.length}</Text>
           <Text style={styles.statLabel}>Total Pods</Text>
@@ -361,75 +327,15 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Activity</Text>
       <TouchableOpacity
-        style={styles.reportsLink}
-        onPress={() => navigation.navigate('MyReports')}
+        style={[styles.settingsButton, shadows.sm]}
+        onPress={() => navigation.navigate('Settings')}
+        activeOpacity={0.8}
       >
-        <Ionicons name="flag-outline" size={20} color={colors.primary} />
-        <Text style={styles.reportsLinkText}>My Reports</Text>
+        <Ionicons name="settings-outline" size={20} color={colors.primary} />
+        <Text style={styles.settingsText}>Settings</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
       </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>Notifications</Text>
-      <View style={[styles.notifCard, shadows.sm]}>
-        <View style={styles.notifRow}>
-          <View style={styles.notifLabelGroup}>
-            <Ionicons name="people-outline" size={18} color={colors.primary} />
-            <View>
-              <Text style={styles.notifLabel}>Pod joins</Text>
-              <Text style={styles.notifSubLabel}>When someone joins your pod</Text>
-            </View>
-          </View>
-          <Switch
-            value={notifPrefs.podJoin}
-            onValueChange={(v) => handleToggleNotif('podJoin', v)}
-            trackColor={{ false: colors.border, true: colors.primary + '55' }}
-            thumbColor={notifPrefs.podJoin ? colors.primary : colors.textTertiary}
-          />
-        </View>
-        <View style={styles.notifDivider} />
-        <View style={styles.notifRow}>
-          <View style={styles.notifLabelGroup}>
-            <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
-            <View>
-              <Text style={styles.notifLabel}>New messages</Text>
-              <Text style={styles.notifSubLabel}>Chat activity in your pods</Text>
-            </View>
-          </View>
-          <Switch
-            value={notifPrefs.newMessage}
-            onValueChange={(v) => handleToggleNotif('newMessage', v)}
-            trackColor={{ false: colors.border, true: colors.primary + '55' }}
-            thumbColor={notifPrefs.newMessage ? colors.primary : colors.textTertiary}
-          />
-        </View>
-        <View style={styles.notifDivider} />
-        <View style={styles.notifRow}>
-          <View style={styles.notifLabelGroup}>
-            <Ionicons name="alarm-outline" size={18} color={colors.primary} />
-            <View>
-              <Text style={styles.notifLabel}>Meetup reminders</Text>
-              <Text style={styles.notifSubLabel}>1 hour before your meetup</Text>
-            </View>
-          </View>
-          <Switch
-            value={notifPrefs.meetupReminder}
-            onValueChange={(v) => handleToggleNotif('meetupReminder', v)}
-            trackColor={{ false: colors.border, true: colors.primary + '55' }}
-            thumbColor={notifPrefs.meetupReminder ? colors.primary : colors.textTertiary}
-          />
-        </View>
-      </View>
-
-      <View style={styles.signOutSection}>
-        <GradientButton
-          title="Sign Out"
-          onPress={handleSignOut}
-          icon="log-out-outline"
-          variant="outline"
-        />
-      </View>
     </ScrollView>
   );
 }
@@ -535,6 +441,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2,
   },
+  interestTagsRow: {
+    justifyContent: 'center',
+    marginTop: 2,
+  },
   clubChip: {
     backgroundColor: colors.primary + '12',
     borderRadius: radii.pill,
@@ -631,56 +541,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
     marginLeft: spacing.md,
   },
-  reportsLink: {
+  settingsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
-    ...shadows.sm,
   },
-  reportsLinkText: {
+  settingsText: {
     ...typography.bodyBold,
     flex: 1,
-    color: colors.primary,
-  },
-  signOutSection: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.xxl,
-  },
-  notifCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    marginHorizontal: spacing.lg,
-    overflow: 'hidden',
-  },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  notifLabelGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm + 2,
-    flex: 1,
-  },
-  notifLabel: {
-    ...typography.bodyBold,
-    fontSize: 14,
-  },
-  notifSubLabel: {
-    ...typography.tiny,
-    color: colors.textTertiary,
-    marginTop: 1,
-  },
-  notifDivider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginLeft: spacing.md,
+    color: colors.text,
   },
 });

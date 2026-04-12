@@ -61,7 +61,7 @@ describe('PodCard', () => {
     expect(onJoin).toHaveBeenCalledTimes(1);
   });
 
-  it('shows "Pod is full" when pod is at capacity and user is not a member', () => {
+  it('shows "Pod is full" when pod is at capacity, no waitlist handler', () => {
     const fullPod: Pod = {
       ...basePod,
       maxMembers: 2,
@@ -70,6 +70,44 @@ describe('PodCard', () => {
       <PodCard pod={fullPod} onJoin={jest.fn()} onView={jest.fn()} isJoining={false} isMember={false} />
     );
     expect(screen.getByText('Pod is full')).toBeTruthy();
+  });
+
+  it('shows "Join Waitlist" when pod is full and onJoinWaitlist is provided', () => {
+    const fullPod: Pod = {
+      ...basePod,
+      maxMembers: 2,
+    };
+    render(
+      <PodCard
+        pod={fullPod}
+        onJoin={jest.fn()}
+        onView={jest.fn()}
+        onJoinWaitlist={jest.fn()}
+        isJoining={false}
+        isMember={false}
+      />
+    );
+    expect(screen.getByText('Join Waitlist')).toBeTruthy();
+  });
+
+  it('calls onJoinWaitlist when "Join Waitlist" is pressed', () => {
+    const onJoinWaitlist = jest.fn();
+    const fullPod: Pod = {
+      ...basePod,
+      maxMembers: 2,
+    };
+    render(
+      <PodCard
+        pod={fullPod}
+        onJoin={jest.fn()}
+        onView={jest.fn()}
+        onJoinWaitlist={onJoinWaitlist}
+        isJoining={false}
+        isMember={false}
+      />
+    );
+    fireEvent.press(screen.getByText('Join Waitlist'));
+    expect(onJoinWaitlist).toHaveBeenCalledTimes(1);
   });
 
   it('renders member count correctly', () => {

@@ -40,6 +40,8 @@ import MessagesInboxScreen from './src/screens/MessagesInboxScreen';
 import DirectMessageThreadScreen from './src/screens/DirectMessageThreadScreen';
 import PodInvitesScreen from './src/screens/PodInvitesScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import PeopleYouMetScreen from './src/screens/PeopleYouMetScreen';
 import { colors } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -68,6 +70,8 @@ export type RootStackParamList = {
   DirectMessageThread: { threadId: string; otherUserId: string; otherUserName: string };
   PodInvites: undefined;
   EditProfile: undefined;
+  Settings: undefined;
+  PeopleYouMet: { podId: string };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -130,6 +134,7 @@ function MainTabs() {
             android: { elevation: 8 },
           }),
         },
+        animation: 'fade',
       })}
     >
       <Tab.Screen
@@ -251,6 +256,7 @@ function AppNavigator() {
           headerBackButtonDisplayMode: 'minimal',
           contentStyle: { backgroundColor: colors.bg },
           animation: 'slide_from_right',
+          animationDuration: 250,
         }}
       >
         {user && !user.verifiedUniversity ? (
@@ -287,6 +293,7 @@ function AppNavigator() {
               options={{
                 title: 'Your Pod',
                 headerBlurEffect: 'light',
+                animation: 'fade_from_bottom',
               }}
             />
             <Stack.Screen
@@ -333,6 +340,16 @@ function AppNavigator() {
               name="EditProfile"
               component={EditProfileScreen}
               options={{ title: 'Edit Profile' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ title: 'Settings' }}
+            />
+            <Stack.Screen
+              name="PeopleYouMet"
+              component={PeopleYouMetScreen}
+              options={{ title: 'People You Met' }}
             />
           </>
         ) : (

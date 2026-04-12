@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../Avatar';
-import { colors, spacing, radii, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 export interface MessageReactionItem {
   emoji: string;
@@ -80,90 +79,84 @@ export default function MessageBubble({
     }));
   }, [message.reactions, currentUserId]);
 
-  const bubbleStyle = [
-    styles.bubble,
-    isMe ? styles.bubbleMe : styles.bubbleThem,
-    !isLastInGroup && (isMe ? styles.bubbleMeGrouped : styles.bubbleThemGrouped),
-  ];
+  // Tail: last message in a group gets a smaller bottom corner (iMessage style)
+  // Non-last messages in a group get fully rounded corners on the "inner" side
+  const bubbleStyle = isMe
+    ? [
+        styles.bubble,
+        styles.bubbleMe,
+        !isLastInGroup && styles.bubbleMeGrouped,
+      ]
+    : [
+        styles.bubble,
+        styles.bubbleThem,
+        !isLastInGroup && styles.bubbleThemGrouped,
+      ];
 
   return (
     <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
+      {/* Avatar slot always present for "them" to maintain alignment */}
       {!isMe && (
         <View style={styles.avatarSlot}>
           {showAvatar && sender ? (
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
-              <Avatar name={sender.name} size={28} uri={avatarUri} />
+              <Avatar name={sender.name} size={30} uri={avatarUri} />
             </TouchableOpacity>
           ) : null}
         </View>
       )}
-      <View style={styles.bubbleColumn}>
+
+      <View style={[styles.bubbleColumn, isMe && styles.bubbleColumnMe]}>
+        {/* Sender name above first message in a sequence (others only) */}
         {showAvatar && !isMe && sender && (
           <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
             <Text style={styles.senderName}>{sender.name.split(' ')[0]}</Text>
           </TouchableOpacity>
         )}
-        {isMe ? (
-          <TouchableOpacity
-            onLongPress={onLongPress}
-            activeOpacity={1}
-            delayLongPress={400}
-          >
-            <LinearGradient
-              colors={[...colors.chatMe]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={bubbleStyle}
-            >
-              {message.replyTo && (
-                <View style={styles.replyPreview}>
-                  <Text style={styles.replyPreviewName} numberOfLines={1}>
-                    {(message.replyTo.user ?? message.replyTo.sender)?.name ?? 'Unknown'}
-                  </Text>
-                  <Text style={styles.replyPreviewContent} numberOfLines={2}>
-                    {message.replyTo.content}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.bubbleTextMe}>{message.content}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={bubbleStyle}
-            onLongPress={onLongPress}
-            activeOpacity={1}
-            delayLongPress={400}
-          >
-            {message.replyTo && (
-              <View style={styles.replyPreviewThem}>
-                <Text style={styles.replyPreviewName} numberOfLines={1}>
-                  {(message.replyTo.user ?? message.replyTo.sender)?.name ?? 'Unknown'}
-                </Text>
-                <Text style={styles.replyPreviewContentThem} numberOfLines={2}>
-                  {message.replyTo.content}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.bubbleTextThem}>{message.content}</Text>
-          </TouchableOpacity>
-        )}
+
+        <TouchableOpacity
+          style={bubbleStyle}
+          onLongPress={onLongPress}
+          activeOpacity={0.95}
+          delayLongPress={400}
+        >
+          {/* Reply preview */}
+          {message.replyTo && (
+            <View style={isMe ? styles.replyPreviewMe : styles.replyPreviewThem}>
+              <Text style={isMe ? styles.replyPreviewNameMe : styles.replyPreviewNameThem} numberOfLines={1}>
+                {(message.replyTo.user ?? message.replyTo.sender)?.name ?? 'Unknown'}
+              </Text>
+              <Text style={isMe ? styles.replyPreviewContentMe : styles.replyPreviewContentThem} numberOfLines={2}>
+                {message.replyTo.content}
+              </Text>
+            </View>
+          )}
+          <Text style={isMe ? styles.bubbleTextMe : styles.bubbleTextThem}>
+            {message.content}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Reactions */}
         {reactionGroups.length > 0 && (
           <View style={[styles.reactionsRow, isMe && styles.reactionsRowMe]}>
             {reactionGroups.map(({ emoji, count }) => (
-              <Text key={emoji} style={styles.reactionChip}>
-                {emoji}{count > 1 ? ` ${count}` : ''}
-              </Text>
+              <View key={emoji} style={styles.reactionChip}>
+                <Text style={styles.reactionChipText}>
+                  {emoji}{count > 1 ? ` ${count}` : ''}
+                </Text>
+              </View>
             ))}
           </View>
         )}
+
+        {/* Timestamp + read receipt on last message in group */}
         {isLastInGroup && (
           <View style={[styles.timestampRow, isMe && styles.timestampRowMe]}>
             <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
               {formatTime(message.createdAt)}
             </Text>
             {isMe && isReadByOther && (
-              <Ionicons name="checkmark-done" size={14} color={colors.primary} style={styles.readReceipt} />
+              <Ionicons name="checkmark-done" size={13} color={colors.primary} style={styles.readReceipt} />
             )}
           </View>
         )}
@@ -172,129 +165,173 @@ export default function MessageBubble({
   );
 }
 
+const BUBBLE_RADIUS = 18;
+const TAIL_RADIUS = 4;
+const CHAT_BG = '#F5F5F5';
+const THEM_BORDER = '#E5E5EA';
+
 const styles = StyleSheet.create({
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: 3,
+    marginBottom: 2,
+    paddingHorizontal: spacing.sm,
   },
   messageRowMe: {
     justifyContent: 'flex-end',
   },
   avatarSlot: {
-    width: 32,
+    width: 34,
     marginRight: 6,
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
   bubbleColumn: {
-    maxWidth: '75%',
+    maxWidth: '72%',
+  },
+  bubbleColumnMe: {
+    alignItems: 'flex-end',
   },
   senderName: {
     ...typography.tiny,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: 2,
-    marginLeft: 4,
+    marginBottom: 3,
+    marginLeft: 2,
+    fontSize: 11,
   },
+
+  // Base bubble
   bubble: {
-    borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    borderRadius: BUBBLE_RADIUS,
   },
+
+  // My messages — scarlet, tail bottom-right
   bubbleMe: {
+    backgroundColor: colors.chatMe,
     alignSelf: 'flex-end',
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: TAIL_RADIUS,
   },
+  // Non-last "me" messages in a sequence — fully rounded right side
   bubbleMeGrouped: {
-    borderBottomRightRadius: 18,
-    borderTopRightRadius: 18,
+    borderBottomRightRadius: BUBBLE_RADIUS,
+    borderTopRightRadius: BUBBLE_RADIUS,
   },
+
+  // Their messages — white with gray border, tail bottom-left
   bubbleThem: {
     backgroundColor: colors.chatThem,
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: TAIL_RADIUS,
+    borderWidth: 1,
+    borderColor: THEM_BORDER,
   },
+  // Non-last "them" messages in a sequence — fully rounded left side
   bubbleThemGrouped: {
-    borderBottomLeftRadius: 18,
-    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: BUBBLE_RADIUS,
+    borderTopLeftRadius: BUBBLE_RADIUS,
   },
+
   bubbleTextMe: {
     ...typography.body,
-    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
   },
   bubbleTextThem: {
     ...typography.body,
+    fontSize: 15,
+    lineHeight: 20,
     color: colors.text,
   },
+
+  // Timestamps
   timestampRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-    marginBottom: 6,
-    marginLeft: 4,
+    gap: 3,
+    marginTop: 3,
+    marginBottom: 4,
+    marginLeft: 2,
   },
   timestampRowMe: {
     alignSelf: 'flex-end',
     marginLeft: 0,
-    marginRight: 4,
+    marginRight: 2,
   },
   timestamp: {
     ...typography.tiny,
     fontSize: 10,
+    color: colors.textTertiary,
   },
   timestampMe: {
     textAlign: 'right',
   },
   readReceipt: {
-    marginLeft: 2,
+    marginLeft: 1,
   },
+
+  // Reactions
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
     marginTop: 4,
-    marginLeft: 4,
+    marginLeft: 2,
     alignSelf: 'flex-start',
   },
   reactionsRowMe: {
     alignSelf: 'flex-end',
     marginLeft: 0,
-    marginRight: 4,
+    marginRight: 2,
   },
   reactionChip: {
-    ...typography.tiny,
+    backgroundColor: CHAT_BG,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: THEM_BORDER,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  reactionChipText: {
     fontSize: 12,
   },
-  replyPreview: {
-    borderLeftWidth: 3,
-    borderLeftColor: 'rgba(255,255,255,0.6)',
+
+  // Reply previews
+  replyPreviewMe: {
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(255,255,255,0.5)',
     paddingLeft: 8,
     marginBottom: 6,
   },
   replyPreviewThem: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.textTertiary,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.primary + '60',
     paddingLeft: 8,
     marginBottom: 6,
   },
-  replyPreviewName: {
-    ...typography.tiny,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
+  replyPreviewNameMe: {
     fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
   },
-  replyPreviewContent: {
-    ...typography.tiny,
-    color: 'rgba(255,255,255,0.8)',
+  replyPreviewNameThem: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  replyPreviewContentMe: {
     fontSize: 12,
-    marginTop: 2,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 1,
+    lineHeight: 16,
   },
   replyPreviewContentThem: {
-    ...typography.tiny,
-    color: colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
+    color: colors.textSecondary,
+    marginTop: 1,
+    lineHeight: 16,
   },
 });

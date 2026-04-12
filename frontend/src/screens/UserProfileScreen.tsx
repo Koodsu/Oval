@@ -29,6 +29,7 @@ import { useAuth } from '../context/AuthContext';
 import { PublicProfile, FriendRelationship } from '../types';
 import Avatar from '../components/Avatar';
 import ReportModal from '../components/ReportModal';
+import TagPills from '../components/TagPills';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
@@ -269,6 +270,11 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {/* Interest Tags */}
+        {profile?.interestTags && profile.interestTags.length > 0 && (
+          <TagPills tags={profile.interestTags} style={styles.interestTagsRow} />
+        )}
+
         {/* Instagram */}
         {profile?.instagramHandle && (
           <TouchableOpacity
@@ -411,6 +417,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.xs,
     justifyContent: 'center',
+  },
+  interestTagsRow: {
+    justifyContent: 'center',
+    marginTop: 2,
   },
   clubChip: {
     backgroundColor: colors.primary + '12',

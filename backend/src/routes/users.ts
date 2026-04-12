@@ -10,11 +10,17 @@ import {
   cancelPendingRequestsBetween,
   removeFriendshipIfExists,
 } from '../services/friendService';
+import { INTEREST_TAG_SET } from '../config/interestTags';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
 const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
+
+function parseJsonArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
 
 const router = Router();
 
@@ -65,8 +71,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
       classYear: user.classYear ?? null,
       major: user.major ?? null,
       bio: user.bio ?? null,
-      clubs: user.clubs ? (() => { try { return JSON.parse(user.clubs!); } catch { return []; } })() : [],
+      clubs: parseJsonArray(user.clubs),
       instagramHandle: user.instagramHandle ?? null,
+      interestTags: parseJsonArray(user.interestTags),
     });
   } catch (err) {
     console.error(err);
@@ -78,7 +85,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
 
 router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
-  const { classYear, major, bio, clubs, instagramHandle } = req.body ?? {};
+  const { classYear, major, bio, clubs, instagramHandle, interestTags } = req.body ?? {};
 
   const updateData: Record<string, unknown> = {};
 
@@ -169,6 +176,24 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
     }
   }
 
+  if (interestTags !== undefined) {
+    if (!Array.isArray(interestTags)) {
+      res.status(400).json({ error: 'interestTags must be an array' });
+      return;
+    }
+    if (interestTags.length > 5) {
+      res.status(400).json({ error: 'You can select up to 5 interest tags' });
+      return;
+    }
+    for (const tag of interestTags) {
+      if (typeof tag !== 'string' || !INTEREST_TAG_SET.has(tag)) {
+        res.status(400).json({ error: `Invalid interest tag: ${tag}` });
+        return;
+      }
+    }
+    updateData.interestTags = JSON.stringify(interestTags);
+  }
+
   if (Object.keys(updateData).length === 0) {
     res.status(400).json({ error: 'No valid fields provided' });
     return;
@@ -189,8 +214,9 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
       classYear: updated.classYear ?? null,
       major: updated.major ?? null,
       bio: updated.bio ?? null,
-      clubs: updated.clubs ? (() => { try { return JSON.parse(updated.clubs!); } catch { return []; } })() : [],
+      clubs: parseJsonArray(updated.clubs),
       instagramHandle: updated.instagramHandle ?? null,
+      interestTags: parseJsonArray(updated.interestTags),
     });
   } catch (err) {
     console.error(err);
@@ -275,7 +301,7 @@ router.get('/notifications', requireAuth, async (req: AuthRequest, res: Response
   const userId = req.user!.userId;
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    const defaults = { podJoin: true, newMessage: true, meetupReminder: true };
+    const defaults = { podJoin: true, newMessage: true, meetupReminder: true, recapPrompt: true, waitlistSpot: true };
     const prefs = user?.notificationPreferences
       ? (() => {
           try { return { ...defaults, ...JSON.parse(user.notificationPreferences) }; } catch { return defaults; }
@@ -291,12 +317,14 @@ router.get('/notifications', requireAuth, async (req: AuthRequest, res: Response
 // PATCH /users/notifications — update notification preferences
 router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
-  const { podJoin, newMessage, meetupReminder } = req.body;
+  const { podJoin, newMessage, meetupReminder, recapPrompt, waitlistSpot } = req.body;
 
   if (
     (podJoin !== undefined && typeof podJoin !== 'boolean') ||
     (newMessage !== undefined && typeof newMessage !== 'boolean') ||
-    (meetupReminder !== undefined && typeof meetupReminder !== 'boolean')
+    (meetupReminder !== undefined && typeof meetupReminder !== 'boolean') ||
+    (recapPrompt !== undefined && typeof recapPrompt !== 'boolean') ||
+    (waitlistSpot !== undefined && typeof waitlistSpot !== 'boolean')
   ) {
     res.status(400).json({ error: 'Preference values must be booleans' });
     return;
@@ -309,13 +337,15 @@ router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Respon
           try { return JSON.parse(user.notificationPreferences); } catch { return {}; }
         })()
       : {};
-    const defaults = { podJoin: true, newMessage: true, meetupReminder: true };
+    const defaults = { podJoin: true, newMessage: true, meetupReminder: true, recapPrompt: true, waitlistSpot: true };
     const updated = {
       ...defaults,
       ...current,
       ...(podJoin !== undefined && { podJoin }),
       ...(newMessage !== undefined && { newMessage }),
       ...(meetupReminder !== undefined && { meetupReminder }),
+      ...(recapPrompt !== undefined && { recapPrompt }),
+      ...(waitlistSpot !== undefined && { waitlistSpot }),
     };
 
     await prisma.user.update({
@@ -404,8 +434,9 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       classYear: user.classYear ?? null,
       major: user.major ?? null,
       bio: user.bio ?? null,
-      clubs: user.clubs ? (() => { try { return JSON.parse(user.clubs!); } catch { return []; } })() : [],
+      clubs: parseJsonArray(user.clubs),
       instagramHandle: user.instagramHandle ?? null,
+      interestTags: parseJsonArray(user.interestTags),
     });
   } catch (err) {
     console.error(err);

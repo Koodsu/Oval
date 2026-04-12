@@ -17,6 +17,7 @@ import { updateProfile } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import MajorPickerModal, { PRESET_MAJORS } from '../components/MajorPickerModal';
+import { INTEREST_TAGS, INTEREST_TAG_META } from '../constants/interestTags';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
@@ -45,6 +46,7 @@ export default function EditProfileScreen({ navigation }: Props) {
   const [clubs, setClubs] = useState<string[]>(user?.clubs ?? []);
   const [clubInput, setClubInput] = useState('');
   const [instagramHandle, setInstagramHandle] = useState(user?.instagramHandle ?? '');
+  const [interestTags, setInterestTags] = useState<string[]>(user?.interestTags ?? []);
 
   const [clubError, setClubError] = useState('');
   const [instagramError, setInstagramError] = useState('');
@@ -134,6 +136,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         bio: bio.trim() || null,
         clubs,
         instagramHandle: instagramHandle.trim() || null,
+        interestTags,
       });
       await updateUser(updated);
       navigation.goBack();
@@ -278,6 +281,49 @@ export default function EditProfileScreen({ navigation }: Props) {
           )}
         </View>
 
+        {/* Interests */}
+        <View style={[styles.section, shadows.sm]}>
+          <Text style={styles.sectionTitle}>
+            Interests{' '}
+            <Text style={styles.optionalTag}>optional · up to 5</Text>
+          </Text>
+          <Text style={styles.interestsHint}>
+            Tap to toggle — helps others see who they'd be joining
+          </Text>
+          <View style={styles.pillRow}>
+            {INTEREST_TAGS.map((tag) => {
+              const selected = interestTags.includes(tag);
+              const meta = INTEREST_TAG_META[tag];
+              return (
+                <TouchableOpacity
+                  key={tag}
+                  style={[
+                    styles.pill,
+                    selected && {
+                      borderColor: meta.color,
+                      backgroundColor: meta.bg,
+                    },
+                  ]}
+                  onPress={() => {
+                    if (selected) {
+                      setInterestTags(interestTags.filter((t) => t !== tag));
+                    } else if (interestTags.length >= 5) {
+                      Alert.alert('Limit reached', 'You can select up to 5 interest tags.');
+                    } else {
+                      setInterestTags([...interestTags, tag]);
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.pillText, selected && { color: meta.color }]}>
+                    {tag}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Instagram */}
         <View style={[styles.section, shadows.sm]}>
           <Text style={styles.sectionTitle}>Instagram <Text style={styles.optionalTag}>optional</Text></Text>
@@ -355,6 +401,11 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     color: colors.textTertiary,
     fontWeight: '500',
+  },
+  interestsHint: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+    marginTop: -spacing.xs,
   },
   pillRow: {
     flexDirection: 'row',

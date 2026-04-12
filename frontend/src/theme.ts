@@ -1,11 +1,11 @@
 import { Platform, ViewStyle } from 'react-native';
 
 export const colors = {
-  primary: '#6366f1',
-  primaryDark: '#4f46e5',
-  violet: '#8b5cf6',
-  gradient: ['#6366f1', '#8b5cf6'] as const,
-  gradientSubtle: ['#eef2ff', '#e0e7ff', '#f5f3ff'] as const,
+  primary: '#990000',
+  primaryDark: '#7a0000',
+  primaryLight: '#fef2f2',
+  gradient: ['#990000', '#cc1100'] as const,
+  gradientSubtle: ['#fef2f2', '#fee2e2', '#fecaca'] as const,
 
   amber: '#f59e0b',
   amberLight: '#fef3c7',
@@ -28,8 +28,8 @@ export const colors = {
   borderLight: '#f1f5f9',
   divider: '#e2e8f0',
 
-  chatMe: ['#6366f1', '#7c3aed'] as const,
-  chatThem: '#f1f5f9',
+  chatMe: '#B30000',
+  chatThem: '#FFFFFF',
 
   status: {
     FORMING: '#22c55e',
@@ -44,13 +44,13 @@ export const colors = {
   } as Record<string, string>,
 
   avatarPalette: [
-    '#6366f1',
+    '#990000',
     '#ec4899',
     '#f59e0b',
     '#22c55e',
     '#3b82f6',
-    '#8b5cf6',
-    '#14b8a6',
+    '#1a1a1a',
+    '#334155',
     '#f97316',
   ],
 };

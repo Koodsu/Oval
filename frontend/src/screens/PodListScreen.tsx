@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getPodsByActivity, joinPod } from '../api';
+import { getPodsByActivity, joinPod, joinWaitlist } from '../api';
 import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
@@ -41,6 +41,7 @@ export default function PodListScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('starting_soon');
   const [pendingAction, setPendingAction] = useState<{ type: 'join'; podId: string } | { type: 'create' } | null>(null);
 
@@ -77,6 +78,18 @@ export default function PodListScreen({ route, navigation }: Props) {
       setPendingAction({ type: 'join', podId });
     } else {
       executeJoin(podId);
+    }
+  };
+
+  const handleJoinWaitlist = async (podId: string) => {
+    setWaitlistingId(podId);
+    try {
+      const { position } = await joinWaitlist(podId);
+      Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join waitlist');
+    } finally {
+      setWaitlistingId(null);
     }
   };
 
@@ -197,7 +210,9 @@ export default function PodListScreen({ route, navigation }: Props) {
               currentUserId={user?.id}
               onJoin={() => handleJoin(item.id)}
               onView={() => navigation.navigate('Pod', { podId: item.id })}
+              onJoinWaitlist={() => handleJoinWaitlist(item.id)}
               isJoining={actionId === item.id}
+              isJoiningWaitlist={waitlistingId === item.id}
               isMember={isAlreadyMember(item)}
             />
           </FadeIn>

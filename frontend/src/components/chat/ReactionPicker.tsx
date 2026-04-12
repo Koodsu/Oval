@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, TouchableOpacity, Text, StyleSheet, Modal, Pressable, Animated } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radii, typography } from '../../theme';
 
@@ -38,6 +38,20 @@ export default function ReactionPicker({
     onReport?.();
   };
 
+  const scaleAnim = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    if (visible) {
+      scaleAnim.setValue(0.6);
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 12,
+      }).start();
+    }
+  }, [visible, scaleAnim]);
+
   return (
     <Modal
       visible={visible}
@@ -46,7 +60,7 @@ export default function ReactionPicker({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <View style={styles.picker} onStartShouldSetResponder={() => true}>
+        <Animated.View style={[styles.picker, { transform: [{ scale: scaleAnim }] }]} onStartShouldSetResponder={() => true}>
           {REACTION_EMOJIS.map((emoji) => (
             <TouchableOpacity
               key={emoji}
@@ -78,7 +92,7 @@ export default function ReactionPicker({
               <Text style={styles.reportText}>Report</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

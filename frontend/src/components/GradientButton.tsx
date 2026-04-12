@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-  TouchableOpacity,
+  TouchableWithoutFeedback,
   Text,
   StyleSheet,
   ActivityIndicator,
   View,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,25 @@ export default function GradientButton({
   size = 'lg',
 }: GradientButtonProps) {
   const isDisabled = disabled || loading;
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 8,
+    }).start();
+  };
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -39,67 +59,74 @@ export default function GradientButton({
 
   if (variant === 'outline') {
     return (
-      <TouchableOpacity
-        style={[
-          styles.outline,
-          size === 'md' && styles.sizeMd,
-          isDisabled && styles.outlineDisabled,
-        ]}
+      <TouchableWithoutFeedback
         onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         disabled={isDisabled}
-        activeOpacity={0.7}
       >
-        {loading ? (
-          <ActivityIndicator color={colors.primary} size="small" />
-        ) : (
-          <View style={styles.row}>
-            {icon && (
-              <Ionicons
-                name={icon}
-                size={size === 'md' ? 16 : 18}
-                color={colors.primary}
-                style={styles.icon}
-              />
-            )}
-            <Text style={[styles.outlineText, size === 'md' && styles.textMd]}>
-              {title}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+        <Animated.View
+          style={[
+            styles.outline,
+            size === 'md' && styles.sizeMd,
+            isDisabled && styles.outlineDisabled,
+            { transform: [{ scale }] },
+          ]}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <View style={styles.row}>
+              {icon && (
+                <Ionicons
+                  name={icon}
+                  size={size === 'md' ? 16 : 18}
+                  color={colors.primary}
+                  style={styles.icon}
+                />
+              )}
+              <Text style={[styles.outlineText, size === 'md' && styles.textMd]}>
+                {title}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
+      </TouchableWithoutFeedback>
     );
   }
 
   return (
-    <TouchableOpacity
+    <TouchableWithoutFeedback
       onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       disabled={isDisabled}
-      activeOpacity={0.8}
-      style={size === 'md' ? styles.sizeMd : undefined}
     >
-      <LinearGradient
-        colors={isDisabled ? ['#cbd5e1', '#cbd5e1'] : [...colors.gradient]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.gradient, size === 'md' && styles.sizeMd]}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <View style={styles.row}>
-            {icon && (
-              <Ionicons
-                name={icon}
-                size={size === 'md' ? 16 : 18}
-                color="#fff"
-                style={styles.icon}
-              />
-            )}
-            <Text style={[styles.text, size === 'md' && styles.textMd]}>{title}</Text>
-          </View>
-        )}
-      </LinearGradient>
-    </TouchableOpacity>
+      <Animated.View style={[size === 'md' ? styles.sizeMd : undefined, { transform: [{ scale }] }]}>
+        <LinearGradient
+          colors={isDisabled ? ['#cbd5e1', '#cbd5e1'] : [...colors.gradient]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.gradient, size === 'md' && styles.sizeMd]}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <View style={styles.row}>
+              {icon && (
+                <Ionicons
+                  name={icon}
+                  size={size === 'md' ? 16 : 18}
+                  color="#fff"
+                  style={styles.icon}
+                />
+              )}
+              <Text style={[styles.text, size === 'md' && styles.textMd]}>{title}</Text>
+            </View>
+          )}
+        </LinearGradient>
+      </Animated.View>
+    </TouchableWithoutFeedback>
   );
 }
 

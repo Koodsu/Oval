@@ -19,6 +19,8 @@ import webRoutes from './routes/web';
 import friendsRoutes from './routes/friends';
 import directMessagesRoutes from './routes/directMessages';
 import podInvitesRoutes from './routes/podInvites';
+import recapsRoutes from './routes/recaps';
+import podWaitlistRoutes from './routes/podWaitlist';
 import waitlistRoutes from './routes/waitlist';
 
 const app = express();
@@ -101,6 +103,8 @@ app.use('/messages', apiLimiter, directMessagesRoutes);
 // Pod invites: /pods/invites and /pods/:id/invite
 // Must be mounted before the pod messages router to avoid :id conflict
 app.use('/pods', apiLimiter, podInvitesRoutes);
+app.use('/pods', apiLimiter, recapsRoutes);
+app.use('/pods', apiLimiter, podWaitlistRoutes);
 
 // Messages are nested under pods: /pods/:id/messages
 // Separate router with mergeParams so :id is accessible

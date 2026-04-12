@@ -22,9 +22,9 @@ export const CATEGORIES: string[] = [
 export const CATEGORY_META: Record<string, CategoryMeta> = {
   'Sports & Fitness': { label: 'Sports & Fitness', icon: 'fitness-outline', color: '#22c55e' },
   'Food & Drink': { label: 'Food & Drink', icon: 'restaurant-outline', color: '#f59e0b' },
-  'Academic': { label: 'Academic', icon: 'book-outline', color: '#6366f1' },
+  'Academic': { label: 'Academic', icon: 'book-outline', color: '#3b82f6' },
   'Arts & Creative': { label: 'Arts & Creative', icon: 'color-palette-outline', color: '#ec4899' },
-  'Social': { label: 'Social', icon: 'people-outline', color: '#8b5cf6' },
+  'Social': { label: 'Social', icon: 'people-outline', color: '#990000' },
   'Outdoors': { label: 'Outdoors', icon: 'leaf-outline', color: '#14b8a6' },
   'Music & Entertainment': { label: 'Music & Entertainment', icon: 'musical-notes-outline', color: '#f97316' },
   'Wellness': { label: 'Wellness', icon: 'heart-outline', color: '#06b6d4' },
