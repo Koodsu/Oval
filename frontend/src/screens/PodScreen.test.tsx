@@ -48,7 +48,15 @@ jest.mock('../components/Avatar', () => {
   const AvatarStack = () => React.createElement(View, { testID: 'avatar-stack' });
   Avatar.displayName = 'Avatar';
   AvatarStack.displayName = 'AvatarStack';
-  return { default: Avatar, AvatarStack };
+  return { __esModule: true, default: Avatar, AvatarStack };
+});
+
+// ── RecapPromptModal mock ─────────────────────────────────────────────────────
+jest.mock('../components/RecapPromptModal', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return ({ visible }: { visible: boolean }) =>
+    visible ? React.createElement(View, { testID: 'recap-modal' }) : null;
 });
 
 // ── AuthContext mock ──────────────────────────────────────────────────────────

@@ -6,6 +6,28 @@ import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
 
+// Select shape used for pod member user fields across all pod queries
+const MEMBER_USER_SELECT = {
+  id: true,
+  name: true,
+  avatarUrl: true,
+  interestTags: true,
+  classYear: true,
+  major: true,
+} as const;
+
+function parseMemberTags<T extends { user: { interestTags?: string | null } }>(member: T) {
+  let tags: string[] = [];
+  if (member.user.interestTags) {
+    try { tags = JSON.parse(member.user.interestTags); } catch { /* ignore */ }
+  }
+  return { ...member, user: { ...member.user, interestTags: tags } };
+}
+
+function parsePodMembers<T extends { members: Array<{ user: { interestTags?: string | null } }> }>(pod: T) {
+  return { ...pod, members: pod.members.map(parseMemberTags) };
+}
+
 const router = Router();
 
 const FORMING = 'FORMING';
@@ -35,13 +57,13 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+          include: { user: { select: MEMBER_USER_SELECT } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json(pods);
+    res.json(pods.map(parsePodMembers));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -67,13 +89,13 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       where.activity = { category };
     }
 
-    const [pods, pastMembers] = await Promise.all([
+    const [pods, pastMembers, recaps] = await Promise.all([
       prisma.pod.findMany({
         where,
         include: {
           activity: true,
           members: {
-            include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+            include: { user: { select: MEMBER_USER_SELECT } },
           },
         },
         take: Math.min(Number(limit) || 20, 50),
@@ -81,20 +103,47 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       prisma.podMember.findMany({
         where: { userId },
         include: { pod: { select: { activityId: true } } },
-        take: 20,
+        take: 50,
+      }),
+      prisma.podRecap.findMany({
+        where: { userId },
+        include: { pod: { select: { activityId: true } } },
       }),
     ]);
 
+    // Build activity preference scores from past recaps
+    // rating 3 = +1, rating 2 = 0, rating 1 = -1 (normalized to -1..+1)
+    const activityRatingSum: Record<string, number> = {};
+    const activityRatingCount: Record<string, number> = {};
+    for (const recap of recaps) {
+      const actId = recap.pod.activityId;
+      activityRatingSum[actId] = (activityRatingSum[actId] ?? 0) + (recap.rating - 2);
+      activityRatingCount[actId] = (activityRatingCount[actId] ?? 0) + 1;
+    }
+
     const preferredActivityIds = new Set(pastMembers.map((pm) => pm.pod.activityId));
 
-    // v1 matching sort: meetupTime asc, then memberCount desc as tiebreaker
+    function getActivityScore(activityId: string): number {
+      const count = activityRatingCount[activityId] ?? 0;
+      if (count === 0) return 0;
+      return (activityRatingSum[activityId] ?? 0) / count; // -1..+1
+    }
+
+    // Sort: negatively-rated activities go last, then by meetupTime asc, then memberCount desc
     pods.sort((a, b) => {
+      const scoreA = getActivityScore(a.activityId);
+      const scoreB = getActivityScore(b.activityId);
+      // Heavily negative activities (avg < -0.5) sink to the bottom
+      const sinkA = scoreA < -0.5 ? 1 : 0;
+      const sinkB = scoreB < -0.5 ? 1 : 0;
+      if (sinkA !== sinkB) return sinkA - sinkB;
+      // Otherwise sort by time then members
       const timeDiff = new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime();
       if (timeDiff !== 0) return timeDiff;
       return b.members.length - a.members.length;
     });
 
-    const result = pods.map((p) => ({ ...p, recommended: preferredActivityIds.has(p.activityId) }));
+    const result = pods.map((p) => parsePodMembers({ ...p, recommended: preferredActivityIds.has(p.activityId) }));
 
     res.json(result);
   } catch (err) {
@@ -131,7 +180,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       include: {
         activity: true,
         members: {
-          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+          include: { user: { select: MEMBER_USER_SELECT } },
         },
       },
       orderBy,
@@ -142,7 +191,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       result = [...pods].sort((a, b) => b.members.length - a.members.length);
     }
 
-    res.json(result);
+    res.json(result.map(parsePodMembers));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -210,6 +259,12 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
 
       await prisma.podMember.create({ data: { podId, userId } });
 
+      // If this user was on the waitlist, mark as JOINED
+      await prisma.podWaitlist.updateMany({
+        where: { podId, userId, status: { in: ['WAITING', 'NOTIFIED'] } },
+        data: { status: 'JOINED' },
+      });
+
       const memberCount = await prisma.podMember.count({ where: { podId } });
       if (memberCount >= pod.maxMembers) {
         await prisma.pod.update({ where: { id: podId }, data: { status: LOCKED } });
@@ -220,14 +275,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         include: {
           activity: true,
           creator: { select: { id: true } },
-          members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          members: { include: { user: { select: MEMBER_USER_SELECT } } },
         },
       });
 
-      // Fire-and-forget: notify the pod creator that someone joined
-      NotificationService.notifyPodJoin(podId, userId).catch(() => {});
-
-      res.status(201).json(updatedPod);
+      res.status(201).json(updatedPod ? parsePodMembers(updatedPod) : updatedPod);
 
       // Notify creator that someone joined (fire-and-forget)
       if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
@@ -322,11 +374,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
       },
     });
 
-    res.status(201).json(updatedPod);
+    res.status(201).json(updatedPod ? parsePodMembers(updatedPod) : updatedPod);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -367,10 +419,10 @@ router.post('/:id/lock', requireAuth, async (req: AuthRequest, res: Response): P
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
       },
     });
-    res.json(updated);
+    res.json(parsePodMembers(updated));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -385,7 +437,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
   try {
     const pod = await prisma.pod.findUnique({
       where: { id },
-      include: { members: true },
+      include: { members: true, activity: { select: { title: true } } },
     });
     if (!pod) {
       res.status(404).json({ error: 'Pod not found' });
@@ -399,6 +451,7 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
     }
 
     let podDeleted = false;
+    const wasLocked = pod.status === LOCKED;
 
     await prisma.$transaction(async (tx) => {
       await tx.podMember.delete({ where: { id: membership.id } });
@@ -407,16 +460,19 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
         await tx.message.deleteMany({ where: { podId: id } });
         await tx.pod.delete({ where: { id } });
         podDeleted = true;
-      } else if (pod.creatorId === userId) {
-        const nextCreator = await tx.podMember.findFirst({
-          where: { podId: id },
-          orderBy: { joinedAt: 'asc' },
-        });
-        if (nextCreator) {
-          await tx.pod.update({
-            where: { id },
-            data: { creatorId: nextCreator.userId },
+      } else {
+        const updates: Record<string, unknown> = {};
+        if (pod.creatorId === userId) {
+          const nextCreator = await tx.podMember.findFirst({
+            where: { podId: id },
+            orderBy: { joinedAt: 'asc' },
           });
+          if (nextCreator) updates.creatorId = nextCreator.userId;
+        }
+        // Reopen pod to FORMING when a member leaves a LOCKED pod
+        if (wasLocked) updates.status = FORMING;
+        if (Object.keys(updates).length > 0) {
+          await tx.pod.update({ where: { id }, data: updates });
         }
       }
     });
@@ -426,15 +482,18 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
       return;
     }
 
+    // Notify first waitlisted user that a spot opened up (fire-and-forget)
+    NotificationService.notifyWaitlistSpot(id, pod.activity?.title).catch(() => {});
+
     const updatedPod = await prisma.pod.findUnique({
       where: { id },
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
       },
     });
-    res.json({ left: true, podDeleted: false, pod: updatedPod });
+    res.json({ left: true, podDeleted: false, pod: updatedPod ? parsePodMembers(updatedPod) : updatedPod });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -475,10 +534,10 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
       include: {
         activity: true,
         creator: { select: { id: true } },
-        members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
       },
     });
-    res.json(updated);
+    res.json(parsePodMembers(updated));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -517,7 +576,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   const userId = req.user!.userId;
 
   const memberInclude = {
-    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    include: { user: { select: MEMBER_USER_SELECT } },
   };
 
   try {
@@ -556,19 +615,157 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       });
     }
 
-    // Include no-show user IDs for completed pods so frontend can show attendance status
-    const noShowUserIds =
+    // Include no-show user IDs + recap data for completed pods
+    const [noShowUserIds, averageRating, myRecap] =
       pod.status === COMPLETED
-        ? (
-            await prisma.noShowReport.findMany({
-              where: { podId: id },
-              select: { targetUserId: true },
-              distinct: ['targetUserId'],
-            })
-          ).map((r) => r.targetUserId)
-        : [];
+        ? await Promise.all([
+            prisma.noShowReport
+              .findMany({
+                where: { podId: id },
+                select: { targetUserId: true },
+                distinct: ['targetUserId'],
+              })
+              .then((r) => r.map((x) => x.targetUserId)),
+            prisma.podRecap
+              .aggregate({ where: { podId: id }, _avg: { rating: true } })
+              .then((r) => r._avg.rating),
+            prisma.podRecap.findUnique({
+              where: { podId_userId: { podId: id, userId } },
+            }),
+          ])
+        : [[], null, null];
 
-    res.json({ ...pod, noShowUserIds });
+    // Waitlist info
+    const [waitlistCount, myWaitlistEntry] = await Promise.all([
+      prisma.podWaitlist.count({ where: { podId: id, status: 'WAITING' } }),
+      prisma.podWaitlist.findUnique({ where: { podId_userId: { podId: id, userId } } }),
+    ]);
+    const myWaitlistPosition =
+      myWaitlistEntry && (myWaitlistEntry.status === 'WAITING' || myWaitlistEntry.status === 'NOTIFIED')
+        ? myWaitlistEntry.position
+        : null;
+
+    res.json(parsePodMembers({
+      ...pod,
+      noShowUserIds,
+      averageRating,
+      myRecap,
+      waitlistCount,
+      myWaitlistPosition,
+    }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /pods/:id/people-you-met — confirmed attendees who are not yet friends
+router.get('/:id/people-you-met', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const userId = req.user!.userId;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                avatarUrl: true,
+                classYear: true,
+                major: true,
+                interestTags: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+
+    if (pod.status !== COMPLETED) {
+      res.status(400).json({ error: 'Pod is not completed' });
+      return;
+    }
+
+    const myMember = pod.members.find((m) => m.userId === userId);
+    if (!myMember || !myMember.confirmedAt) {
+      res.status(403).json({ error: 'You must be a confirmed attendee of this pod' });
+      return;
+    }
+
+    // Other confirmed members (not the caller)
+    const confirmedOthers = pod.members.filter(
+      (m) => m.userId !== userId && m.confirmedAt
+    );
+
+    if (confirmedOthers.length === 0) {
+      res.json({ users: [] });
+      return;
+    }
+
+    const otherUserIds = confirmedOthers.map((m) => m.userId);
+
+    // Exclude users who are already friends
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { userAId: userId, userBId: { in: otherUserIds } },
+          { userBId: userId, userAId: { in: otherUserIds } },
+        ],
+      },
+    });
+    const friendIds = new Set(
+      friendships.map((f) => (f.userAId === userId ? f.userBId : f.userAId))
+    );
+
+    // Exclude users with pending friend requests (either direction)
+    const pendingRequests = await prisma.friendRequest.findMany({
+      where: {
+        status: 'PENDING',
+        OR: [
+          { senderId: userId, receiverId: { in: otherUserIds } },
+          { receiverId: userId, senderId: { in: otherUserIds } },
+        ],
+      },
+    });
+    const pendingIds = new Set(
+      pendingRequests.map((r) => (r.senderId === userId ? r.receiverId : r.senderId))
+    );
+
+    // Exclude no-show reported users
+    const noShows = await prisma.noShowReport.findMany({
+      where: { podId: id, targetUserId: { in: otherUserIds } },
+      select: { targetUserId: true },
+      distinct: ['targetUserId'],
+    });
+    const noShowIds = new Set(noShows.map((n) => n.targetUserId));
+
+    const users = confirmedOthers
+      .filter((m) => !friendIds.has(m.userId) && !pendingIds.has(m.userId) && !noShowIds.has(m.userId))
+      .map((m) => {
+        let interestTags: string[] = [];
+        if (m.user.interestTags) {
+          try { interestTags = JSON.parse(m.user.interestTags as string); } catch { /* ignore */ }
+        }
+        return {
+          id: m.user.id,
+          name: m.user.name,
+          avatarUrl: m.user.avatarUrl,
+          classYear: m.user.classYear,
+          major: m.user.major,
+          interestTags,
+        };
+      });
+
+    res.json({ users });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

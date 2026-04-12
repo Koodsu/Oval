@@ -17,6 +17,7 @@ import { getMessageThreads, resolveAvatarUrl } from '../api';
 import { DirectMessageThread } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import { SkeletonMessageRow } from '../components/SkeletonLoader';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 import { formatThreadTime } from '../utils/format';
 
@@ -46,8 +47,13 @@ export default function MessagesInboxScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.heading}>Messages</Text>
+        </View>
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => <SkeletonMessageRow key={i} />)}
+        </View>
       </View>
     );
   }

@@ -255,6 +255,8 @@ export interface NotificationPreferences {
   podJoin: boolean;
   newMessage: boolean;
   meetupReminder: boolean;
+  recapPrompt: boolean;
+  waitlistSpot: boolean;
 }
 
 export const getNotificationPreferences = () =>
@@ -280,6 +282,7 @@ export const updateProfile = (data: {
   bio?: string | null;
   clubs?: string[];
   instagramHandle?: string | null;
+  interestTags?: string[];
 }) =>
   request<import('./types').User>('/users/me', {
     method: 'PATCH',
@@ -429,3 +432,27 @@ export const acceptPodInvite = (id: string) =>
 
 export const declinePodInvite = (id: string) =>
   request<void>(`/pods/invites/${id}/decline`, { method: 'POST' });
+
+// Pod recaps
+export const submitRecap = (podId: string, data: { rating: 1 | 2 | 3; note?: string | null }) =>
+  request<import('./types').PodRecap>(`/pods/${podId}/recap`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getMyRecap = (podId: string) =>
+  request<import('./types').PodRecap | null>(`/pods/${podId}/recap`);
+
+// People You Met
+export const getPeopleYouMet = (podId: string) =>
+  request<{ users: import('./types').PeopleYouMetUser[] }>(`/pods/${podId}/people-you-met`);
+
+// Pod waitlist
+export const joinWaitlist = (podId: string) =>
+  request<{ position: number }>(`/pods/${podId}/waitlist`, { method: 'POST' });
+
+export const leaveWaitlist = (podId: string) =>
+  request<{ removed: boolean }>(`/pods/${podId}/waitlist`, { method: 'DELETE' });
+
+export const getWaitlistInfo = (podId: string) =>
+  request<{ count: number; myPosition: number | null; myStatus: string | null }>(`/pods/${podId}/waitlist`);

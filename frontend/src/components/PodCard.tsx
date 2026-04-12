@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 import { Pod } from '../types';
 import { AvatarStack } from './Avatar';
 import StatusBadge from './StatusBadge';
 import GradientButton from './GradientButton';
+import PressableScale from './PressableScale';
 import { formatPodTime } from '../utils/format';
 
 interface PodCardProps {
@@ -14,7 +14,9 @@ interface PodCardProps {
   currentUserId?: string;
   onJoin: () => void;
   onView: () => void;
+  onJoinWaitlist?: () => void;
   isJoining: boolean;
+  isJoiningWaitlist?: boolean;
   isMember: boolean;
 }
 
@@ -23,27 +25,26 @@ export default function PodCard({
   currentUserId,
   onJoin,
   onView,
+  onJoinWaitlist,
   isJoining,
+  isJoiningWaitlist = false,
   isMember,
 }: PodCardProps) {
   const memberCount = pod.members.length;
   const maxMembers = pod.maxMembers ?? 4;
   const isForming = pod.status === 'FORMING';
   const canJoin = isForming && memberCount < maxMembers && !isMember;
+  const isFull = isForming && memberCount >= maxMembers && !isMember;
   const progress = memberCount / maxMembers;
-
-  const handleView = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onView();
-  };
 
   const activityTitle = pod.activity?.title;
 
   return (
-    <TouchableOpacity
+    <PressableScale
       style={[styles.card, shadows.md]}
-      onPress={isMember ? handleView : undefined}
-      activeOpacity={isMember ? 0.7 : 1}
+      onPress={isMember ? onView : undefined}
+      disabled={!isMember}
+      haptic="light"
     >
       {activityTitle ? (
         <Text style={styles.activityTitle} numberOfLines={1}>
@@ -80,7 +81,7 @@ export default function PodCard({
 
       {/* Actions */}
       {isMember ? (
-        <TouchableOpacity style={styles.viewRow} onPress={handleView}>
+        <TouchableOpacity style={styles.viewRow} onPress={onView}>
           <Text style={styles.viewText}>View Pod</Text>
           <Ionicons name="arrow-forward" size={16} color={colors.primary} />
         </TouchableOpacity>
@@ -95,10 +96,22 @@ export default function PodCard({
             size="md"
           />
         </View>
-      ) : !isMember && isForming && memberCount >= maxMembers ? (
+      ) : isFull && onJoinWaitlist ? (
+        <View style={styles.actionRow}>
+          <GradientButton
+            title="Join Waitlist"
+            onPress={onJoinWaitlist}
+            loading={isJoiningWaitlist}
+            disabled={isJoiningWaitlist}
+            icon="time-outline"
+            variant="outline"
+            size="md"
+          />
+        </View>
+      ) : isFull ? (
         <Text style={styles.fullText}>Pod is full</Text>
       ) : null}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

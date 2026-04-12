@@ -3,20 +3,28 @@ import { Animated, ViewStyle } from 'react-native';
 
 interface FadeInProps {
   delay?: number;
+  duration?: number;
+  slideDistance?: number;
   children: React.ReactNode;
   style?: ViewStyle;
 }
 
-export default function FadeIn({ delay = 0, children, style }: FadeInProps) {
+export default function FadeIn({
+  delay = 0,
+  duration = 350,
+  slideDistance = 14,
+  children,
+  style,
+}: FadeInProps) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(14)).current;
+  const translateY = useRef(new Animated.Value(slideDistance)).current;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 350,
+          duration,
           useNativeDriver: true,
         }),
         Animated.spring(translateY, {
@@ -29,7 +37,7 @@ export default function FadeIn({ delay = 0, children, style }: FadeInProps) {
     }, delay);
 
     return () => clearTimeout(timeout);
-  }, [delay, opacity, translateY]);
+  }, [delay, duration, opacity, translateY, slideDistance]);
 
   return (
     <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>

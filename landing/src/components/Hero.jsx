@@ -121,9 +121,6 @@ export default function Hero() {
               pickup basketball, study groups, jam sessions — happening on campus, today.
             </p>
             <WaitlistForm />
-            <p className="mt-4 text-xs text-warm-gray">
-              <strong className="text-ink font-semibold">847 Buckeyes</strong> already on the waitlist. No spam, ever.
-            </p>
           </div>
 
           {/* Right column: sticker cards */}

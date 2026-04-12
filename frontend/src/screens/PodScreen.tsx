@@ -3,19 +3,19 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  LayoutAnimation,
-  UIManager,
   Share,
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import {
@@ -24,19 +24,18 @@ import {
   lockPod, unlockPod, leavePod,
   confirmAttendance, reportNoShow, resolveAvatarUrl,
   getFriends, sendPodInvite,
+  submitRecap,
+  leaveWaitlist,
 } from '../api';
 import { Pod, Message, FriendUser } from '../types';
 import { useAuth } from '../context/AuthContext';
-import Avatar, { AvatarStack } from '../components/Avatar';
+import Avatar from '../components/Avatar';
 import StatusBadge from '../components/StatusBadge';
 import ReportModal from '../components/ReportModal';
+import RecapPromptModal from '../components/RecapPromptModal';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 import { formatPodTime } from '../utils/format';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
 
@@ -69,7 +68,6 @@ export default function PodScreen({ route, navigation }: Props) {
   const [sending, setSending] = useState(false);
   const [locking, setLocking] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [headerExpanded, setHeaderExpanded] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [reportedNoShows, setReportedNoShows] = useState<Set<string>>(new Set());
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -84,19 +82,49 @@ export default function PodScreen({ route, navigation }: Props) {
   const [reactionTargetMsgId, setReactionTargetMsgId] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<{ messageId: string; name: string; content: string } | null>(null);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const [recapModalVisible, setRecapModalVisible] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const recapPromptShownRef = useRef(false);
+  const peopleYouMetShownRef = useRef(false);
+
+  const maybeShowPeopleYouMet = useCallback(async (pod: Pod) => {
+    if (peopleYouMetShownRef.current) return;
+    if (pod.status !== 'COMPLETED') return;
+    const myMember = pod.members.find((m) => m.userId === user?.id);
+    if (!myMember?.confirmedAt) return;
+
+    const key = `peopleYouMet_seen_${podId}`;
+    const seen = await AsyncStorage.getItem(key);
+    if (seen) return;
+
+    peopleYouMetShownRef.current = true;
+    await AsyncStorage.setItem(key, '1');
+    navigation.navigate('PeopleYouMet', { podId });
+  }, [podId, user?.id, navigation]);
+
   const fetchPod = useCallback(async () => {
     try {
       const data = await getPod(podId);
       setPod(data);
+      // Auto-show recap prompt once if pod is COMPLETED and user hasn't submitted
+      if (data.status === 'COMPLETED' && data.myRecap === null && !recapPromptShownRef.current) {
+        const isMember = data.members.some((m: { userId: string }) => m.userId === user?.id);
+        if (isMember) {
+          recapPromptShownRef.current = true;
+          setRecapModalVisible(true);
+        }
+      }
+      // Auto-show "people you met" once per completed pod
+      maybeShowPeopleYouMet(data);
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load pod');
     }
-  }, [podId]);
+  }, [podId, user?.id, maybeShowPeopleYouMet]);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -148,11 +176,6 @@ export default function PodScreen({ route, navigation }: Props) {
     return member?.user?.name?.split(' ')[0] ?? 'Someone';
   }, [typingUserIds, pod?.members]);
 
-  const toggleHeader = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setHeaderExpanded(!headerExpanded);
-  };
-
   const handleSend = async () => {
     const text = messageText.trim();
     if (!text) return;
@@ -192,11 +215,14 @@ export default function PodScreen({ route, navigation }: Props) {
   const canUnlock = isCreator && pod.status === 'LOCKED' && memberCount < maxMembers;
 
   const myMember = pod.members.find((m) => m.userId === user?.id);
+  const isMember = !!myMember;
   const alreadyConfirmed = !!myMember?.confirmedAt;
   const meetupInFuture = new Date(pod.meetupTime) > new Date();
   const canConfirm = pod.status === 'LOCKED' && meetupInFuture && !alreadyConfirmed;
   const confirmedCount = pod.members.filter((m) => m.confirmedAt).length;
   const otherMembers = pod.members.filter((m) => m.userId !== user?.id);
+  const isOnWaitlist = pod.myWaitlistPosition !== null && pod.myWaitlistPosition !== undefined;
+  const waitlistCount = pod.waitlistCount ?? 0;
 
   const handleLock = async () => {
     if (!canLock) return;
@@ -246,6 +272,16 @@ export default function PodScreen({ route, navigation }: Props) {
   const openReportPod = () => {
     setReportTarget({ type: 'pod', podId });
     setReportModalVisible(true);
+  };
+
+  const handleRecapSubmit = async (rating: 1 | 2 | 3, note: string | null) => {
+    try {
+      const recap = await submitRecap(podId, { rating, note });
+      setPod((prev) => (prev ? { ...prev, myRecap: recap } : prev));
+      setRecapModalVisible(false);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit recap');
+    }
   };
 
   const handleReportSuccess = () => {
@@ -356,12 +392,9 @@ export default function PodScreen({ route, navigation }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 95 : 0}
     >
-      {/* Collapsible Pod Info Header */}
-      <TouchableOpacity
-        style={[styles.infoSection, shadows.sm]}
-        onPress={toggleHeader}
-        activeOpacity={0.8}
-      >
+      {/* Pod Info Header */}
+      <View style={[styles.infoSection, shadows.sm]}>
+        {/* Title row */}
         <View style={styles.infoTopRow}>
           <View style={styles.infoTitleArea}>
             <Text style={styles.activityTitle} numberOfLines={1}>
@@ -369,204 +402,290 @@ export default function PodScreen({ route, navigation }: Props) {
             </Text>
             <StatusBadge status={pod.status} size="md" />
           </View>
-          <Ionicons
-            name={headerExpanded ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={colors.textTertiary}
-          />
+          <TouchableOpacity
+            onPress={() => setShowOverflowMenu(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.textTertiary} />
+          </TouchableOpacity>
         </View>
 
-        {headerExpanded && (
-          <View style={styles.infoExpanded}>
-            <View style={styles.metaRow}>
-              <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-              <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Ionicons
-                name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
-                size={14}
-                color={colors.textTertiary}
-              />
-              <Text style={styles.metaText}>{pod.location}</Text>
-            </View>
-            <View style={styles.membersSection}>
-              <View style={styles.membersLabelRow}>
-                <Text style={styles.membersLabel}>
-                  Members {memberCount}/{maxMembers}
+        {/* Time + Location in one row */}
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
+          <View style={styles.metaDot} />
+          <Ionicons
+            name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+            size={14}
+            color={colors.textTertiary}
+          />
+          <Text style={styles.metaText} numberOfLines={1}>{pod.location}</Text>
+        </View>
+
+        {/* Horizontal member scroll */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.memberScroll}
+          contentContainerStyle={styles.memberScrollContent}
+        >
+          {pod.members.map((m) => {
+            const isYou = m.userId === user?.id;
+            return (
+              <TouchableOpacity
+                key={m.userId}
+                style={styles.memberItem}
+                onPress={() => {
+                  if (!isYou) {
+                    navigation.navigate('UserProfile', { userId: m.user.id, name: m.user.name });
+                  }
+                }}
+                activeOpacity={isYou ? 1 : 0.7}
+              >
+                <Avatar
+                  name={m.user.name}
+                  size={48}
+                  uri={resolveAvatarUrl(m.user.avatarUrl)}
+                  isYou={isYou}
+                />
+                <Text style={styles.memberFirstName} numberOfLines={1}>
+                  {m.user.name.split(' ')[0]}{isYou ? ' (you)' : ''}
                 </Text>
-                {pod.status === 'LOCKED' && meetupInFuture && confirmedCount > 0 && (
-                  <View style={styles.confirmedBadge}>
-                    <Ionicons name="checkmark-circle" size={12} color={colors.green} />
-                    <Text style={styles.confirmedBadgeText}>{confirmedCount} confirmed</Text>
-                  </View>
-                )}
-              </View>
-              <AvatarStack
-                members={pod.members}
-                currentUserId={user?.id}
-                size={30}
-                onMemberPress={(m) =>
-                  navigation.navigate('UserProfile', {
-                    userId: m.user.id,
-                    name: m.user.name,
-                  })
-                }
-              />
-            </View>
-            <View style={styles.lockRow}>
-              {(canLock || canUnlock) && (
-                <>
-                  {canLock && (
-                    <TouchableOpacity
-                      style={styles.lockButton}
-                      onPress={handleLock}
-                      disabled={locking}
-                    >
-                      {locking ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <>
-                          <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
-                          <Text style={styles.lockButtonText}>Lock Pod</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  {canUnlock && (
-                    <TouchableOpacity
-                      style={styles.lockButton}
-                      onPress={handleUnlock}
-                      disabled={locking}
-                    >
-                      {locking ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <>
-                          <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
-                          <Text style={styles.lockButtonText}>Unlock Pod</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-              <TouchableOpacity
-                style={[styles.lockButton, styles.shareButton]}
-                onPress={handleShare}
-                accessibilityLabel="Share pod invite link"
-              >
-                <Ionicons name="share-outline" size={16} color={colors.primary} />
-                <Text style={styles.lockButtonText}>Share</Text>
               </TouchableOpacity>
-              {pod.status === 'FORMING' && (
-                <TouchableOpacity
-                  style={[styles.lockButton, styles.shareButton]}
-                  onPress={handleOpenInvite}
-                  accessibilityLabel="Invite a friend"
-                >
-                  <Ionicons name="person-add-outline" size={16} color={colors.primary} />
-                  <Text style={styles.lockButtonText}>Invite Friend</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.lockButton, styles.leaveButton]}
-                onPress={handleLeave}
-                disabled={leaving}
-              >
-                {leaving ? (
-                  <ActivityIndicator size="small" color={colors.red} />
+            );
+          })}
+        </ScrollView>
+
+        {/* Member count progress bar */}
+        <View style={styles.progressSection}>
+          <View style={styles.progressBarTrack}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${Math.min((memberCount / maxMembers) * 100, 100)}%` as `${number}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {memberCount} of {maxMembers} spots filled
+            {pod.status === 'LOCKED' && meetupInFuture && confirmedCount > 0 && (
+              <Text style={styles.confirmedInline}> · {confirmedCount} confirmed</Text>
+            )}
+          </Text>
+        </View>
+
+        {/* Waitlist info */}
+        {waitlistCount > 0 && isMember && (
+          <View style={styles.waitlistInfoRow}>
+            <Ionicons name="people-outline" size={14} color={colors.textTertiary} />
+            <Text style={styles.waitlistInfoText}>
+              {waitlistCount} {waitlistCount === 1 ? 'person' : 'people'} waitlisted
+            </Text>
+          </View>
+        )}
+        {isOnWaitlist && (
+          <View style={styles.waitlistStatusRow}>
+            <View style={styles.waitlistPositionBadge}>
+              <Ionicons name="time-outline" size={14} color={colors.primary} />
+              <Text style={styles.waitlistPositionText}>
+                You're #{pod.myWaitlistPosition} on the waitlist
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.waitlistLeaveBtn}
+              onPress={async () => {
+                try {
+                  await leaveWaitlist(podId);
+                  setPod((prev) => prev ? { ...prev, myWaitlistPosition: null, waitlistCount: Math.max(0, (prev.waitlistCount ?? 1) - 1) } : prev);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (err: unknown) {
+                  Alert.alert('Error', err instanceof Error ? err.message : 'Failed to leave waitlist');
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.waitlistLeaveBtnText}>Leave Waitlist</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Full-width Share + Invite Friend buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={handleShare}
+            accessibilityLabel="Share pod invite link"
+          >
+            <Ionicons name="share-outline" size={18} color={colors.primary} />
+            <Text style={styles.actionBtnText}>Share</Text>
+          </TouchableOpacity>
+          {pod.status === 'FORMING' && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={handleOpenInvite}
+              accessibilityLabel="Invite a friend"
+            >
+              <Ionicons name="person-add-outline" size={18} color={colors.primary} />
+              <Text style={styles.actionBtnText}>Invite Friend</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Creator lock/unlock + confirm attendance row */}
+        {(canLock || canUnlock || canConfirm || (alreadyConfirmed && pod.status === 'LOCKED' && meetupInFuture)) && (
+          <View style={styles.lockRow}>
+            {canLock && (
+              <TouchableOpacity style={styles.lockButton} onPress={handleLock} disabled={locking}>
+                {locking ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Ionicons name="exit-outline" size={16} color={colors.red} />
-                    <Text style={styles.leaveButtonText}>Leave Pod</Text>
+                    <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
+                    <Text style={styles.lockButtonText}>Lock Pod</Text>
                   </>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.lockButton, styles.reportButton]}
-                onPress={openReportPod}
-              >
-                <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
-                <Text style={styles.reportButtonText}>Report Pod</Text>
+            )}
+            {canUnlock && (
+              <TouchableOpacity style={styles.lockButton} onPress={handleUnlock} disabled={locking}>
+                {locking ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
+                    <Text style={styles.lockButtonText}>Unlock Pod</Text>
+                  </>
+                )}
               </TouchableOpacity>
-              {canConfirm && (
-                <TouchableOpacity
-                  style={[styles.lockButton, styles.confirmButton]}
-                  onPress={handleConfirmAttendance}
-                  disabled={confirming}
-                >
-                  {confirming ? (
-                    <ActivityIndicator size="small" color={colors.green} />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle-outline" size={16} color={colors.green} />
-                      <Text style={styles.confirmButtonText}>I'll be there</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-              {alreadyConfirmed && pod.status === 'LOCKED' && meetupInFuture && (
-                <View style={[styles.lockButton, styles.confirmedButton]}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.green} />
-                  <Text style={styles.confirmedButtonText}>You're confirmed</Text>
-                </View>
-              )}
-            </View>
-
-            {/* No-show reporting section for completed pods */}
-            {pod.status === 'COMPLETED' && otherMembers.length > 0 && (
-              <View style={styles.noShowSection}>
-                <Text style={styles.noShowTitle}>Did everyone show up?</Text>
-                {otherMembers.map((m) => {
-                  const alreadyReported =
-                    reportedNoShows.has(m.userId) ||
-                    (pod.noShowUserIds ?? []).some(
-                      (id) => id === m.userId
-                    );
-                  return (
-                    <View key={m.userId} style={styles.noShowRow}>
-                      <Text style={styles.noShowName}>{m.user.name.split(' ')[0]}</Text>
-                      {alreadyReported ? (
-                        <View style={styles.noShowReportedBadge}>
-                          <Ionicons name="alert-circle" size={14} color={colors.textTertiary} />
-                          <Text style={styles.noShowReportedText}>No-show reported</Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.noShowButton}
-                          onPress={() =>
-                            Alert.alert(
-                              'Report No-Show',
-                              `Mark ${m.user.name.split(' ')[0]} as a no-show for this meetup?`,
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Report',
-                                  style: 'destructive',
-                                  onPress: () => handleReportNoShow(m.userId),
-                                },
-                              ]
-                            )
-                          }
-                        >
-                          <Text style={styles.noShowButtonText}>Didn't show</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
+            )}
+            {canConfirm && (
+              <TouchableOpacity
+                style={[styles.lockButton, styles.confirmButton]}
+                onPress={handleConfirmAttendance}
+                disabled={confirming}
+              >
+                {confirming ? (
+                  <ActivityIndicator size="small" color={colors.green} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.green} />
+                    <Text style={styles.confirmButtonText}>I'll be there</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+            {alreadyConfirmed && pod.status === 'LOCKED' && meetupInFuture && (
+              <View style={[styles.lockButton, styles.confirmedButton]}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.green} />
+                <Text style={styles.confirmedButtonText}>You're confirmed</Text>
               </View>
             )}
           </View>
         )}
-      </TouchableOpacity>
+
+        {/* Recap section for completed pods */}
+        {pod.status === 'COMPLETED' && (
+          <View style={styles.recapSection}>
+            {(() => {
+              const avgRating = pod.averageRating;
+              const myRecap = pod.myRecap;
+              const ratingEmoji = (r: number) =>
+                r >= 2.5 ? '👍' : r >= 1.5 ? '😐' : '👎';
+              const ratingLabel = (r: number) =>
+                r >= 2.5 ? 'Mostly positive' : r >= 1.5 ? 'Mixed' : 'Could be better';
+              return (
+                <>
+                  {avgRating !== null && avgRating !== undefined && (
+                    <View style={styles.recapAvgRow}>
+                      <Text style={styles.recapAvgEmoji}>{ratingEmoji(avgRating)}</Text>
+                      <Text style={styles.recapAvgLabel}>{ratingLabel(avgRating)}</Text>
+                      <Text style={styles.recapAvgSub}>group recap</Text>
+                    </View>
+                  )}
+                  {myRecap ? (
+                    <TouchableOpacity
+                      style={styles.recapEditBtn}
+                      onPress={() => setRecapModalVisible(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="create-outline" size={14} color={colors.primary} />
+                      <Text style={styles.recapEditBtnText}>Edit your recap</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.recapRateBtn}
+                      onPress={() => setRecapModalVisible(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="star-outline" size={14} color={colors.primary} />
+                      <Text style={styles.recapRateBtnText}>Rate this meetup</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+        )}
+
+        {/* No-show reporting section for completed pods */}
+        {pod.status === 'COMPLETED' && otherMembers.length > 0 && (
+          <View style={styles.noShowSection}>
+            <Text style={styles.noShowTitle}>Did everyone show up?</Text>
+            {otherMembers.map((m) => {
+              const alreadyReported =
+                reportedNoShows.has(m.userId) ||
+                (pod.noShowUserIds ?? []).some((id) => id === m.userId);
+              return (
+                <View key={m.userId} style={styles.noShowRow}>
+                  <Text style={styles.noShowName}>{m.user.name.split(' ')[0]}</Text>
+                  {alreadyReported ? (
+                    <View style={styles.noShowReportedBadge}>
+                      <Ionicons name="alert-circle" size={14} color={colors.textTertiary} />
+                      <Text style={styles.noShowReportedText}>No-show reported</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.noShowButton}
+                      onPress={() =>
+                        Alert.alert(
+                          'Report No-Show',
+                          `Mark ${m.user.name.split(' ')[0]} as a no-show for this meetup?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Report',
+                              style: 'destructive',
+                              onPress: () => handleReportNoShow(m.userId),
+                            },
+                          ]
+                        )
+                      }
+                    >
+                      <Text style={styles.noShowButtonText}>Didn't show</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      {/* Pod Chat divider */}
+      <View style={styles.chatDivider}>
+        <View style={styles.chatDividerLine} />
+        <Text style={styles.chatDividerText}>Pod Chat</Text>
+        <View style={styles.chatDividerLine} />
+      </View>
 
       {/* Chat Messages */}
       <FlatList
         ref={flatListRef}
         data={buildChatList(messages)}
         keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
+        style={styles.chatFlatList}
         contentContainerStyle={styles.chatList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         showsVerticalScrollIndicator={false}
@@ -578,7 +697,7 @@ export default function PodScreen({ route, navigation }: Props) {
         }
         ListFooterComponent={
           typingUserIds.length > 0 ? (
-            <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+            <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
               <TypingIndicator userName={typingUserName} />
             </View>
           ) : null
@@ -677,6 +796,51 @@ export default function PodScreen({ route, navigation }: Props) {
         podOnly={reportTarget?.type === 'pod'}
       />
 
+      <RecapPromptModal
+        visible={recapModalVisible}
+        podTitle={pod?.activity?.title}
+        initialRating={(pod?.myRecap?.rating as 1 | 2 | 3 | undefined) ?? null}
+        initialNote={pod?.myRecap?.note}
+        onSubmit={handleRecapSubmit}
+        onClose={() => setRecapModalVisible(false)}
+      />
+
+      {/* Three-dot overflow menu */}
+      <Modal
+        visible={showOverflowMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowOverflowMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.overflowBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowOverflowMenu(false)}
+        >
+          <View style={styles.overflowMenu}>
+            <TouchableOpacity
+              style={styles.overflowItem}
+              onPress={() => { setShowOverflowMenu(false); openReportPod(); }}
+            >
+              <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
+              <Text style={styles.overflowItemText}>Report Pod</Text>
+            </TouchableOpacity>
+            {isMember && (
+              <>
+                <View style={styles.overflowDivider} />
+                <TouchableOpacity
+                  style={styles.overflowItem}
+                  onPress={() => { setShowOverflowMenu(false); handleLeave(); }}
+                >
+                  <Ionicons name="exit-outline" size={16} color={colors.red} />
+                  <Text style={[styles.overflowItemText, { color: colors.red }]}>Leave Pod</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Friend invite modal */}
       <Modal
         visible={inviteModalVisible}
@@ -744,7 +908,8 @@ const styles = StyleSheet.create({
   infoSection: {
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
@@ -752,11 +917,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: spacing.xs + 2,
   },
   infoTitleArea: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm + 2,
+    gap: spacing.sm,
     flex: 1,
     marginRight: spacing.sm,
   },
@@ -765,52 +931,149 @@ const styles = StyleSheet.create({
     fontSize: 18,
     flex: 1,
   },
-  infoExpanded: {
-    marginTop: spacing.sm + 4,
-  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    gap: 5,
+    marginBottom: spacing.sm,
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
   },
   metaText: {
     ...typography.caption,
     fontSize: 13,
+    flexShrink: 1,
   },
-  membersSection: {
-    marginTop: spacing.sm + 2,
-    gap: spacing.sm,
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.textTertiary,
+    marginHorizontal: 2,
+    flexShrink: 0,
   },
-  membersLabelRow: {
-    flexDirection: 'row',
+
+  // Member horizontal scroll
+  memberScroll: {
+    marginBottom: spacing.sm,
+  },
+  memberScrollContent: {
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  memberItem: {
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.xs,
+    width: 60,
   },
-  membersLabel: {
-    ...typography.bodyBold,
-    fontSize: 13,
+  memberFirstName: {
+    ...typography.tiny,
+    fontSize: 11,
+    fontWeight: '600',
     color: colors.textSecondary,
+    textAlign: 'center',
+    width: 60,
   },
-  confirmedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.greenLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+
+  // Progress bar
+  progressSection: {
+    gap: 5,
+    marginBottom: spacing.sm,
+  },
+  progressBarTrack: {
+    height: 6,
+    backgroundColor: colors.borderLight,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
     borderRadius: radii.pill,
   },
-  confirmedBadgeText: {
+  progressText: {
     ...typography.tiny,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  confirmedInline: {
     color: colors.green,
     fontWeight: '600',
   },
+
+  // Waitlist
+  waitlistInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  waitlistInfoText: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    fontWeight: '600',
+  },
+  waitlistStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  waitlistPositionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primary + '12',
+    borderRadius: radii.pill,
+  },
+  waitlistPositionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  waitlistLeaveBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  waitlistLeaveBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.red,
+  },
+
+  // Full-width action buttons
+  actionButtons: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  actionBtnText: {
+    ...typography.bodyBold,
+    fontSize: 14,
+    color: colors.primary,
+  },
+
+  // Creator lock/confirm row
   lockRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   lockButton: {
     flexDirection: 'row',
@@ -827,27 +1090,6 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.primary,
-  },
-  shareButton: {
-    borderColor: colors.primary,
-    backgroundColor: '#eef2ff',
-  },
-  leaveButton: {
-    borderColor: colors.red,
-    backgroundColor: '#fef2f2',
-  },
-  leaveButtonText: {
-    ...typography.bodyBold,
-    fontSize: 13,
-    color: colors.red,
-  },
-  reportButton: {
-    borderColor: colors.border,
-  },
-  reportButtonText: {
-    ...typography.bodyBold,
-    fontSize: 13,
-    color: colors.textSecondary,
   },
   confirmButton: {
     borderColor: colors.green,
@@ -866,6 +1108,120 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     fontSize: 13,
     color: colors.green,
+  },
+
+  // Overflow menu
+  overflowBackdrop: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  overflowMenu: {
+    position: 'absolute',
+    top: 52,
+    right: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingVertical: spacing.xs,
+    minWidth: 160,
+    ...shadows.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  overflowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  overflowItemText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  overflowDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginHorizontal: spacing.sm,
+  },
+
+  // Chat divider
+  chatDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: '#F5F5F5',
+  },
+  chatDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  chatDividerText: {
+    ...typography.tiny,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textTertiary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginHorizontal: spacing.sm,
+  },
+  recapSection: {
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+  },
+  recapAvgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  recapAvgEmoji: {
+    fontSize: 16,
+  },
+  recapAvgLabel: {
+    ...typography.bodyBold,
+    fontSize: 13,
+    color: colors.text,
+  },
+  recapAvgSub: {
+    ...typography.tiny,
+    color: colors.textTertiary,
+  },
+  recapRateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primary + '12',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  recapRateBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  recapEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  recapEditBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
   },
   noShowSection: {
     marginTop: spacing.md,
@@ -913,8 +1269,11 @@ const styles = StyleSheet.create({
   },
 
   // Chat
+  chatFlatList: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
   chatList: {
-    paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },

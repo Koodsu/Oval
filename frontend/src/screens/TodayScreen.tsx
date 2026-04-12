@@ -17,13 +17,16 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { fetchFeed, getActivities, joinPod, resolveAvatarUrl } from '../api';
+import { fetchFeed, getActivities, joinPod, joinWaitlist, resolveAvatarUrl } from '../api';
 import { Pod, Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import ActivityCard from '../components/ActivityCard';
 import FadeIn from '../components/FadeIn';
+import PressableScale from '../components/PressableScale';
 import GuidelinesModal from '../components/GuidelinesModal';
+import TagPills from '../components/TagPills';
+import { SkeletonFeedCard, SkeletonActivityCard } from '../components/SkeletonLoader';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 import { CATEGORY_META } from '../constants/categories';
 import { formatMeetupTime } from '../utils/format';
@@ -44,11 +47,14 @@ interface FeedPodCardProps {
   pod: Pod;
   onJoin: () => void;
   onView: () => void;
+  onJoinWaitlist?: () => void;
   isJoining: boolean;
+  isJoiningWaitlist?: boolean;
   isMember: boolean;
+  currentUserId?: string;
 }
 
-function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardProps) {
+function FeedPodCard({ pod, onJoin, onView, onJoinWaitlist, isJoining, isJoiningWaitlist = false, isMember, currentUserId }: FeedPodCardProps) {
   const memberCount = pod.members.length;
   const spotsLeft = pod.maxMembers - memberCount;
   const progress = memberCount / pod.maxMembers;
@@ -71,7 +77,7 @@ function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardPr
   };
 
   return (
-    <TouchableOpacity style={[styles.feedCard, shadows.md]} onPress={handlePress} activeOpacity={0.85}>
+    <PressableScale onPress={handlePress} haptic="light" style={[styles.feedCard, shadows.md]}>
       {/* Activity icon + title */}
       <View style={styles.feedCardHeader}>
         <View style={[styles.feedCardIcon, { backgroundColor: accentColor + '1a' }]}>
@@ -109,6 +115,16 @@ function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardPr
         />
       </View>
 
+      {/* Member interest tag preview (non-self members only) */}
+      {(() => {
+        const otherTags = pod.members
+          .filter((m) => m.userId !== currentUserId)
+          .flatMap((m) => m.user.interestTags ?? []);
+        const uniqueTags = [...new Set(otherTags)];
+        if (uniqueTags.length === 0) return null;
+        return <TagPills tags={uniqueTags} max={3} size="sm" style={styles.memberTagsPreview} />;
+      })()}
+
       {/* Spots badge */}
       <View style={styles.feedCardFooter}>
         {spotsLeft > 0 ? (
@@ -130,6 +146,22 @@ function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardPr
           <Text style={styles.feedCardActionText}>View Pod</Text>
           <Ionicons name="arrow-forward" size={14} color={colors.primary} />
         </TouchableOpacity>
+      ) : spotsLeft <= 0 && onJoinWaitlist ? (
+        <TouchableOpacity
+          style={[styles.feedCardWaitlistBtn, isJoiningWaitlist && styles.feedCardJoinBtnLoading]}
+          onPress={onJoinWaitlist}
+          disabled={isJoiningWaitlist}
+          activeOpacity={0.8}
+        >
+          {isJoiningWaitlist ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <>
+              <Ionicons name="time-outline" size={14} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.feedCardWaitlistText}>Join Waitlist</Text>
+            </>
+          )}
+        </TouchableOpacity>
       ) : (
         <TouchableOpacity
           style={[styles.feedCardJoinBtn, isJoining && styles.feedCardJoinBtnLoading]}
@@ -144,7 +176,7 @@ function FeedPodCard({ pod, onJoin, onView, isJoining, isMember }: FeedPodCardPr
           )}
         </TouchableOpacity>
       )}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -159,6 +191,7 @@ export default function TodayScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
+  const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -212,10 +245,23 @@ export default function TodayScreen() {
     if (id) executeJoin(id);
   };
 
+  const handleJoinWaitlist = async (podId: string) => {
+    setWaitlistingId(podId);
+    try {
+      const { position } = await joinWaitlist(podId);
+      Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join waitlist');
+    } finally {
+      setWaitlistingId(null);
+    }
+  };
+
   const isMember = (pod: Pod) => pod.members.some((m) => m.user.id === user?.id);
 
   const todayPods = pods.filter((p) => isToday(p.meetupTime));
   const weekPods = pods.filter((p) => !isToday(p.meetupTime));
+  const hasAnyPods = todayPods.length > 0 || weekPods.length > 0;
   const firstName = user?.name?.split(' ')[0] ?? '';
 
   const renderFeedCard = (pod: Pod, index: number) => (
@@ -224,16 +270,73 @@ export default function TodayScreen() {
         pod={pod}
         onJoin={() => handleJoin(pod.id)}
         onView={() => navigation.navigate('Pod', { podId: pod.id })}
+        onJoinWaitlist={() => handleJoinWaitlist(pod.id)}
         isJoining={joiningId === pod.id}
+        isJoiningWaitlist={waitlistingId === pod.id}
         isMember={isMember(pod)}
+        currentUserId={user?.id}
       />
     </FadeIn>
   );
 
+  const renderActivityList = (heading: string) => (
+    <View style={[styles.section, styles.browseSection]}>
+      <Text style={styles.sectionLabel}>{heading}</Text>
+      {activities.length === 0 ? (
+        <View style={styles.emptySection}>
+          <Ionicons name="leaf-outline" size={32} color={colors.border} />
+          <Text style={styles.emptySectionTitle}>No activities available</Text>
+          <Text style={styles.emptySectionSub}>Check back soon — new activities are added regularly.</Text>
+        </View>
+      ) : (
+        activities.map((activity, index) => (
+          <FadeIn key={activity.id} delay={index * 30}>
+            <ActivityCard
+              activity={activity}
+              onPress={() =>
+                navigation.navigate('PodList', {
+                  activityId: activity.id,
+                  activityTitle: activity.title,
+                  activityCategory: activity.category,
+                })
+              }
+            />
+          </FadeIn>
+        ))
+      )}
+    </View>
+  );
+
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop: insets.top }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.border }} />
+              <View style={styles.headerText}>
+                <View style={{ width: 120, height: 18, borderRadius: 6, backgroundColor: colors.border }} />
+                <View style={{ width: 160, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginTop: 4 }} />
+              </View>
+            </View>
+          </View>
+          <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.lg }}>
+            <View style={{ width: '100%', height: 52, borderRadius: radii.md, backgroundColor: colors.border }} />
+          </View>
+          <View style={styles.section}>
+            <View style={{ width: 120, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginLeft: spacing.lg, marginBottom: spacing.md }} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+              {[0, 1, 2].map((i) => <SkeletonFeedCard key={i} />)}
+            </ScrollView>
+          </View>
+          <View style={[styles.section, styles.browseSection]}>
+            <View style={{ width: 130, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginBottom: spacing.md }} />
+            {[0, 1, 2, 3].map((i) => <SkeletonActivityCard key={i} />)}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -267,80 +370,57 @@ export default function TodayScreen() {
 
         {/* Find a Group CTA */}
         <View style={styles.heroSection}>
-          <TouchableOpacity
+          <PressableScale
             style={styles.heroButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              navigation.navigate('FindAGroup');
-            }}
-            activeOpacity={0.85}
+            onPress={() => navigation.navigate('FindAGroup')}
+            haptic="medium"
           >
             <Ionicons name="flash" size={20} color={colors.textInverse} />
             <Text style={styles.heroButtonText}>Find a Group</Text>
-          </TouchableOpacity>
+          </PressableScale>
           <Text style={styles.heroSubtext}>See open pods you can join right now</Text>
         </View>
 
-        {/* Happening Today */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Happening Today</Text>
-          {todayPods.length > 0 ? (
-            <FlatList
-              data={todayPods}
-              keyExtractor={(p) => p.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              renderItem={({ item, index }) => renderFeedCard(item, index)}
-            />
-          ) : (
-            <View style={styles.emptySection}>
-              <Ionicons name="sunny-outline" size={32} color={colors.border} />
-              <Text style={styles.emptySectionTitle}>Nothing today yet</Text>
-              <Text style={styles.emptySectionSub}>Start a pod from Browse Activities below.</Text>
-            </View>
-          )}
-        </View>
+        {/* No pods: promote activity list to the top */}
+        {!hasAnyPods && renderActivityList('Find something to join')}
 
-        {/* Starting This Week */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Starting This Week</Text>
-          {weekPods.length > 0 ? (
-            <FlatList
-              data={weekPods}
-              keyExtractor={(p) => p.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              renderItem={({ item, index }) => renderFeedCard(item, index)}
-            />
-          ) : (
-            <View style={styles.emptySection}>
-              <Ionicons name="calendar-outline" size={32} color={colors.border} />
-              <Text style={styles.emptySectionTitle}>Nothing scheduled yet</Text>
-              <Text style={styles.emptySectionSub}>Be the first to plan something this week.</Text>
-            </View>
-          )}
-        </View>
+        {/* Has pods: show pod sections, then activities below */}
+        {hasAnyPods && (
+          <>
+            {/* Happening Today */}
+            {todayPods.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Happening Today</Text>
+                <FlatList
+                  data={todayPods}
+                  keyExtractor={(p) => p.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalList}
+                  renderItem={({ item, index }) => renderFeedCard(item, index)}
+                />
+              </View>
+            )}
 
-        {/* Browse Activities */}
-        <View style={[styles.section, styles.browseSection]}>
-          <Text style={styles.sectionLabel}>Browse Activities</Text>
-          {activities.map((activity, index) => (
-            <FadeIn key={activity.id} delay={index * 30}>
-              <ActivityCard
-                activity={activity}
-                onPress={() =>
-                  navigation.navigate('PodList', {
-                    activityId: activity.id,
-                    activityTitle: activity.title,
-                    activityCategory: activity.category,
-                  })
-                }
-              />
-            </FadeIn>
-          ))}
-        </View>
+            {/* Starting This Week */}
+            {weekPods.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Starting This Week</Text>
+                <FlatList
+                  data={weekPods}
+                  keyExtractor={(p) => p.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalList}
+                  renderItem={({ item, index }) => renderFeedCard(item, index)}
+                />
+              </View>
+            )}
+
+            {/* Browse Activities */}
+            {renderActivityList('Browse Activities')}
+          </>
+        )}
       </ScrollView>
 
       <GuidelinesModal
@@ -513,6 +593,10 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
+  memberTagsPreview: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
   feedCardFooter: {
     marginBottom: spacing.sm,
   },
@@ -550,6 +634,21 @@ const styles = StyleSheet.create({
   },
   feedCardJoinText: {
     color: colors.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  feedCardWaitlistBtn: {
+    borderRadius: radii.sm,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 2,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  feedCardWaitlistText: {
+    color: colors.primary,
     fontSize: 13,
     fontWeight: '700',
   },

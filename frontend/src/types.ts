@@ -16,6 +16,7 @@ export interface User {
   bio?: string | null;
   clubs?: string[];
   instagramHandle?: string | null;
+  interestTags?: string[];
 }
 
 export interface PublicProfile {
@@ -33,6 +34,7 @@ export interface PublicProfile {
   bio?: string | null;
   clubs?: string[];
   instagramHandle?: string | null;
+  interestTags?: string[];
 }
 
 export type FriendRelationshipStatus =
@@ -124,7 +126,16 @@ export interface PodMember {
   userId: string;
   joinedAt: string;
   confirmedAt?: string | null;
-  user: { id: string; name: string; avatarUrl?: string | null };
+  user: { id: string; name: string; avatarUrl?: string | null; interestTags?: string[]; classYear?: string | null; major?: string | null };
+}
+
+export interface PodRecap {
+  id: string;
+  podId: string;
+  userId: string;
+  rating: 1 | 2 | 3;
+  note?: string | null;
+  createdAt: string;
 }
 
 export interface Pod {
@@ -143,6 +154,19 @@ export interface Pod {
   members: PodMember[];
   noShowUserIds?: string[];
   recommended?: boolean;
+  averageRating?: number | null;
+  myRecap?: PodRecap | null;
+  waitlistCount?: number;
+  myWaitlistPosition?: number | null;
+}
+
+export interface PeopleYouMetUser {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  classYear?: string | null;
+  major?: string | null;
+  interestTags: string[];
 }
 
 export interface MessageReaction {

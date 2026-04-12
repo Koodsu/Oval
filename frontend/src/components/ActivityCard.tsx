@@ -1,10 +1,10 @@
 import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { colors, spacing, radii, shadows, typography } from '../theme';
 import { Activity } from '../types';
 import { CATEGORY_META } from '../constants/categories';
+import PressableScale from './PressableScale';
 
 interface ActivityCardProps {
   activity: Activity;
@@ -16,16 +16,11 @@ export default function ActivityCard({ activity, onPress }: ActivityCardProps) {
   const iconName = meta?.icon ?? 'sparkles-outline';
   const accentColor = meta?.color ?? colors.primary;
 
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  };
-
   return (
-    <TouchableOpacity
+    <PressableScale
       style={[styles.card, shadows.md]}
-      onPress={handlePress}
-      activeOpacity={0.7}
+      onPress={onPress}
+      haptic="light"
     >
       <View style={[styles.iconCircle, { backgroundColor: accentColor + '15' }]}>
         <Ionicons name={iconName} size={22} color={accentColor} />
@@ -54,7 +49,7 @@ export default function ActivityCard({ activity, onPress }: ActivityCardProps) {
         )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.border} style={styles.chevron} />
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

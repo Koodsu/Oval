@@ -14,7 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { fetchFeed, joinPod } from '../api';
+import { fetchFeed, joinPod, joinWaitlist } from '../api';
 import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import GuidelinesModal from '../components/GuidelinesModal';
@@ -29,11 +29,13 @@ interface DiscoveryPodCardProps {
   pod: Pod;
   onJoin: () => void;
   onView: () => void;
+  onJoinWaitlist?: () => void;
   isJoining: boolean;
+  isJoiningWaitlist?: boolean;
   isMember: boolean;
 }
 
-function DiscoveryPodCard({ pod, onJoin, onView, isJoining, isMember }: DiscoveryPodCardProps) {
+function DiscoveryPodCard({ pod, onJoin, onView, onJoinWaitlist, isJoining, isJoiningWaitlist = false, isMember }: DiscoveryPodCardProps) {
   const memberCount = pod.members.length;
   const spotsLeft = pod.maxMembers - memberCount;
   const progress = memberCount / pod.maxMembers;
@@ -109,6 +111,22 @@ function DiscoveryPodCard({ pod, onJoin, onView, isJoining, isMember }: Discover
             <Text style={styles.viewBtnText}>View Pod</Text>
             <Ionicons name="arrow-forward" size={13} color={colors.primary} />
           </TouchableOpacity>
+        ) : spotsLeft <= 0 && onJoinWaitlist ? (
+          <TouchableOpacity
+            style={[styles.waitlistBtn, isJoiningWaitlist && styles.joinBtnLoading]}
+            onPress={onJoinWaitlist}
+            disabled={isJoiningWaitlist}
+            activeOpacity={0.8}
+          >
+            {isJoiningWaitlist ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Ionicons name="time-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                <Text style={styles.waitlistBtnText}>Join Waitlist</Text>
+              </>
+            )}
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[styles.joinBtn, isJoining && styles.joinBtnLoading]}
@@ -150,6 +168,7 @@ export default function FindAGroupScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
   const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -179,6 +198,18 @@ export default function FindAGroupScreen() {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join pod');
     } finally {
       setJoiningId(null);
+    }
+  };
+
+  const handleJoinWaitlist = async (podId: string) => {
+    setWaitlistingId(podId);
+    try {
+      const { position } = await joinWaitlist(podId);
+      Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join waitlist');
+    } finally {
+      setWaitlistingId(null);
     }
   };
 
@@ -213,7 +244,9 @@ export default function FindAGroupScreen() {
         pod={pod}
         onJoin={() => handleJoin(pod.id)}
         onView={() => navigation.navigate('Pod', { podId: pod.id })}
+        onJoinWaitlist={() => handleJoinWaitlist(pod.id)}
         isJoining={joiningId === pod.id}
+        isJoiningWaitlist={waitlistingId === pod.id}
         isMember={isMember(pod)}
       />
     </FadeIn>
@@ -444,6 +477,22 @@ const styles = StyleSheet.create({
   },
   joinBtnText: {
     color: colors.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  waitlistBtn: {
+    borderRadius: radii.sm,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    minWidth: 90,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  waitlistBtnText: {
+    color: colors.primary,
     fontSize: 13,
     fontWeight: '700',
   },

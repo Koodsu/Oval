@@ -18,6 +18,7 @@ import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
 import FadeIn from '../components/FadeIn';
+import { SkeletonPodCard } from '../components/SkeletonLoader';
 import { colors, spacing, typography } from '../theme';
 
 export default function MyActivitiesScreen() {
@@ -51,8 +52,14 @@ export default function MyActivitiesScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.heading}>My Activities</Text>
+          <Text style={styles.subtitle}>Pods you've joined</Text>
+        </View>
+        <View style={styles.list}>
+          {[0, 1, 2, 3].map((i) => <SkeletonPodCard key={i} />)}
+        </View>
       </View>
     );
   }

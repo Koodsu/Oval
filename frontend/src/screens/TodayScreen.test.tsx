@@ -102,15 +102,6 @@ describe('TodayScreen', () => {
     mockGetActivities.mockResolvedValue([]);
   });
 
-  it('renders section labels', async () => {
-    render(<TodayScreen />);
-    await waitFor(() => {
-      expect(screen.getByText('Happening Today')).toBeTruthy();
-      expect(screen.getByText('Starting This Week')).toBeTruthy();
-      expect(screen.getByText('Browse Activities')).toBeTruthy();
-    });
-  });
-
   it('shows greeting with first name', async () => {
     render(<TodayScreen />);
     await waitFor(() => {
@@ -118,35 +109,71 @@ describe('TodayScreen', () => {
     });
   });
 
-  it('shows empty state for Today when no pods', async () => {
+  it('shows "Find something to join" heading when user has no pods and activities exist', async () => {
+    mockGetActivities.mockResolvedValue([makeActivity({ title: 'Coffee Walk' })]);
     render(<TodayScreen />);
     await waitFor(() => {
-      expect(screen.getByText('Nothing today yet')).toBeTruthy();
+      expect(screen.getByText('Find something to join')).toBeTruthy();
+      expect(screen.getByText('Coffee Walk')).toBeTruthy();
     });
   });
 
-  it('shows empty state for This Week when no pods', async () => {
+  it('does NOT show pod section headings when there are no pods', async () => {
+    mockGetActivities.mockResolvedValue([makeActivity()]);
+    render(<TodayScreen />);
+    await waitFor(() => screen.getByText('Find something to join'));
+    expect(screen.queryByText('Happening Today')).toBeNull();
+    expect(screen.queryByText('Starting This Week')).toBeNull();
+  });
+
+  it('does NOT show old empty state text', async () => {
+    render(<TodayScreen />);
+    await waitFor(() => screen.getByText('Hey, Alice'));
+    expect(screen.queryByText('Nothing today yet')).toBeNull();
+    expect(screen.queryByText('Nothing scheduled yet')).toBeNull();
+  });
+
+  it('shows "No activities available" when no pods and no activities exist', async () => {
     render(<TodayScreen />);
     await waitFor(() => {
-      expect(screen.getByText('Nothing scheduled yet')).toBeTruthy();
+      expect(screen.getByText('No activities available')).toBeTruthy();
     });
   });
 
-  it('renders a pod card in Happening Today section when a today pod exists', async () => {
+  it('shows "Happening Today" section when today pods exist', async () => {
     mockFetchFeed.mockResolvedValue([makePod({ meetupTime: todayISO })]);
     render(<TodayScreen />);
     await waitFor(() => {
+      expect(screen.getByText('Happening Today')).toBeTruthy();
       expect(screen.getByText('Study Session')).toBeTruthy();
       expect(screen.getByText('Join Pod')).toBeTruthy();
     });
   });
 
-  it('renders a pod card in Starting This Week when a week pod exists', async () => {
+  it('shows "Starting This Week" section when week pods exist', async () => {
     mockFetchFeed.mockResolvedValue([makePod({ id: 'pod-week', meetupTime: weekISO })]);
     render(<TodayScreen />);
     await waitFor(() => {
+      expect(screen.getByText('Starting This Week')).toBeTruthy();
       expect(screen.getByText('Study Session')).toBeTruthy();
     });
+  });
+
+  it('shows "Browse Activities" section heading when pods exist', async () => {
+    mockFetchFeed.mockResolvedValue([makePod({ meetupTime: todayISO })]);
+    mockGetActivities.mockResolvedValue([makeActivity({ title: 'Coffee Walk' })]);
+    render(<TodayScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Browse Activities')).toBeTruthy();
+      expect(screen.getByText('Coffee Walk')).toBeTruthy();
+    });
+  });
+
+  it('does NOT show "Happening Today" when only week pods exist', async () => {
+    mockFetchFeed.mockResolvedValue([makePod({ id: 'pod-week', meetupTime: weekISO })]);
+    render(<TodayScreen />);
+    await waitFor(() => screen.getByText('Starting This Week'));
+    expect(screen.queryByText('Happening Today')).toBeNull();
   });
 
   it('shows "1 spot left!" badge when only 1 spot remains', async () => {
@@ -180,7 +207,8 @@ describe('TodayScreen', () => {
     });
   });
 
-  it('renders activity cards in Browse Activities section', async () => {
+  it('renders activity cards in Browse Activities section when pods exist', async () => {
+    mockFetchFeed.mockResolvedValue([makePod()]);
     mockGetActivities.mockResolvedValue([makeActivity({ title: 'Coffee Walk', podCount: 2 })]);
     render(<TodayScreen />);
     await waitFor(() => {

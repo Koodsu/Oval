@@ -7,9 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radii, typography, shadows } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 export interface ReplyPreview {
   name: string;
@@ -27,6 +26,8 @@ export interface ChatInputProps {
   onCancelReply?: () => void;
 }
 
+const SEND_BG = colors.chatMe; // #B30000 scarlet
+
 export default function ChatInput({
   value,
   onChangeText,
@@ -40,54 +41,52 @@ export default function ChatInput({
   const disabled = !value.trim() || sending;
 
   return (
-    <View style={[styles.inputBar, shadows.sm]}>
+    <View style={styles.inputBar}>
       {replyPreview && (
         <View style={styles.replyPreviewBar}>
           <View style={styles.replyPreviewContent}>
             <Text style={styles.replyPreviewName} numberOfLines={1}>
-              {replyPreview.name}
+              Replying to {replyPreview.name}
             </Text>
             <Text style={styles.replyPreviewText} numberOfLines={1}>
               {replyPreview.content}
             </Text>
           </View>
           {onCancelReply && (
-            <TouchableOpacity onPress={onCancelReply} style={styles.cancelReplyBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+            <TouchableOpacity
+              onPress={onCancelReply}
+              style={styles.cancelReplyBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
             </TouchableOpacity>
           )}
         </View>
       )}
       <View style={styles.inputRow}>
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={styles.textInput}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textTertiary}
-          value={value}
-          onChangeText={onChangeText}
-          multiline
-          maxLength={maxLength}
-        />
-      </View>
-      <TouchableOpacity
-        onPress={onSend}
-        disabled={disabled}
-        activeOpacity={0.7}
-      >
-        <LinearGradient
-          colors={disabled ? ['#cbd5e1', '#cbd5e1'] : [...colors.gradient]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.sendButton}
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.textInput}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textTertiary}
+            value={value}
+            onChangeText={onChangeText}
+            multiline
+            maxLength={maxLength}
+          />
+        </View>
+        <TouchableOpacity
+          onPress={onSend}
+          disabled={disabled}
+          activeOpacity={0.75}
+          style={[styles.sendButton, disabled && styles.sendButtonDisabled]}
         >
           {sending ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Ionicons name="send" size={18} color="#fff" />
+            <Ionicons name="send" size={17} color="#fff" />
           )}
-        </LinearGradient>
-      </TouchableOpacity>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -95,34 +94,39 @@ export default function ChatInput({
 
 const styles = StyleSheet.create({
   inputBar: {
-    paddingTop: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    borderTopColor: '#E5E5EA',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   replyPreviewBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xs,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    marginBottom: spacing.xs,
   },
   replyPreviewContent: {
     flex: 1,
-    borderLeftWidth: 3,
+    borderLeftWidth: 2,
     borderLeftColor: colors.primary,
     paddingLeft: spacing.sm,
   },
   replyPreviewName: {
     ...typography.tiny,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.primary,
+    fontSize: 11,
   },
   replyPreviewText: {
     ...typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   cancelReplyBtn: {
     padding: spacing.xs,
@@ -131,31 +135,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
     gap: spacing.sm,
   },
+  // Pill-shaped white text input
   inputWrapper: {
     flex: 1,
-    backgroundColor: colors.bg,
-    borderRadius: radii.pill,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
+    borderColor: '#E5E5EA',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
   },
   textInput: {
     ...typography.body,
     fontSize: 15,
     color: colors.text,
-    paddingVertical: 10,
+    paddingVertical: 9,
     maxHeight: 100,
     lineHeight: 20,
     letterSpacing: 0,
   },
+  // Solid scarlet circular send button
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: SEND_BG,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 1,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#D0D0D0',
   },
 });
