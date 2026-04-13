@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../Avatar';
 import { colors, spacing, typography } from '../../theme';
@@ -26,40 +26,106 @@ export interface MessageBubbleMessage {
   replyTo?: MessageReplyTo | null;
 }
 
+const R = 18;
+/** Tight chain corner where two same-side bubbles meet */
+const CHAIN = 4;
+
+/** Sent (right): first = BR 4; last = TR 4; middle = TR+BR 4; solo = both 4. Received: mirror on left (BL / TL). */
+function groupedBubbleCorners(isMe: boolean, isFirst: boolean, isLast: boolean): ViewStyle {
+  if (isMe) {
+    if (isFirst && isLast) {
+      return {
+        borderTopLeftRadius: R,
+        borderTopRightRadius: CHAIN,
+        borderBottomLeftRadius: R,
+        borderBottomRightRadius: CHAIN,
+      };
+    }
+    if (isFirst) {
+      return {
+        borderTopLeftRadius: R,
+        borderTopRightRadius: R,
+        borderBottomLeftRadius: R,
+        borderBottomRightRadius: CHAIN,
+      };
+    }
+    if (isLast) {
+      return {
+        borderTopLeftRadius: R,
+        borderTopRightRadius: CHAIN,
+        borderBottomLeftRadius: R,
+        borderBottomRightRadius: R,
+      };
+    }
+    return {
+      borderTopLeftRadius: R,
+      borderTopRightRadius: CHAIN,
+      borderBottomLeftRadius: R,
+      borderBottomRightRadius: CHAIN,
+    };
+  }
+
+  if (isFirst && isLast) {
+    return {
+      borderTopLeftRadius: R,
+      borderTopRightRadius: R,
+      borderBottomRightRadius: R,
+      borderBottomLeftRadius: CHAIN,
+    };
+  }
+  if (isFirst) {
+    return {
+      borderTopLeftRadius: R,
+      borderTopRightRadius: R,
+      borderBottomRightRadius: R,
+      borderBottomLeftRadius: CHAIN,
+    };
+  }
+  if (isLast) {
+    return {
+      borderTopLeftRadius: CHAIN,
+      borderTopRightRadius: R,
+      borderBottomRightRadius: R,
+      borderBottomLeftRadius: R,
+    };
+  }
+  return {
+    borderTopLeftRadius: R,
+    borderTopRightRadius: R,
+    borderBottomRightRadius: R,
+    borderBottomLeftRadius: R,
+  };
+}
+
 export interface MessageBubbleProps {
   message: MessageBubbleMessage;
   isMe: boolean;
   showAvatar: boolean;
+  isFirstInGroup: boolean;
   isLastInGroup: boolean;
+  /** Index in the messages array (for vertical spacing between sender groups). */
+  listIndex?: number;
   currentUserId?: string;
   isReadByOther?: boolean;
+  /** When true, show read receipt on last own bubble (DM threads). */
+  showReadReceipt?: boolean;
   onLongPress?: () => void;
   onAvatarPress?: () => void;
   resolveAvatarUrl?: (url: string | null | undefined) => string | undefined;
-  formatTime?: (iso: string) => string;
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export default function MessageBubble({
   message,
   isMe,
   showAvatar,
+  isFirstInGroup,
   isLastInGroup,
-  currentUserId,
+  listIndex = 0,
   isReadByOther,
+  showReadReceipt = false,
   onLongPress,
   onAvatarPress,
   resolveAvatarUrl = () => undefined,
-  formatTime = timeAgo,
 }: MessageBubbleProps) {
   const sender = message.user ?? message.sender;
   const avatarUri = sender ? resolveAvatarUrl(sender.avatarUrl) : undefined;
@@ -72,42 +138,50 @@ export default function MessageBubble({
       cur.userIds.add(r.userId);
       byEmoji.set(r.emoji, cur);
     }
-    return Array.from(byEmoji.entries()).map(([emoji, { count, userIds }]) => ({
+    return Array.from(byEmoji.entries()).map(([emoji, { count }]) => ({
       emoji,
       count,
-      hasMe: currentUserId ? userIds.has(currentUserId) : false,
     }));
-  }, [message.reactions, currentUserId]);
+  }, [message.reactions]);
 
-  // Tail: last message in a group gets a smaller bottom corner (iMessage style)
-  // Non-last messages in a group get fully rounded corners on the "inner" side
-  const bubbleStyle = isMe
-    ? [
-        styles.bubble,
-        styles.bubbleMe,
-        !isLastInGroup && styles.bubbleMeGrouped,
-      ]
-    : [
-        styles.bubble,
-        styles.bubbleThem,
-        !isLastInGroup && styles.bubbleThemGrouped,
-      ];
+  const cornerStyle = groupedBubbleCorners(isMe, isFirstInGroup, isLastInGroup);
+  const bubbleStyle = [
+    styles.bubbleBase,
+    isMe ? styles.bubbleMeFill : styles.bubbleThemFill,
+    cornerStyle,
+    !isMe && THEM_SHADOW,
+  ];
+
+  const rowMarginTop = isFirstInGroup ? (listIndex > 0 ? 12 : 4) : 0;
+  const rowMarginBottom = isMe
+    ? isLastInGroup
+      ? 10
+      : 2
+    : isLastInGroup
+      ? 0
+      : 2;
+
+  const showReceipt = Boolean(showReadReceipt && isMe && isLastInGroup && isReadByOther);
 
   return (
-    <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
-      {/* Avatar slot always present for "them" to maintain alignment */}
+    <View
+      style={[
+        styles.messageRow,
+        isMe && styles.messageRowMe,
+        { marginTop: rowMarginTop, marginBottom: rowMarginBottom },
+      ]}
+    >
       {!isMe && (
         <View style={styles.avatarSlot}>
           {showAvatar && sender ? (
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
-              <Avatar name={sender.name} size={30} uri={avatarUri} />
+              <Avatar name={sender.name} size={32} uri={avatarUri} />
             </TouchableOpacity>
           ) : null}
         </View>
       )}
 
       <View style={[styles.bubbleColumn, isMe && styles.bubbleColumnMe]}>
-        {/* Sender name above first message in a sequence (others only) */}
         {showAvatar && !isMe && sender && (
           <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
             <Text style={styles.senderName}>{sender.name.split(' ')[0]}</Text>
@@ -120,7 +194,6 @@ export default function MessageBubble({
           activeOpacity={0.95}
           delayLongPress={400}
         >
-          {/* Reply preview */}
           {message.replyTo && (
             <View style={isMe ? styles.replyPreviewMe : styles.replyPreviewThem}>
               <Text style={isMe ? styles.replyPreviewNameMe : styles.replyPreviewNameThem} numberOfLines={1}>
@@ -136,28 +209,22 @@ export default function MessageBubble({
           </Text>
         </TouchableOpacity>
 
-        {/* Reactions */}
         {reactionGroups.length > 0 && (
           <View style={[styles.reactionsRow, isMe && styles.reactionsRowMe]}>
             {reactionGroups.map(({ emoji, count }) => (
               <View key={emoji} style={styles.reactionChip}>
                 <Text style={styles.reactionChipText}>
-                  {emoji}{count > 1 ? ` ${count}` : ''}
+                  {emoji}
+                  {count > 1 ? ` ${count}` : ''}
                 </Text>
               </View>
             ))}
           </View>
         )}
 
-        {/* Timestamp + read receipt on last message in group */}
-        {isLastInGroup && (
-          <View style={[styles.timestampRow, isMe && styles.timestampRowMe]}>
-            <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
-              {formatTime(message.createdAt)}
-            </Text>
-            {isMe && isReadByOther && (
-              <Ionicons name="checkmark-done" size={13} color={colors.primary} style={styles.readReceipt} />
-            )}
+        {showReceipt && (
+          <View style={styles.readRow}>
+            <Ionicons name="checkmark-done" size={13} color={colors.scarlet} />
           </View>
         )}
       </View>
@@ -165,23 +232,29 @@ export default function MessageBubble({
   );
 }
 
-const BUBBLE_RADIUS = 18;
-const TAIL_RADIUS = 4;
-const CHAT_BG = '#F5F5F5';
-const THEM_BORDER = '#E5E5EA';
+const SCARLET = colors.scarlet;
+const THEM_SHADOW =
+  Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 1 },
+    },
+    android: { elevation: 2 },
+  }) ?? {};
 
 const styles = StyleSheet.create({
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: 2,
     paddingHorizontal: spacing.sm,
   },
   messageRowMe: {
     justifyContent: 'flex-end',
   },
   avatarSlot: {
-    width: 34,
+    width: 36,
     marginRight: 6,
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -193,45 +266,25 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   senderName: {
-    ...typography.tiny,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textMuted,
     marginBottom: 3,
     marginLeft: 2,
-    fontSize: 11,
   },
 
-  // Base bubble
-  bubble: {
+  bubbleBase: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: BUBBLE_RADIUS,
+    overflow: 'hidden',
   },
-
-  // My messages — scarlet, tail bottom-right
-  bubbleMe: {
-    backgroundColor: colors.chatMe,
+  bubbleMeFill: {
+    backgroundColor: SCARLET,
     alignSelf: 'flex-end',
-    borderBottomRightRadius: TAIL_RADIUS,
   },
-  // Non-last "me" messages in a sequence — fully rounded right side
-  bubbleMeGrouped: {
-    borderBottomRightRadius: BUBBLE_RADIUS,
-    borderTopRightRadius: BUBBLE_RADIUS,
-  },
-
-  // Their messages — white with gray border, tail bottom-left
-  bubbleThem: {
-    backgroundColor: colors.chatThem,
+  bubbleThemFill: {
+    backgroundColor: '#FFFFFF',
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: TAIL_RADIUS,
-    borderWidth: 1,
-    borderColor: THEM_BORDER,
-  },
-  // Non-last "them" messages in a sequence — fully rounded left side
-  bubbleThemGrouped: {
-    borderBottomLeftRadius: BUBBLE_RADIUS,
-    borderTopLeftRadius: BUBBLE_RADIUS,
   },
 
   bubbleTextMe: {
@@ -244,36 +297,16 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontSize: 15,
     lineHeight: 20,
-    color: colors.text,
+    color: colors.textOnLight,
   },
 
-  // Timestamps
-  timestampRow: {
+  readRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 3,
-    marginBottom: 4,
-    marginLeft: 2,
-  },
-  timestampRowMe: {
-    alignSelf: 'flex-end',
-    marginLeft: 0,
+    justifyContent: 'flex-end',
+    marginTop: 2,
     marginRight: 2,
   },
-  timestamp: {
-    ...typography.tiny,
-    fontSize: 10,
-    color: colors.textTertiary,
-  },
-  timestampMe: {
-    textAlign: 'right',
-  },
-  readReceipt: {
-    marginLeft: 1,
-  },
 
-  // Reactions
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -288,18 +321,18 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   reactionChip: {
-    backgroundColor: CHAT_BG,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: THEM_BORDER,
+    borderColor: colors.creamBorder,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   reactionChipText: {
     fontSize: 12,
+    color: colors.textMuted,
   },
 
-  // Reply previews
   replyPreviewMe: {
     borderLeftWidth: 2,
     borderLeftColor: 'rgba(255,255,255,0.5)',
@@ -308,7 +341,7 @@ const styles = StyleSheet.create({
   },
   replyPreviewThem: {
     borderLeftWidth: 2,
-    borderLeftColor: colors.primary + '60',
+    borderLeftColor: `${SCARLET}99`,
     paddingLeft: 8,
     marginBottom: 6,
   },
@@ -320,7 +353,7 @@ const styles = StyleSheet.create({
   replyPreviewNameThem: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.primary,
+    color: SCARLET,
   },
   replyPreviewContentMe: {
     fontSize: 12,
@@ -330,7 +363,7 @@ const styles = StyleSheet.create({
   },
   replyPreviewContentThem: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 1,
     lineHeight: 16,
   },

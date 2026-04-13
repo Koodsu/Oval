@@ -26,7 +26,7 @@ export interface ChatInputProps {
   onCancelReply?: () => void;
 }
 
-const SEND_BG = colors.chatMe; // #B30000 scarlet
+const ACCENT = colors.scarlet;
 
 export default function ChatInput({
   value,
@@ -58,17 +58,23 @@ export default function ChatInput({
               style={styles.cancelReplyBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
+              <Ionicons name="close-circle" size={20} color={colors.textMutedLight} />
             </TouchableOpacity>
           )}
         </View>
       )}
       <View style={styles.inputRow}>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.6} accessibilityLabel="Attach (coming soon)">
+          <Ionicons name="image-outline" size={22} color="#AAAAAA" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.6} accessibilityLabel="Emoji (coming soon)">
+          <Ionicons name="happy-outline" size={22} color="#AAAAAA" />
+        </TouchableOpacity>
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.textInput}
             placeholder={placeholder}
-            placeholderTextColor={colors.textTertiary}
+            placeholderTextColor={colors.textMutedLight}
             value={value}
             onChangeText={onChangeText}
             multiline
@@ -84,7 +90,7 @@ export default function ChatInput({
           {sending ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Ionicons name="send" size={17} color="#fff" />
+            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
           )}
         </TouchableOpacity>
       </View>
@@ -96,7 +102,7 @@ const styles = StyleSheet.create({
   inputBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: colors.creamBorder,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
@@ -107,25 +113,25 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.creamBorder,
     marginBottom: spacing.xs,
   },
   replyPreviewContent: {
     flex: 1,
     borderLeftWidth: 2,
-    borderLeftColor: colors.primary,
+    borderLeftColor: ACCENT,
     paddingLeft: spacing.sm,
   },
   replyPreviewName: {
     ...typography.tiny,
     fontWeight: '700',
-    color: colors.primary,
+    color: ACCENT,
     fontSize: 11,
   },
   replyPreviewText: {
     ...typography.body,
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 1,
   },
   cancelReplyBtn: {
@@ -134,39 +140,46 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    gap: 4,
   },
-  // Pill-shaped white text input
+  iconBtn: {
+    paddingBottom: 8,
+    paddingHorizontal: 2,
+    justifyContent: 'center',
+  },
   inputWrapper: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    paddingHorizontal: 14,
+    backgroundColor: colors.cream,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     justifyContent: 'center',
+    minHeight: 40,
   },
   textInput: {
     ...typography.body,
     fontSize: 15,
-    color: colors.text,
-    paddingVertical: 9,
+    color: colors.textOnLight,
+    paddingVertical: 8,
     maxHeight: 100,
     lineHeight: 20,
     letterSpacing: 0,
   },
-  // Solid scarlet circular send button
   sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: SEND_BG,
+    width: 36,
+    height: 36,
+    minWidth: 36,
+    minHeight: 36,
+    maxWidth: 36,
+    maxHeight: 36,
+    borderRadius: 18,
+    backgroundColor: '#BB0000',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 1,
+    overflow: 'hidden',
   },
   sendButtonDisabled: {
-    backgroundColor: '#D0D0D0',
+    backgroundColor: '#BB0000',
+    opacity: 0.38,
   },
 });

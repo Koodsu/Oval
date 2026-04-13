@@ -141,7 +141,7 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.scarlet} />
       </View>
     );
   }
@@ -180,6 +180,8 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
           const showAvatar =
             !isMe &&
             (index === 0 || messages[index - 1].senderId !== message.senderId);
+          const isFirstInGroup =
+            index === 0 || messages[index - 1].senderId !== message.senderId;
           const isLastInGroup =
             index === messages.length - 1 ||
             messages[index + 1].senderId !== message.senderId;
@@ -194,9 +196,12 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
               message={message}
               isMe={isMe}
               showAvatar={showAvatar}
+              isFirstInGroup={isFirstInGroup}
               isLastInGroup={isLastInGroup}
+              listIndex={index}
               currentUserId={user?.id}
               isReadByOther={isReadByOther}
+              showReadReceipt
               onLongPress={() => setReactionTargetMsgId(message.id)}
               onAvatarPress={handleAvatarPress}
               resolveAvatarUrl={resolveAvatarUrl}
@@ -253,8 +258,8 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: colors.cream },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.cream },
   messageList: {
     padding: spacing.md,
     paddingBottom: spacing.sm,

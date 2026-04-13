@@ -2,9 +2,16 @@ import React from 'react';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { AuthProvider, useAuth } from './AuthContext';
 
 jest.mock('../api', () => ({ setToken: jest.fn(), setOnUnauthorized: jest.fn() }));
+
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn().mockResolvedValue(null),
+  setItemAsync: jest.fn().mockResolvedValue(undefined),
+  deleteItemAsync: jest.fn().mockResolvedValue(undefined),
+}));
 
 function TestConsumer() {
   const { hasAcceptedGuidelines, acceptGuidelines, isLoading } = useAuth();
@@ -19,11 +26,13 @@ function TestConsumer() {
 
 describe('AuthContext — guidelines', () => {
   beforeEach(() => {
-    (AsyncStorage.multiGet as jest.Mock).mockResolvedValue([
-      ['token', null],
-      ['user', null],
-      ['guidelinesAccepted', null],
-    ]);
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'guidelinesAccepted') return Promise.resolve(null);
+      if (key === 'user') return Promise.resolve(null);
+      if (key === 'token') return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
     (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
   });
 
@@ -37,11 +46,12 @@ describe('AuthContext — guidelines', () => {
   });
 
   it('hasAcceptedGuidelines is true when storage has "true"', async () => {
-    (AsyncStorage.multiGet as jest.Mock).mockResolvedValue([
-      ['token', null],
-      ['user', null],
-      ['guidelinesAccepted', 'true'],
-    ]);
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'guidelinesAccepted') return Promise.resolve('true');
+      if (key === 'user') return Promise.resolve(null);
+      if (key === 'token') return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
     render(
       <AuthProvider>
         <TestConsumer />

@@ -2,7 +2,19 @@ import React from 'react';
 import { ActivityIndicator } from 'react-native';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Share } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PodScreen from './PodScreen';
+
+const initialSafeAreaMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
+
+function renderWithSafeArea(ui: React.ReactElement) {
+  return render(
+    <SafeAreaProvider initialMetrics={initialSafeAreaMetrics}>{ui}</SafeAreaProvider>
+  );
+}
 
 // ── API mocks ────────────────────────────────────────────────────────────────
 jest.mock('../api', () => ({
@@ -30,14 +42,6 @@ jest.mock('../components/ReportModal', () => {
   const { View } = require('react-native');
   return ({ visible }: { visible: boolean }) =>
     visible ? React.createElement(View, { testID: 'report-modal' }) : null;
-});
-
-// ── StatusBadge mock ──────────────────────────────────────────────────────────
-jest.mock('../components/StatusBadge', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-  return ({ status }: { status: string }) =>
-    React.createElement(Text, { testID: 'status-badge' }, status);
 });
 
 // ── Avatar mock ───────────────────────────────────────────────────────────────
@@ -117,8 +121,8 @@ afterEach(() => {
 });
 
 async function renderAndLoad() {
-  const utils = render(<PodScreen {...buildProps()} />);
-  await waitFor(() => expect(screen.queryByTestId('status-badge')).not.toBeNull());
+  const utils = renderWithSafeArea(<PodScreen {...buildProps()} />);
+  await waitFor(() => expect(screen.getByText('Share')).toBeTruthy());
   return utils;
 }
 
@@ -191,7 +195,7 @@ describe('PodScreen — loading state', () => {
     mockGetPod.mockReturnValue(new Promise(() => {}));
     mockGetMessages.mockReturnValue(new Promise<{ messages: unknown[]; typingUserIds: string[] }>(() => {}));
 
-    const { UNSAFE_getByType } = render(<PodScreen {...buildProps()} />);
+    const { UNSAFE_getByType } = renderWithSafeArea(<PodScreen {...buildProps()} />);
     expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
   });
 });
