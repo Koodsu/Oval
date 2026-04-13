@@ -28,7 +28,20 @@ export const colors = {
   borderLight: '#f1f5f9',
   divider: '#e2e8f0',
 
-  chatMe: '#B30000',
+  /** Warm cream pod/chat surface (landing-aligned) */
+  cream: '#F5F0E8',
+  creamBorder: '#E8E3DB',
+  /** Brand scarlet for pod detail + chat accents */
+  scarlet: '#CC0000',
+  textOnLight: '#111111',
+  textMuted: '#666666',
+  textMutedLight: '#999999',
+  /** Chat input bar accessory icons (image / emoji) */
+  inputBarMutedIcon: '#AAAAAA',
+  progressTrack: '#E8E3DB',
+  podForming: '#16a34a',
+
+  chatMe: '#CC0000',
   chatThem: '#FFFFFF',
 
   status: {
@@ -126,6 +139,18 @@ export const typography = {
     color: colors.textTertiary,
   },
 };
+
+/** Card on cream: subtle neutral shadow */
+export const cardShadowCream: ViewStyle =
+  Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    android: { elevation: 5 },
+  }) ?? {};
 
 export const shadows: Record<string, ViewStyle> = {
   sm: Platform.select({

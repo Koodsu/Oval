@@ -1,32 +1,41 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing, typography } from '../../theme';
-import { formatChatDateLabel } from '../../utils/format';
+import { spacing } from '../../theme';
+import { formatPodChatDateSeparator } from '../../utils/format';
 
 export interface DateSeparatorProps {
-  date: string; // ISO string
+  date: string; // ISO string (first message of that calendar day)
 }
 
 export default function DateSeparator({ date }: DateSeparatorProps) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>{formatChatDateLabel(date)}</Text>
+    <View style={styles.row}>
+      <View style={styles.line} />
+      <Text style={styles.text}>{formatPodChatDateSeparator(date)}</Text>
+      <View style={styles.line} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  line: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    minHeight: 1,
+    backgroundColor: '#E8E3DB',
   },
   text: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    backgroundColor: colors.bg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 12,
-    overflow: 'hidden',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#999999',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginHorizontal: spacing.sm,
   },
 });

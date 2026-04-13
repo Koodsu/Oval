@@ -18,7 +18,7 @@ export default function EmptyChatState({
 }: EmptyChatStateProps) {
   return (
     <View style={styles.container}>
-      <Ionicons name={icon} size={iconSize} color={colors.border} />
+      <Ionicons name={icon} size={iconSize} color={colors.creamBorder} />
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>

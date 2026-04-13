@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   FlatList,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -13,6 +14,7 @@ import {
   Share,
   Modal,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,11 +32,10 @@ import {
 import { Pod, Message, FriendUser } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-import StatusBadge from '../components/StatusBadge';
 import ReportModal from '../components/ReportModal';
 import RecapPromptModal from '../components/RecapPromptModal';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
-import { colors, spacing, radii, shadows, typography } from '../theme';
+import { colors, spacing, radii, shadows, typography, cardShadowCream } from '../theme';
 import { formatPodTime } from '../utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
@@ -42,6 +43,46 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
 type ChatListItem =
   | { type: 'date'; id: string; date: string }
   | { type: 'message'; message: Message; index: number };
+
+const MEMBER_AVATAR = 44;
+const AVATAR_OVERLAP = 8;
+
+function PodStatusPill({ status }: { status: string }) {
+  let backgroundColor = '#64748b';
+  let label = status;
+  let textColor = colors.textInverse;
+  if (status === 'FORMING') {
+    backgroundColor = colors.podForming;
+    label = 'Forming';
+  } else if (status === 'LOCKED') {
+    backgroundColor = colors.scarlet;
+    label = 'Closed';
+  } else if (status === 'COMPLETED') {
+    backgroundColor = '#64748b';
+    label = 'Completed';
+  }
+  return (
+    <View style={[pillStyles.outer, { backgroundColor }]}>
+      <Text style={[pillStyles.label, { color: textColor }]}>{label}</Text>
+    </View>
+  );
+}
+
+const pillStyles = StyleSheet.create({
+  outer: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginTop: 6,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+});
 
 function buildChatList(messages: Message[]): ChatListItem[] {
   const items: ChatListItem[] = [];
@@ -57,9 +98,22 @@ function buildChatList(messages: Message[]): ChatListItem[] {
   return items;
 }
 
+function PodBackControl({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+      android_ripple={null}
+    >
+      <Ionicons name="chevron-back" size={26} color="#111111" />
+    </Pressable>
+  );
+}
+
 export default function PodScreen({ route, navigation }: Props) {
   const { podId } = route.params;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [pod, setPod] = useState<Pod | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -168,6 +222,13 @@ export default function PodScreen({ route, navigation }: Props) {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+      title: pod?.activity?.title ?? 'Pod',
+    });
+  }, [navigation, pod?.activity?.title]);
+
   const typingUserName = useMemo(() => {
     if (typingUserIds.length === 0) return undefined;
     const id = typingUserIds[0];
@@ -200,8 +261,13 @@ export default function PodScreen({ route, navigation }: Props) {
 
   if (loading || !pod) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.container}>
+        <View style={[styles.podBackBar, { paddingTop: insets.top }]}>
+          <PodBackControl onPress={() => navigation.goBack()} />
+        </View>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
+        </View>
       </View>
     );
   }
@@ -386,77 +452,83 @@ export default function PodScreen({ route, navigation }: Props) {
     }
   };
 
+  const keyboardVerticalOffset =
+    Platform.OS === 'ios' ? insets.top + 44 : 0;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 95 : 0}
+      keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      {/* Pod Info Header */}
-      <View style={[styles.infoSection, shadows.sm]}>
-        {/* Title row */}
-        <View style={styles.infoTopRow}>
-          <View style={styles.infoTitleArea}>
-            <Text style={styles.activityTitle} numberOfLines={1}>
-              {pod.activity?.title ?? 'Pod'}
-            </Text>
-            <StatusBadge status={pod.status} size="md" />
+      <View style={[styles.podBackBar, { paddingTop: insets.top }]}>
+        <PodBackControl onPress={() => navigation.goBack()} />
+      </View>
+      <View style={styles.podBody}>
+      <View style={styles.infoSectionOuter}>
+        <View style={styles.infoCard}>
+          <View style={styles.infoTopRow}>
+            <View style={styles.infoTitleBlock}>
+              <Text style={styles.activityTitle} numberOfLines={2}>
+                {pod.activity?.title ?? 'Pod'}
+              </Text>
+              <PodStatusPill status={pod.status} />
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowOverflowMenu(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.6}
+              style={styles.overflowHit}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={colors.textMuted} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={() => setShowOverflowMenu(true)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.6}
+
+          <View style={styles.metaRow}>
+            <Ionicons name="time-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
+            <View style={styles.metaDot} />
+            <Ionicons
+              name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+              size={14}
+              color={colors.textMuted}
+            />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {pod.location}
+            </Text>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.memberScroll}
+            contentContainerStyle={styles.memberScrollContent}
           >
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Time + Location in one row */}
-        <View style={styles.metaRow}>
-          <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
-          <View style={styles.metaDot} />
-          <Ionicons
-            name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
-            size={14}
-            color={colors.textTertiary}
-          />
-          <Text style={styles.metaText} numberOfLines={1}>{pod.location}</Text>
-        </View>
-
-        {/* Horizontal member scroll */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.memberScroll}
-          contentContainerStyle={styles.memberScrollContent}
-        >
-          {pod.members.map((m) => {
-            const isYou = m.userId === user?.id;
-            return (
-              <TouchableOpacity
-                key={m.userId}
-                style={styles.memberItem}
-                onPress={() => {
-                  if (!isYou) {
-                    navigation.navigate('UserProfile', { userId: m.user.id, name: m.user.name });
-                  }
-                }}
-                activeOpacity={isYou ? 1 : 0.7}
-              >
-                <Avatar
-                  name={m.user.name}
-                  size={48}
-                  uri={resolveAvatarUrl(m.user.avatarUrl)}
-                  isYou={isYou}
-                />
-                <Text style={styles.memberFirstName} numberOfLines={1}>
-                  {m.user.name.split(' ')[0]}{isYou ? ' (you)' : ''}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            {pod.members.map((m, i) => {
+              const isYou = m.userId === user?.id;
+              return (
+                <TouchableOpacity
+                  key={m.userId}
+                  style={[styles.memberAvatarWrap, i > 0 && { marginLeft: -AVATAR_OVERLAP }]}
+                  onPress={() => {
+                    if (!isYou) {
+                      navigation.navigate('UserProfile', { userId: m.user.id, name: m.user.name });
+                    }
+                  }}
+                  activeOpacity={isYou ? 1 : 0.7}
+                >
+                  <View style={styles.memberAvatarRing}>
+                    <Avatar
+                      name={m.user.name}
+                      size={MEMBER_AVATAR}
+                      uri={resolveAvatarUrl(m.user.avatarUrl)}
+                      isYou={false}
+                    />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
         {/* Member count progress bar */}
         <View style={styles.progressSection}>
@@ -479,7 +551,7 @@ export default function PodScreen({ route, navigation }: Props) {
         {/* Waitlist info */}
         {waitlistCount > 0 && isMember && (
           <View style={styles.waitlistInfoRow}>
-            <Ionicons name="people-outline" size={14} color={colors.textTertiary} />
+            <Ionicons name="people-outline" size={14} color={colors.textMutedLight} />
             <Text style={styles.waitlistInfoText}>
               {waitlistCount} {waitlistCount === 1 ? 'person' : 'people'} waitlisted
             </Text>
@@ -488,7 +560,7 @@ export default function PodScreen({ route, navigation }: Props) {
         {isOnWaitlist && (
           <View style={styles.waitlistStatusRow}>
             <View style={styles.waitlistPositionBadge}>
-              <Ionicons name="time-outline" size={14} color={colors.primary} />
+              <Ionicons name="time-outline" size={14} color={colors.scarlet} />
               <Text style={styles.waitlistPositionText}>
                 You're #{pod.myWaitlistPosition} on the waitlist
               </Text>
@@ -511,24 +583,21 @@ export default function PodScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {/* Full-width Share + Invite Friend buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={styles.actionBtn}
+            style={styles.actionBtnShare}
             onPress={handleShare}
             accessibilityLabel="Share pod invite link"
           >
-            <Ionicons name="share-outline" size={18} color={colors.primary} />
-            <Text style={styles.actionBtnText}>Share</Text>
+            <Text style={styles.actionBtnShareText}>Share</Text>
           </TouchableOpacity>
           {pod.status === 'FORMING' && (
             <TouchableOpacity
-              style={styles.actionBtn}
+              style={styles.actionBtnInvite}
               onPress={handleOpenInvite}
               accessibilityLabel="Invite a friend"
             >
-              <Ionicons name="person-add-outline" size={18} color={colors.primary} />
-              <Text style={styles.actionBtnText}>Invite Friend</Text>
+              <Text style={styles.actionBtnInviteText}>Invite Friend</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -539,10 +608,10 @@ export default function PodScreen({ route, navigation }: Props) {
             {canLock && (
               <TouchableOpacity style={styles.lockButton} onPress={handleLock} disabled={locking}>
                 {locking ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
+                  <ActivityIndicator size="small" color={colors.scarlet} />
                 ) : (
                   <>
-                    <Ionicons name="lock-closed-outline" size={16} color={colors.primary} />
+                    <Ionicons name="lock-closed-outline" size={16} color={colors.scarlet} />
                     <Text style={styles.lockButtonText}>Lock Pod</Text>
                   </>
                 )}
@@ -551,10 +620,10 @@ export default function PodScreen({ route, navigation }: Props) {
             {canUnlock && (
               <TouchableOpacity style={styles.lockButton} onPress={handleUnlock} disabled={locking}>
                 {locking ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
+                  <ActivityIndicator size="small" color={colors.scarlet} />
                 ) : (
                   <>
-                    <Ionicons name="lock-open-outline" size={16} color={colors.primary} />
+                    <Ionicons name="lock-open-outline" size={16} color={colors.scarlet} />
                     <Text style={styles.lockButtonText}>Unlock Pod</Text>
                   </>
                 )}
@@ -610,7 +679,7 @@ export default function PodScreen({ route, navigation }: Props) {
                       onPress={() => setRecapModalVisible(true)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="create-outline" size={14} color={colors.primary} />
+                      <Ionicons name="create-outline" size={14} color={colors.scarlet} />
                       <Text style={styles.recapEditBtnText}>Edit your recap</Text>
                     </TouchableOpacity>
                   ) : (
@@ -619,7 +688,7 @@ export default function PodScreen({ route, navigation }: Props) {
                       onPress={() => setRecapModalVisible(true)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="star-outline" size={14} color={colors.primary} />
+                      <Ionicons name="star-outline" size={14} color={colors.scarlet} />
                       <Text style={styles.recapRateBtnText}>Rate this meetup</Text>
                     </TouchableOpacity>
                   )}
@@ -642,7 +711,7 @@ export default function PodScreen({ route, navigation }: Props) {
                   <Text style={styles.noShowName}>{m.user.name.split(' ')[0]}</Text>
                   {alreadyReported ? (
                     <View style={styles.noShowReportedBadge}>
-                      <Ionicons name="alert-circle" size={14} color={colors.textTertiary} />
+                      <Ionicons name="alert-circle" size={14} color={colors.textMutedLight} />
                       <Text style={styles.noShowReportedText}>No-show reported</Text>
                     </View>
                   ) : (
@@ -671,6 +740,7 @@ export default function PodScreen({ route, navigation }: Props) {
             })}
           </View>
         )}
+        </View>
       </View>
 
       {/* Pod Chat divider */}
@@ -711,6 +781,8 @@ export default function PodScreen({ route, navigation }: Props) {
           const showAvatar =
             !isMe &&
             (index === 0 || messages[index - 1].user.id !== message.user.id);
+          const isFirstInGroup =
+            index === 0 || messages[index - 1].user.id !== message.user.id;
           const isLastInGroup =
             index === messages.length - 1 ||
             messages[index + 1].user.id !== message.user.id;
@@ -720,8 +792,11 @@ export default function PodScreen({ route, navigation }: Props) {
               message={message}
               isMe={isMe}
               showAvatar={showAvatar}
+              isFirstInGroup={isFirstInGroup}
               isLastInGroup={isLastInGroup}
+              listIndex={index}
               currentUserId={user?.id}
+              showReadReceipt={false}
               onLongPress={() => setReactionTargetMsgId(message.id)}
               onAvatarPress={() =>
                 navigation.navigate('UserProfile', {
@@ -888,6 +963,7 @@ export default function PodScreen({ route, navigation }: Props) {
           )}
         </View>
       </Modal>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -895,41 +971,57 @@ export default function PodScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
+  },
+  /** In-screen top bar: only safe-area + horizontal inset for the bare back control (no native UIBarButtonItem pill). */
+  podBackBar: {
+    backgroundColor: colors.cream,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  podBody: {
+    flex: 1,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
   },
 
-  // Info Header
-  infoSection: {
+  infoSectionOuter: {
+    backgroundColor: colors.cream,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  infoCard: {
     backgroundColor: colors.surface,
+    borderRadius: 14,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    ...cardShadowCream,
   },
   infoTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs + 2,
+    marginBottom: spacing.xs,
   },
-  infoTitleArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  infoTitleBlock: {
     flex: 1,
     marginRight: spacing.sm,
   },
+  overflowHit: {
+    marginTop: 2,
+  },
   activityTitle: {
-    ...typography.h3,
-    fontSize: 18,
-    flex: 1,
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.textOnLight,
+    letterSpacing: -0.3,
   },
   metaRow: {
     flexDirection: 'row',
@@ -940,70 +1032,66 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   metaText: {
-    ...typography.caption,
     fontSize: 13,
+    fontWeight: '500',
+    color: colors.textMuted,
     flexShrink: 1,
   },
   metaDot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: colors.textTertiary,
+    backgroundColor: colors.textMutedLight,
     marginHorizontal: 2,
     flexShrink: 0,
   },
 
-  // Member horizontal scroll
   memberScroll: {
     marginBottom: spacing.sm,
   },
   memberScrollContent: {
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  memberItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    width: 60,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.md,
   },
-  memberFirstName: {
-    ...typography.tiny,
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    width: 60,
+  memberAvatarWrap: {
+    zIndex: 1,
+  },
+  memberAvatarRing: {
+    width: MEMBER_AVATAR + 4,
+    height: MEMBER_AVATAR + 4,
+    borderRadius: (MEMBER_AVATAR + 4) / 2,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  // Progress bar
   progressSection: {
     gap: 5,
     marginBottom: spacing.sm,
   },
   progressBarTrack: {
-    height: 6,
-    backgroundColor: colors.borderLight,
+    height: 4,
+    backgroundColor: colors.progressTrack,
     borderRadius: radii.pill,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.scarlet,
     borderRadius: radii.pill,
   },
   progressText: {
-    ...typography.tiny,
     fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '600',
+    fontWeight: '500',
+    color: colors.textMuted,
   },
   confirmedInline: {
     color: colors.green,
     fontWeight: '600',
   },
 
-  // Waitlist
   waitlistInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1011,8 +1099,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   waitlistInfoText: {
-    ...typography.caption,
-    color: colors.textTertiary,
+    fontSize: 13,
+    color: colors.textMuted,
     fontWeight: '600',
   },
   waitlistStatusRow: {
@@ -1028,13 +1116,13 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: `${colors.scarlet}14`,
     borderRadius: radii.pill,
   },
   waitlistPositionText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.scarlet,
   },
   waitlistLeaveBtn: {
     paddingHorizontal: spacing.sm,
@@ -1046,29 +1134,37 @@ const styles = StyleSheet.create({
     color: colors.red,
   },
 
-  // Full-width action buttons
   actionButtons: {
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  actionBtn: {
-    flexDirection: 'row',
+  actionBtnShare: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.scarlet,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
   },
-  actionBtnText: {
-    ...typography.bodyBold,
-    fontSize: 14,
-    color: colors.primary,
+  actionBtnShareText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  actionBtnInvite: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: colors.scarlet,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnInviteText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.scarlet,
   },
 
-  // Creator lock/confirm row
   lockRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1082,15 +1178,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.creamBorder,
   },
   lockButtonText: {
     ...typography.bodyBold,
     fontSize: 13,
-    color: colors.primary,
+    color: colors.scarlet,
   },
+
   confirmButton: {
     borderColor: colors.green,
     backgroundColor: colors.greenLight,
@@ -1145,24 +1242,22 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.sm,
   },
 
-  // Chat divider
   chatDivider: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.cream,
   },
   chatDividerLine: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#E0E0E0',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.creamBorder,
   },
   chatDividerText: {
-    ...typography.tiny,
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textTertiary,
+    color: colors.textMutedLight,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginHorizontal: spacing.sm,
@@ -1170,7 +1265,7 @@ const styles = StyleSheet.create({
   recapSection: {
     marginTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    borderTopColor: colors.creamBorder,
     paddingTop: spacing.md,
     gap: spacing.sm,
     flexDirection: 'row',
@@ -1189,11 +1284,11 @@ const styles = StyleSheet.create({
   recapAvgLabel: {
     ...typography.bodyBold,
     fontSize: 13,
-    color: colors.text,
+    color: colors.textOnLight,
   },
   recapAvgSub: {
     ...typography.tiny,
-    color: colors.textTertiary,
+    color: colors.textMutedLight,
   },
   recapRateBtn: {
     flexDirection: 'row',
@@ -1201,15 +1296,15 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: `${colors.scarlet}14`,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: `${colors.scarlet}40`,
   },
   recapRateBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.scarlet,
   },
   recapEditBtn: {
     flexDirection: 'row',
@@ -1221,19 +1316,19 @@ const styles = StyleSheet.create({
   recapEditBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.scarlet,
   },
   noShowSection: {
     marginTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    borderTopColor: colors.creamBorder,
     paddingTop: spacing.md,
     gap: spacing.sm,
   },
   noShowTitle: {
     ...typography.bodyBold,
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   noShowRow: {
@@ -1244,6 +1339,7 @@ const styles = StyleSheet.create({
   noShowName: {
     ...typography.body,
     fontSize: 14,
+    color: colors.textOnLight,
   },
   noShowButton: {
     paddingVertical: 4,
@@ -1265,13 +1361,12 @@ const styles = StyleSheet.create({
   },
   noShowReportedText: {
     ...typography.tiny,
-    color: colors.textTertiary,
+    color: colors.textMutedLight,
   },
 
-  // Chat
   chatFlatList: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.cream,
   },
   chatList: {
     paddingTop: spacing.sm,
@@ -1316,7 +1411,7 @@ const styles = StyleSheet.create({
   inviteBtn: {
     paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.scarlet,
     borderRadius: radii.md,
     minWidth: 72,
     alignItems: 'center',

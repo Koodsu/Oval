@@ -291,8 +291,8 @@ function AppNavigator() {
               name="Pod"
               component={PodScreen}
               options={{
-                title: 'Your Pod',
-                headerBlurEffect: 'light',
+                title: 'Pod',
+                headerShown: false,
                 animation: 'fade_from_bottom',
               }}
             />
