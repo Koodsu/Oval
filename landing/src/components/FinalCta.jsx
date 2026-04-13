@@ -31,9 +31,6 @@ export default function FinalCta() {
             get founding-member status, and help shape the app from day one.
           </p>
           <WaitlistForm dark />
-          <p className="mt-5 text-xs text-white/25">
-            <strong className="text-white/45">847 Buckeyes</strong> already waiting. No spam. Unsubscribe anytime.
-          </p>
         </div>
       </div>
     </section>
