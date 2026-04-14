@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { getActivities, fetchFeed, joinPod, joinWaitlist } from '../api';
+import { getActivities, fetchFeed, joinPod, joinWaitlist, API_USER_MESSAGE } from '../api';
 import { Activity, Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import ActivityCard from '../components/ActivityCard';
@@ -219,7 +219,7 @@ export default function SearchScreen() {
       );
       setPods(sorted);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load pods');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setPodsLoading(false);
       setPodsRefreshing(false);
@@ -231,7 +231,7 @@ export default function SearchScreen() {
       const data = await getActivities(category ?? undefined);
       setActivities(data);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load activities');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActivitiesLoading(false);
       setActivitiesRefreshing(false);
@@ -244,10 +244,6 @@ export default function SearchScreen() {
       void fetchActivities(activityCategory);
     }, [fetchPods, fetchActivities, activityCategory])
   );
-
-  useEffect(() => {
-    fetchActivities(activityCategory);
-  }, [activityCategory, fetchActivities]);
 
   // Filtered pods: category, time, search query
   const filteredPods = useMemo(() => {
@@ -293,7 +289,7 @@ export default function SearchScreen() {
       const pod = await joinPod(podId);
       navigation.navigate('Pod', { podId: pod.id });
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setJoiningId(null);
     }
@@ -313,7 +309,7 @@ export default function SearchScreen() {
       const { position } = await joinWaitlist(podId);
       Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join waitlist');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setWaitlistingId(null);
     }

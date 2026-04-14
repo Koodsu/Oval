@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { register } from '../api';
+import { register, API_USER_MESSAGE } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import MajorPickerModal from '../components/MajorPickerModal';
@@ -91,7 +91,7 @@ export default function RegisterScreen({ navigation }: Props) {
       const { token, user } = await register(name.trim(), email.trim(), password, classYear, effectiveMajor);
       await signIn(token, user);
     } catch (err: unknown) {
-      Alert.alert('Registration Failed', err instanceof Error ? err.message : 'Unknown error');
+      Alert.alert('Registration Failed', API_USER_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -119,6 +119,7 @@ export default function RegisterScreen({ navigation }: Props) {
             </View>
             <Text style={styles.brand}>Bridge</Text>
             <Text style={styles.tagline}>Jump in and meet people</Text>
+            <Text style={styles.osuHint}>Verify your OSU email to get started</Text>
           </View>
 
           <View style={[styles.card, shadows.lg]}>
@@ -136,11 +137,12 @@ export default function RegisterScreen({ navigation }: Props) {
               />
             </View>
 
+            <Text style={styles.fieldLabel}>OSU Email</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="mail-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="OSU Email (name.#@osu.edu)"
                 placeholderTextColor={colors.textTertiary}
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -149,6 +151,9 @@ export default function RegisterScreen({ navigation }: Props) {
                 autoCorrect={false}
               />
             </View>
+            <Text style={styles.emailHelper}>
+              Must be an @osu.edu or @buckeyemail.osu.edu address
+            </Text>
 
             <View style={styles.inputWrapper}>
               <Ionicons name="lock-closed-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
@@ -287,6 +292,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 4,
   },
+  osuHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
@@ -339,6 +351,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
     marginTop: spacing.xs,
+  },
+  emailHelper: {
+    fontSize: 12,
+    color: '#999999',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
   },
   pillRow: {
     flexDirection: 'row',

@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../../App';
-import { getActivities, resolveAvatarUrl } from '../api';
+import { getActivities, resolveAvatarUrl, API_USER_MESSAGE } from '../api';
 import { Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -36,7 +36,7 @@ export default function ActivityListScreen() {
       const data = await getActivities(category ?? undefined);
       setActivities(data);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load activities');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLoading(false);
       setRefreshing(false);

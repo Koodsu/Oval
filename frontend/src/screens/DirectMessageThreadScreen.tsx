@@ -11,7 +11,16 @@ import {
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { getThreadMessages, sendDirectMessage, addDMReaction, removeDMReaction, sendDMTyping, markDMThreadRead, resolveAvatarUrl } from '../api';
+import {
+  API_USER_MESSAGE,
+  getThreadMessages,
+  sendDirectMessage,
+  addDMReaction,
+  removeDMReaction,
+  sendDMTyping,
+  markDMThreadRead,
+  resolveAvatarUrl,
+} from '../api';
 import { useAuth } from '../context/AuthContext';
 import { DirectMessage } from '../types';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
@@ -93,7 +102,7 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
     } catch (err) {
       setInput(content);
       if (savedReply) setReplyTarget(savedReply);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setSending(false);
     }
@@ -165,11 +174,12 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
           />
         }
         ListFooterComponent={
-          typingUserIds.length > 0 ? (
-            <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
-              <TypingIndicator userName={otherUserName?.split(' ')[0] ?? 'Someone'} />
-            </View>
-          ) : null
+          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+            <TypingIndicator
+              userName={otherUserName?.split(' ')[0] ?? 'Someone'}
+              visible={typingUserIds.length > 0}
+            />
+          </View>
         }
         renderItem={({ item }) => {
           if (item.type === 'date') {

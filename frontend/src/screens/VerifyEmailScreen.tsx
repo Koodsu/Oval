@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { verifyEmail, resendVerification } from '../api';
+import { verifyEmail, resendVerification, API_USER_MESSAGE } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
@@ -60,8 +60,8 @@ export default function VerifyEmailScreen() {
       const { user: updated } = await verifyEmail(trimmed);
       await updateUser(updated);
       // Navigation updates automatically because App.tsx watches user.verifiedUniversity
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid code. Please try again.');
+    } catch {
+      setError(API_USER_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -75,8 +75,8 @@ export default function VerifyEmailScreen() {
       await resendVerification();
       startCooldown();
       Alert.alert('Code sent', `A new verification code was sent to ${user?.email}.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resend code');
+    } catch {
+      setError(API_USER_MESSAGE);
     } finally {
       setResending(false);
     }

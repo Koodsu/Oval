@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { login } from '../api';
+import { login, API_USER_MESSAGE } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, shadows } from '../theme';
@@ -38,7 +38,7 @@ export default function LoginScreen({ navigation }: Props) {
       const { token, user } = await login(email.trim(), password);
       await signIn(token, user);
     } catch (err: unknown) {
-      Alert.alert('Login Failed', err instanceof Error ? err.message : 'Unknown error');
+      Alert.alert('Login Failed', API_USER_MESSAGE);
     } finally {
       setLoading(false);
     }

@@ -1,59 +1,86 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { colors, spacing, typography } from '../../theme';
 
 export interface TypingIndicatorProps {
+  /** DM / legacy: first name; shown as "[name] is typing..." when `caption` is omitted */
   userName?: string;
+  /** Pod: full line below the bubble (e.g. "Alex is typing..." or "Several people are typing...") */
+  caption?: string;
+  /** When false, fades out then unmounts internally */
+  visible?: boolean;
 }
 
-export default function TypingIndicator({ userName }: TypingIndicatorProps) {
+const FADE_MS = 200;
+const DOT_BOUNCE = -4;
+const DOT_SPRING = { speed: 20, bounciness: 12, useNativeDriver: true as const };
+
+function bounceOneDot(anim: Animated.Value) {
+  return Animated.sequence([
+    Animated.spring(anim, { toValue: DOT_BOUNCE, ...DOT_SPRING }),
+    Animated.spring(anim, { toValue: 0, ...DOT_SPRING }),
+  ]);
+}
+
+export default function TypingIndicator({
+  userName,
+  caption,
+  visible = true,
+}: TypingIndicatorProps) {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
-  const fadeIn = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
+
+  const [mounted, setMounted] = useState(visible);
+  const latchedLabel = useRef('');
+
+  useLayoutEffect(() => {
+    if (visible) setMounted(true);
+  }, [visible]);
 
   useEffect(() => {
-    Animated.timing(fadeIn, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    if (visible) {
+      if (caption) latchedLabel.current = caption;
+      else if (userName) latchedLabel.current = `${userName} is typing...`;
+      setMounted(true);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: FADE_MS,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: FADE_MS,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setMounted(false);
+      });
+    }
+  }, [visible, opacity, caption, userName]);
 
-    const bounce = (anim: Animated.Value, delay: number) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.spring(anim, {
-            toValue: -4,
-            useNativeDriver: true,
-            speed: 20,
-            bounciness: 12,
-          }),
-          Animated.spring(anim, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 20,
-            bounciness: 12,
-          }),
-          Animated.delay(600 - delay),
-        ])
-      );
-    };
-    const a1 = bounce(dot1, 0);
-    const a2 = bounce(dot2, 150);
-    const a3 = bounce(dot3, 300);
-    a1.start();
-    a2.start();
-    a3.start();
-    return () => {
-      a1.stop();
-      a2.stop();
-      a3.stop();
-    };
-  }, [dot1, dot2, dot3, fadeIn]);
+  useEffect(() => {
+    if (!mounted) return;
+
+    const sequential = Animated.loop(
+      Animated.sequence([
+        bounceOneDot(dot1),
+        bounceOneDot(dot2),
+        bounceOneDot(dot3),
+        Animated.delay(120),
+      ])
+    );
+    sequential.start();
+    return () => sequential.stop();
+  }, [mounted, dot1, dot2, dot3]);
+
+  if (!mounted) return null;
+
+  const displayLabel = latchedLabel.current;
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeIn }]}>
+    <Animated.View style={[styles.container, { opacity }]}>
       <View style={styles.bubble}>
         <View style={styles.dots}>
           <Animated.View style={[styles.dot, { transform: [{ translateY: dot1 }] }]} />
@@ -61,9 +88,7 @@ export default function TypingIndicator({ userName }: TypingIndicatorProps) {
           <Animated.View style={[styles.dot, { transform: [{ translateY: dot3 }] }]} />
         </View>
       </View>
-      {userName ? (
-        <Text style={styles.label}>{userName} is typing...</Text>
-      ) : null}
+      {displayLabel ? <Text style={styles.label}>{displayLabel}</Text> : null}
     </Animated.View>
   );
 }

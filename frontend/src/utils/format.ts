@@ -85,8 +85,8 @@ export function formatChatDateLabel(iso: string): string {
 }
 
 /**
- * Pod/DM chat day separator: "TODAY · 4:30 PM", "YESTERDAY · …", or weekday + date + time.
- * Use with small-caps styling in the UI.
+ * Pod chat time-gap separator: "Today · 4:30 PM", "Yesterday · …", or "Mon Apr 14 · 4:30 PM"
+ * (DateSeparator applies uppercase → TODAY · …, MON APR 14 · …).
  */
 export function formatPodChatDateSeparator(iso: string): string {
   const d = new Date(iso);
@@ -97,9 +97,9 @@ export function formatPodChatDateSeparator(iso: string): string {
   const dateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-  if (dateOnly.getTime() === today.getTime()) return `TODAY · ${timeStr}`;
-  if (dateOnly.getTime() === yesterday.getTime()) return `YESTERDAY · ${timeStr}`;
+  if (dateOnly.getTime() === today.getTime()) return `Today · ${timeStr}`;
+  if (dateOnly.getTime() === yesterday.getTime()) return `Yesterday · ${timeStr}`;
   const day = d.toLocaleDateString(undefined, { weekday: 'short' });
   const md = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `${day} · ${md} · ${timeStr}`;
+  return `${day} ${md} · ${timeStr}`;
 }

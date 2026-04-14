@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { updateProfile } from '../api';
+import { updateProfile, API_USER_MESSAGE } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import MajorPickerModal, { PRESET_MAJORS } from '../components/MajorPickerModal';
@@ -141,7 +141,7 @@ export default function EditProfileScreen({ navigation }: Props) {
       await updateUser(updated);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Save failed', API_USER_MESSAGE);
     } finally {
       setLoading(false);
     }

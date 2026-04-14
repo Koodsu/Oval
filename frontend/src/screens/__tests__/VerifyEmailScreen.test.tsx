@@ -4,6 +4,7 @@ import VerifyEmailScreen from '../VerifyEmailScreen';
 
 // Mock api functions
 jest.mock('../../api', () => ({
+  ...jest.requireActual('../../api'),
   verifyEmail: jest.fn(),
   resendVerification: jest.fn(),
 }));
@@ -32,6 +33,7 @@ jest.mock('../../context/AuthContext', () => ({
 }));
 
 import * as api from '../../api';
+import { API_USER_MESSAGE } from '../../api';
 
 describe('VerifyEmailScreen', () => {
   beforeEach(() => {
@@ -80,7 +82,7 @@ describe('VerifyEmailScreen', () => {
     fireEvent.press(screen.getByTestId('gradient-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid verification code')).toBeTruthy();
+      expect(screen.getByText(API_USER_MESSAGE)).toBeTruthy();
     });
   });
 

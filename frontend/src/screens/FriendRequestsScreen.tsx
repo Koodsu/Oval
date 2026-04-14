@@ -12,6 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
+  API_USER_MESSAGE,
   getFriendRequests,
   acceptFriendRequest,
   declineFriendRequest,
@@ -48,7 +49,7 @@ export default function FriendRequestsScreen() {
       await acceptFriendRequest(req.id);
       setIncoming((prev) => prev.filter((r) => r.id !== req.id));
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to accept');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActionId(null);
     }
@@ -60,7 +61,7 @@ export default function FriendRequestsScreen() {
       await declineFriendRequest(req.id);
       setIncoming((prev) => prev.filter((r) => r.id !== req.id));
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to decline');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActionId(null);
     }
@@ -72,7 +73,7 @@ export default function FriendRequestsScreen() {
       await cancelFriendRequest(req.id);
       setOutgoing((prev) => prev.filter((r) => r.id !== req.id));
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to cancel');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActionId(null);
     }

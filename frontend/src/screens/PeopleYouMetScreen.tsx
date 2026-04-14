@@ -12,7 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { getPeopleYouMet, sendFriendRequest, resolveAvatarUrl } from '../api';
+import { getPeopleYouMet, sendFriendRequest, resolveAvatarUrl, API_USER_MESSAGE } from '../api';
 import { PeopleYouMetUser } from '../types';
 import Avatar from '../components/Avatar';
 import TagPills from '../components/TagPills';
@@ -53,7 +53,7 @@ export default function PeopleYouMetScreen({ route, navigation }: Props) {
       setRequestStatuses((prev) => ({ ...prev, [userId]: 'sent' }));
     } catch (err: unknown) {
       setRequestStatuses((prev) => ({ ...prev, [userId]: 'idle' }));
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send friend request');
+      Alert.alert('Error', API_USER_MESSAGE);
     }
   };
 

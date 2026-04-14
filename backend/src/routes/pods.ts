@@ -7,28 +7,7 @@ import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
 import { expireOldPods } from '../lib/expireOldPods';
 import { getActivityEmoji } from '../lib/activityEmoji';
-
-// Select shape used for pod member user fields across all pod queries
-const MEMBER_USER_SELECT = {
-  id: true,
-  name: true,
-  avatarUrl: true,
-  interestTags: true,
-  classYear: true,
-  major: true,
-} as const;
-
-function parseMemberTags<T extends { user: { interestTags?: string | null } }>(member: T) {
-  let tags: string[] = [];
-  if (member.user.interestTags) {
-    try { tags = JSON.parse(member.user.interestTags); } catch { /* ignore */ }
-  }
-  return { ...member, user: { ...member.user, interestTags: tags } };
-}
-
-function parsePodMembers<T extends { members: Array<{ user: { interestTags?: string | null } }> }>(pod: T) {
-  return { ...pod, members: pod.members.map(parseMemberTags) };
-}
+import { joinExistingPodMember, parsePodMembers, MEMBER_USER_SELECT } from '../lib/joinExistingPod';
 
 const router = Router();
 
@@ -228,86 +207,12 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
   try {
     // ── Option A: join a specific pod ─────────────────────────────────────────
     if (podId) {
-      const pod = await prisma.pod.findUnique({
-        where: { id: podId },
-        include: { members: true, activity: true },
-      });
-
-      if (!pod) {
-        res.status(404).json({ error: 'Pod not found' });
+      const result = await joinExistingPodMember(userId, podId);
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
         return;
       }
-
-      if (pod.status === EXPIRED || pod.status === COMPLETED) {
-        res.status(409).json({ error: 'This pod is no longer available' });
-        return;
-      }
-
-      if (pod.status !== FORMING) {
-        res.status(409).json({ error: 'This pod is no longer accepting members' });
-        return;
-      }
-
-      if (pod.members.length >= pod.maxMembers) {
-        res.status(409).json({ error: 'This pod is full' });
-        return;
-      }
-
-      // Check no blocking relationship with any pod member
-      for (const m of pod.members) {
-        if (await hasBlockingRelationship(userId, m.userId)) {
-          res.status(403).json({ error: "You can't join this pod." });
-          return;
-        }
-      }
-
-      // Check user is not already in an active pod for this activity
-      const existingMembership = await prisma.podMember.findFirst({
-        where: {
-          userId,
-          pod: {
-            activityId: pod.activityId,
-            status: { in: [FORMING, LOCKED] },
-          },
-        },
-      });
-
-      if (existingMembership) {
-        res.status(409).json({ error: 'You are already in an active pod for this activity' });
-        return;
-      }
-
-      await prisma.podMember.create({ data: { podId, userId } });
-
-      // If this user was on the waitlist, mark as JOINED
-      await prisma.podWaitlist.updateMany({
-        where: { podId, userId, status: { in: ['WAITING', 'NOTIFIED'] } },
-        data: { status: 'JOINED' },
-      });
-
-      const memberCount = await prisma.podMember.count({ where: { podId } });
-      if (memberCount >= pod.maxMembers) {
-        await prisma.pod.update({ where: { id: podId }, data: { status: LOCKED } });
-      }
-
-      const updatedPod = await prisma.pod.findUnique({
-        where: { id: podId },
-        include: {
-          activity: true,
-          creator: { select: { id: true } },
-          members: { include: { user: { select: MEMBER_USER_SELECT } } },
-        },
-      });
-
-      res.status(201).json(updatedPod ? parsePodMembers(updatedPod) : updatedPod);
-
-      // Notify creator that someone joined (fire-and-forget)
-      if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
-        const joiner = updatedPod.members.find((m) => m.userId === userId);
-        if (joiner) {
-          NotificationService.notifyPodJoin(podId, joiner.userId).catch(() => {});
-        }
-      }
+      res.status(201).json(parsePodMembers(result.updatedPod));
       return;
     }
 

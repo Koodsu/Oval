@@ -13,7 +13,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../../App';
-import { getMyPods } from '../api';
+import { getMyPods, API_USER_MESSAGE } from '../api';
 import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
@@ -34,7 +34,7 @@ export default function MyActivitiesScreen() {
       const data = await getMyPods();
       setPods(data);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load your pods');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLoading(false);
       setRefreshing(false);

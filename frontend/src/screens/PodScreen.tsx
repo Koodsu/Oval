@@ -5,12 +5,10 @@ import {
   FlatList,
   ScrollView,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -23,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import {
+  API_USER_MESSAGE,
   getPod, getMessages, sendMessage, addPodMessageReaction, removePodMessageReaction,
   sendPodTyping,
   lockPod, unlockPod, leavePod,
@@ -41,12 +40,13 @@ import RecapPromptModal from '../components/RecapPromptModal';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
 import { colors, spacing, radii, shadows, typography, cardShadowCream } from '../theme';
 import { formatPodTime } from '../utils/format';
+import { buildPodChatList } from '../utils/podChatList';
+import {
+  parseTypingUsersFromPresenceState,
+  type PresenceStateRow,
+} from '../utils/podPresenceTyping';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
-
-type ChatListItem =
-  | { type: 'date'; id: string; date: string }
-  | { type: 'message'; message: Message; index: number };
 
 const MEMBER_AVATAR = 44;
 const AVATAR_OVERLAP = 8;
@@ -90,20 +90,6 @@ const pillStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
-
-function buildChatList(messages: Message[]): ChatListItem[] {
-  const items: ChatListItem[] = [];
-  let lastDate = '';
-  messages.forEach((msg, index) => {
-    const dateStr = msg.createdAt.slice(0, 10);
-    if (dateStr !== lastDate) {
-      lastDate = dateStr;
-      items.push({ type: 'date', id: `date-${dateStr}`, date: msg.createdAt });
-    }
-    items.push({ type: 'message', message: msg, index });
-  });
-  return items;
-}
 
 /** Map a Realtime INSERT row + pod members into API-shaped `Message` (reactions empty until refetch). */
 function messageFromRealtimeInsert(
@@ -203,14 +189,17 @@ export default function PodScreen({ route, navigation }: Props) {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [reactionTargetMsgId, setReactionTargetMsgId] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<{ messageId: string; name: string; content: string } | null>(null);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<{ userId: string }[]>([]);
   const [recapModalVisible, setRecapModalVisible] = useState(false);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const podChatRef = useRef<Pod | null>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const currentUserIdRef = useRef<string | undefined>(undefined);
+  const apiTypingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceIdleUntrackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recapPromptShownRef = useRef(false);
   const peopleYouMetShownRef = useRef(false);
@@ -245,7 +234,7 @@ export default function PodScreen({ route, navigation }: Props) {
       // Auto-show "people you met" once per completed pod
       maybeShowPeopleYouMet(data);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     }
   }, [podId, user?.id, maybeShowPeopleYouMet]);
 
@@ -253,24 +242,19 @@ export default function PodScreen({ route, navigation }: Props) {
     try {
       const data = await getMessages(podId);
       setMessages(data.messages);
-      setTypingUserIds(data.typingUserIds ?? []);
+      if (!getSupabase()) {
+        setTypingUsers((data.typingUserIds ?? []).map((id) => ({ userId: id })));
+      }
     } catch {
       // silently ignore poll errors
-    }
-  }, [podId]);
-
-  const pollTypingOnly = useCallback(async () => {
-    try {
-      const data = await getMessages(podId);
-      setTypingUserIds(data.typingUserIds ?? []);
-    } catch {
-      // ignore
     }
   }, [podId]);
 
   useEffect(() => {
     podChatRef.current = pod;
   }, [pod]);
+
+  currentUserIdRef.current = user?.id;
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -282,12 +266,20 @@ export default function PodScreen({ route, navigation }: Props) {
     };
     void init();
 
-    pollRef.current = setInterval(supabase ? pollTypingOnly : fetchMessages, 3000);
+    if (!supabase) {
+      pollRef.current = setInterval(() => void fetchMessages(), 3000);
+    }
 
     let channel: RealtimeChannel | null = null;
     if (supabase) {
-      channel = supabase
-        .channel(`pod:${podId}:messages`)
+      channel = supabase.channel(`pod:${podId}:messages`, {
+        config: {
+          presence: { key: user?.id ?? '' },
+        },
+      });
+      channelRef.current = channel;
+
+      channel
         .on(
           'postgres_changes',
           {
@@ -311,6 +303,14 @@ export default function PodScreen({ route, navigation }: Props) {
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
           }
         )
+        .on('presence', { event: 'sync' }, () => {
+          const ch = channelRef.current;
+          if (!ch) return;
+          const state = ch.presenceState() as Record<string, PresenceStateRow[]>;
+          setTypingUsers(
+            parseTypingUsersFromPresenceState(state, currentUserIdRef.current)
+          );
+        })
         .subscribe();
     }
 
@@ -319,27 +319,58 @@ export default function PodScreen({ route, navigation }: Props) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      if (presenceIdleUntrackRef.current) {
+        clearTimeout(presenceIdleUntrackRef.current);
+        presenceIdleUntrackRef.current = null;
+      }
+      if (apiTypingDebounceRef.current) {
+        clearTimeout(apiTypingDebounceRef.current);
+        apiTypingDebounceRef.current = null;
+      }
+      channelRef.current = null;
       if (supabase && channel) {
         void supabase.removeChannel(channel);
       }
     };
-  }, [fetchPod, fetchMessages, podId, pollTypingOnly]);
+  }, [fetchPod, fetchMessages, podId, user?.id]);
 
   const handleMessageTextChange = useCallback(
     (text: string) => {
       setMessageText(text);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
+      const supabase = getSupabase();
+      if (supabase && user?.id) {
+        if (presenceIdleUntrackRef.current) {
+          clearTimeout(presenceIdleUntrackRef.current);
+          presenceIdleUntrackRef.current = null;
+        }
+        const ch = channelRef.current;
+        if (ch) {
+          if (text.length > 0) {
+            void ch.track({ userId: user.id, typing: true }).catch(() => {});
+            presenceIdleUntrackRef.current = setTimeout(() => {
+              void channelRef.current?.untrack().catch(() => {});
+              presenceIdleUntrackRef.current = null;
+            }, 2000);
+          } else {
+            void ch.untrack().catch(() => {});
+          }
+        }
+        return;
+      }
+
+      if (apiTypingDebounceRef.current) clearTimeout(apiTypingDebounceRef.current);
+      apiTypingDebounceRef.current = setTimeout(() => {
         sendPodTyping(podId).catch(() => {});
-        typingTimeoutRef.current = null;
+        apiTypingDebounceRef.current = null;
       }, 300);
     },
-    [podId]
+    [podId, user?.id]
   );
 
   useEffect(() => {
     return () => {
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (apiTypingDebounceRef.current) clearTimeout(apiTypingDebounceRef.current);
+      if (presenceIdleUntrackRef.current) clearTimeout(presenceIdleUntrackRef.current);
     };
   }, []);
 
@@ -350,17 +381,24 @@ export default function PodScreen({ route, navigation }: Props) {
     });
   }, [navigation, pod?.activity?.title]);
 
-  const typingUserName = useMemo(() => {
-    if (typingUserIds.length === 0) return undefined;
-    const id = typingUserIds[0];
+  const typingCaption = useMemo(() => {
+    if (typingUsers.length === 0) return '';
+    if (typingUsers.length > 1) return 'Several people are typing...';
+    const id = typingUsers[0].userId;
     const members = pod?.members ?? [];
     const member = members.find((m) => m.userId === id);
-    return member?.user?.name?.split(' ')[0] ?? 'Someone';
-  }, [typingUserIds, pod?.members]);
+    const first = member?.user?.name?.split(' ')[0] ?? 'Someone';
+    return `${first} is typing...`;
+  }, [typingUsers, pod?.members]);
 
   const handleSend = async () => {
     const text = messageText.trim();
     if (!text) return;
+    if (presenceIdleUntrackRef.current) {
+      clearTimeout(presenceIdleUntrackRef.current);
+      presenceIdleUntrackRef.current = null;
+    }
+    void channelRef.current?.untrack().catch(() => {});
     const replyToId = replyTarget?.messageId;
     const savedReply = replyTarget;
     setMessageText('');
@@ -372,7 +410,7 @@ export default function PodScreen({ route, navigation }: Props) {
       setMessages((prev) => [...prev, msg]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send message');
+      Alert.alert('Error', API_USER_MESSAGE);
       setMessageText(text);
       if (savedReply) setReplyTarget(savedReply);
     } finally {
@@ -418,7 +456,7 @@ export default function PodScreen({ route, navigation }: Props) {
       const updated = await lockPod(podId);
       setPod(updated);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to lock pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLocking(false);
     }
@@ -431,7 +469,7 @@ export default function PodScreen({ route, navigation }: Props) {
       const updated = await unlockPod(podId);
       setPod(updated);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to unlock pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLocking(false);
     }
@@ -467,7 +505,7 @@ export default function PodScreen({ route, navigation }: Props) {
       setPod((prev) => (prev ? { ...prev, myRecap: recap } : prev));
       setRecapModalVisible(false);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit recap');
+      Alert.alert('Error', API_USER_MESSAGE);
     }
   };
 
@@ -504,7 +542,7 @@ export default function PodScreen({ route, navigation }: Props) {
                 // Pod was disbanded - user is already navigated back
               }
             } catch (err: unknown) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to leave pod');
+              Alert.alert('Error', API_USER_MESSAGE);
             } finally {
               setLeaving(false);
             }
@@ -529,7 +567,7 @@ export default function PodScreen({ route, navigation }: Props) {
         };
       });
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm attendance');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setConfirming(false);
     }
@@ -541,7 +579,7 @@ export default function PodScreen({ route, navigation }: Props) {
       setReportedNoShows((prev) => new Set([...prev, targetUserId]));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit report');
+      Alert.alert('Error', API_USER_MESSAGE);
     }
   };
 
@@ -566,20 +604,17 @@ export default function PodScreen({ route, navigation }: Props) {
       setFriends((prev) => prev.filter((f) => f.id !== friend.id));
       Alert.alert('Invite sent', `${friend.name} has been invited to this pod.`);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send invite');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setInvitingId(null);
     }
   };
 
-  /** Custom back bar: safe area + ~44pt control row (matches native header stack). */
-  const keyboardVerticalOffset = insets.top + 44;
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={keyboardVerticalOffset}
+      keyboardVerticalOffset={88}
     >
       <View style={[styles.podBackBar, { paddingTop: insets.top }]}>
         <PodBackControl onPress={() => navigation.goBack()} />
@@ -693,7 +728,7 @@ export default function PodScreen({ route, navigation }: Props) {
                   setPod((prev) => prev ? { ...prev, myWaitlistPosition: null, waitlistCount: Math.max(0, (prev.waitlistCount ?? 1) - 1) } : prev);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 } catch (err: unknown) {
-                  Alert.alert('Error', err instanceof Error ? err.message : 'Failed to leave waitlist');
+                  Alert.alert('Error', API_USER_MESSAGE);
                 }
               }}
               activeOpacity={0.7}
@@ -871,16 +906,16 @@ export default function PodScreen({ route, navigation }: Props) {
           <View style={styles.chatDividerLine} />
         </View>
 
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.chatListWrap}>
+        <View style={styles.chatListWrap}>
             <FlatList
               ref={flatListRef}
-              data={buildChatList(messages)}
-              keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
+              data={buildPodChatList(messages)}
+              keyExtractor={(item) => item.type === 'time' ? item.id : item.message.id}
               style={styles.chatFlatList}
               contentContainerStyle={styles.chatList}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardDismissMode="on-drag"
+              inverted={false}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
@@ -890,14 +925,15 @@ export default function PodScreen({ route, navigation }: Props) {
                 />
               }
               ListFooterComponent={
-                typingUserIds.length > 0 ? (
-                  <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
-                    <TypingIndicator userName={typingUserName} />
-                  </View>
-                ) : null
+                <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
+                  <TypingIndicator
+                    visible={typingUsers.length > 0}
+                    caption={typingCaption}
+                  />
+                </View>
               }
               renderItem={({ item }) => {
-                if (item.type === 'date') {
+                if (item.type === 'time') {
                   return <DateSeparator date={item.date} />;
                 }
                 const { message, index } = item;
@@ -934,7 +970,6 @@ export default function PodScreen({ route, navigation }: Props) {
               }}
             />
           </View>
-        </TouchableWithoutFeedback>
       </View>
 
       <ReactionPicker

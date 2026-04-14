@@ -17,7 +17,15 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { fetchFeed, getActivities, getMyPods, joinPod, joinWaitlist, resolveAvatarUrl } from '../api';
+import {
+  API_USER_MESSAGE,
+  fetchFeed,
+  getActivities,
+  getMyPods,
+  joinPod,
+  joinWaitlist,
+  resolveAvatarUrl,
+} from '../api';
 import { Pod, Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -200,7 +208,7 @@ export default function TodayScreen() {
       });
       setActivities(sorted);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load feed');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -219,7 +227,7 @@ export default function TodayScreen() {
       const pod = await joinPod(podId);
       navigation.navigate('Pod', { podId: pod.id });
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setJoiningId(null);
     }
@@ -246,7 +254,7 @@ export default function TodayScreen() {
       const { position } = await joinWaitlist(podId);
       Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join waitlist');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setWaitlistingId(null);
     }
