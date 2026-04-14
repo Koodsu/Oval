@@ -449,6 +449,35 @@ describe('Pods API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     });
+
+    it('returns 404 for non-members when pod is completed', async () => {
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: { status: 'COMPLETED', meetupTime: new Date(Date.now() - 60 * 60 * 1000) },
+      });
+
+      const { token: outsider } = await registerAndGetToken(
+        'Outsider',
+        `outsider-pod-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app).get(`/pods/${podId}`).set('Authorization', `Bearer ${outsider}`).expect(404);
+
+      await request(app).get(`/pods/${podId}`).set('Authorization', `Bearer ${token}`).expect(200);
+    });
   });
 
   describe('Auth required', () => {
@@ -698,6 +727,159 @@ describe('Pods API (integration)', () => {
 
       const podExists = await prisma.pod.findUnique({ where: { id: podId } });
       expect(podExists).toBeNull();
+    });
+  });
+
+  describe('expireOldPods + public feeds', () => {
+    it('GET /pods/feed expires stale FORMING pods and omits them from the response', async () => {
+      const { token } = await registerAndGetToken(
+        'Feed Expire',
+        `feed-exp-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: { meetupTime: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+      });
+
+      const { token: token2 } = await registerAndGetToken(
+        'Feed Viewer',
+        `feed-view-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const feedRes = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(200);
+
+      expect(feedRes.body.map((p: { id: string }) => p.id)).not.toContain(podId);
+
+      const updated = await prisma.pod.findUnique({ where: { id: podId } });
+      expect(updated?.status).toBe('EXPIRED');
+    });
+
+    it('GET /pods?activityId expires stale pods and omits past meetups from browse', async () => {
+      const { token } = await registerAndGetToken(
+        'Browse Expire',
+        `browse-exp-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: { meetupTime: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+      });
+
+      const listRes = await request(app)
+        .get('/pods')
+        .query({ activityId })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(listRes.body.map((p: { id: string }) => p.id)).not.toContain(podId);
+    });
+
+    it('rejects joining an EXPIRED pod by id', async () => {
+      const { token } = await registerAndGetToken(
+        'Join Expired',
+        `join-exp-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: {
+          status: 'EXPIRED',
+          meetupTime: new Date(Date.now() - 5 * 60 * 60 * 1000),
+        },
+      });
+
+      const { token: token2 } = await registerAndGetToken(
+        'Join Expired B',
+        `join-exp-b-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ podId })
+        .expect(409);
+    });
+
+    it('GET /pods/mine still returns EXPIRED pods for history', async () => {
+      const { token } = await registerAndGetToken(
+        'Mine Expired',
+        `mine-exp-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: { meetupTime: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+      });
+
+      await request(app).get('/pods/feed').set('Authorization', `Bearer ${token}`).expect(200);
+
+      const mine = await request(app).get('/pods/mine').set('Authorization', `Bearer ${token}`).expect(200);
+
+      const minePod = mine.body.find((p: { id: string }) => p.id === podId);
+      expect(minePod).toBeDefined();
+      expect(minePod.status).toBe('EXPIRED');
     });
   });
 });

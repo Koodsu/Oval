@@ -146,7 +146,7 @@ export interface Pod {
   locationType: 'public' | 'private';
   minMembers: number;
   maxMembers: number;
-  status: 'FORMING' | 'LOCKED' | 'COMPLETED';
+  status: 'FORMING' | 'LOCKED' | 'COMPLETED' | 'EXPIRED';
   creatorId?: string | null;
   createdAt: string;
   activity?: Activity;

@@ -1,125 +1,179 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radii, shadows, typography } from '../theme';
 import { Activity } from '../types';
-import { CATEGORY_META } from '../constants/categories';
 import PressableScale from './PressableScale';
+import { home, cardShadowHome } from '../theme';
+import { getActivityEmoji } from '../utils/activityEmoji';
+import { getCategoryPillStyle } from '../utils/activityCategoryPill';
 
 interface ActivityCardProps {
   activity: Activity;
   onPress: () => void;
+  /** Home Today screen: extra footer row + tighter vertical rhythm per design spec */
+  variant?: 'default' | 'home';
 }
 
-export default function ActivityCard({ activity, onPress }: ActivityCardProps) {
-  const meta = CATEGORY_META[activity.category];
-  const iconName = meta?.icon ?? 'sparkles-outline';
-  const accentColor = meta?.color ?? colors.primary;
+export default function ActivityCard({ activity, onPress, variant = 'default' }: ActivityCardProps) {
+  const pill = getCategoryPillStyle(activity.category);
+  const emoji = getActivityEmoji(activity.title, activity.category);
+  const isHome = variant === 'home';
+  const podCount = activity._count?.pods ?? 0;
+  const statusFooter =
+    podCount > 0
+      ? { label: 'OPEN' as const, bg: '#FFF7ED', text: '#EA580C' }
+      : { label: 'NEW' as const, bg: '#F0FDF4', text: '#16A34A' };
+  const podsFormingLabel =
+    podCount === 0 ? 'No pods yet' : `${podCount} pods forming`;
 
   return (
     <PressableScale
-      style={[styles.card, shadows.md]}
+      style={[styles.card, cardShadowHome, isHome && styles.cardHome]}
       onPress={onPress}
       haptic="light"
     >
-      <View style={[styles.iconCircle, { backgroundColor: accentColor + '15' }]}>
-        <Ionicons name={iconName} size={22} color={accentColor} />
-      </View>
-      <View style={styles.content}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={1}>{activity.title}</Text>
-          <Text style={[styles.categoryLabel, { color: accentColor }]}>
-            {activity.category}
+      <View style={styles.topRow}>
+        <View style={[styles.emojiCircle, { backgroundColor: pill.emojiCircleBg }]}>
+          <Text style={styles.emojiText}>{emoji}</Text>
+        </View>
+        <View style={styles.mainCol}>
+          <View style={[styles.titleRow, isHome && styles.titleRowHome]}>
+            <Text style={styles.title} numberOfLines={1}>
+              {activity.title}
+            </Text>
+            <View style={[styles.categoryPill, { backgroundColor: pill.pillBg }]}>
+              <Text style={[styles.categoryPillText, { color: pill.pillText }]}>{pill.label}</Text>
+            </View>
+          </View>
+          <Text style={[styles.desc, isHome && styles.descHome]} numberOfLines={2}>
+            {activity.description}
           </Text>
-        </View>
-        <Text style={styles.desc} numberOfLines={2}>
-          {activity.description}
-        </Text>
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={12} color={colors.textTertiary} />
-          <Text style={styles.location} numberOfLines={1}>{activity.defaultLocation}</Text>
-        </View>
-        {(activity._count?.pods ?? 0) > 0 && (
-          <View style={styles.podCountRow}>
-            <View style={styles.podCountDot} />
-            <Text style={styles.podCountText}>
-              {activity._count!.pods} {activity._count!.pods === 1 ? 'pod' : 'pods'} forming
+          <View style={[styles.locationRow, isHome && styles.locationRowHome]}>
+            <Ionicons name="location-outline" size={12} color={home.textMuted} />
+            <Text style={styles.location} numberOfLines={1}>
+              {activity.defaultLocation}
             </Text>
           </View>
-        )}
+          {isHome ? (
+            <View style={styles.homeFooterRow}>
+              <Text
+                style={[styles.homeFooterLeft, podCount === 0 && styles.homeFooterLeftEmpty]}
+              >
+                {podsFormingLabel}
+              </Text>
+              <View style={[styles.homeStatusPill, { backgroundColor: statusFooter.bg }]}>
+                <Text style={[styles.homeStatusPillText, { color: statusFooter.text }]}>
+                  {statusFooter.label}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.border} style={styles.chevron} />
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm + 2,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: home.cardBg,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  cardHome: {
+    marginBottom: 10,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  emojiCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm + 4,
   },
-  content: {
+  emojiText: {
+    fontSize: 24,
+  },
+  mainCol: {
     flex: 1,
-    marginRight: spacing.sm,
+    minWidth: 0,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    marginBottom: 2,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  titleRowHome: {
+    marginBottom: 0,
   },
   title: {
-    ...typography.h3,
     flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
   },
-  categoryLabel: {
+  categoryPill: {
+    flexShrink: 0,
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  categoryPillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   desc: {
-    ...typography.caption,
-    lineHeight: 18,
-    marginBottom: 4,
+    fontSize: 14,
+    color: home.textSecondary,
+    marginBottom: 6,
+  },
+  descHome: {
+    marginTop: 4,
+    marginBottom: 0,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
-  location: {
-    ...typography.tiny,
-    flex: 1,
+  locationRowHome: {
+    marginTop: 4,
   },
-  podCountRow: {
+  homeFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 3,
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
-  podCountDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.green,
+  homeFooterLeft: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#999999',
   },
-  podCountText: {
-    ...typography.tiny,
-    color: colors.green,
-    fontWeight: '600',
+  homeFooterLeftEmpty: {
+    color: '#BBBBBB',
   },
-  chevron: {
-    marginLeft: 2,
+  homeStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  homeStatusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  location: {
+    fontSize: 12,
+    color: home.textMuted,
+    flex: 1,
   },
 });

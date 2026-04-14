@@ -10,6 +10,8 @@ router.use(requireAuth);
 
 const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
+const EXPIRED = 'EXPIRED';
+const COMPLETED = 'COMPLETED';
 
 const podInclude = {
   activity: true,
@@ -108,8 +110,18 @@ router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void
 router.get('/invites', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   try {
+    const now = new Date();
     const invites = await prisma.podInvite.findMany({
-      where: { receiverId: userId, status: 'PENDING' },
+      where: {
+        receiverId: userId,
+        status: 'PENDING',
+        pod: {
+          AND: [
+            { status: { notIn: [EXPIRED, COMPLETED] } },
+            { meetupTime: { gt: now } },
+          ],
+        },
+      },
       include: {
         pod: { include: { activity: true, members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } } },
         sender: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },

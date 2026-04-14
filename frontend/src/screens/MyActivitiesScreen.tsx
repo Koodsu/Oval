@@ -48,7 +48,7 @@ export default function MyActivitiesScreen() {
   );
 
   const activePods = pods.filter((p) => p.status === 'FORMING' || p.status === 'LOCKED');
-  const pastPods = pods.filter((p) => p.status === 'COMPLETED');
+  const pastPods = pods.filter((p) => p.status === 'COMPLETED' || p.status === 'EXPIRED');
 
   if (loading) {
     return (

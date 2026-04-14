@@ -18,6 +18,11 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Completed')).toBeTruthy();
   });
 
+  it('renders EXPIRED status', () => {
+    render(<StatusBadge status="EXPIRED" />);
+    expect(screen.getByText('Expired')).toBeTruthy();
+  });
+
   it('renders unknown status as-is', () => {
     render(<StatusBadge status="CUSTOM" />);
     expect(screen.getByText('CUSTOM')).toBeTruthy();

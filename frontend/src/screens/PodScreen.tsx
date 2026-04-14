@@ -60,6 +60,9 @@ function PodStatusPill({ status }: { status: string }) {
   } else if (status === 'COMPLETED') {
     backgroundColor = '#64748b';
     label = 'Completed';
+  } else if (status === 'EXPIRED') {
+    backgroundColor = '#94a3b8';
+    label = 'Expired';
   }
   return (
     <View style={[pillStyles.outer, { backgroundColor }]}>

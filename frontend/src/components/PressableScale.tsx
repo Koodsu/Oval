@@ -16,6 +16,7 @@ interface PressableScaleProps {
   haptic?: 'light' | 'medium' | 'heavy' | 'none';
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
+  testID?: string;
 }
 
 export default function PressableScale({
@@ -26,6 +27,7 @@ export default function PressableScale({
   haptic = 'none',
   style,
   children,
+  testID,
 }: PressableScaleProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -62,7 +64,7 @@ export default function PressableScale({
       onPressOut={handlePressOut}
       disabled={disabled}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <Animated.View style={[style, { transform: [{ scale }] }]} testID={testID}>
         {children}
       </Animated.View>
     </TouchableWithoutFeedback>

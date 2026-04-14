@@ -42,13 +42,13 @@ import PodInvitesScreen from './src/screens/PodInvitesScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PeopleYouMetScreen from './src/screens/PeopleYouMetScreen';
-import { colors } from './src/theme';
+import { colors, home } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 export type MainTabParamList = {
   Today: undefined;
   MyActivities: undefined;
-  Search: undefined;
+  Explore: undefined;
   Messages: undefined;
   Profile: undefined;
 };
@@ -98,8 +98,8 @@ const linking = {
 
 const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Today: { active: 'flash', inactive: 'flash-outline' },
-  MyActivities: { active: 'calendar', inactive: 'calendar-outline' },
-  Search: { active: 'search', inactive: 'search-outline' },
+  MyActivities: { active: 'people', inactive: 'people-outline' },
+  Explore: { active: 'compass', inactive: 'compass-outline' },
   Messages: { active: 'chatbubble', inactive: 'chatbubble-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 };
@@ -113,26 +113,18 @@ function MainTabs() {
           const icons = TAB_ICONS[route.name];
           return <Ionicons name={focused ? icons.active : icons.inactive} size={size} color={color} />;
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarActiveTintColor: home.tabActive,
+        tabBarInactiveTintColor: home.tabInactive,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
         },
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 0.5,
+          backgroundColor: home.tabBarBg,
+          borderTopColor: home.tabBarBorder,
+          borderTopWidth: 1,
           paddingTop: 4,
-          ...Platform.select({
-            ios: {
-              shadowColor: '#0f172a',
-              shadowOpacity: 0.06,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: -2 },
-            },
-            android: { elevation: 8 },
-          }),
+          elevation: 0,
         },
         animation: 'fade',
       })}
@@ -145,12 +137,12 @@ function MainTabs() {
       <Tab.Screen
         name="MyActivities"
         component={MyActivitiesScreen}
-        options={{ tabBarLabel: 'My Activities' }}
+        options={{ tabBarLabel: 'My Pods' }}
       />
       <Tab.Screen
-        name="Search"
+        name="Explore"
         component={SearchScreen}
-        options={{ tabBarLabel: 'Search' }}
+        options={{ tabBarLabel: 'Explore' }}
       />
       <Tab.Screen
         name="Messages"

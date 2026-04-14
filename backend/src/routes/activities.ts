@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { getLocationsForCategory } from '../config/locations';
 import { requireAuth } from '../middleware/auth';
+import { expireOldPods } from '../lib/expireOldPods';
 
 const router = Router();
 
@@ -44,13 +45,30 @@ router.get('/:id/locations', requireAuth, async (req: Request, res: Response): P
 // GET /activities?category=
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    await expireOldPods();
+
     const { category } = req.query;
     const where = category && typeof category === 'string' ? { category } : {};
+    const now = new Date();
 
     const activities = await prisma.activity.findMany({
       where,
       orderBy: { createdAt: 'asc' },
-      include: { _count: { select: { pods: { where: { status: 'FORMING' } } } } },
+      include: {
+        _count: {
+          select: {
+            pods: {
+              where: {
+                AND: [
+                  { status: 'FORMING' },
+                  { status: { notIn: ['EXPIRED', 'COMPLETED'] } },
+                  { meetupTime: { gt: now } },
+                ],
+              },
+            },
+          },
+        },
+      },
     });
     res.json(activities);
   } catch (err) {
