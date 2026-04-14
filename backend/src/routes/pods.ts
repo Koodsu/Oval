@@ -6,6 +6,7 @@ import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
 import { expireOldPods } from '../lib/expireOldPods';
+import { getActivityEmoji } from '../lib/activityEmoji';
 
 // Select shape used for pod member user fields across all pod queries
 const MEMBER_USER_SELECT = {
@@ -596,13 +597,8 @@ router.get('/:id/public', async (req: Request, res: Response): Promise<void> => 
   try {
     await expireOldPods();
 
-    const now = new Date();
-    const pod = await prisma.pod.findFirst({
-      where: {
-        id,
-        status: { in: [FORMING, LOCKED] },
-        meetupTime: { gt: now },
-      },
+    const pod = await prisma.pod.findUnique({
+      where: { id },
       include: {
         activity: { select: { title: true, category: true } },
         _count: { select: { members: true } },
@@ -614,14 +610,23 @@ router.get('/:id/public', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    if (pod.status === EXPIRED) {
+      res.json({ expired: true, podName: pod.activity.title });
+      return;
+    }
+
+    const title = pod.activity.title;
+    const category = pod.activity.category;
     res.json({
-      id: pod.id,
-      name: pod.activity.title,
-      activityType: pod.activity.category,
+      expired: false,
+      podName: title,
+      activityName: title,
+      activityEmoji: getActivityEmoji(title, category),
       meetupTime: pod.meetupTime.toISOString(),
       location: pod.location,
       memberCount: pod._count.members,
       maxMembers: pod.maxMembers,
+      status: pod.status,
     });
   } catch (err) {
     console.error(err);
