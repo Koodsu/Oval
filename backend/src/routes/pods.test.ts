@@ -449,6 +449,35 @@ describe('Pods API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     });
+
+    it('returns 404 for non-members when pod is completed', async () => {
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+      await prisma.pod.update({
+        where: { id: podId },
+        data: { status: 'COMPLETED', meetupTime: new Date(Date.now() - 60 * 60 * 1000) },
+      });
+
+      const { token: outsider } = await registerAndGetToken(
+        'Outsider',
+        `outsider-pod-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app).get(`/pods/${podId}`).set('Authorization', `Bearer ${outsider}`).expect(404);
+
+      await request(app).get(`/pods/${podId}`).set('Authorization', `Bearer ${token}`).expect(200);
+    });
   });
 
   describe('Auth required', () => {

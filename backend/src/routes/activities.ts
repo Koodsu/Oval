@@ -59,8 +59,11 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
           select: {
             pods: {
               where: {
-                status: 'FORMING',
-                meetupTime: { gt: now },
+                AND: [
+                  { status: 'FORMING' },
+                  { status: { notIn: ['EXPIRED', 'COMPLETED'] } },
+                  { meetupTime: { gt: now } },
+                ],
               },
             },
           },

@@ -84,8 +84,11 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
     const blockedIds = await getBlockedUserIds(userId);
 
     const where: Record<string, unknown> = {
-      status: FORMING,
-      meetupTime: { gt: now },
+      AND: [
+        { status: FORMING },
+        { status: { notIn: [EXPIRED, COMPLETED] } },
+        { meetupTime: { gt: now } },
+      ],
       members: { none: { userId: { in: [...blockedIds] } } },
     };
 
@@ -173,8 +176,11 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     const blockedIds = await getBlockedUserIds(req.user!.userId);
     const where: Record<string, unknown> = {
       activityId,
-      status: FORMING,
-      meetupTime: { gt: now },
+      AND: [
+        { status: FORMING },
+        { status: { notIn: [EXPIRED, COMPLETED] } },
+        { meetupTime: { gt: now } },
+      ],
       members: { none: { userId: { in: [...blockedIds] } } },
     };
 
@@ -593,8 +599,20 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   };
 
   try {
-    let pod = await prisma.pod.findUnique({
-      where: { id },
+    const nowAccess = new Date();
+    let pod = await prisma.pod.findFirst({
+      where: {
+        id,
+        OR: [
+          { members: { some: { userId } } },
+          {
+            AND: [
+              { status: { notIn: [EXPIRED, COMPLETED] } },
+              { meetupTime: { gt: nowAccess } },
+            ],
+          },
+        ],
+      },
       include: {
         activity: true,
         creator: { select: { id: true } },
