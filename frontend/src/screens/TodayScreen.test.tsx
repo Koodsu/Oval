@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react-native';
-import TodayScreen from './TodayScreen';
+import TodayScreen, { getTimeOfDayGreeting } from './TodayScreen';
 
 // ── API mocks ────────────────────────────────────────────────────────────────
 jest.mock('../api', () => ({
@@ -154,6 +154,28 @@ describe('TodayScreen', () => {
         screen.queryByText('Good afternoon') ||
         screen.queryByText('Good evening');
       expect(ok).toBeTruthy();
+    });
+  });
+
+  describe('getTimeOfDayGreeting', () => {
+    it('uses evening for hours before 5am', () => {
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 1, 0, 0))).toBe('Good evening');
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 4, 59, 0))).toBe('Good evening');
+    });
+
+    it('uses morning from 5am to before noon', () => {
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 5, 0, 0))).toBe('Good morning');
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 11, 30, 0))).toBe('Good morning');
+    });
+
+    it('uses afternoon from noon to before 5pm', () => {
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 12, 0, 0))).toBe('Good afternoon');
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 16, 59, 0))).toBe('Good afternoon');
+    });
+
+    it('uses evening from 5pm onward', () => {
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 17, 0, 0))).toBe('Good evening');
+      expect(getTimeOfDayGreeting(new Date(2026, 3, 14, 23, 0, 0))).toBe('Good evening');
     });
   });
 

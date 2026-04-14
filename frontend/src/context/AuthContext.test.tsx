@@ -28,6 +28,7 @@ describe('AuthContext — guidelines', () => {
   beforeEach(() => {
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
     (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'hasAcceptedPodTerms') return Promise.resolve(null);
       if (key === 'guidelinesAccepted') return Promise.resolve(null);
       if (key === 'user') return Promise.resolve(null);
       if (key === 'token') return Promise.resolve(null);
@@ -45,8 +46,25 @@ describe('AuthContext — guidelines', () => {
     await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('not-accepted'));
   });
 
-  it('hasAcceptedGuidelines is true when storage has "true"', async () => {
+  it('hasAcceptedGuidelines is true when hasAcceptedPodTerms is "true"', async () => {
     (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'hasAcceptedPodTerms') return Promise.resolve('true');
+      if (key === 'guidelinesAccepted') return Promise.resolve(null);
+      if (key === 'user') return Promise.resolve(null);
+      if (key === 'token') return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
+  });
+
+  it('migrates legacy guidelinesAccepted to hasAcceptedPodTerms', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'hasAcceptedPodTerms') return Promise.resolve(null);
       if (key === 'guidelinesAccepted') return Promise.resolve('true');
       if (key === 'user') return Promise.resolve(null);
       if (key === 'token') return Promise.resolve(null);
@@ -58,6 +76,9 @@ describe('AuthContext — guidelines', () => {
       </AuthProvider>,
     );
     await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
+    await waitFor(() =>
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('hasAcceptedPodTerms', 'true')
+    );
   });
 
   it('acceptGuidelines persists to storage and updates state', async () => {
@@ -72,7 +93,7 @@ describe('AuthContext — guidelines', () => {
       fireEvent.press(screen.getByTestId('accept-btn'));
     });
 
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('guidelinesAccepted', 'true');
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('hasAcceptedPodTerms', 'true');
     await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
   });
 });

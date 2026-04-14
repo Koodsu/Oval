@@ -5,10 +5,12 @@ import {
   FlatList,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -29,7 +31,9 @@ import {
   submitRecap,
   leaveWaitlist,
 } from '../api';
-import { Pod, Message, FriendUser } from '../types';
+import { Pod, PodMember, Message, FriendUser } from '../types';
+import { getSupabase } from '../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import ReportModal from '../components/ReportModal';
@@ -101,6 +105,67 @@ function buildChatList(messages: Message[]): ChatListItem[] {
   return items;
 }
 
+/** Map a Realtime INSERT row + pod members into API-shaped `Message` (reactions empty until refetch). */
+function messageFromRealtimeInsert(
+  row: Record<string, unknown>,
+  members: PodMember[],
+  existingMessages: Message[]
+): Message | null {
+  const id = row.id;
+  const podIdRow = row.podId;
+  const userId = row.userId;
+  const content = row.content;
+  const replyToId = row.replyToId;
+  const createdAtRaw = row.createdAt;
+  if (
+    typeof id !== 'string' ||
+    typeof podIdRow !== 'string' ||
+    typeof userId !== 'string' ||
+    typeof content !== 'string'
+  ) {
+    return null;
+  }
+  const member = members.find((m) => m.userId === userId);
+  if (!member) return null;
+
+  let createdAt: string;
+  if (typeof createdAtRaw === 'string') {
+    createdAt = createdAtRaw;
+  } else if (createdAtRaw instanceof Date) {
+    createdAt = createdAtRaw.toISOString();
+  } else {
+    createdAt = new Date().toISOString();
+  }
+
+  let replyTo: Message['replyTo'] = null;
+  if (typeof replyToId === 'string' && replyToId) {
+    const parent = existingMessages.find((m) => m.id === replyToId);
+    if (parent) {
+      replyTo = {
+        id: parent.id,
+        content: parent.content,
+        userId: parent.userId,
+        user: { id: parent.user.id, name: parent.user.name },
+      };
+    }
+  }
+
+  return {
+    id,
+    podId: podIdRow,
+    userId,
+    content,
+    createdAt,
+    user: {
+      id: member.user.id,
+      name: member.user.name,
+      avatarUrl: member.user.avatarUrl,
+    },
+    reactions: [],
+    replyTo,
+  };
+}
+
 function PodBackControl({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
@@ -144,6 +209,7 @@ export default function PodScreen({ route, navigation }: Props) {
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const podChatRef = useRef<Pod | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recapPromptShownRef = useRef(false);
@@ -193,19 +259,71 @@ export default function PodScreen({ route, navigation }: Props) {
     }
   }, [podId]);
 
+  const pollTypingOnly = useCallback(async () => {
+    try {
+      const data = await getMessages(podId);
+      setTypingUserIds(data.typingUserIds ?? []);
+    } catch {
+      // ignore
+    }
+  }, [podId]);
+
   useEffect(() => {
+    podChatRef.current = pod;
+  }, [pod]);
+
+  useEffect(() => {
+    const supabase = getSupabase();
+
     const init = async () => {
       await fetchPod();
       await fetchMessages();
       setLoading(false);
     };
-    init();
+    void init();
 
-    pollRef.current = setInterval(fetchMessages, 3000);
+    pollRef.current = setInterval(supabase ? pollTypingOnly : fetchMessages, 3000);
+
+    let channel: RealtimeChannel | null = null;
+    if (supabase) {
+      channel = supabase
+        .channel(`pod:${podId}:messages`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'Message',
+            filter: `podId=eq.${podId}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            const newId = row.id;
+            if (typeof newId !== 'string') return;
+
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newId)) return prev;
+              const members = podChatRef.current?.members ?? [];
+              const mapped = messageFromRealtimeInsert(row, members, prev);
+              if (!mapped) return prev;
+              return [...prev, mapped];
+            });
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+          }
+        )
+        .subscribe();
+    }
+
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      if (supabase && channel) {
+        void supabase.removeChannel(channel);
+      }
     };
-  }, [fetchPod, fetchMessages]);
+  }, [fetchPod, fetchMessages, podId, pollTypingOnly]);
 
   const handleMessageTextChange = useCallback(
     (text: string) => {
@@ -454,8 +572,8 @@ export default function PodScreen({ route, navigation }: Props) {
     }
   };
 
-  const keyboardVerticalOffset =
-    Platform.OS === 'ios' ? insets.top + 44 : 0;
+  /** Custom back bar: safe area + ~44pt control row (matches native header stack). */
+  const keyboardVerticalOffset = insets.top + 44;
 
   return (
     <KeyboardAvoidingView
@@ -745,72 +863,79 @@ export default function PodScreen({ route, navigation }: Props) {
         </View>
       </View>
 
-      {/* Pod Chat divider */}
-      <View style={styles.chatDivider}>
-        <View style={styles.chatDividerLine} />
-        <Text style={styles.chatDividerText}>Pod Chat</Text>
-        <View style={styles.chatDividerLine} />
-      </View>
+      <View style={styles.chatSection}>
+        {/* Pod Chat divider */}
+        <View style={styles.chatDivider}>
+          <View style={styles.chatDividerLine} />
+          <Text style={styles.chatDividerText}>Pod Chat</Text>
+          <View style={styles.chatDividerLine} />
+        </View>
 
-      {/* Chat Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={buildChatList(messages)}
-        keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
-        style={styles.chatFlatList}
-        contentContainerStyle={styles.chatList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyChatState
-            title="No messages yet"
-            subtitle="Say hi to your pod!"
-          />
-        }
-        ListFooterComponent={
-          typingUserIds.length > 0 ? (
-            <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
-              <TypingIndicator userName={typingUserName} />
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => {
-          if (item.type === 'date') {
-            return <DateSeparator date={item.date} />;
-          }
-          const { message, index } = item;
-          const isMe = message.user.id === user?.id;
-          const showAvatar =
-            !isMe &&
-            (index === 0 || messages[index - 1].user.id !== message.user.id);
-          const isFirstInGroup =
-            index === 0 || messages[index - 1].user.id !== message.user.id;
-          const isLastInGroup =
-            index === messages.length - 1 ||
-            messages[index + 1].user.id !== message.user.id;
-
-          return (
-            <MessageBubble
-              message={message}
-              isMe={isMe}
-              showAvatar={showAvatar}
-              isFirstInGroup={isFirstInGroup}
-              isLastInGroup={isLastInGroup}
-              listIndex={index}
-              currentUserId={user?.id}
-              showReadReceipt={false}
-              onLongPress={() => setReactionTargetMsgId(message.id)}
-              onAvatarPress={() =>
-                navigation.navigate('UserProfile', {
-                  userId: message.user.id,
-                  name: message.user.name,
-                })
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.chatListWrap}>
+            <FlatList
+              ref={flatListRef}
+              data={buildChatList(messages)}
+              keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
+              style={styles.chatFlatList}
+              contentContainerStyle={styles.chatList}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <EmptyChatState
+                  title="No messages yet"
+                  subtitle="Say hi to your pod!"
+                />
               }
-              resolveAvatarUrl={resolveAvatarUrl}
+              ListFooterComponent={
+                typingUserIds.length > 0 ? (
+                  <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
+                    <TypingIndicator userName={typingUserName} />
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                if (item.type === 'date') {
+                  return <DateSeparator date={item.date} />;
+                }
+                const { message, index } = item;
+                const isMe = message.user.id === user?.id;
+                const showAvatar =
+                  !isMe &&
+                  (index === 0 || messages[index - 1].user.id !== message.user.id);
+                const isFirstInGroup =
+                  index === 0 || messages[index - 1].user.id !== message.user.id;
+                const isLastInGroup =
+                  index === messages.length - 1 ||
+                  messages[index + 1].user.id !== message.user.id;
+
+                return (
+                  <MessageBubble
+                    message={message}
+                    isMe={isMe}
+                    showAvatar={showAvatar}
+                    isFirstInGroup={isFirstInGroup}
+                    isLastInGroup={isLastInGroup}
+                    listIndex={index}
+                    currentUserId={user?.id}
+                    showReadReceipt={false}
+                    onLongPress={() => setReactionTargetMsgId(message.id)}
+                    onAvatarPress={() =>
+                      navigation.navigate('UserProfile', {
+                        userId: message.user.id,
+                        name: message.user.name,
+                      })
+                    }
+                    resolveAvatarUrl={resolveAvatarUrl}
+                  />
+                );
+              }}
             />
-          );
-        }}
-      />
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
 
       <ReactionPicker
         visible={!!reactionTargetMsgId}
@@ -984,6 +1109,15 @@ const styles = StyleSheet.create({
   },
   podBody: {
     flex: 1,
+    minHeight: 0,
+  },
+  chatSection: {
+    flex: 1,
+    minHeight: 0,
+  },
+  chatListWrap: {
+    flex: 1,
+    minHeight: 0,
   },
   center: {
     flex: 1,

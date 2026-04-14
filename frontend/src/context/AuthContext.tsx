@@ -8,6 +8,9 @@ import { User } from '../types';
 
 const TOKEN_KEY = 'auth_token';
 const LEGACY_TOKEN_KEY = 'token'; // old AsyncStorage key — migrated on first launch
+const HAS_ACCEPTED_POD_TERMS_KEY = 'hasAcceptedPodTerms';
+/** Legacy key — migrated to HAS_ACCEPTED_POD_TERMS_KEY on read */
+const LEGACY_GUIDELINES_ACCEPTED_KEY = 'guidelinesAccepted';
 
 interface AuthContextValue {
   user: User | null;
@@ -89,10 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Migrate token from old plaintext AsyncStorage to SecureStore
       await migrateTokenToSecureStore();
 
-      const [storedToken, userEntry, guidelinesEntry] = await Promise.all([
+      const [storedToken, userEntry, podTermsEntry, legacyGuidelinesEntry] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         AsyncStorage.getItem('user'),
-        AsyncStorage.getItem('guidelinesAccepted'),
+        AsyncStorage.getItem(HAS_ACCEPTED_POD_TERMS_KEY),
+        AsyncStorage.getItem(LEGACY_GUIDELINES_ACCEPTED_KEY),
       ]);
 
       if (storedToken && userEntry) {
@@ -112,7 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      setHasAcceptedGuidelines(guidelinesEntry === 'true');
+      const accepted =
+        podTermsEntry === 'true' || legacyGuidelinesEntry === 'true';
+      if (legacyGuidelinesEntry === 'true' && podTermsEntry !== 'true') {
+        try {
+          await AsyncStorage.setItem(HAS_ACCEPTED_POD_TERMS_KEY, 'true');
+        } catch {
+          // non-fatal
+        }
+      }
+      setHasAcceptedGuidelines(accepted);
       setIsLoading(false);
     }
 
@@ -132,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const acceptGuidelines = async () => {
-    await AsyncStorage.setItem('guidelinesAccepted', 'true');
+    await AsyncStorage.setItem(HAS_ACCEPTED_POD_TERMS_KEY, 'true');
     setHasAcceptedGuidelines(true);
   };
 
