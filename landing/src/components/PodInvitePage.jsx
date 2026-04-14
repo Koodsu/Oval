@@ -22,6 +22,11 @@ function formatMeetup(iso) {
   }
 }
 
+function formatStatus(status) {
+  if (!status || typeof status !== 'string') return ''
+  return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ')
+}
+
 export default function PodInvitePage() {
   const { podId } = useParams()
   const [status, setStatus] = useState('loading')
@@ -57,13 +62,18 @@ export default function PodInvitePage() {
           setErrorMessage(data?.error ?? 'Pod not found')
           return
         }
-        if (!data?.id) {
-          setStatus('error')
-          setErrorMessage('Pod not found')
+        if (data?.expired === true && data?.podName) {
+          setPod(data)
+          setStatus('expired')
           return
         }
-        setPod(data)
-        setStatus('success')
+        if (data?.activityName && data?.meetupTime != null) {
+          setPod(data)
+          setStatus('success')
+          return
+        }
+        setStatus('error')
+        setErrorMessage('Pod not found')
       })
       .catch(() => {
         if (!cancelled) {
@@ -109,24 +119,54 @@ export default function PodInvitePage() {
           </div>
         )}
 
+        {status === 'expired' && pod && (
+          <div className="flex-1 flex flex-col py-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight mb-4">
+              This pod has expired
+            </h1>
+            <p
+              className="text-xl sm:text-2xl font-bold leading-tight mb-10"
+              style={{ color: SCARLET }}
+            >
+              {pod.podName}
+            </p>
+            <p className="text-warm-gray text-base mb-10">
+              The meetup window for this pod has passed. Ask your host for a new invite or browse
+              activities in the Bridge app.
+            </p>
+            <Link
+              to="/"
+              className="text-center font-semibold text-white py-4 px-6 text-base tracking-wide transition-opacity hover:opacity-90"
+              style={{ backgroundColor: SCARLET }}
+            >
+              Back to home
+            </Link>
+          </div>
+        )}
+
         {status === 'success' && pod && (
           <>
             <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight mb-4">
               You were invited to join a pod
             </h1>
             <p
-              className="text-2xl sm:text-3xl font-bold leading-tight mb-8"
+              className="text-2xl sm:text-3xl font-bold leading-tight mb-2 flex flex-wrap items-center gap-2"
               style={{ color: SCARLET }}
             >
-              {pod.name}
+              {pod.activityEmoji ? (
+                <span className="not-italic" aria-hidden>
+                  {pod.activityEmoji}
+                </span>
+              ) : null}
+              <span>{pod.podName ?? pod.activityName}</span>
             </p>
 
-            <dl className="space-y-4 text-base text-ink mb-10">
+            <dl className="space-y-4 text-base text-ink mb-10 mt-6">
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wider text-warm-gray mb-0.5">
-                  Activity type
+                  Status
                 </dt>
-                <dd>{pod.activityType}</dd>
+                <dd>{formatStatus(pod.status)}</dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wider text-warm-gray mb-0.5">
