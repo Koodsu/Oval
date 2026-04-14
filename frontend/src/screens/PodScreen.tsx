@@ -362,10 +362,7 @@ export default function PodScreen({ route, navigation }: Props) {
     const podName = pod.activity?.title ?? 'Pod';
     const message = `Join my pod on Bridge! ${podName}\n${url}`;
     try {
-      await Share.share({
-        message,
-        url, // iOS only — shows URL separately in share sheet
-      });
+      await Share.share({ message });
     } catch {
       // User cancelled or share not available — no-op
     }
