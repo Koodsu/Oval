@@ -121,6 +121,24 @@ export const getActivities = (category?: string, signal?: AbortSignal) =>
     signal
   );
 
+// Clubs
+export const getClubs = (
+  params?: { category?: string; search?: string },
+  signal?: AbortSignal
+) => {
+  const q = new URLSearchParams();
+  if (params?.category?.trim()) q.set('category', params.category.trim());
+  if (params?.search?.trim()) q.set('search', params.search.trim());
+  const qs = q.toString();
+  return request<import('./types').ClubDirectoryEntry[]>(qs ? `/clubs?${qs}` : '/clubs', {}, signal);
+};
+
+export const getClubsToday = (signal?: AbortSignal) =>
+  request<import('./types').ClubMeetingToday[]>('/clubs/today', {}, signal);
+
+export const joinClub = (clubId: string) =>
+  request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/join`, { method: 'POST' });
+
 // Pods
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);

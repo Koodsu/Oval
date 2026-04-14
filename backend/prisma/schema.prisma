@@ -51,6 +51,11 @@ model User {
   directMessages         DirectMessage[]
   sentPodInvites         PodInvite[]           @relation("PodInviteSender")
   receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
+  clubsCreated             Club[]                     @relation("ClubCreator")
+  clubMemberships          ClubMember[]
+  clubMeetingsCreated      ClubMeeting[]              @relation("MeetingCreator")
+  clubMeetingAttendees     ClubMeetingAttendee[]
+  clubAnnouncements        ClubAnnouncement[]
 }
 
 model Block {
@@ -323,4 +328,87 @@ model PodWaitlist {
   @@unique([podId, userId])
   @@index([podId, status])
   @@index([userId])
+}
+
+model Club {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  category    String
+  emoji       String   @default("🎓")
+  isVerified  Boolean  @default(false)
+  isPublic    Boolean  @default(true)
+  university  String   @default("OSU")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy     User               @relation("ClubCreator", fields: [createdById], references: [id])
+  members       ClubMember[]
+  meetings      ClubMeeting[]
+  announcements ClubAnnouncement[]
+
+  @@index([isPublic, category])
+}
+
+model ClubMember {
+  id       String   @id @default(uuid())
+  clubId   String
+  userId   String
+  role     String   @default("MEMBER")
+  joinedAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+}
+
+model ClubMeeting {
+  id          String   @id @default(uuid())
+  clubId      String
+  title       String
+  description String?
+  location    String
+  meetingTime DateTime
+  isPublic    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  club      Club                    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy User                    @relation("MeetingCreator", fields: [createdById], references: [id])
+  attendees ClubMeetingAttendee[]
+
+  @@index([clubId, meetingTime])
+  @@index([meetingTime])
+}
+
+model ClubMeetingAttendee {
+  id        String   @id @default(uuid())
+  meetingId String
+  userId    String
+  status    String   @default("GOING")
+  createdAt DateTime @default(now())
+
+  meeting ClubMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+  @@index([userId])
+}
+
+model ClubAnnouncement {
+  id        String   @id @default(uuid())
+  clubId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, createdAt])
 }

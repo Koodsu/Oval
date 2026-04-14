@@ -22,8 +22,10 @@ import podInvitesRoutes from './routes/podInvites';
 import recapsRoutes from './routes/recaps';
 import podWaitlistRoutes from './routes/podWaitlist';
 import waitlistRoutes from './routes/waitlist';
+import clubsRoutes from './routes/clubs';
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet({
   // Allow inline scripts on the pod landing page
@@ -96,6 +98,7 @@ app.use('/activities', apiLimiter, activitiesRoutes);
 app.use('/pods', apiLimiter, podsRoutes);
 app.use('/pods', apiLimiter, attendanceRoutes);
 app.use('/users', apiLimiter, usersRoutes);
+app.use('/clubs', apiLimiter, clubsRoutes);
 app.use('/reports', apiLimiter, reportsRoutes);
 app.use('/admin/reports', apiLimiter, adminReportsRoutes);
 app.use('/friends', apiLimiter, friendsRoutes);
