@@ -599,6 +599,8 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   };
 
   try {
+    await expireOldPods();
+
     const nowAccess = new Date();
     let pod = await prisma.pod.findFirst({
       where: {

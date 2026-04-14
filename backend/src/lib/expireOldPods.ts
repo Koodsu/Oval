@@ -8,13 +8,12 @@ const EXPIRED = 'EXPIRED';
 /**
  * Lifecycle cleanup for pods:
  * 1. LOCKED pods whose meetup time has passed → COMPLETED (matches GET /pods/:id lazy behavior).
- * 2. FORMING pods whose meetup was more than 2 hours ago → EXPIRED (never locked / abandoned).
+ * 2. FORMING pods whose meetup time has passed → EXPIRED (never locked / abandoned).
  *
  * Does not delete rows. Skips pods already COMPLETED or EXPIRED.
  */
 export async function expireOldPods(): Promise<{ lockedToCompleted: number; formingToExpired: number }> {
   const now = new Date();
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
   const lockedResult = await prisma.pod.updateMany({
     where: {
@@ -27,7 +26,7 @@ export async function expireOldPods(): Promise<{ lockedToCompleted: number; form
   const expiredResult = await prisma.pod.updateMany({
     where: {
       status: FORMING,
-      meetupTime: { lt: twoHoursAgo },
+      meetupTime: { lt: now },
     },
     data: { status: EXPIRED },
   });

@@ -15,7 +15,7 @@ describe('expireOldPods', () => {
     activityId = activity.id;
   });
 
-  it('marks FORMING pods as EXPIRED when meetup was over 2 hours ago', async () => {
+  it('marks FORMING pods as EXPIRED when meetup time is in the past', async () => {
     const { token } = await registerAndGetToken(
       'Lib Exp A',
       `lib-exp-a-${Date.now()}@example.com`,
