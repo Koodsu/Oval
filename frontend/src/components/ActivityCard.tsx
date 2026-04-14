@@ -19,10 +19,6 @@ export default function ActivityCard({ activity, onPress, variant = 'default' }:
   const emoji = getActivityEmoji(activity.title, activity.category);
   const isHome = variant === 'home';
   const podCount = activity._count?.pods ?? 0;
-  const statusFooter =
-    podCount > 0
-      ? { label: 'OPEN' as const, bg: '#FFF7ED', text: '#EA580C' }
-      : { label: 'NEW' as const, bg: '#F0FDF4', text: '#16A34A' };
   const podsFormingLabel =
     podCount === 0 ? 'No pods yet' : `${podCount} pods forming`;
 
@@ -61,11 +57,6 @@ export default function ActivityCard({ activity, onPress, variant = 'default' }:
               >
                 {podsFormingLabel}
               </Text>
-              <View style={[styles.homeStatusPill, { backgroundColor: statusFooter.bg }]}>
-                <Text style={[styles.homeStatusPillText, { color: statusFooter.text }]}>
-                  {statusFooter.label}
-                </Text>
-              </View>
             </View>
           ) : null}
         </View>
@@ -150,7 +141,7 @@ const styles = StyleSheet.create({
   homeFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginTop: 8,
   },
   homeFooterLeft: {
@@ -160,16 +151,6 @@ const styles = StyleSheet.create({
   },
   homeFooterLeftEmpty: {
     color: '#BBBBBB',
-  },
-  homeStatusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  homeStatusPillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.4,
   },
   location: {
     fontSize: 12,
