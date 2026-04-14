@@ -43,7 +43,7 @@ export default function PodListScreen({ route, navigation }: Props) {
   const [actionId, setActionId] = useState<string | null>(null);
   const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('starting_soon');
-  const [pendingAction, setPendingAction] = useState<{ type: 'join'; podId: string } | { type: 'create' } | null>(null);
+  const [pendingJoinPodId, setPendingJoinPodId] = useState<string | null>(null);
 
   const fetchPods = useCallback(async () => {
     try {
@@ -75,7 +75,7 @@ export default function PodListScreen({ route, navigation }: Props) {
 
   const handleJoin = (podId: string) => {
     if (!hasAcceptedGuidelines) {
-      setPendingAction({ type: 'join', podId });
+      setPendingJoinPodId(podId);
     } else {
       executeJoin(podId);
     }
@@ -102,26 +102,18 @@ export default function PodListScreen({ route, navigation }: Props) {
   };
 
   const handleCreate = () => {
-    if (!hasAcceptedGuidelines) {
-      setPendingAction({ type: 'create' });
-    } else {
-      executeCreate();
-    }
+    executeCreate();
   };
 
   const handleGuidelinesAccept = async () => {
     await acceptGuidelines();
-    const action = pendingAction;
-    setPendingAction(null);
-    if (action?.type === 'join') {
-      executeJoin(action.podId);
-    } else if (action?.type === 'create') {
-      executeCreate();
-    }
+    const podId = pendingJoinPodId;
+    setPendingJoinPodId(null);
+    if (podId) executeJoin(podId);
   };
 
   const handleGuidelinesClose = () => {
-    setPendingAction(null);
+    setPendingJoinPodId(null);
   };
 
   const isAlreadyMember = (pod: Pod) =>
@@ -220,7 +212,7 @@ export default function PodListScreen({ route, navigation }: Props) {
       />
 
       <GuidelinesModal
-        visible={pendingAction !== null}
+        visible={pendingJoinPodId !== null}
         onAccept={handleGuidelinesAccept}
         onClose={handleGuidelinesClose}
       />

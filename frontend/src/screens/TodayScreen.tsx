@@ -32,10 +32,11 @@ import { getCategoryPillStyle } from '../utils/activityCategoryPill';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-function getTimeOfDayGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
+/** Device-local hours via `Date#getHours` (default `new Date()`). */
+export function getTimeOfDayGreeting(now: Date = new Date()): string {
+  const h = now.getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
   return 'Good evening';
 }
 
