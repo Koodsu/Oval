@@ -142,8 +142,9 @@ describe('PodScreen — share / invite button', () => {
     });
 
     const call = (Share.share as jest.Mock).mock.calls[0][0];
-    expect(call.url).toBe(`https://bridge.app/pod/${POD_ID}`);
-    expect(call.message).toContain(`https://bridge.app/pod/${POD_ID}`);
+    expect(call.url).toBe(`https://joinbridgeapp.com/pod/${POD_ID}`);
+    expect(call.message).toContain(`https://joinbridgeapp.com/pod/${POD_ID}`);
+    expect(call.message).toContain('Morning Coffee Walk');
   });
 
   it('share message mentions Bridge', async () => {
@@ -153,7 +154,7 @@ describe('PodScreen — share / invite button', () => {
     await waitFor(() => expect(Share.share).toHaveBeenCalled());
 
     const call = (Share.share as jest.Mock).mock.calls[0][0];
-    expect(call.message).toMatch(/bridge/i);
+    expect(call.message).toMatch(/Join my pod on Bridge!/i);
   });
 
   it('does not throw if the user cancels the share sheet', async () => {
