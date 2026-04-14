@@ -121,6 +121,36 @@ export interface Activity {
   _count?: { pods: number };
 }
 
+/** Row from GET /clubs */
+export interface ClubDirectoryEntry {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  emoji: string;
+  isVerified: boolean;
+  isPublic: boolean;
+  university: string;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  upcomingMeetingCount: number;
+  isMember: boolean;
+}
+
+/** Row from GET /clubs/today */
+export interface ClubMeetingToday {
+  id: string;
+  title: string;
+  location: string;
+  meetingTime: string;
+  isPublic: boolean;
+  clubId: string;
+  clubName: string;
+  clubEmoji: string;
+  attendeeCount: number;
+}
+
 export interface PodMember {
   id: string;
   userId: string;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -17,329 +18,248 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { getActivities, fetchFeed, joinPod, joinWaitlist, API_USER_MESSAGE } from '../api';
-import { Activity, Pod } from '../types';
-import { useAuth } from '../context/AuthContext';
+import {
+  getActivities,
+  fetchFeed,
+  getClubs,
+  getClubsToday,
+  joinClub,
+  API_USER_MESSAGE,
+} from '../api';
+import { Activity, Pod, ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import ActivityCard from '../components/ActivityCard';
-import CategoryFilter from '../components/CategoryFilter';
 import FadeIn from '../components/FadeIn';
-import PressableScale from '../components/PressableScale';
-import GuidelinesModal from '../components/GuidelinesModal';
-import TagPills from '../components/TagPills';
-import { SkeletonPodCard } from '../components/SkeletonLoader';
-import { colors, spacing, radii, typography, shadows } from '../theme';
-import { CATEGORY_META } from '../constants/categories';
-import { formatMeetupTime } from '../utils/format';
+import ExplorePillRow from '../components/ExplorePillRow';
+import { SkeletonActivityCard } from '../components/SkeletonLoader';
+import { home, cardShadowHome, colors, spacing } from '../theme';
+import { CATEGORIES, CATEGORY_META } from '../constants/categories';
+import { getCategoryPillStyle } from '../utils/activityCategoryPill';
+import { filterActivitiesForExplore, ExploreTimeFilter } from '../utils/exploreActivityFilter';
 
-type Tab = 'pods' | 'activities';
-type TimeFilter = 'all' | 'today' | 'week';
+type MainTab = 'activities' | 'clubs';
 
-function isToday(iso: string): boolean {
-  const d = new Date(iso);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
-}
-
-function isThisWeek(iso: string): boolean {
-  const d = new Date(iso);
-  const now = new Date();
-  const weekFromNow = new Date(now.getTime() + 7 * 86_400_000);
-  return d >= now && d <= weekFromNow;
-}
-
-interface SearchPodCardProps {
-  pod: Pod;
-  onJoin: () => void;
-  onView: () => void;
-  onJoinWaitlist?: () => void;
-  isJoining: boolean;
-  isJoiningWaitlist?: boolean;
-  isMember: boolean;
-  currentUserId?: string;
-}
-
-function SearchPodCard({ pod, onJoin, onView, onJoinWaitlist, isJoining, isJoiningWaitlist = false, isMember, currentUserId }: SearchPodCardProps) {
-  const memberCount = pod.members.length;
-  const spotsLeft = pod.maxMembers - memberCount;
-  const progress = memberCount / pod.maxMembers;
-  const meta = pod.activity ? CATEGORY_META[pod.activity.category] : null;
-  const accentColor = meta?.color ?? colors.primary;
-
-  let spotsColor = colors.green;
-  let spotsBg = colors.greenLight;
-  if (spotsLeft === 1) {
-    spotsColor = colors.red;
-    spotsBg = '#fee2e2';
-  } else if (spotsLeft === 2) {
-    spotsColor = colors.amber;
-    spotsBg = colors.amberLight;
+function clubCircleBg(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
+  return colors.avatarPalette[Math.abs(hash) % colors.avatarPalette.length];
+}
 
+function formatScheduleTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+const CATEGORY_PILL_ITEMS = [
+  { key: 'all', label: 'All' },
+  ...CATEGORIES.map((c) => ({ key: c, label: CATEGORY_META[c].label })),
+];
+
+const TIME_PILL_ITEMS: { key: ExploreTimeFilter; label: string }[] = [
+  { key: 'all', label: 'All Times' },
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: 'This Week' },
+];
+
+function ExploreSectionHeader({ label }: { label: string }) {
   return (
-    <PressableScale
-      style={[styles.podCard, shadows.md]}
-      onPress={() => {
-        isMember ? onView() : onJoin();
-      }}
-      haptic="light"
-    >
-      {/* Header: icon + title + "For You" badge */}
-      <View style={styles.podCardHeader}>
-        <View style={[styles.podCardIcon, { backgroundColor: accentColor + '18' }]}>
-          <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={18} color={accentColor} />
-        </View>
-        <View style={styles.podCardTitleBlock}>
-          <Text style={styles.podCardTitle} numberOfLines={1}>
-            {pod.activity?.title ?? 'Pod'}
-          </Text>
-          {pod.recommended && (
-            <View style={[styles.forYouBadge, { backgroundColor: accentColor }]}>
-              <Text style={styles.forYouBadgeText}>For You</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Meta */}
-      <View style={styles.podCardMeta}>
-        <Ionicons name="time-outline" size={13} color={colors.textTertiary} />
-        <Text style={styles.podCardMetaText}>{formatMeetupTime(pod.meetupTime)}</Text>
-        <View style={styles.metaDot} />
-        <Ionicons name="location-outline" size={13} color={colors.textTertiary} />
-        <Text style={[styles.podCardMetaText, { flex: 1 }]} numberOfLines={1}>
-          {pod.location}
-        </Text>
-      </View>
-
-      {/* Progress */}
-      <View style={styles.podCardProgressRow}>
-        <View style={styles.podCardProgressTrack}>
-          <View
-            style={[
-              styles.podCardProgressFill,
-              { width: `${progress * 100}%` as `${number}%`, backgroundColor: accentColor },
-            ]}
-          />
-        </View>
-        <Text style={styles.podCardMemberText}>{memberCount}/{pod.maxMembers} joined</Text>
-      </View>
-
-      {/* Member interest tag preview */}
-      {(() => {
-        const otherTags = pod.members
-          .filter((m) => m.userId !== currentUserId)
-          .flatMap((m) => m.user.interestTags ?? []);
-        const uniqueTags = [...new Set(otherTags)];
-        if (uniqueTags.length === 0) return null;
-        return <TagPills tags={uniqueTags} max={3} size="sm" style={{ marginBottom: spacing.sm }} />;
-      })()}
-
-      {/* Footer */}
-      <View style={styles.podCardFooter}>
-        <View style={[styles.spotsBadge, { backgroundColor: spotsBg }]}>
-          <Text style={[styles.spotsBadgeText, { color: spotsColor }]}>
-            {spotsLeft <= 0 ? 'Full' : spotsLeft === 1 ? '1 spot left!' : `${spotsLeft} spots left`}
-          </Text>
-        </View>
-
-        {isMember ? (
-          <TouchableOpacity style={styles.viewBtn} onPress={onView} activeOpacity={0.7}>
-            <Text style={styles.viewBtnText}>View Pod</Text>
-            <Ionicons name="arrow-forward" size={13} color={colors.primary} />
-          </TouchableOpacity>
-        ) : spotsLeft <= 0 && onJoinWaitlist ? (
-          <TouchableOpacity
-            style={[styles.waitlistBtn, isJoiningWaitlist && styles.joinBtnLoading]}
-            onPress={onJoinWaitlist}
-            disabled={isJoiningWaitlist}
-            activeOpacity={0.8}
-          >
-            {isJoiningWaitlist ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <>
-                <Ionicons name="time-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
-                <Text style={styles.waitlistBtnText}>Join Waitlist</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.joinBtn, isJoining && styles.joinBtnLoading]}
-            onPress={onJoin}
-            disabled={isJoining}
-            activeOpacity={0.8}
-          >
-            {isJoining ? (
-              <ActivityIndicator size="small" color={colors.textInverse} />
-            ) : (
-              <Text style={styles.joinBtnText}>Join Pod</Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-    </PressableScale>
+    <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionHeaderDot} />
+      <Text style={styles.sectionHeaderLabel}>{label}</Text>
+    </View>
   );
 }
 
 export default function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
-  const { user, hasAcceptedGuidelines, acceptGuidelines } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<Tab>('pods');
-  const [query, setQuery] = useState('');
+  const [mainTab, setMainTab] = useState<MainTab>('activities');
 
-  // Pods tab state
-  const [pods, setPods] = useState<Pod[]>([]);
-  const [podsLoading, setPodsLoading] = useState(true);
-  const [podsRefreshing, setPodsRefreshing] = useState(false);
-  const [podCategory, setPodCategory] = useState<string | null>(null);
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
-  const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
-  const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
-
-  // Activities tab state
+  const [activitiesQuery, setActivitiesQuery] = useState('');
+  const [activityCategory, setActivityCategory] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<ExploreTimeFilter>('all');
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [feedPods, setFeedPods] = useState<Pod[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [activitiesRefreshing, setActivitiesRefreshing] = useState(false);
-  const [activityCategory, setActivityCategory] = useState<string | null>(null);
 
-  const fetchPods = useCallback(async () => {
-    try {
-      const data = await fetchFeed({ limit: 100 });
-      // Sort by soonest meetup
-      const sorted = [...data].sort(
-        (a, b) => new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime()
-      );
-      setPods(sorted);
-    } catch (err: unknown) {
-      Alert.alert('Error', API_USER_MESSAGE);
-    } finally {
-      setPodsLoading(false);
-      setPodsRefreshing(false);
+  const [clubsQuery, setClubsQuery] = useState('');
+  const [debouncedClubSearch, setDebouncedClubSearch] = useState('');
+  const [clubCategory, setClubCategory] = useState<string | null>(null);
+  const [clubs, setClubs] = useState<ClubDirectoryEntry[]>([]);
+  const [meetingsToday, setMeetingsToday] = useState<ClubMeetingToday[]>([]);
+  const [clubsLoading, setClubsLoading] = useState(true);
+  const [clubsRefreshing, setClubsRefreshing] = useState(false);
+  const [joiningClubId, setJoiningClubId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = clubsQuery.trim();
+    if (q === '') {
+      setDebouncedClubSearch('');
+      return;
     }
-  }, []);
+    const t = setTimeout(() => setDebouncedClubSearch(q), 400);
+    return () => clearTimeout(t);
+  }, [clubsQuery]);
 
-  const fetchActivities = useCallback(async (category?: string | null) => {
+  const loadActivitiesData = useCallback(async () => {
     try {
-      const data = await getActivities(category ?? undefined);
-      setActivities(data);
-    } catch (err: unknown) {
+      const [acts, feed] = await Promise.all([
+        getActivities(activityCategory ?? undefined),
+        fetchFeed({ limit: 100 }),
+      ]);
+      setActivities(acts);
+      setFeedPods(feed);
+    } catch {
       Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActivitiesLoading(false);
       setActivitiesRefreshing(false);
     }
-  }, []);
+  }, [activityCategory]);
+
+  const loadClubsData = useCallback(async () => {
+    try {
+      const [list, today] = await Promise.all([
+        getClubs({
+          category: clubCategory ?? undefined,
+          search: debouncedClubSearch || undefined,
+        }),
+        getClubsToday(),
+      ]);
+      setClubs(list);
+      setMeetingsToday(today);
+    } catch {
+      Alert.alert('Error', API_USER_MESSAGE);
+    } finally {
+      setClubsLoading(false);
+      setClubsRefreshing(false);
+    }
+  }, [clubCategory, debouncedClubSearch]);
 
   useFocusEffect(
     useCallback(() => {
-      void fetchPods();
-      void fetchActivities(activityCategory);
-    }, [fetchPods, fetchActivities, activityCategory])
+      void loadActivitiesData();
+    }, [loadActivitiesData])
   );
 
-  // Filtered pods: category, time, search query
-  const filteredPods = useMemo(() => {
-    let result = pods;
+  useFocusEffect(
+    useCallback(() => {
+      void loadClubsData();
+    }, [loadClubsData])
+  );
 
-    if (podCategory) {
-      result = result.filter((p) => p.activity?.category === podCategory);
-    }
+  const filteredActivities = useMemo(
+    () => filterActivitiesForExplore(activities, feedPods, timeFilter, activitiesQuery),
+    [activities, feedPods, timeFilter, activitiesQuery]
+  );
 
-    if (timeFilter === 'today') {
-      result = result.filter((p) => isToday(p.meetupTime));
-    } else if (timeFilter === 'week') {
-      result = result.filter((p) => isThisWeek(p.meetupTime));
-    }
+  const handleMainTab = (tab: MainTab) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMainTab(tab);
+  };
 
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      result = result.filter(
-        (p) =>
-          (p.activity?.title ?? '').toLowerCase().includes(q) ||
-          p.location.toLowerCase().includes(q)
-      );
-    }
-
-    return result;
-  }, [pods, podCategory, timeFilter, query]);
-
-  // Filtered activities: category filter is server-side, just apply query
-  const filteredActivities = useMemo(() => {
-    if (!query.trim()) return activities;
-    const q = query.toLowerCase();
-    return activities.filter(
-      (a) =>
-        a.title.toLowerCase().includes(q) ||
-        a.description.toLowerCase().includes(q) ||
-        a.defaultLocation.toLowerCase().includes(q)
-    );
-  }, [activities, query]);
-
-  const executeJoin = async (podId: string) => {
-    setJoiningId(podId);
+  const handleJoinClub = async (clubId: string) => {
+    setJoiningClubId(clubId);
     try {
-      const pod = await joinPod(podId);
-      navigation.navigate('Pod', { podId: pod.id });
-    } catch (err: unknown) {
+      await joinClub(clubId);
+      setClubs((prev) => prev.map((c) => (c.id === clubId ? { ...c, isMember: true } : c)));
+    } catch {
       Alert.alert('Error', API_USER_MESSAGE);
     } finally {
-      setJoiningId(null);
+      setJoiningClubId(null);
     }
   };
 
-  const handleJoin = (podId: string) => {
-    if (!hasAcceptedGuidelines) {
-      setPendingJoinId(podId);
-    } else {
-      executeJoin(podId);
-    }
-  };
+  const activitiesSearchBar = (
+    <View style={styles.searchBarOuter}>
+      <View style={[styles.searchBar, cardShadowHome]}>
+        <Ionicons name="search" size={18} color="#999999" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search activities..."
+          placeholderTextColor="#999999"
+          value={activitiesQuery}
+          onChangeText={setActivitiesQuery}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {activitiesQuery.length > 0 ? (
+          <TouchableOpacity onPress={() => setActivitiesQuery('')} hitSlop={12}>
+            <Ionicons name="close-circle" size={18} color="#999999" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
 
-  const handleJoinWaitlist = async (podId: string) => {
-    setWaitlistingId(podId);
-    try {
-      const { position } = await joinWaitlist(podId);
-      Alert.alert('Waitlisted!', `You're #${position} on the waitlist. We'll notify you when a spot opens.`);
-    } catch (err: unknown) {
-      Alert.alert('Error', API_USER_MESSAGE);
-    } finally {
-      setWaitlistingId(null);
-    }
-  };
+  const clubsSearchBar = (
+    <View style={styles.searchBarOuter}>
+      <View style={[styles.searchBar, cardShadowHome]}>
+        <Ionicons name="search" size={18} color="#999999" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search clubs..."
+          placeholderTextColor="#999999"
+          value={clubsQuery}
+          onChangeText={setClubsQuery}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {clubsQuery.length > 0 ? (
+          <TouchableOpacity onPress={() => setClubsQuery('')} hitSlop={12}>
+            <Ionicons name="close-circle" size={18} color="#999999" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
 
-  const handleGuidelinesAccept = async () => {
-    await acceptGuidelines();
-    const id = pendingJoinId;
-    setPendingJoinId(null);
-    if (id) executeJoin(id);
-  };
+  const tabSwitcher = (
+    <View style={styles.tabSwitcherWrap}>
+      <TouchableOpacity
+        style={[styles.tabSegment, mainTab === 'activities' && styles.tabSegmentActive]}
+        onPress={() => handleMainTab('activities')}
+        activeOpacity={0.85}
+      >
+        <Text style={[styles.tabSegmentText, mainTab === 'activities' && styles.tabSegmentTextActive]}>
+          Activities
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tabSegment, mainTab === 'clubs' && styles.tabSegmentActive]}
+        onPress={() => handleMainTab('clubs')}
+        activeOpacity={0.85}
+      >
+        <Text style={[styles.tabSegmentText, mainTab === 'clubs' && styles.tabSegmentTextActive]}>Clubs</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
-  const isMember = (pod: Pod) => pod.members.some((m) => m.user.id === user?.id);
-
-  const handleTabChange = (tab: Tab) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveTab(tab);
-    setQuery('');
-  };
-
-  const isLoading = activeTab === 'pods' ? podsLoading : activitiesLoading;
-
-  if (isLoading) {
+  if (mainTab === 'activities' && activitiesLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Text style={styles.heading}>Search</Text>
+          <Text style={styles.title}>Explore</Text>
+          <Text style={styles.subtitle}>Find activities and clubs at OSU</Text>
         </View>
-        <View style={styles.list}>
-          {[0, 1, 2, 3, 4].map((i) => <SkeletonPodCard key={i} />)}
+        {tabSwitcher}
+        {activitiesSearchBar}
+        <ExplorePillRow
+          items={CATEGORY_PILL_ITEMS}
+          selectedKey={activityCategory ?? 'all'}
+          onSelect={(key) => setActivityCategory(key === 'all' ? null : key)}
+        />
+        <ExplorePillRow
+          items={TIME_PILL_ITEMS.map((t) => ({ key: t.key, label: t.label }))}
+          selectedKey={timeFilter}
+          onSelect={(key) => setTimeFilter(key as ExploreTimeFilter)}
+        />
+        <View style={styles.listPad}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <SkeletonActivityCard key={i} />
+          ))}
         </View>
       </View>
     );
@@ -347,220 +267,189 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.heading}>Search</Text>
+        <Text style={styles.title}>Explore</Text>
+        <Text style={styles.subtitle}>Find activities and clubs at OSU</Text>
       </View>
 
-      {/* Tab bar */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'pods' && styles.tabActive]}
-          onPress={() => handleTabChange('pods')}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={activeTab === 'pods' ? 'people' : 'people-outline'}
-            size={16}
-            color={activeTab === 'pods' ? colors.primary : colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'pods' && styles.tabTextActive]}>Pods</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'activities' && styles.tabActive]}
-          onPress={() => handleTabChange('activities')}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={activeTab === 'activities' ? 'grid' : 'grid-outline'}
-            size={16}
-            color={activeTab === 'activities' ? colors.primary : colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'activities' && styles.tabTextActive]}>
-            Activities
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {tabSwitcher}
 
-      {/* Search bar */}
-      <View style={styles.searchBarContainer}>
-        <View style={[styles.searchBar, shadows.sm]}>
-          <Ionicons name="search" size={18} color={colors.textTertiary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={activeTab === 'pods' ? 'Search pods by activity or location...' : 'Search activities, locations...'}
-            placeholderTextColor={colors.textTertiary}
-            value={query}
-            onChangeText={setQuery}
-            autoCorrect={false}
-            returnKeyType="search"
+      {mainTab === 'activities' ? (
+        <>
+          {activitiesSearchBar}
+          <ExplorePillRow
+            items={CATEGORY_PILL_ITEMS}
+            selectedKey={activityCategory ?? 'all'}
+            onSelect={(key) => setActivityCategory(key === 'all' ? null : key)}
           />
-          {query.length > 0 && (
-            <Ionicons
-              name="close-circle"
-              size={18}
-              color={colors.textTertiary}
-              onPress={() => setQuery('')}
-            />
-          )}
+          <ExplorePillRow
+            items={TIME_PILL_ITEMS.map((t) => ({ key: t.key, label: t.label }))}
+            selectedKey={timeFilter}
+            onSelect={(key) => setTimeFilter(key as ExploreTimeFilter)}
+          />
+          <FlatList
+            data={filteredActivities}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listPad}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={activitiesRefreshing}
+                onRefresh={() => {
+                  setActivitiesRefreshing(true);
+                  void loadActivitiesData();
+                }}
+                tintColor={home.scarlet}
+              />
+            }
+            renderItem={({ item, index }) => (
+              <FadeIn delay={index * 40}>
+                <ActivityCard
+                  variant="home"
+                  activity={item}
+                  onPress={() =>
+                    navigation.navigate('PodList', {
+                      activityId: item.id,
+                      activityTitle: item.title,
+                      activityCategory: item.category,
+                    })
+                  }
+                />
+              </FadeIn>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyBlock}>
+                <Text style={styles.emptyTitle}>No activities found</Text>
+                <Text style={styles.emptySub}>
+                  {activitiesQuery.trim() || timeFilter !== 'all' || activityCategory
+                    ? 'Try another search, category, or time range.'
+                    : 'Check back later for new activities.'}
+                </Text>
+              </View>
+            }
+          />
+        </>
+      ) : clubsLoading ? (
+        <View style={styles.clubsLoading}>
+          <ActivityIndicator size="large" color={home.scarlet} />
         </View>
-      </View>
-
-      {/* Pods tab */}
-      {activeTab === 'pods' && (
-        <FlatList
-          data={filteredPods}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={podsRefreshing}
-              onRefresh={() => {
-                setPodsRefreshing(true);
-                fetchPods();
-              }}
-              tintColor={colors.primary}
-            />
-          }
-          ListHeaderComponent={
-            <View>
-              {/* Category filter */}
-              <CategoryFilter
-                selected={podCategory}
-                onSelect={(cat) => setPodCategory(cat)}
+      ) : (
+        <>
+          {clubsSearchBar}
+          <ExplorePillRow
+            items={CATEGORY_PILL_ITEMS}
+            selectedKey={clubCategory ?? 'all'}
+            onSelect={(key) => setClubCategory(key === 'all' ? null : key)}
+          />
+          <FlatList
+            data={clubs}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listPad}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={clubsRefreshing}
+                onRefresh={() => {
+                  setClubsRefreshing(true);
+                  void loadClubsData();
+                }}
+                tintColor={home.scarlet}
               />
-
-              {/* Time filter chips */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.timeFilterRow}
-              >
-                {([
-                  { key: 'all', label: 'All Times', icon: 'calendar-outline' },
-                  { key: 'today', label: 'Today', icon: 'sunny-outline' },
-                  { key: 'week', label: 'This Week', icon: 'calendar-clear-outline' },
-                ] as { key: TimeFilter; label: string; icon: keyof typeof Ionicons.glyphMap }[]).map((opt) => {
-                  const isActive = timeFilter === opt.key;
-                  return (
-                    <TouchableOpacity
-                      key={opt.key}
-                      style={[styles.timeChip, isActive && styles.timeChipActive]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setTimeFilter(opt.key);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={opt.icon}
-                        size={13}
-                        color={isActive ? colors.textInverse : colors.textSecondary}
-                      />
-                      <Text style={[styles.timeChipText, isActive && styles.timeChipTextActive]}>
-                        {opt.label}
+            }
+            ListHeaderComponent={
+              <View style={styles.clubsHeaderBlock}>
+                <View style={styles.sectionHeaderPad}>
+                  <ExploreSectionHeader label="MEETING TODAY" />
+                </View>
+                {meetingsToday.length === 0 ? (
+                  <Text style={styles.meetingsEmpty}>No club meetings today</Text>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled={Platform.OS === 'android'}
+                    contentContainerStyle={styles.meetingsRow}
+                  >
+                    {meetingsToday.map((m) => (
+                      <View key={m.id} style={[styles.meetingCard, cardShadowHome]}>
+                        <Text style={styles.meetingEmoji}>{m.clubEmoji}</Text>
+                        <Text style={styles.meetingClubName} numberOfLines={1}>
+                          {m.clubName}
+                        </Text>
+                        <Text style={styles.meetingTime}>{formatScheduleTime(m.meetingTime)}</Text>
+                        <Text style={styles.meetingLocation} numberOfLines={1}>
+                          {m.location}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+                <View style={[styles.sectionHeaderPad, { marginTop: spacing.md }]}>
+                  <ExploreSectionHeader label="ALL CLUBS" />
+                </View>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const pill = getCategoryPillStyle(item.category);
+              return (
+                <View style={[styles.clubCard, cardShadowHome]}>
+                  <View style={styles.clubCardInner}>
+                    <View style={[styles.clubEmojiCircle, { backgroundColor: clubCircleBg(item.name) }]}>
+                      <Text style={styles.clubEmojiText}>{item.emoji}</Text>
+                    </View>
+                    <View style={styles.clubCardMain}>
+                      <View style={styles.clubTitleRow}>
+                        <Text style={styles.clubName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <View style={[styles.categoryPillSmall, { backgroundColor: pill.pillBg }]}>
+                          <Text style={[styles.categoryPillSmallText, { color: pill.pillText }]} numberOfLines={1}>
+                            {pill.label}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.clubDesc} numberOfLines={2}>
+                        {item.description}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          }
-          renderItem={({ item, index }) => (
-            <FadeIn delay={index * 50}>
-              <SearchPodCard
-                pod={item}
-                onJoin={() => handleJoin(item.id)}
-                onView={() => navigation.navigate('Pod', { podId: item.id })}
-                onJoinWaitlist={() => handleJoinWaitlist(item.id)}
-                isJoining={joiningId === item.id}
-                isJoiningWaitlist={waitlistingId === item.id}
-                isMember={isMember(item)}
-                currentUserId={user?.id}
-              />
-            </FadeIn>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="people-outline" size={40} color={colors.textTertiary} />
+                      <View style={styles.clubFooterRow}>
+                        <Text style={styles.clubMemberCount}>
+                          {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
+                        </Text>
+                        {item.isMember ? (
+                          <View style={styles.joinedPill}>
+                            <Text style={styles.joinedPillText}>Joined</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.joinOutlineBtn, joiningClubId === item.id && styles.joinOutlineBtnDisabled]}
+                            onPress={() => void handleJoinClub(item.id)}
+                            disabled={joiningClubId === item.id}
+                            activeOpacity={0.8}
+                          >
+                            {joiningClubId === item.id ? (
+                              <ActivityIndicator size="small" color={home.scarlet} />
+                            ) : (
+                              <Text style={styles.joinOutlineBtnText}>Join</Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={styles.emptyBlock}>
+                <Text style={styles.emptyTitle}>No clubs found</Text>
+                <Text style={styles.emptySub}>Try another search or category.</Text>
               </View>
-              <Text style={styles.emptyTitle}>
-                {query.trim() ? 'No pods found' : 'No pods right now'}
-              </Text>
-              <Text style={styles.emptyText}>
-                {query.trim()
-                  ? `No pods match "${query}"`
-                  : 'Check back later or browse activities to start one'}
-              </Text>
-            </View>
-          }
-        />
+            }
+          />
+        </>
       )}
-
-      {/* Activities tab */}
-      {activeTab === 'activities' && (
-        <FlatList
-          data={filteredActivities}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={activitiesRefreshing}
-              onRefresh={() => {
-                setActivitiesRefreshing(true);
-                fetchActivities(activityCategory);
-              }}
-              tintColor={colors.primary}
-            />
-          }
-          ListHeaderComponent={
-            <CategoryFilter
-              selected={activityCategory}
-              onSelect={(cat) => setActivityCategory(cat)}
-            />
-          }
-          renderItem={({ item, index }) => (
-            <FadeIn delay={index * 70}>
-              <ActivityCard
-                activity={item}
-                onPress={() =>
-                  navigation.navigate('PodList', {
-                    activityId: item.id,
-                    activityTitle: item.title,
-                    activityCategory: item.category,
-                  })
-                }
-              />
-            </FadeIn>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="search-outline" size={40} color={colors.textTertiary} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {query.trim() ? 'No results found' : 'No activities yet'}
-              </Text>
-              <Text style={styles.emptyText}>
-                {query.trim()
-                  ? `No activities match "${query}"`
-                  : 'Find activities by name or location'}
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      <GuidelinesModal
-        visible={pendingJoinId !== null}
-        onAccept={handleGuidelinesAccept}
-        onClose={() => setPendingJoinId(null)}
-      />
     </View>
   );
 }
@@ -568,274 +457,253 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: home.creamBg,
   },
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: 16,
+    paddingTop: spacing.sm,
+    paddingBottom: 12,
   },
-  heading: {
-    ...typography.h2,
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: home.textPrimary,
   },
-
-  /* Tab bar */
-  tabBar: {
+  subtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    color: home.textSecondary,
+  },
+  tabSwitcherWrap: {
     flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.borderLight,
-    borderRadius: radii.md,
-    padding: 3,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#F0EBE3',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
   },
-  tab: {
+  tabSegment: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  tabActive: {
-    backgroundColor: colors.surface,
-    ...shadows.sm,
+  tabSegmentActive: {
+    backgroundColor: home.scarlet,
   },
-  tabText: {
+  tabSegmentText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    fontWeight: '700',
+    color: home.textSecondary,
   },
-  tabTextActive: {
-    color: colors.primary,
+  tabSegmentTextActive: {
+    color: '#FFFFFF',
   },
-
-  /* Search bar */
-  searchBarContainer: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
+  searchBarOuter: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
     height: 44,
-    gap: spacing.sm,
+    gap: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#E8E3DB',
   },
   searchInput: {
     flex: 1,
-    ...typography.body,
+    fontSize: 15,
+    color: home.textPrimary,
     paddingVertical: 0,
-    letterSpacing: 0,
   },
-
-  /* Time filter */
-  timeFilterRow: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  timeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  timeChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  timeChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  timeChipTextActive: {
-    color: colors.textInverse,
-  },
-
-  /* List */
-  list: {
-    paddingHorizontal: spacing.lg,
+  listPad: {
+    paddingHorizontal: 16,
     paddingBottom: spacing.xxl,
   },
-
-  /* Empty state */
-  emptyContainer: {
-    alignItems: 'center',
-    marginTop: 60,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
+  sectionHeaderPad: {
+    paddingHorizontal: 0,
   },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.borderLight,
+  sectionHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: 10,
+    gap: 8,
+  },
+  sectionHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: home.scarlet,
+  },
+  sectionHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: '#999999',
+    textTransform: 'uppercase',
+  },
+  emptyBlock: {
+    alignItems: 'center',
+    marginTop: 48,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    ...typography.h3,
-    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
+    color: home.textSecondary,
+    marginBottom: 6,
   },
-  emptyText: {
-    ...typography.caption,
+  emptySub: {
+    fontSize: 13,
+    color: '#999999',
     textAlign: 'center',
     lineHeight: 20,
   },
-
-  /* Pod card */
-  podCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    marginBottom: spacing.sm + 4,
-    padding: spacing.md,
-  },
-  podCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  podCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
+  clubsLoading: {
+    flex: 1,
     justifyContent: 'center',
-    flexShrink: 0,
-  },
-  podCardTitleBlock: {
-    flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
   },
-  podCardTitle: {
-    ...typography.bodyBold,
-    flex: 1,
+  clubsHeaderBlock: {
+    marginBottom: 4,
   },
-  forYouBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
+  meetingsEmpty: {
+    fontSize: 13,
+    color: '#BBBBBB',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
-  forYouBadgeText: {
-    color: colors.textInverse,
-    fontSize: 10,
+  meetingsRow: {
+    flexDirection: 'row',
+    paddingBottom: 8,
+    gap: 10,
+  },
+  meetingCard: {
+    width: 160,
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: home.cardBg,
+    padding: 10,
+  },
+  meetingEmoji: {
+    fontSize: 26,
+    marginBottom: 2,
+  },
+  meetingClubName: {
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    color: home.textPrimary,
   },
-  podCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: spacing.sm,
-    flexWrap: 'nowrap',
+  meetingTime: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: home.scarlet,
+    marginTop: 2,
   },
-  podCardMetaText: {
-    ...typography.caption,
-    fontSize: 12,
+  meetingLocation: {
+    fontSize: 11,
+    color: home.textSecondary,
+    marginTop: 2,
   },
-  metaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: colors.border,
-    marginHorizontal: 2,
-  },
-  podCardProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  podCardProgressTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.borderLight,
-    borderRadius: 2,
+  clubCard: {
+    borderRadius: 16,
+    backgroundColor: home.cardBg,
+    marginBottom: 10,
     overflow: 'hidden',
   },
-  podCardProgressFill: {
-    height: '100%',
-    borderRadius: 2,
+  clubCardInner: {
+    flexDirection: 'row',
+    padding: 14,
+    gap: 12,
   },
-  podCardMemberText: {
-    ...typography.tiny,
-    fontWeight: '600',
+  clubEmojiCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  podCardFooter: {
+  clubEmojiText: {
+    fontSize: 22,
+  },
+  clubCardMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  clubTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 2,
+    gap: 8,
+    marginBottom: 4,
   },
-  spotsBadge: {
-    paddingHorizontal: spacing.sm,
+  clubName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  categoryPillSmall: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: radii.pill,
+    borderRadius: 999,
+    maxWidth: 120,
   },
-  spotsBadgeText: {
-    fontSize: 11,
+  categoryPillSmallText: {
+    fontSize: 10,
     fontWeight: '700',
   },
-  viewBtn: {
+  clubDesc: {
+    fontSize: 14,
+    color: home.textSecondary,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  clubFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
   },
-  viewBtnText: {
-    ...typography.bodyBold,
-    color: colors.primary,
-    fontSize: 13,
+  clubMemberCount: {
+    fontSize: 12,
+    color: '#999999',
   },
-  joinBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    paddingVertical: 7,
-    paddingHorizontal: spacing.md,
-    minWidth: 90,
-    alignItems: 'center',
-  },
-  joinBtnLoading: {
-    backgroundColor: colors.textTertiary,
-  },
-  joinBtnText: {
-    color: colors.textInverse,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  waitlistBtn: {
-    borderRadius: radii.sm,
-    paddingVertical: 7,
-    paddingHorizontal: spacing.md,
-    minWidth: 90,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
+  joinOutlineBtn: {
     borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderColor: home.scarlet,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  waitlistBtnText: {
-    color: colors.primary,
+  joinOutlineBtnDisabled: {
+    opacity: 0.7,
+  },
+  joinOutlineBtnText: {
     fontSize: 13,
     fontWeight: '700',
+    color: home.scarlet,
+  },
+  joinedPill: {
+    backgroundColor: '#F0EBE3',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  joinedPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: home.textSecondary,
   },
 });
