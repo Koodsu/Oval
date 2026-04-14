@@ -162,7 +162,7 @@ export default function ProfileScreen() {
   };
 
   const activePods = pods.filter((p) => p.status === 'FORMING' || p.status === 'LOCKED');
-  const completedPods = pods.filter((p) => p.status === 'COMPLETED');
+  const pastPods = pods.filter((p) => p.status === 'COMPLETED' || p.status === 'EXPIRED');
 
   const avatarUri = resolveAvatarUrl(user?.avatarUrl);
 
@@ -276,8 +276,8 @@ export default function ProfileScreen() {
           <View style={[styles.statIcon, { backgroundColor: colors.green + '15' }]}>
             <Ionicons name="checkmark-circle" size={20} color={colors.green} />
           </View>
-          <Text style={styles.statNumber}>{completedPods.length}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
+          <Text style={styles.statNumber}>{pastPods.length}</Text>
+          <Text style={styles.statLabel}>Past Pods</Text>
         </View>
         <View style={[styles.statCard, shadows.sm]}>
           <View style={[styles.statIcon, { backgroundColor: colors.primary + '15' }]}>

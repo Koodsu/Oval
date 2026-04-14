@@ -6,6 +6,7 @@ const LABELS: Record<string, string> = {
   FORMING: 'Forming',
   LOCKED: 'Locked',
   COMPLETED: 'Completed',
+  EXPIRED: 'Expired',
 };
 
 interface StatusBadgeProps {

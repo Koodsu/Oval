@@ -1,14 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -17,7 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { fetchFeed, getActivities, joinPod, joinWaitlist, resolveAvatarUrl } from '../api';
+import { fetchFeed, getActivities, getMyPods, joinPod, joinWaitlist, resolveAvatarUrl } from '../api';
 import { Pod, Activity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -25,21 +25,53 @@ import ActivityCard from '../components/ActivityCard';
 import FadeIn from '../components/FadeIn';
 import PressableScale from '../components/PressableScale';
 import GuidelinesModal from '../components/GuidelinesModal';
-import TagPills from '../components/TagPills';
-import { SkeletonFeedCard, SkeletonActivityCard } from '../components/SkeletonLoader';
-import { colors, spacing, radii, shadows, typography } from '../theme';
-import { CATEGORY_META } from '../constants/categories';
-import { formatMeetupTime } from '../utils/format';
+import { SkeletonActivityCard } from '../components/SkeletonLoader';
+import { home, spacing, cardShadowHome, colors } from '../theme';
+import { getActivityEmoji } from '../utils/activityEmoji';
+import { getCategoryPillStyle } from '../utils/activityCategoryPill';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-function isToday(iso: string): boolean {
-  const date = new Date(iso);
-  const now = new Date();
+function getTimeOfDayGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function mergedFeedPods(pods: Pod[]): Pod[] {
+  return [...pods].sort(
+    (a, b) => new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime()
+  );
+}
+
+function isSameLocalCalendarDay(iso: string, ref: Date = new Date()): boolean {
+  const d = new Date(iso);
   return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
+    d.getFullYear() === ref.getFullYear() &&
+    d.getMonth() === ref.getMonth() &&
+    d.getDate() === ref.getDate()
+  );
+}
+
+function formatScheduleTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function clubCircleBg(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors.avatarPalette[Math.abs(hash) % colors.avatarPalette.length];
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionHeaderDot} />
+      <Text style={styles.sectionHeaderLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -51,131 +83,91 @@ interface FeedPodCardProps {
   isJoining: boolean;
   isJoiningWaitlist?: boolean;
   isMember: boolean;
-  currentUserId?: string;
 }
 
-function FeedPodCard({ pod, onJoin, onView, onJoinWaitlist, isJoining, isJoiningWaitlist = false, isMember, currentUserId }: FeedPodCardProps) {
+function FeedPodCard({
+  pod,
+  onJoin,
+  onView,
+  onJoinWaitlist,
+  isJoining,
+  isJoiningWaitlist = false,
+  isMember,
+}: FeedPodCardProps) {
   const memberCount = pod.members.length;
   const spotsLeft = pod.maxMembers - memberCount;
-  const progress = memberCount / pod.maxMembers;
-  const meta = pod.activity ? CATEGORY_META[pod.activity.category] : null;
-  const accentColor = meta?.color ?? colors.primary;
+  const activity = pod.activity;
+  const title = activity?.title ?? 'Pod';
+  const category = activity?.category ?? '';
+  const pill = getCategoryPillStyle(category);
+  const emoji = getActivityEmoji(title, category);
 
-  let spotsColor = colors.green;
-  let spotsBg = colors.greenLight;
-  if (spotsLeft === 1) {
-    spotsColor = colors.red;
-    spotsBg = '#fee2e2';
-  } else if (spotsLeft === 2) {
-    spotsColor = colors.amber;
-    spotsBg = colors.amberLight;
-  }
+  const statusPill =
+    pod.status === 'LOCKED'
+      ? { label: 'FORMING', bg: '#F0FDF4', text: '#16A34A' }
+      : pod.status === 'FORMING' && memberCount < pod.maxMembers
+        ? { label: 'OPEN', bg: '#FFF7ED', text: '#EA580C' }
+        : pod.status === 'FORMING' && memberCount >= pod.maxMembers
+          ? { label: 'FULL', bg: '#FEF2F2', text: '#CC0000' }
+          : { label: 'Past', bg: '#F4F4F5', text: '#52525B' };
 
   const handlePress = () => {
+    if (isJoining || isJoiningWaitlist) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    isMember ? onView() : onJoin();
+    if (isMember) {
+      onView();
+    } else if (spotsLeft > 0) {
+      onJoin();
+    } else if (onJoinWaitlist) {
+      onJoinWaitlist();
+    }
   };
 
   return (
-    <PressableScale onPress={handlePress} haptic="light" style={[styles.feedCard, shadows.md]}>
-      {/* Activity icon + title */}
-      <View style={styles.feedCardHeader}>
-        <View style={[styles.feedCardIcon, { backgroundColor: accentColor + '1a' }]}>
-          <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={16} color={accentColor} />
+    <PressableScale
+      onPress={handlePress}
+      haptic="none"
+      disabled={isJoining || isJoiningWaitlist}
+      style={[styles.feedCard, cardShadowHome]}
+      testID="feed-pod-card"
+    >
+      {(isJoining || isJoiningWaitlist) && (
+        <View style={styles.feedCardLoadingOverlay}>
+          <ActivityIndicator size="small" color={home.scarlet} />
         </View>
-        <View style={styles.feedCardTitleRow}>
-          <Text style={styles.feedCardTitle} numberOfLines={2}>{pod.activity?.title ?? 'Pod'}</Text>
-          {pod.recommended && (
-            <View style={styles.forYouBadge}>
-              <Text style={styles.forYouBadgeText}>For You</Text>
+      )}
+      <View style={styles.feedCardTopRow}>
+        <View style={[styles.emojiCircle, { backgroundColor: pill.emojiCircleBg }]}>
+          <Text style={styles.emojiText}>{emoji}</Text>
+        </View>
+        <View style={styles.feedCardMainCol}>
+          <View style={styles.feedCardTitleRow}>
+            <Text style={styles.feedCardTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            <View style={[styles.categoryPill, styles.feedCardCategoryPill, { backgroundColor: pill.pillBg }]}>
+              <Text style={[styles.categoryPillText, { color: pill.pillText }]}>{pill.label}</Text>
             </View>
-          )}
-        </View>
-      </View>
-
-      {/* Time */}
-      <View style={styles.feedCardMeta}>
-        <Ionicons name="time-outline" size={13} color={colors.textTertiary} />
-        <Text style={styles.feedCardMetaText}>{formatMeetupTime(pod.meetupTime)}</Text>
-      </View>
-
-      {/* Location */}
-      <View style={styles.feedCardMeta}>
-        <Ionicons name="location-outline" size={13} color={colors.textTertiary} />
-        <Text style={styles.feedCardMetaText} numberOfLines={1}>{pod.location}</Text>
-      </View>
-
-      {/* Progress bar */}
-      <View style={styles.feedCardProgressTrack}>
-        <View
-          style={[
-            styles.feedCardProgressFill,
-            { width: `${progress * 100}%` as `${number}%`, backgroundColor: accentColor },
-          ]}
-        />
-      </View>
-
-      {/* Member interest tag preview (non-self members only) */}
-      {(() => {
-        const otherTags = pod.members
-          .filter((m) => m.userId !== currentUserId)
-          .flatMap((m) => m.user.interestTags ?? []);
-        const uniqueTags = [...new Set(otherTags)];
-        if (uniqueTags.length === 0) return null;
-        return <TagPills tags={uniqueTags} max={3} size="sm" style={styles.memberTagsPreview} />;
-      })()}
-
-      {/* Spots badge */}
-      <View style={styles.feedCardFooter}>
-        {spotsLeft > 0 ? (
-          <View style={[styles.spotsBadge, { backgroundColor: spotsBg }]}>
-            <Text style={[styles.spotsBadgeText, { color: spotsColor }]}>
-              {spotsLeft === 1 ? '1 spot left!' : `${spotsLeft} spots left`}
+          </View>
+          {activity?.description ? (
+            <Text style={styles.feedCardDesc} numberOfLines={2}>
+              {activity.description}
+            </Text>
+          ) : null}
+          <View style={styles.feedCardLocationRow}>
+            <Ionicons name="location-outline" size={12} color={home.textMuted} />
+            <Text style={styles.feedCardLocation} numberOfLines={1}>
+              {pod.location}
             </Text>
           </View>
-        ) : (
-          <View style={[styles.spotsBadge, { backgroundColor: colors.borderLight }]}>
-            <Text style={[styles.spotsBadgeText, { color: colors.textTertiary }]}>Full</Text>
-          </View>
-        )}
+        </View>
       </View>
-
-      {/* Action */}
-      {isMember ? (
-        <TouchableOpacity style={styles.feedCardAction} onPress={onView} activeOpacity={0.7}>
-          <Text style={styles.feedCardActionText}>View Pod</Text>
-          <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-        </TouchableOpacity>
-      ) : spotsLeft <= 0 && onJoinWaitlist ? (
-        <TouchableOpacity
-          style={[styles.feedCardWaitlistBtn, isJoiningWaitlist && styles.feedCardJoinBtnLoading]}
-          onPress={onJoinWaitlist}
-          disabled={isJoiningWaitlist}
-          activeOpacity={0.8}
-        >
-          {isJoiningWaitlist ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <>
-              <Ionicons name="time-outline" size={14} color={colors.primary} style={{ marginRight: 6 }} />
-              <Text style={styles.feedCardWaitlistText}>Join Waitlist</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={[styles.feedCardJoinBtn, isJoining && styles.feedCardJoinBtnLoading]}
-          onPress={onJoin}
-          disabled={isJoining}
-          activeOpacity={0.8}
-        >
-          {isJoining ? (
-            <ActivityIndicator size="small" color={colors.textInverse} />
-          ) : (
-            <Text style={styles.feedCardJoinText}>Join Pod</Text>
-          )}
-        </TouchableOpacity>
-      )}
+      <View style={styles.feedCardBottomRow}>
+        <Text style={styles.joiningText}>{memberCount} joining</Text>
+        <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+          <Text style={[styles.statusPillText, { color: statusPill.text }]}>{statusPill.label}</Text>
+        </View>
+      </View>
     </PressableScale>
   );
 }
@@ -186,6 +178,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
 
   const [pods, setPods] = useState<Pod[]>([]);
+  const [myPods, setMyPods] = useState<Pod[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -195,8 +188,9 @@ export default function TodayScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [feedPods, acts] = await Promise.all([fetchFeed(), getActivities()]);
+      const [feedPods, acts, mine] = await Promise.all([fetchFeed(), getActivities(), getMyPods()]);
       setPods(feedPods);
+      setMyPods(mine);
       const sorted = [...acts].sort((a, b) => {
         const aC = a._count?.pods ?? 0;
         const bC = b._count?.pods ?? 0;
@@ -259,13 +253,25 @@ export default function TodayScreen() {
 
   const isMember = (pod: Pod) => pod.members.some((m) => m.user.id === user?.id);
 
-  const todayPods = pods.filter((p) => isToday(p.meetupTime));
-  const weekPods = pods.filter((p) => !isToday(p.meetupTime));
-  const hasAnyPods = todayPods.length > 0 || weekPods.length > 0;
+  const feedPodsOrdered = useMemo(() => mergedFeedPods(pods), [pods]);
+  const scheduleToday = useMemo(
+    () =>
+      myPods.filter(
+        (p) =>
+          p.status !== 'EXPIRED' &&
+          isSameLocalCalendarDay(p.meetupTime) &&
+          (p.status === 'FORMING' || p.status === 'LOCKED' || p.status === 'COMPLETED')
+      ),
+    [myPods]
+  );
+  const pickedActivities = useMemo(() => activities.slice(0, 3), [activities]);
+  const clubNames = useMemo(() => user?.clubs?.filter(Boolean) ?? [], [user?.clubs]);
+
   const firstName = user?.name?.split(' ')[0] ?? '';
+  const timeGreeting = getTimeOfDayGreeting();
 
   const renderFeedCard = (pod: Pod, index: number) => (
-    <FadeIn key={pod.id} delay={index * 60}>
+    <FadeIn key={pod.id} delay={index * 50}>
       <FeedPodCard
         pod={pod}
         onJoin={() => handleJoin(pod.id)}
@@ -274,38 +280,16 @@ export default function TodayScreen() {
         isJoining={joiningId === pod.id}
         isJoiningWaitlist={waitlistingId === pod.id}
         isMember={isMember(pod)}
-        currentUserId={user?.id}
       />
     </FadeIn>
   );
 
-  const renderActivityList = (heading: string) => (
-    <View style={[styles.section, styles.browseSection]}>
-      <Text style={styles.sectionLabel}>{heading}</Text>
-      {activities.length === 0 ? (
-        <View style={styles.emptySection}>
-          <Ionicons name="leaf-outline" size={32} color={colors.border} />
-          <Text style={styles.emptySectionTitle}>No activities available</Text>
-          <Text style={styles.emptySectionSub}>Check back soon — new activities are added regularly.</Text>
-        </View>
-      ) : (
-        activities.map((activity, index) => (
-          <FadeIn key={activity.id} delay={index * 30}>
-            <ActivityCard
-              activity={activity}
-              onPress={() =>
-                navigation.navigate('PodList', {
-                  activityId: activity.id,
-                  activityTitle: activity.title,
-                  activityCategory: activity.category,
-                })
-              }
-            />
-          </FadeIn>
-        ))
-      )}
-    </View>
-  );
+  const horizontalProps = {
+    horizontal: true as const,
+    showsHorizontalScrollIndicator: false,
+    nestedScrollEnabled: Platform.OS === 'android',
+    contentContainerStyle: styles.horizontalScrollContent,
+  } as const;
 
   if (loading) {
     return (
@@ -316,25 +300,88 @@ export default function TodayScreen() {
         >
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.border }} />
+              <View style={styles.skeletonAvatar} />
               <View style={styles.headerText}>
-                <View style={{ width: 120, height: 18, borderRadius: 6, backgroundColor: colors.border }} />
-                <View style={{ width: 160, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginTop: 4 }} />
+                <View style={styles.skeletonLineLg} />
+                <View style={styles.skeletonLineSm} />
               </View>
             </View>
+            <View style={styles.skeletonBell} />
           </View>
-          <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.lg }}>
-            <View style={{ width: '100%', height: 52, borderRadius: radii.md, backgroundColor: colors.border }} />
+          <View style={styles.heroSection}>
+            <View style={styles.skeletonCta} />
+            <View style={[styles.skeletonLineSm, { alignSelf: 'center', width: 220 }]} />
           </View>
-          <View style={styles.section}>
-            <View style={{ width: 120, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginLeft: spacing.lg, marginBottom: spacing.md }} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-              {[0, 1, 2].map((i) => <SkeletonFeedCard key={i} />)}
+          <View style={styles.sectionBlock}>
+            <View style={styles.skeletonSectionHeader} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.skeletonScheduleRow}>
+                {[0, 1, 2].map((i) => (
+                  <View key={i} style={styles.skeletonScheduleCard} />
+                ))}
+              </View>
             </ScrollView>
           </View>
-          <View style={[styles.section, styles.browseSection]}>
-            <View style={{ width: 130, height: 12, borderRadius: 4, backgroundColor: colors.borderLight, marginBottom: spacing.md }} />
-            {[0, 1, 2, 3].map((i) => <SkeletonActivityCard key={i} />)}
+          <View style={styles.sectionBlock}>
+            <View style={styles.skeletonSectionHeader} />
+            <View style={styles.sectionBodyPad}>
+              {[0, 1, 2].map((i) => (
+                <SkeletonActivityCard key={i} />
+              ))}
+            </View>
+          </View>
+          <View style={styles.sectionBlock}>
+            <View style={styles.skeletonSectionHeader} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.skeletonScheduleRow}>
+                {[0, 1].map((i) => (
+                  <View key={i} style={styles.skeletonClubCard} />
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+          <View style={styles.sectionBlock}>
+            <View style={styles.skeletonSectionHeader} />
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={[styles.feedCard, cardShadowHome, { opacity: 0.6 }]}>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: colors.creamBorder,
+                    }}
+                  />
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <View
+                      style={{
+                        height: 14,
+                        borderRadius: 4,
+                        width: '70%',
+                        backgroundColor: colors.creamBorder,
+                      }}
+                    />
+                    <View
+                      style={{
+                        height: 10,
+                        borderRadius: 4,
+                        width: '35%',
+                        backgroundColor: colors.creamBorder,
+                      }}
+                    />
+                    <View
+                      style={{
+                        height: 12,
+                        borderRadius: 4,
+                        width: '90%',
+                        backgroundColor: colors.creamBorder,
+                      }}
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
           </View>
         </ScrollView>
       </View>
@@ -353,74 +400,170 @@ export default function TodayScreen() {
               setRefreshing(true);
               loadData();
             }}
-            tintColor={colors.primary}
+            tintColor={home.scarlet}
           />
         }
       >
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Avatar name={user?.name ?? 'U'} size={42} uri={resolveAvatarUrl(user?.avatarUrl)} />
+            <Avatar name={user?.name ?? 'U'} size={44} uri={resolveAvatarUrl(user?.avatarUrl)} />
             <View style={styles.headerText}>
-              <Text style={styles.greeting}>Hey, {firstName}</Text>
-              <Text style={styles.subtitle}>What's happening today</Text>
+              <Text style={styles.greeting}>
+                Hey, {firstName} 👋
+              </Text>
+              <Text style={styles.subtitle}>{timeGreeting}</Text>
             </View>
           </View>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('PodInvites')}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <Ionicons name="notifications-outline" size={24} color={home.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Find a Group CTA */}
         <View style={styles.heroSection}>
           <PressableScale
-            style={styles.heroButton}
             onPress={() => navigation.navigate('FindAGroup')}
             haptic="medium"
+            style={[styles.heroButtonWrap, styles.heroButtonSolid]}
           >
-            <Ionicons name="flash" size={20} color={colors.textInverse} />
-            <Text style={styles.heroButtonText}>Find a Group</Text>
+            <Text style={styles.heroButtonText}>⚡ Find a Group</Text>
           </PressableScale>
           <Text style={styles.heroSubtext}>See open pods you can join right now</Text>
         </View>
 
-        {/* No pods: promote activity list to the top */}
-        {!hasAnyPods && renderActivityList('Find something to join')}
-
-        {/* Has pods: show pod sections, then activities below */}
-        {hasAnyPods && (
-          <>
-            {/* Happening Today */}
-            {todayPods.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Happening Today</Text>
-                <FlatList
-                  data={todayPods}
-                  keyExtractor={(p) => p.id}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.horizontalList}
-                  renderItem={({ item, index }) => renderFeedCard(item, index)}
-                />
+        {/* Section 1 — Your day */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderPad}>
+            <SectionHeader label="YOUR DAY" />
+          </View>
+          {scheduleToday.length === 0 ? (
+            <View style={styles.sectionBodyPad}>
+              <View style={styles.emptyDashedCard}>
+                <Text style={styles.emptyDashedTitle}>Nothing yet</Text>
+                <Text style={styles.emptyDashedSub}>Find something below</Text>
               </View>
-            )}
+            </View>
+          ) : (
+            <ScrollView {...horizontalProps}>
+              {scheduleToday.map((pod) => (
+                <TouchableOpacity
+                  key={pod.id}
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate('Pod', { podId: pod.id })}
+                  style={[styles.scheduleCard, cardShadowHome]}
+                >
+                  <Text style={styles.scheduleTime}>{formatScheduleTime(pod.meetupTime)}</Text>
+                  <View style={styles.scheduleTitleWrap}>
+                    <Text style={styles.scheduleTitle} numberOfLines={2}>
+                      {pod.activity?.title ?? 'Pod'}
+                    </Text>
+                  </View>
+                  <View style={styles.scheduleLocationRow}>
+                    <Ionicons name="location-outline" size={11} color={home.textMuted} />
+                    <Text style={styles.scheduleLocation} numberOfLines={1}>
+                      {pod.location}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
-            {/* Starting This Week */}
-            {weekPods.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Starting This Week</Text>
-                <FlatList
-                  data={weekPods}
-                  keyExtractor={(p) => p.id}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.horizontalList}
-                  renderItem={({ item, index }) => renderFeedCard(item, index)}
-                />
+        {/* Section 2 — Picked for you */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderPad}>
+            <SectionHeader label="PICKED FOR YOU" />
+          </View>
+          <View style={styles.sectionBodyPad}>
+            {pickedActivities.length === 0 ? (
+              <View style={styles.emptyDashedCard}>
+                <Text style={styles.emptyDashedTitle}>Nothing yet</Text>
+                <Text style={styles.emptyDashedSub}>Check back for new activities</Text>
               </View>
+            ) : (
+              pickedActivities.map((activity, index) => (
+                <FadeIn key={activity.id} delay={index * 40}>
+                  <ActivityCard
+                    variant="home"
+                    activity={activity}
+                    onPress={() =>
+                      navigation.navigate('PodList', {
+                        activityId: activity.id,
+                        activityTitle: activity.title,
+                        activityCategory: activity.category,
+                      })
+                    }
+                  />
+                </FadeIn>
+              ))
             )}
+          </View>
+        </View>
 
-            {/* Browse Activities */}
-            {renderActivityList('Browse Activities')}
-          </>
-        )}
+        {/* Section 3 — Your clubs */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderPad}>
+            <SectionHeader label="YOUR CLUBS" />
+          </View>
+          {clubNames.length === 0 ? (
+            <View style={styles.sectionBodyPad}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.emptyDashedCard}
+                onPress={() => navigation.navigate('EditProfile')}
+              >
+                <Ionicons name="add-circle-outline" size={28} color={home.scarlet} style={{ marginBottom: 6 }} />
+                <Text style={styles.emptyDashedTitle}>Join a club</Text>
+                <Text style={styles.emptyDashedSub}>Add clubs on your profile</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView {...horizontalProps}>
+              {clubNames.map((club) => (
+                <TouchableOpacity
+                  key={club}
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate('EditProfile')}
+                  style={[styles.clubCard, cardShadowHome]}
+                >
+                  <View style={styles.clubCardTop}>
+                    <View style={[styles.clubAvatar, { backgroundColor: clubCircleBg(club) }]}>
+                      <Text style={styles.clubAvatarText}>{club.trim().charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.clubTextCol}>
+                      <Text style={styles.clubName} numberOfLines={1}>
+                        {club}
+                      </Text>
+                      <Text style={styles.clubMeta}>On your profile</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Section 4 — Happening now */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderPad}>
+            <SectionHeader label="HAPPENING NOW" />
+          </View>
+          <View style={styles.sectionBodyPad}>
+            {feedPodsOrdered.length === 0 ? (
+              <View style={styles.emptyDashedCard}>
+                <Text style={styles.emptyDashedTitle}>Nothing open right now</Text>
+                <Text style={styles.emptyDashedSub}>Try Find a Group above</Text>
+              </View>
+            ) : (
+              <View style={styles.verticalFeed}>{feedPodsOrdered.map((p, i) => renderFeedCard(p, i))}</View>
+            )}
+          </View>
+        </View>
       </ScrollView>
 
       <GuidelinesModal
@@ -432,18 +575,10 @@ export default function TodayScreen() {
   );
 }
 
-const FEED_CARD_WIDTH = 220;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
+    backgroundColor: home.creamBg,
   },
   content: {
     paddingBottom: spacing.xxl,
@@ -452,204 +587,343 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 16,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm + 4,
+    gap: 12,
   },
   headerText: {
     gap: 2,
   },
   greeting: {
-    ...typography.h2,
+    fontSize: 22,
+    fontWeight: '700',
+    color: home.textPrimary,
   },
   subtitle: {
-    ...typography.caption,
+    fontSize: 14,
+    fontWeight: '500',
+    color: home.textSecondary,
   },
   heroSection: {
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
+    paddingHorizontal: 16,
+    marginBottom: 20,
     alignItems: 'center',
     gap: spacing.sm,
   },
-  heroButton: {
-    flexDirection: 'row',
+  heroButtonWrap: {
+    width: '100%',
+    height: 56,
+    borderRadius: 14,
+    overflow: 'hidden',
+    ...cardShadowHome,
+  },
+  heroButtonSolid: {
+    backgroundColor: home.scarlet,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    width: '100%',
-    ...shadows.sm,
   },
   heroButtonText: {
-    color: colors.textInverse,
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.2,
   },
   heroSubtext: {
-    ...typography.caption,
+    fontSize: 12,
+    color: '#888888',
     textAlign: 'center',
   },
-  section: {
-    marginBottom: spacing.lg,
+  sectionBlock: {
+    marginBottom: 24,
   },
-  browseSection: {
-    paddingHorizontal: spacing.lg,
+  sectionHeaderPad: {
+    paddingHorizontal: 16,
   },
-  sectionLabel: {
-    ...typography.label,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
+  sectionBodyPad: {
+    paddingHorizontal: 16,
   },
-  horizontalList: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm + 4,
-  },
-  emptySection: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  emptySectionTitle: {
-    ...typography.h3,
-    color: colors.textSecondary,
-  },
-  emptySectionSub: {
-    ...typography.caption,
-    textAlign: 'center',
-  },
-
-  /* Feed pod card */
-  feedCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    width: FEED_CARD_WIDTH,
-  },
-  feedCardHeader: {
+  sectionHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  feedCardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    marginBottom: 12,
+    gap: 8,
   },
-  feedCardTitleRow: {
-    flex: 1,
-    gap: 4,
+  sectionHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#CC0000',
   },
-  feedCardTitle: {
-    ...typography.bodyBold,
+  sectionHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: '#999999',
+    textTransform: 'uppercase',
+  },
+  horizontalScrollContent: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+  },
+  scheduleCard: {
+    width: 140,
+    height: 100,
+    borderRadius: 14,
+    backgroundColor: home.cardBg,
+    padding: 10,
+    marginRight: 10,
+  },
+  scheduleTime: {
     fontSize: 14,
-    lineHeight: 19,
-  },
-  forYouBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    borderRadius: radii.pill,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  forYouBadgeText: {
-    color: colors.textInverse,
-    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  feedCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    color: home.scarlet,
     marginBottom: 4,
   },
-  feedCardMetaText: {
-    ...typography.caption,
-    fontSize: 12,
+  scheduleTitleWrap: {
+    flex: 1,
+    minHeight: 0,
+    justifyContent: 'center',
+  },
+  scheduleTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  scheduleLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  scheduleLocation: {
+    fontSize: 11,
+    color: home.textMuted,
     flex: 1,
   },
-  feedCardProgressTrack: {
-    height: 3,
-    backgroundColor: colors.borderLight,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm - 2,
+  emptyDashedCard: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#E8E3DB',
+    backgroundColor: home.creamBg,
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  feedCardProgressFill: {
-    height: '100%',
-    borderRadius: 2,
+  emptyDashedTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999999',
+    textAlign: 'center',
   },
-  memberTagsPreview: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
+  emptyDashedSub: {
+    fontSize: 12,
+    color: '#BBBBBB',
+    textAlign: 'center',
+    marginTop: 4,
   },
-  feedCardFooter: {
-    marginBottom: spacing.sm,
+  clubCard: {
+    width: 160,
+    height: 90,
+    borderRadius: 14,
+    backgroundColor: home.cardBg,
+    padding: 12,
+    marginRight: 10,
   },
-  spotsBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.sm,
+  clubCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  clubAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clubAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  clubTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  clubName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  clubMeta: {
+    fontSize: 11,
+    color: home.textMuted,
+    marginTop: 4,
+  },
+  verticalFeed: {
+    gap: 10,
+  },
+
+  feedCard: {
+    backgroundColor: home.cardBg,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 0,
+  },
+  feedCardLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    zIndex: 2,
+  },
+  feedCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  emojiCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emojiText: {
+    fontSize: 24,
+  },
+  feedCardMainCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  feedCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 0,
+  },
+  feedCardCategoryPill: {
+    marginLeft: 8,
+  },
+  feedCardTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  categoryPill: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: radii.pill,
+    borderRadius: 999,
   },
-  spotsBadgeText: {
+  categoryPillText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  feedCardAction: {
+  feedCardDesc: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: home.textSecondary,
+    marginTop: 4,
+    marginBottom: 0,
+  },
+  feedCardLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 4,
-    marginTop: 2,
+    marginTop: 4,
   },
-  feedCardActionText: {
-    ...typography.bodyBold,
-    color: colors.primary,
-    fontSize: 13,
+  feedCardLocation: {
+    fontSize: 12,
+    color: home.textMuted,
+    flex: 1,
   },
-  feedCardJoinBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  feedCardJoinBtnLoading: {
-    backgroundColor: colors.textTertiary,
-  },
-  feedCardJoinText: {
-    color: colors.textInverse,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  feedCardWaitlistBtn: {
-    borderRadius: radii.sm,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  feedCardBottomRow: {
     flexDirection: 'row',
-    marginTop: 2,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
-  feedCardWaitlistText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '700',
+  joiningText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#999999',
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+
+  skeletonAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.creamBorder,
+  },
+  skeletonBell: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: colors.creamBorder,
+  },
+  skeletonLineLg: {
+    width: 140,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: colors.creamBorder,
+  },
+  skeletonLineSm: {
+    width: 120,
+    height: 12,
+    borderRadius: 4,
+    backgroundColor: colors.creamBorder,
+    marginTop: 4,
+  },
+  skeletonCta: {
+    width: '100%',
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: colors.creamBorder,
+  },
+  skeletonSectionHeader: {
+    width: 120,
+    height: 12,
+    borderRadius: 4,
+    backgroundColor: colors.creamBorder,
+    marginLeft: 16,
+    marginBottom: 12,
+  },
+  skeletonScheduleRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingBottom: 4,
+  },
+  skeletonScheduleCard: {
+    width: 140,
+    height: 100,
+    borderRadius: 14,
+    backgroundColor: colors.creamBorder,
+  },
+  skeletonClubCard: {
+    width: 160,
+    height: 90,
+    borderRadius: 14,
+    backgroundColor: colors.creamBorder,
   },
 });

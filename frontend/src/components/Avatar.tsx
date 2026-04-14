@@ -56,16 +56,19 @@ export function AvatarStack({
   currentUserId,
   size = 32,
   max = 4,
+  overlap: overlapProp,
   onMemberPress,
 }: {
   members: { id: string; user: { id: string; name: string; avatarUrl?: string | null } }[];
   currentUserId?: string;
   size?: number;
   max?: number;
+  /** Horizontal overlap in px between stacked avatars; default ~30% of size */
+  overlap?: number;
   onMemberPress?: (member: { id: string; user: { id: string; name: string; avatarUrl?: string | null } }) => void;
 }) {
   const visible = members.slice(0, max);
-  const overlap = size * 0.3;
+  const overlap = overlapProp ?? size * 0.3;
 
   return (
     <View style={[styles.stack, { height: size }]}>

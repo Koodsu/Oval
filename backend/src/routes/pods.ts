@@ -5,6 +5,7 @@ import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
+import { expireOldPods } from '../lib/expireOldPods';
 
 // Select shape used for pod member user fields across all pod queries
 const MEMBER_USER_SELECT = {
@@ -33,6 +34,7 @@ const router = Router();
 const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
+const EXPIRED = 'EXPIRED';
 
 function getMaxMeetupTime(): Date {
   const max = new Date();
@@ -77,6 +79,8 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
   const now = new Date();
 
   try {
+    await expireOldPods();
+
     const blockedIds = await getBlockedUserIds(userId);
 
     const where: Record<string, unknown> = {
@@ -153,7 +157,7 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
 });
 
 // GET /pods?activityId=&sort=
-// Returns FORMING pods for an activity (locked pods excluded from browse)
+// Returns upcoming FORMING pods for an activity (not locked/completed/expired — public browse)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { activityId, sort } = req.query;
 
@@ -163,10 +167,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
+    await expireOldPods();
+
+    const now = new Date();
     const blockedIds = await getBlockedUserIds(req.user!.userId);
     const where: Record<string, unknown> = {
       activityId,
       status: FORMING,
+      meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
     };
 
@@ -220,6 +228,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
 
       if (!pod) {
         res.status(404).json({ error: 'Pod not found' });
+        return;
+      }
+
+      if (pod.status === EXPIRED || pod.status === COMPLETED) {
+        res.status(409).json({ error: 'This pod is no longer available' });
         return;
       }
 
@@ -602,7 +615,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       }
     }
 
-    // Lazy COMPLETED transition
+    // Lazy COMPLETED transition (skip if already expired)
     if (pod.status === LOCKED && pod.meetupTime < new Date()) {
       pod = await prisma.pod.update({
         where: { id },

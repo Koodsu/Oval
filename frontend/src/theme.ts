@@ -48,12 +48,14 @@ export const colors = {
     FORMING: '#22c55e',
     LOCKED: '#3b82f6',
     COMPLETED: '#94a3b8',
+    EXPIRED: '#94a3b8',
   } as Record<string, string>,
 
   statusBg: {
     FORMING: '#dcfce7',
     LOCKED: '#dbeafe',
     COMPLETED: '#f1f5f9',
+    EXPIRED: '#f1f5f9',
   } as Record<string, string>,
 
   avatarPalette: [
@@ -150,6 +152,34 @@ export const cardShadowCream: ViewStyle =
       shadowOffset: { width: 0, height: 2 },
     },
     android: { elevation: 5 },
+  }) ?? {};
+
+/** Today / home screen + matching cards (cream + scarlet) */
+export const home = {
+  creamBg: '#F5F0E8',
+  textPrimary: '#111111',
+  textSecondary: '#666666',
+  textMuted: '#999999',
+  textSubcaption: '#888888',
+  scarlet: '#CC0000',
+  scarletDark: '#AA0000',
+  cardBg: '#FFFFFF',
+  tabBarBg: '#FFFFFF',
+  tabBarBorder: '#E8E3DB',
+  tabActive: '#CC0000',
+  tabInactive: '#999999',
+} as const;
+
+/** Home pod / activity cards — spec: opacity 0.06, radius 12, elevation 3 */
+export const cardShadowHome: ViewStyle =
+  Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    android: { elevation: 3 },
   }) ?? {};
 
 export const shadows: Record<string, ViewStyle> = {
