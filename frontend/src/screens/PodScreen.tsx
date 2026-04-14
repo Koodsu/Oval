@@ -358,10 +358,12 @@ export default function PodScreen({ route, navigation }: Props) {
   };
 
   const handleShare = async () => {
-    const url = `https://bridge.app/pod/${podId}`;
+    const url = `https://joinbridgeapp.com/pod/${podId}`;
+    const podName = pod.activity?.title ?? 'Pod';
+    const message = `Join my pod on Bridge! ${podName}\n${url}`;
     try {
       await Share.share({
-        message: `Join my pod on Bridge: ${url}`,
+        message,
         url, // iOS only — shows URL separately in share sheet
       });
     } catch {

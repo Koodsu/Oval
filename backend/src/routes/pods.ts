@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
@@ -583,6 +583,46 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
     }
     setTyping('pod', podId, userId);
     res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /pods/:id/public — unauthenticated share preview for landing / deep links
+router.get('/:id/public', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  try {
+    await expireOldPods();
+
+    const now = new Date();
+    const pod = await prisma.pod.findFirst({
+      where: {
+        id,
+        status: { in: [FORMING, LOCKED] },
+        meetupTime: { gt: now },
+      },
+      include: {
+        activity: { select: { title: true, category: true } },
+        _count: { select: { members: true } },
+      },
+    });
+
+    if (!pod?.activity) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+
+    res.json({
+      id: pod.id,
+      name: pod.activity.title,
+      activityType: pod.activity.category,
+      meetupTime: pod.meetupTime.toISOString(),
+      location: pod.location,
+      memberCount: pod._count.members,
+      maxMembers: pod.maxMembers,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

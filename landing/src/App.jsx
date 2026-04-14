@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Outlet } from 'react-router-dom'
 import Nav from './components/Nav'
 import Hero from './components/Hero'
 import StatsBar from './components/StatsBar'
@@ -10,6 +10,7 @@ import FinalCta from './components/FinalCta'
 import Footer from './components/Footer'
 import PrivacyPolicy from './components/PrivacyPolicy'
 import TermsOfUse from './components/TermsOfUse'
+import PodInvitePage from './components/PodInvitePage'
 import { useScrollReveal } from './hooks/useScrollReveal'
 
 const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`
@@ -29,7 +30,7 @@ function LandingPage() {
   )
 }
 
-export default function App() {
+function MainSiteLayout() {
   return (
     <div className="bg-cream font-sans text-ink overflow-x-hidden">
       {/* Grain overlay */}
@@ -46,12 +47,21 @@ export default function App() {
         }}
       />
       <Nav />
-      <Routes>
+      <Outlet />
+      <Footer />
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/pod/:podId" element={<PodInvitePage />} />
+      <Route element={<MainSiteLayout />}>
         <Route path="/" element={<LandingPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfUse />} />
-      </Routes>
-      <Footer />
-    </div>
+      </Route>
+    </Routes>
   )
 }
