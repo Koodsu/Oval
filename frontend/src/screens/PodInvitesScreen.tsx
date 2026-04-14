@@ -13,7 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
-import { getPodInvites, acceptPodInvite, declinePodInvite, resolveAvatarUrl } from '../api';
+import { getPodInvites, acceptPodInvite, declinePodInvite, resolveAvatarUrl, API_USER_MESSAGE } from '../api';
 import { PodInvite } from '../types';
 import Avatar from '../components/Avatar';
 import { colors, spacing, radii, typography, shadows } from '../theme';
@@ -43,7 +43,7 @@ export default function PodInvitesScreen() {
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
       navigation.navigate('Pod', { podId: pod.id });
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to accept invite');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActionId(null);
     }
@@ -55,7 +55,7 @@ export default function PodInvitesScreen() {
       await declinePodInvite(invite.id);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to decline');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setActionId(null);
     }

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RootStackParamList } from '../../App';
-import { createPod, getActivityLocations, getLocationsByCategory } from '../api';
+import { createPod, getActivityLocations, getLocationsByCategory, API_USER_MESSAGE } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography } from '../theme';
 
@@ -115,7 +115,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       });
       navigation.replace('Pod', { podId: pod.id });
     } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create pod');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setSubmitting(false);
     }

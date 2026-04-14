@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
+  API_USER_MESSAGE,
   createReport,
   REPORT_REASONS,
   REPORT_REASON_LABELS,
@@ -77,8 +78,8 @@ export default function ReportModal({
       onClose();
       setReason('');
       setDetails('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit report');
+    } catch {
+      setError(API_USER_MESSAGE);
     } finally {
       setLoading(false);
     }

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../../App';
 import {
+  API_USER_MESSAGE,
   blockUser,
   getUserProfile,
   resolveAvatarUrl,
@@ -93,7 +94,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
                 await unfriend(userId);
                 setRelationship({ status: 'NONE' });
               } catch (err) {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed');
+                Alert.alert('Error', API_USER_MESSAGE);
               } finally {
                 setFriendLoading(false);
               }
@@ -102,7 +103,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         ]);
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setFriendLoading(false);
     }
@@ -116,7 +117,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       setRelationship({ status: 'FRIENDS' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to accept');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setFriendLoading(false);
     }
@@ -129,7 +130,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       await declineFriendRequest(relationship.requestId);
       setRelationship({ status: 'NONE' });
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to decline');
+      Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setFriendLoading(false);
     }
@@ -144,7 +145,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         otherUserName: name,
       });
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to open conversation');
+      Alert.alert('Error', API_USER_MESSAGE);
     }
   };
 
@@ -164,7 +165,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
               await blockUser(userId);
               navigation.pop(2);
             } catch (err: unknown) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to block user');
+              Alert.alert('Error', API_USER_MESSAGE);
             } finally {
               setBlocking(false);
             }

@@ -20,6 +20,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../../App';
 import {
+  API_USER_MESSAGE,
   getMyPods,
   uploadAvatar,
   deleteAvatar,
@@ -100,7 +101,7 @@ export default function ProfileScreen() {
       const { avatarUrl } = await uploadAvatar(manipulated.uri);
       await updateUser({ avatarUrl });
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', API_USER_MESSAGE);
     } finally {
       setAvatarUploading(false);
     }

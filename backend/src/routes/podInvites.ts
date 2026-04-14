@@ -3,7 +3,7 @@ import { AuthRequest, requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { hasBlockingRelationship } from '../lib/blocks';
 import { areFriends } from '../lib/friendUtils';
-import { NotificationService } from '../lib/NotificationService';
+import { joinExistingPodMember, parsePodMembers } from '../lib/joinExistingPod';
 
 const router = Router();
 router.use(requireAuth);
@@ -12,12 +12,6 @@ const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const EXPIRED = 'EXPIRED';
 const COMPLETED = 'COMPLETED';
-
-const podInclude = {
-  activity: true,
-  creator: { select: { id: true } },
-  members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
-} as const;
 
 // POST /pods/:id/invite — invite a friend to a pod
 router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -229,33 +223,24 @@ router.post('/invites/:id/accept', async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    // All checks passed — join the pod and mark invite accepted
-    await prisma.$transaction([
-      prisma.podMember.create({ data: { podId: pod.id, userId } }),
-      prisma.podInvite.update({
-        where: { id: inviteId },
-        data: { status: 'ACCEPTED', respondedAt: new Date() },
-      }),
-    ]);
+    const result = await joinExistingPodMember(userId, pod.id, { markInviteAcceptedId: inviteId });
 
-    const memberCount = await prisma.podMember.count({ where: { podId: pod.id } });
-    if (memberCount >= pod.maxMembers) {
-      await prisma.pod.update({ where: { id: pod.id }, data: { status: LOCKED } });
-    }
-
-    const updatedPod = await prisma.pod.findUnique({
-      where: { id: pod.id },
-      include: podInclude,
-    });
-
-    res.status(201).json(updatedPod);
-
-    if (updatedPod?.creatorId && updatedPod.creatorId !== userId) {
-      const joiner = updatedPod.members.find((m) => m.userId === userId);
-      if (joiner) {
-        NotificationService.notifyPodJoin(pod.id, joiner.userId).catch(() => {});
+    if (!result.ok) {
+      const expireInvite =
+        result.status === 404 ||
+        result.error === 'This pod is full' ||
+        result.error === 'This pod is no longer available' ||
+        result.error === 'This pod is no longer accepting members';
+      if (expireInvite) {
+        await prisma.podInvite
+          .update({ where: { id: inviteId }, data: { status: 'EXPIRED' } })
+          .catch(() => {});
       }
+      res.status(result.status).json({ error: result.error });
+      return;
     }
+
+    res.status(201).json(parsePodMembers(result.updatedPod));
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }

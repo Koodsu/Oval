@@ -3,6 +3,12 @@
 // On a physical device, set this to your machine's local IP, e.g. http://192.168.1.100:3000
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
+/** Shown in alerts instead of raw server messages after API failures. */
+export const API_USER_MESSAGE = 'Something went wrong, please try again';
+
+const RETRY_BACKOFF_MS = [250, 500, 1000] as const;
+const MAX_RETRY_ATTEMPTS = 3;
+
 /**
  * Resolves a stored avatar path (e.g. /uploads/avatars/x.jpg) to a full URL.
  * Handles relative backend paths and already-absolute URLs.
@@ -43,27 +49,46 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  let res: Response;
-  let data: unknown;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
-    data = res.status === 204 ? {} : await res.json();
-  } catch (err) {
-    // Re-throw AbortErrors as-is so callers can detect cancellation
-    if (err instanceof Error && err.name === 'AbortError') throw err;
-    throw new Error(err instanceof Error ? err.message : 'Network request failed');
-  }
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    if (signal?.aborted) {
+      const e = new Error('Aborted');
+      e.name = 'AbortError';
+      throw e;
+    }
 
-  if (res.status === 401) {
-    onUnauthorized?.();
-    throw new Error((data as { error?: string }).error ?? 'Unauthorized');
-  }
+    let res: Response;
+    let data: unknown;
+    try {
+      res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
+      data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') throw err;
+      throw new Error(err instanceof Error ? err.message : 'Network request failed');
+    }
 
-  if (!res.ok) {
+    if (res.status === 401) {
+      onUnauthorized?.();
+      throw new Error((data as { error?: string }).error ?? 'Unauthorized');
+    }
+
+    if (res.ok) {
+      return data as T;
+    }
+
+    const retryable = res.status === 429 || res.status === 503;
+    if (retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+      continue;
+    }
+
+    if (retryable) {
+      throw new Error(API_USER_MESSAGE);
+    }
+
     throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);
   }
 
-  return data as T;
+  throw new Error(API_USER_MESSAGE);
 }
 
 // Auth

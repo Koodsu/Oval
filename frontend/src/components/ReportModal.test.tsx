@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 import ReportModal from './ReportModal';
 
 jest.mock('../api', () => ({
+  API_USER_MESSAGE: 'Something went wrong, please try again',
   createReport: jest.fn().mockResolvedValue({ reportId: 'r1', status: 'OPEN' }),
   REPORT_REASONS: ['HARASSMENT', 'SPAM', 'OTHER'],
   REPORT_REASON_LABELS: { HARASSMENT: 'Harassment', SPAM: 'Spam', OTHER: 'Other' },
