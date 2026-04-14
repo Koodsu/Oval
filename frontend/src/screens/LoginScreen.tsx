@@ -69,7 +69,7 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
 
           <View style={[styles.card, shadows.lg]}>
-            <Text style={styles.cardTitle}>Welcome back</Text>
+            <Text style={styles.cardTitle}>Sign In</Text>
 
             <View style={styles.inputWrapper}>
               <Ionicons name="mail-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />

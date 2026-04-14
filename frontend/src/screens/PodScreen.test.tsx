@@ -132,7 +132,7 @@ describe('PodScreen — share / invite button', () => {
     expect(screen.getByText('Share')).toBeTruthy();
   });
 
-  it('calls Share.share with the correct URL when Share is tapped', async () => {
+  it('calls Share.share with a single message (title line, newline, URL) when Share is tapped', async () => {
     await renderAndLoad();
 
     fireEvent.press(screen.getByText('Share'));
@@ -142,9 +142,9 @@ describe('PodScreen — share / invite button', () => {
     });
 
     const call = (Share.share as jest.Mock).mock.calls[0][0];
-    expect(call.url).toBe(`https://joinbridgeapp.com/pod/${POD_ID}`);
-    expect(call.message).toContain(`https://joinbridgeapp.com/pod/${POD_ID}`);
-    expect(call.message).toContain('Morning Coffee Walk');
+    expect(call).toEqual({
+      message: `Join my pod on Bridge! Morning Coffee Walk\nhttps://joinbridgeapp.com/pod/${POD_ID}`,
+    });
   });
 
   it('share message mentions Bridge', async () => {

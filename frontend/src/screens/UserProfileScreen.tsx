@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import { HeaderBackButton } from '@react-navigation/elements';
 import {
   View,
   Text,
@@ -43,6 +44,14 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   const [relationship, setRelationship] = useState<FriendRelationship | null>(null);
   const [friendLoading, setFriendLoading] = useState(false);
   const isOwnProfile = user?.id === userId;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: navigation.canGoBack()
+        ? (props) => <HeaderBackButton {...props} onPress={() => navigation.goBack()} />
+        : undefined,
+    });
+  }, [navigation]);
 
   const loadData = useCallback(() => {
     getUserProfile(userId).then(setProfile).catch(() => {});

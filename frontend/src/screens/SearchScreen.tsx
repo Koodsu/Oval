@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -238,13 +238,16 @@ export default function SearchScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchPods();
-  }, [fetchPods]);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchPods();
+      void fetchActivities(activityCategory);
+    }, [fetchPods, fetchActivities, activityCategory])
+  );
 
   useEffect(() => {
     fetchActivities(activityCategory);
-  }, [fetchActivities, activityCategory]);
+  }, [activityCategory, fetchActivities]);
 
   // Filtered pods: category, time, search query
   const filteredPods = useMemo(() => {
