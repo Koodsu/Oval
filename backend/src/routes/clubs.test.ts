@@ -547,6 +547,202 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('POST /clubs/:id/announcements', () => {
+    it('allows ADMIN to post', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const res = await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Hello all' })
+        .expect(201);
+      expect(res.body.content).toBe('Hello all');
+      expect(res.body.user.name).toBeDefined();
+    });
+
+    it('returns 403 for MEMBER', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2 } = await registerAndGetToken(
+        'PlainMember',
+        `plain-m-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({ content: 'Nope' })
+        .expect(403);
+    });
+  });
+
+  describe('PATCH /clubs/:id/members/:userId', () => {
+    it('demotes OFFICER to MEMBER', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'OfficerX',
+        `offx-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/members/${u2.id}/promote`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const res = await request(app)
+        .patch(`/clubs/${create.body.id}/members/${u2.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ role: 'MEMBER' })
+        .expect(200);
+      expect(res.body.role).toBe('MEMBER');
+    });
+
+    it('returns 403 for non-admin', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'M1',
+        `patch-m1-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: t3, user: u3 } = await registerAndGetToken(
+        'M2',
+        `patch-m2-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t3}`).expect(201);
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${u3.id}`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({ role: 'OFFICER' })
+        .expect(403);
+    });
+
+    it('returns 400 when targeting another ADMIN', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'CoAdmin',
+        `coad-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+      await prisma.clubMember.update({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+        data: { role: 'ADMIN' },
+      });
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${u2.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ role: 'MEMBER' })
+        .expect(400);
+    });
+  });
+
+  describe('DELETE /clubs/:id/members/:userId', () => {
+    it('allows ADMIN to remove MEMBER', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'KickMe',
+        `kick-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/members/${u2.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const gone = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+      });
+      expect(gone).toBeNull();
+    });
+
+    it('returns 400 when removing another ADMIN', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'OtherAdmin',
+        `oadm-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+      await prisma.clubMember.update({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+        data: { role: 'ADMIN' },
+      });
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/members/${u2.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+    });
+
+    it('returns 403 for non-admin', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: t2, user: u2 } = await registerAndGetToken(
+        'A',
+        `del-a-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: t3, user: u3 } = await registerAndGetToken(
+        'B',
+        `del-b-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t2}`).expect(201);
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${t3}`).expect(201);
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/members/${u3.id}`)
+        .set('Authorization', `Bearer ${t2}`)
+        .expect(403);
+    });
+  });
+
   describe('GET /clubs/:id (private)', () => {
     it('returns 404 for non-member', async () => {
       const create = await request(app)

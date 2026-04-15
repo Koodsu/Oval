@@ -175,6 +175,46 @@ export const promoteClubMember = (clubId: string, memberUserId: string) =>
     { method: 'POST' }
   );
 
+export const getClubAnnouncements = (
+  clubId: string,
+  params?: { page?: number; limit?: number },
+  signal?: AbortSignal
+) => {
+  const q = new URLSearchParams();
+  if (params?.page != null) q.set('page', String(params.page));
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return request<import('./types').GetClubAnnouncementsResponse>(
+    qs
+      ? `/clubs/${encodeURIComponent(clubId)}/announcements?${qs}`
+      : `/clubs/${encodeURIComponent(clubId)}/announcements`,
+    {},
+    signal
+  );
+};
+
+export const postClubAnnouncement = (clubId: string, content: string) =>
+  request<import('./types').ClubAnnouncementRow>(
+    `/clubs/${encodeURIComponent(clubId)}/announcements`,
+    { method: 'POST', body: JSON.stringify({ content }) }
+  );
+
+export const patchClubMemberRole = (
+  clubId: string,
+  memberUserId: string,
+  body: { role: 'OFFICER' | 'MEMBER' }
+) =>
+  request<import('./types').ClubMemberWithUser>(
+    `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
+export const removeClubMember = (clubId: string, memberUserId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}`,
+    { method: 'DELETE' }
+  );
+
 export type ClubMeetingRsvpStatus = 'GOING' | 'MAYBE' | 'NOT_GOING';
 
 export const rsvpClubMeeting = (meetingId: string, status: ClubMeetingRsvpStatus) =>

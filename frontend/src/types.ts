@@ -209,6 +209,14 @@ export interface ClubAnnouncementRow {
   user: { id: string; name: string; avatarUrl?: string | null };
 }
 
+/** GET /clubs/:id/announcements */
+export interface GetClubAnnouncementsResponse {
+  items: ClubAnnouncementRow[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 /** GET /clubs/:id */
 export interface ClubDetail {
   id: string;

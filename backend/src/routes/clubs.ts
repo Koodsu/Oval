@@ -37,6 +37,8 @@ function canCreateMeetings(role: string): boolean {
   return role === ROLE_ADMIN || role === ROLE_OFFICER;
 }
 
+const canPostAnnouncements = canCreateMeetings;
+
 async function requireClubMembership(
   clubId: string,
   userId: string
@@ -58,6 +60,69 @@ async function requireClubMembership(
     return { ok: false, status: 403, message: 'You must be a member to access club messages' };
   }
   return { ok: true };
+}
+
+type AdminRoleChangeResult =
+  | { ok: true; member: ReturnType<typeof parseMemberTags> }
+  | { ok: false; status: number; error: string };
+
+/** ADMIN-only: MEMBER→OFFICER or OFFICER→MEMBER. Idempotent when already at desired role. */
+async function applyAdminMemberRoleChange(
+  clubId: string,
+  actorUserId: string,
+  memberUserId: string,
+  desiredRole: typeof ROLE_OFFICER | typeof ROLE_MEMBER
+): Promise<AdminRoleChangeResult> {
+  if (memberUserId === actorUserId) {
+    return { ok: false, status: 400, error: 'Cannot change yourself' };
+  }
+
+  const actor = await prisma.clubMember.findUnique({
+    where: { clubId_userId: { clubId, userId: actorUserId } },
+  });
+  if (!actor || actor.role !== ROLE_ADMIN) {
+    return { ok: false, status: 403, error: 'Only admins can change member roles' };
+  }
+
+  const target = await prisma.clubMember.findUnique({
+    where: { clubId_userId: { clubId, userId: memberUserId } },
+    include: { user: { select: MEMBER_USER_SELECT } },
+  });
+
+  if (!target) {
+    return { ok: false, status: 404, error: 'Member not found' };
+  }
+  if (target.role === ROLE_ADMIN) {
+    return { ok: false, status: 400, error: 'Cannot change an admin role' };
+  }
+
+  if (desiredRole === ROLE_OFFICER) {
+    if (target.role === ROLE_OFFICER) {
+      return { ok: true, member: parseMemberTags(target) };
+    }
+    if (target.role !== ROLE_MEMBER) {
+      return { ok: false, status: 400, error: 'Invalid role transition' };
+    }
+    const updated = await prisma.clubMember.update({
+      where: { id: target.id },
+      data: { role: ROLE_OFFICER },
+      include: { user: { select: MEMBER_USER_SELECT } },
+    });
+    return { ok: true, member: parseMemberTags(updated) };
+  }
+
+  if (target.role === ROLE_MEMBER) {
+    return { ok: true, member: parseMemberTags(target) };
+  }
+  if (target.role !== ROLE_OFFICER) {
+    return { ok: false, status: 400, error: 'Invalid role transition' };
+  }
+  const updated = await prisma.clubMember.update({
+    where: { id: target.id },
+    data: { role: ROLE_MEMBER },
+    include: { user: { select: MEMBER_USER_SELECT } },
+  });
+  return { ok: true, member: parseMemberTags(updated) };
 }
 
 // GET /clubs — public directory
@@ -469,6 +534,10 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
       res.status(403).json({ error: 'You must be a member to post announcements' });
       return;
     }
+    if (!canPostAnnouncements(membership.role)) {
+      res.status(403).json({ error: 'Only officers and admins can post announcements' });
+      return;
+    }
 
     const announcement = await prisma.clubAnnouncement.create({
       data: { clubId, userId, content: content.trim() },
@@ -790,31 +859,53 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
   }
 });
 
-// POST /clubs/:id/members/:memberUserId/promote — ADMIN only
-router.post(
-  '/:id/members/:memberUserId/promote',
+// PATCH /clubs/:id/members/:memberUserId — ADMIN only (MEMBER↔OFFICER)
+router.patch(
+  '/:id/members/:memberUserId',
   requireAuth,
   async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user!.userId;
     const { id: clubId, memberUserId } = req.params;
+    const roleRaw = (req.body ?? {}).role;
 
-    if (memberUserId === userId) {
-      res.status(400).json({ error: 'Cannot promote yourself' });
+    if (roleRaw !== ROLE_OFFICER && roleRaw !== ROLE_MEMBER) {
+      res.status(400).json({ error: 'role must be OFFICER or MEMBER' });
       return;
     }
+
+    try {
+      const result = await applyAdminMemberRoleChange(clubId, userId, memberUserId, roleRaw);
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+      res.json(result.member);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// DELETE /clubs/:id/members/:memberUserId — ADMIN only (kick)
+router.delete(
+  '/:id/members/:memberUserId',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, memberUserId } = req.params;
 
     try {
       const actor = await prisma.clubMember.findUnique({
         where: { clubId_userId: { clubId, userId } },
       });
       if (!actor || actor.role !== ROLE_ADMIN) {
-        res.status(403).json({ error: 'Only admins can promote members' });
+        res.status(403).json({ error: 'Only admins can remove members' });
         return;
       }
 
       const target = await prisma.clubMember.findUnique({
         where: { clubId_userId: { clubId, userId: memberUserId } },
-        include: { user: { select: MEMBER_USER_SELECT } },
       });
 
       if (!target) {
@@ -822,21 +913,46 @@ router.post(
         return;
       }
       if (target.role === ROLE_ADMIN) {
-        res.status(400).json({ error: 'Cannot change an admin role' });
-        return;
-      }
-      if (target.role === ROLE_OFFICER) {
-        res.json(parseMemberTags(target));
+        res.status(400).json({ error: 'Cannot remove an admin' });
         return;
       }
 
-      const updated = await prisma.clubMember.update({
-        where: { id: target.id },
-        data: { role: ROLE_OFFICER },
-        include: { user: { select: MEMBER_USER_SELECT } },
-      });
+      if (memberUserId === userId) {
+        const adminCount = await prisma.clubMember.count({
+          where: { clubId, role: ROLE_ADMIN },
+        });
+        if (adminCount === 1) {
+          res.status(400).json({
+            error: 'You are the only admin. Delete the club or transfer admin before leaving.',
+          });
+          return;
+        }
+      }
 
-      res.json(parseMemberTags(updated));
+      await prisma.clubMember.delete({ where: { id: target.id } });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// POST /clubs/:id/members/:memberUserId/promote — ADMIN only (delegates to MEMBER→OFFICER)
+router.post(
+  '/:id/members/:memberUserId/promote',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, memberUserId } = req.params;
+
+    try {
+      const result = await applyAdminMemberRoleChange(clubId, userId, memberUserId, ROLE_OFFICER);
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+      res.json(result.member);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Internal server error' });
