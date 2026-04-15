@@ -31,13 +31,22 @@ import {
   getClubMessages,
   sendClubMessage,
   sendClubTyping,
-  promoteClubMember,
+  getClubAnnouncements,
+  postClubAnnouncement,
+  patchClubMemberRole,
+  removeClubMember,
   rsvpClubMeeting,
   createClubMeeting,
   API_USER_MESSAGE,
   resolveAvatarUrl,
 } from '../api';
-import type { ClubDetail, ClubMeetingWithMeta, ClubMemberWithUser, ClubMessage } from '../types';
+import type {
+  ClubAnnouncementRow,
+  ClubDetail,
+  ClubMeetingWithMeta,
+  ClubMemberWithUser,
+  ClubMessage,
+} from '../types';
 import ExplorePillRow from '../components/ExplorePillRow';
 import Avatar from '../components/Avatar';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, TypingIndicator } from '../components/chat';
@@ -50,15 +59,47 @@ import { colors, spacing, home, cardShadowHome } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 
-type DetailTab = 'meetings' | 'chat' | 'members';
+type DetailTab = 'meetings' | 'chat' | 'announcements' | 'members';
+
+type ClubMyRole = 'ADMIN' | 'OFFICER' | 'MEMBER' | null;
 
 const MEETING_TIME_MAX = new Date('2027-06-01T00:00:00.000Z');
 
 const TAB_ITEMS = [
   { key: 'meetings' as const, label: 'Meetings' },
   { key: 'chat' as const, label: 'Chat' },
+  { key: 'announcements' as const, label: 'Announcements' },
   { key: 'members' as const, label: 'Members' },
 ];
+
+function parseClubMyRole(members: ClubMemberWithUser[], userId: string | undefined): ClubMyRole {
+  if (!userId) return null;
+  const r = members.find((m) => m.userId === userId)?.role;
+  if (r === 'ADMIN' || r === 'OFFICER' || r === 'MEMBER') return r;
+  return null;
+}
+
+function MemberRoleBadge({ role }: { role: string }) {
+  if (role === 'ADMIN') {
+    return (
+      <View style={styles.roleBadgeAdmin}>
+        <Text style={styles.roleBadgeAdminText}>Admin</Text>
+      </View>
+    );
+  }
+  if (role === 'OFFICER') {
+    return (
+      <View style={styles.roleBadgeOfficer}>
+        <Text style={styles.roleBadgeOfficerText}>Officer</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.roleBadgeMember}>
+      <Text style={styles.roleBadgeMemberText}>Member</Text>
+    </View>
+  );
+}
 
 function roleSortOrder(role: string): number {
   if (role === 'ADMIN') return 0;
@@ -161,6 +202,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [sending, setSending] = useState(false);
   const [typingUsers, setTypingUsers] = useState<{ userId: string }[]>([]);
 
+  const [announcements, setAnnouncements] = useState<ClubAnnouncementRow[]>([]);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [postingAnnouncement, setPostingAnnouncement] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clubRef = useRef<ClubDetail | null>(null);
@@ -180,6 +225,15 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       setMeetings(list);
     } catch {
       setMeetings([]);
+    }
+  }, [clubId]);
+
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const res = await getClubAnnouncements(clubId, { page: 1, limit: 50 });
+      setAnnouncements(res.items);
+    } catch {
+      setAnnouncements([]);
     }
   }, [clubId]);
 
@@ -300,6 +354,16 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     };
   }, [tab, club?.isMember, clubId, user?.id, fetchMessages]);
 
+  useEffect(() => {
+    if (tab !== 'announcements') return;
+    void loadAnnouncements();
+  }, [tab, loadAnnouncements]);
+
+  const myRole = useMemo(
+    () => parseClubMyRole(club?.members ?? [], user?.id),
+    [club?.members, user?.id]
+  );
+
   const handleMessageTextChange = useCallback(
     (text: string) => {
       setMessageText(text);
@@ -409,21 +473,96 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handlePromote = (targetUserId: string, name: string) => {
-    Alert.alert('Promote to officer', `Promote ${name} to officer?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Promote',
-        onPress: async () => {
-          try {
-            await promoteClubMember(clubId, targetUserId);
-            await loadClub();
-          } catch {
-            Alert.alert('Error', API_USER_MESSAGE);
-          }
-        },
-      },
-    ]);
+  const patchMemberRoleAndReload = useCallback(
+    async (targetUserId: string, role: 'OFFICER' | 'MEMBER') => {
+      try {
+        await patchClubMemberRole(clubId, targetUserId, { role });
+        await loadClub();
+      } catch {
+        Alert.alert('Error', API_USER_MESSAGE);
+      }
+    },
+    [clubId, loadClub]
+  );
+
+  const kickMemberAndReload = useCallback(
+    async (targetUserId: string) => {
+      try {
+        await removeClubMember(clubId, targetUserId);
+        await loadClub();
+      } catch {
+        Alert.alert('Error', API_USER_MESSAGE);
+      }
+    },
+    [clubId, loadClub]
+  );
+
+  const showMemberAdminMenu = useCallback(
+    (item: ClubMemberWithUser) => {
+      if (myRole !== 'ADMIN' || item.userId === user?.id || item.role === 'ADMIN') return;
+      const name = item.user.name;
+      if (item.role === 'MEMBER') {
+        Alert.alert(name, undefined, [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Promote to Officer',
+            onPress: () => void patchMemberRoleAndReload(item.userId, 'OFFICER'),
+          },
+          {
+            text: 'Remove from Club',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert('Remove from club', `Remove ${name} from this club?`, [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: () => void kickMemberAndReload(item.userId),
+                },
+              ]);
+            },
+          },
+        ]);
+      } else if (item.role === 'OFFICER') {
+        Alert.alert(name, undefined, [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Demote to Member',
+            onPress: () => void patchMemberRoleAndReload(item.userId, 'MEMBER'),
+          },
+          {
+            text: 'Remove from Club',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert('Remove from club', `Remove ${name} from this club?`, [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: () => void kickMemberAndReload(item.userId),
+                },
+              ]);
+            },
+          },
+        ]);
+      }
+    },
+    [myRole, user?.id, patchMemberRoleAndReload, kickMemberAndReload]
+  );
+
+  const submitAnnouncement = async () => {
+    const text = announcementText.trim();
+    if (!text) return;
+    setPostingAnnouncement(true);
+    try {
+      await postClubAnnouncement(clubId, text);
+      setAnnouncementText('');
+      await loadAnnouncements();
+    } catch {
+      Alert.alert('Error', API_USER_MESSAGE);
+    } finally {
+      setPostingAnnouncement(false);
+    }
   };
 
   const openCreateMeeting = () => {
@@ -498,7 +637,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   }
 
   const pill = getCategoryPillStyle(club.category);
-  const canCreateMeeting = club.myRole === 'ADMIN' || club.myRole === 'OFFICER';
+  const canCreateMeeting = myRole === 'ADMIN' || myRole === 'OFFICER';
+  const canPostAnnouncement = myRole === 'ADMIN' || myRole === 'OFFICER';
   const sortedMembers = sortClubMembers(club.members);
   const emojiSize = 64;
 
@@ -636,6 +776,67 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       </KeyboardAvoidingView>
     );
 
+  const announcementsBody = (
+    <KeyboardAvoidingView
+      style={styles.announcementsWrap}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom + 8 : 0}
+    >
+      <FlatList
+        data={announcements}
+        keyExtractor={(item) => item.id}
+        style={styles.announcementsFlatList}
+        contentContainerStyle={styles.announcementsList}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={<Text style={styles.emptyMeetings}>No announcements yet</Text>}
+        renderItem={({ item }) => (
+          <View style={[styles.announcementCard, cardShadowHome]}>
+            <View style={styles.announcementTop}>
+              <View style={styles.announcementAuthor}>
+                <Avatar name={item.user.name} size={36} uri={resolveAvatarUrl(item.user.avatarUrl)} />
+                <Text style={styles.announcementName} numberOfLines={1}>
+                  {item.user.name}
+                </Text>
+              </View>
+              <Text style={styles.announcementTime}>
+                {new Date(item.createdAt).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
+            <Text style={styles.announcementContent}>{item.content}</Text>
+          </View>
+        )}
+      />
+      {canPostAnnouncement && (
+        <View style={[styles.announcementComposer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <TextInput
+            style={styles.announcementInput}
+            value={announcementText}
+            onChangeText={setAnnouncementText}
+            placeholder="Post an announcement..."
+            multiline
+            maxLength={2000}
+          />
+          <TouchableOpacity
+            style={[styles.announcementSend, postingAnnouncement && styles.btnDisabled]}
+            onPress={() => void submitAnnouncement()}
+            disabled={postingAnnouncement}
+          >
+            {postingAnnouncement ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.announcementSendText}>Post</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    </KeyboardAvoidingView>
+  );
+
   const membersBody = (
     <FlatList
       data={sortedMembers}
@@ -643,35 +844,28 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       contentContainerStyle={styles.membersList}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) => {
-        const isAdmin = item.role === 'ADMIN';
-        const isOfficer = item.role === 'OFFICER';
-        const showRoleBadge = isAdmin || isOfficer;
-        const canPromote =
-          club.myRole === 'ADMIN' && item.role === 'MEMBER' && item.userId !== user?.id;
+        const adminLongPress =
+          myRole === 'ADMIN' && item.userId !== user?.id && item.role !== 'ADMIN';
         return (
-          <View style={[styles.memberRow, cardShadowHome]}>
-            <Avatar name={item.user.name} size={44} uri={resolveAvatarUrl(item.user.avatarUrl)} />
-            <View style={styles.memberMain}>
-              <Text style={styles.memberName} numberOfLines={1}>
-                {item.user.name}
-              </Text>
-              {item.user.classYear ? (
-                <Text style={styles.memberMeta}>Class of {item.user.classYear}</Text>
-              ) : null}
-            </View>
-            {showRoleBadge && (
-              <View style={isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeOfficer}>
-                <Text style={isAdmin ? styles.roleBadgeAdminText : styles.roleBadgeOfficerText}>
-                  {isAdmin ? 'Admin' : 'Officer'}
-                </Text>
+          <Pressable
+            onLongPress={adminLongPress ? () => showMemberAdminMenu(item) : undefined}
+            delayLongPress={400}
+          >
+            <View style={[styles.memberRow, cardShadowHome]}>
+              <Avatar name={item.user.name} size={44} uri={resolveAvatarUrl(item.user.avatarUrl)} />
+              <View style={styles.memberMain}>
+                <View style={styles.memberNameRow}>
+                  <Text style={styles.memberName} numberOfLines={1}>
+                    {item.user.name}
+                  </Text>
+                  <MemberRoleBadge role={item.role} />
+                </View>
+                {item.user.classYear ? (
+                  <Text style={styles.memberMeta}>{item.user.classYear}</Text>
+                ) : null}
               </View>
-            )}
-            {canPromote && (
-              <TouchableOpacity onPress={() => handlePromote(item.userId, item.user.name)}>
-                <Text style={styles.promoteLink}>Promote</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          </Pressable>
         );
       }}
     />
@@ -726,6 +920,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       <View style={styles.tabBody}>
         {tab === 'meetings' && meetingsBody}
         {tab === 'chat' && chatBody}
+        {tab === 'announcements' && announcementsBody}
         {tab === 'members' && membersBody}
       </View>
 
@@ -1032,10 +1227,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   memberName: {
     fontSize: 16,
     fontWeight: '700',
     color: home.textPrimary,
+    flexShrink: 1,
   },
   memberMeta: {
     fontSize: 13,
@@ -1043,7 +1245,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   roleBadgeAdmin: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#CC0000',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1051,10 +1253,10 @@ const styles = StyleSheet.create({
   roleBadgeAdminText: {
     fontSize: 11,
     fontWeight: '700',
-    color: home.scarlet,
+    color: '#FFFFFF',
   },
   roleBadgeOfficer: {
-    backgroundColor: '#FFF7ED',
+    backgroundColor: '#EA580C',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1062,12 +1264,102 @@ const styles = StyleSheet.create({
   roleBadgeOfficerText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#EA580C',
+    color: '#FFFFFF',
   },
-  promoteLink: {
-    fontSize: 14,
+  roleBadgeMember: {
+    backgroundColor: '#F0EBE3',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  roleBadgeMemberText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666666',
+  },
+  announcementsWrap: {
+    flex: 1,
+    minHeight: 0,
+  },
+  announcementsFlatList: {
+    flex: 1,
+  },
+  announcementsList: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  announcementCard: {
+    backgroundColor: home.cardBg,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  announcementTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  announcementAuthor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  announcementName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: home.textPrimary,
+    flex: 1,
+  },
+  announcementTime: {
+    fontSize: 12,
     fontWeight: '600',
-    color: home.scarlet,
+    color: '#666666',
+  },
+  announcementContent: {
+    marginTop: spacing.sm,
+    fontSize: 15,
+    color: home.textPrimary,
+    lineHeight: 22,
+  },
+  announcementComposer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.creamBorder,
+    backgroundColor: home.creamBg,
+  },
+  announcementInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: home.textPrimary,
+    backgroundColor: '#FAFAFA',
+  },
+  announcementSend: {
+    backgroundColor: home.scarlet,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  announcementSendText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   modalInner: {
     flex: 1,

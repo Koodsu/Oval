@@ -74,11 +74,16 @@ jest.mock('../api', () => ({
   getClub: jest.fn(() => Promise.resolve(mockClub)),
   getClubMeetings: jest.fn(() => Promise.resolve([])),
   getClubMessages: jest.fn(() => Promise.resolve({ messages: [], typingUserIds: [] })),
+  getClubAnnouncements: jest.fn(() =>
+    Promise.resolve({ items: [], page: 1, limit: 50, total: 0 })
+  ),
+  postClubAnnouncement: jest.fn(),
+  patchClubMemberRole: jest.fn(),
+  removeClubMember: jest.fn(),
   joinClub: jest.fn(),
   leaveClub: jest.fn(),
   sendClubMessage: jest.fn(),
   sendClubTyping: jest.fn(),
-  promoteClubMember: jest.fn(),
   rsvpClubMeeting: jest.fn(),
   createClubMeeting: jest.fn(),
   API_USER_MESSAGE: 'Something went wrong',
@@ -108,6 +113,7 @@ describe('ClubDetailScreen', () => {
 
     expect(screen.getByText('Meetings')).toBeTruthy();
     expect(screen.getByText('Chat')).toBeTruthy();
+    expect(screen.getByText('Announcements')).toBeTruthy();
     expect(screen.getByText('Members')).toBeTruthy();
   });
 
@@ -129,7 +135,7 @@ describe('ClubDetailScreen', () => {
     });
   });
 
-  it('shows Admin and Officer role badges on Members tab', async () => {
+  it('shows Admin, Officer, and Member role badges on Members tab', async () => {
     renderWithSafeArea(
       <ClubDetailScreen
         navigation={{ navigate: mockNavigate, goBack: mockGoBack, setOptions: jest.fn() } as never}
@@ -145,11 +151,40 @@ describe('ClubDetailScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Admin')).toBeTruthy();
       expect(screen.getByText('Officer')).toBeTruthy();
+      expect(screen.getAllByText('Member').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Zara')).toBeTruthy();
       expect(screen.getByText('Amy')).toBeTruthy();
       expect(screen.getByText('Test User')).toBeTruthy();
     });
     expect(screen.queryByText('ADMIN')).toBeNull();
     expect(screen.queryByText('OFFICER')).toBeNull();
+  });
+
+  it('shows class year without Class of prefix', async () => {
+    const m0 = mockClub.members[0];
+    const origYear = m0.user.classYear;
+    mockClub.members[0] = {
+      ...m0,
+      user: { ...m0.user, classYear: 'Sophomore' },
+    };
+
+    renderWithSafeArea(
+      <ClubDetailScreen
+        navigation={{ navigate: mockNavigate, goBack: mockGoBack, setOptions: jest.fn() } as never}
+        route={{ key: 'k', name: 'ClubDetail', params: { clubId: 'c1' } } as never}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chess Club')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Members'));
+    await waitFor(() => {
+      expect(screen.getByText('Sophomore')).toBeTruthy();
+    });
+    expect(screen.queryByText(/Class of/)).toBeNull();
+
+    mockClub.members[0] = { ...m0, user: { ...m0.user, classYear: origYear } };
   });
 });
