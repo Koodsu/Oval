@@ -117,8 +117,7 @@ export default function Hero() {
             }}
           >
             <p className="text-[clamp(16px,1.7vw,20px)] text-warm-gray leading-relaxed mb-10 font-light">
-              Bridge connects OSU students through small, real-life activity pods —
-              pickup basketball, study groups, jam sessions — happening on campus, today.
+              Bridge connects OSU students through real-life activity groups, clubs, and campus events — happening today.
             </p>
             <WaitlistForm />
           </div>
