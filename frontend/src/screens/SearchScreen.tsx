@@ -30,21 +30,13 @@ import { Activity, Pod, ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import ActivityCard from '../components/ActivityCard';
 import FadeIn from '../components/FadeIn';
 import ExplorePillRow from '../components/ExplorePillRow';
-import { SkeletonActivityCard } from '../components/SkeletonLoader';
 import { home, cardShadowHome, colors, spacing } from '../theme';
 import { CATEGORIES, CATEGORY_META } from '../constants/categories';
 import { getCategoryPillStyle } from '../utils/activityCategoryPill';
+import { clubCircleBg } from '../utils/clubCircleBg';
 import { filterActivitiesForExplore, ExploreTimeFilter } from '../utils/exploreActivityFilter';
 
 type MainTab = 'activities' | 'clubs';
-
-function clubCircleBg(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors.avatarPalette[Math.abs(hash) % colors.avatarPalette.length];
-}
 
 function formatScheduleTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -103,7 +95,8 @@ export default function SearchScreen() {
     return () => clearTimeout(t);
   }, [clubsQuery]);
 
-  const loadActivitiesData = useCallback(async () => {
+  const loadActivitiesData = useCallback(async (opts?: { skipFullScreenLoading?: boolean }) => {
+    if (!opts?.skipFullScreenLoading) setActivitiesLoading(true);
     try {
       const [acts, feed] = await Promise.all([
         getActivities(activityCategory ?? undefined),
@@ -119,7 +112,8 @@ export default function SearchScreen() {
     }
   }, [activityCategory]);
 
-  const loadClubsData = useCallback(async () => {
+  const loadClubsData = useCallback(async (opts?: { skipFullScreenLoading?: boolean }) => {
+    if (!opts?.skipFullScreenLoading) setClubsLoading(true);
     try {
       const [list, today] = await Promise.all([
         getClubs({
@@ -164,7 +158,7 @@ export default function SearchScreen() {
     setJoiningClubId(clubId);
     try {
       await joinClub(clubId);
-      setClubs((prev) => prev.map((c) => (c.id === clubId ? { ...c, isMember: true } : c)));
+      setClubs((prev) => prev.map((c) => (c.id === clubId ? { ...c, isMember: true, memberCount: c.memberCount + 1 } : c)));
     } catch {
       Alert.alert('Error', API_USER_MESSAGE);
     } finally {
@@ -260,10 +254,8 @@ export default function SearchScreen() {
             onSelect={(key) => setTimeFilter(key as ExploreTimeFilter)}
           />
           {activitiesLoading ? (
-            <View style={styles.listPad}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <SkeletonActivityCard key={i} />
-              ))}
+            <View style={styles.tabLoadingInner}>
+              <ActivityIndicator size="large" color={colors.scarlet} />
             </View>
           ) : (
           <FlatList
@@ -277,7 +269,7 @@ export default function SearchScreen() {
                 refreshing={activitiesRefreshing}
                 onRefresh={() => {
                   setActivitiesRefreshing(true);
-                  void loadActivitiesData();
+                  void loadActivitiesData({ skipFullScreenLoading: true });
                 }}
                 tintColor={home.scarlet}
               />
@@ -311,8 +303,8 @@ export default function SearchScreen() {
           )}
         </>
       ) : clubsLoading ? (
-        <View style={styles.clubsLoading}>
-          <ActivityIndicator size="large" color={home.scarlet} />
+        <View style={styles.tabLoadingInner}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
         </View>
       ) : (
         <>
@@ -333,7 +325,7 @@ export default function SearchScreen() {
                 refreshing={clubsRefreshing}
                 onRefresh={() => {
                   setClubsRefreshing(true);
-                  void loadClubsData();
+                  void loadClubsData({ skipFullScreenLoading: true });
                 }}
                 tintColor={home.scarlet}
               />
@@ -375,48 +367,53 @@ export default function SearchScreen() {
               const pill = getCategoryPillStyle(item.category);
               return (
                 <View style={[styles.clubCard, cardShadowHome]}>
-                  <View style={styles.clubCardInner}>
-                    <View style={[styles.clubEmojiCircle, { backgroundColor: clubCircleBg(item.name) }]}>
-                      <Text style={styles.clubEmojiText}>{item.emoji}</Text>
-                    </View>
-                    <View style={styles.clubCardMain}>
-                      <View style={styles.clubTitleRow}>
-                        <Text style={styles.clubName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        <View style={[styles.categoryPillSmall, { backgroundColor: pill.pillBg }]}>
-                          <Text style={[styles.categoryPillSmallText, { color: pill.pillText }]} numberOfLines={1}>
-                            {pill.label}
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}
+                  >
+                    <View style={styles.clubCardInner}>
+                      <View style={[styles.clubEmojiCircle, { backgroundColor: clubCircleBg(item.name) }]}>
+                        <Text style={styles.clubEmojiText}>{item.emoji}</Text>
+                      </View>
+                      <View style={styles.clubCardMain}>
+                        <View style={styles.clubTitleRow}>
+                          <Text style={styles.clubName} numberOfLines={1}>
+                            {item.name}
                           </Text>
-                        </View>
-                      </View>
-                      <Text style={styles.clubDesc} numberOfLines={2}>
-                        {item.description}
-                      </Text>
-                      <View style={styles.clubFooterRow}>
-                        <Text style={styles.clubMemberCount}>
-                          {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
-                        </Text>
-                        {item.isMember ? (
-                          <View style={styles.joinedPill}>
-                            <Text style={styles.joinedPillText}>Joined</Text>
+                          <View style={[styles.categoryPillSmall, { backgroundColor: pill.pillBg }]}>
+                            <Text style={[styles.categoryPillSmallText, { color: pill.pillText }]} numberOfLines={1}>
+                              {pill.label}
+                            </Text>
                           </View>
-                        ) : (
-                          <TouchableOpacity
-                            style={[styles.joinOutlineBtn, joiningClubId === item.id && styles.joinOutlineBtnDisabled]}
-                            onPress={() => void handleJoinClub(item.id)}
-                            disabled={joiningClubId === item.id}
-                            activeOpacity={0.8}
-                          >
-                            {joiningClubId === item.id ? (
-                              <ActivityIndicator size="small" color={home.scarlet} />
-                            ) : (
-                              <Text style={styles.joinOutlineBtnText}>Join</Text>
-                            )}
-                          </TouchableOpacity>
-                        )}
+                        </View>
+                        <Text style={styles.clubDesc} numberOfLines={2}>
+                          {item.description}
+                        </Text>
                       </View>
                     </View>
+                  </TouchableOpacity>
+                  <View style={styles.clubCardFooter}>
+                    <Text style={styles.clubMemberCount}>
+                      {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
+                    </Text>
+                    {item.isMember ? (
+                      <View style={styles.joinedPill}>
+                        <Text style={styles.joinedPillText}>Joined</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.joinOutlineBtn, joiningClubId === item.id && styles.joinOutlineBtnDisabled]}
+                        onPress={() => void handleJoinClub(item.id)}
+                        disabled={joiningClubId === item.id}
+                        activeOpacity={0.8}
+                      >
+                        {joiningClubId === item.id ? (
+                          <ActivityIndicator size="small" color={home.scarlet} />
+                        ) : (
+                          <Text style={styles.joinOutlineBtnText}>Join</Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -545,8 +542,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  clubsLoading: {
+  tabLoadingInner: {
     flex: 1,
+    minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -600,8 +598,17 @@ const styles = StyleSheet.create({
   },
   clubCardInner: {
     flexDirection: 'row',
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingTop: 14,
     gap: 12,
+  },
+  clubCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 10,
   },
   clubEmojiCircle: {
     width: 48,
@@ -646,12 +653,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: home.textSecondary,
     lineHeight: 20,
-    marginBottom: 8,
-  },
-  clubFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   clubMemberCount: {
     fontSize: 12,

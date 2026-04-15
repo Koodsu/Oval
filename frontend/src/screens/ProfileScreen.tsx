@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -37,6 +37,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [pods, setPods] = useState<Pod[]>([]);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -44,12 +45,16 @@ export default function ProfileScreen() {
       setPods(data);
     } catch {
       // Stats are non-critical, fail silently
+    } finally {
+      setStatsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchStats();
+    }, [fetchStats])
+  );
 
   const pickAndUploadImage = async (source: 'camera' | 'library') => {
     try {
@@ -168,6 +173,12 @@ export default function ProfileScreen() {
   const avatarUri = resolveAvatarUrl(user?.avatarUrl);
 
   return (
+    <View style={styles.profileScreenRoot}>
+      {statsLoading ? (
+        <View style={[styles.tabLoadingInner, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
+        </View>
+      ) : (
     <ScrollView
       style={[styles.container, { paddingTop: insets.top }]}
       contentContainerStyle={styles.content}
@@ -338,13 +349,24 @@ export default function ProfileScreen() {
         <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     </ScrollView>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  profileScreenRoot: {
+    flex: 1,
+    backgroundColor: colors.cream,
+  },
+  tabLoadingInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
   },
   content: {
     paddingBottom: spacing.xxxl,

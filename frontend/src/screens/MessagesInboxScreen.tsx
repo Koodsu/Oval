@@ -17,7 +17,6 @@ import { getMessageThreads, resolveAvatarUrl } from '../api';
 import { DirectMessageThread } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-import { SkeletonMessageRow } from '../components/SkeletonLoader';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 import { formatThreadTime } from '../utils/format';
 
@@ -48,11 +47,8 @@ export default function MessagesInboxScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Text style={styles.heading}>Messages</Text>
-        </View>
-        <View style={styles.list}>
-          {[0, 1, 2, 3, 4].map((i) => <SkeletonMessageRow key={i} />)}
+        <View style={styles.tabLoadingInner}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
         </View>
       </View>
     );
@@ -134,7 +130,12 @@ export default function MessagesInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.cream },
+  tabLoadingInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     paddingHorizontal: spacing.lg,

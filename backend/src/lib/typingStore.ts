@@ -1,6 +1,6 @@
 /**
  * In-memory store for typing indicators.
- * Keys: "pod:{podId}" or "dm:{threadId}"
+ * Keys: "pod:{podId}", "dm:{threadId}", or "club:{clubId}"
  * Values: Map<userId, lastTypingAt>
  * TTL: 5 seconds
  */
@@ -19,7 +19,7 @@ function prune(key: string): void {
   if (m.size === 0) store.delete(key);
 }
 
-export function setTyping(type: 'pod' | 'dm', id: string, userId: string): void {
+export function setTyping(type: 'pod' | 'dm' | 'club', id: string, userId: string): void {
   const key = `${type}:${id}`;
   let m = store.get(key);
   if (!m) {
@@ -29,7 +29,7 @@ export function setTyping(type: 'pod' | 'dm', id: string, userId: string): void 
   m.set(userId, Date.now());
 }
 
-export function getTypingUserIds(type: 'pod' | 'dm', id: string, excludeUserId?: string): string[] {
+export function getTypingUserIds(type: 'pod' | 'dm' | 'club', id: string, excludeUserId?: string): string[] {
   const key = `${type}:${id}`;
   prune(key);
   const m = store.get(key);

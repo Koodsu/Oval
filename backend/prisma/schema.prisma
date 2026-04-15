@@ -56,6 +56,7 @@ model User {
   clubMeetingsCreated      ClubMeeting[]              @relation("MeetingCreator")
   clubMeetingAttendees     ClubMeetingAttendee[]
   clubAnnouncements        ClubAnnouncement[]
+  clubMessages             ClubMessage[]
 }
 
 model Block {
@@ -347,6 +348,7 @@ model Club {
   members       ClubMember[]
   meetings      ClubMeeting[]
   announcements ClubAnnouncement[]
+  messages      ClubMessage[]
 
   @@index([isPublic, category])
 }
@@ -411,4 +413,18 @@ model ClubAnnouncement {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([clubId, createdAt])
+}
+
+model ClubMessage {
+  id        String   @id @default(uuid())
+  clubId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, createdAt])
+  @@index([userId])
 }
