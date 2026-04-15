@@ -14,7 +14,7 @@ const CARDS = [
     emoji: '📅',
     title: 'Events',
     description:
-      'See what's happening tonight, this week, this semester. Never miss out again.',
+      'See what\'s happening tonight, this week, this semester. Never miss out again.',
   },
 ]
 
