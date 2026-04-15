@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { home } from '../theme';
 
@@ -22,34 +22,43 @@ export default function ExplorePillRow({
   contentPaddingHorizontal = 16,
 }: ExplorePillRowProps) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[styles.row, { paddingHorizontal: contentPaddingHorizontal }]}
-    >
-      {items.map((item) => {
-        const active = selectedKey === item.key;
-        return (
-          <TouchableOpacity
-            key={item.key}
-            style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onSelect(item.key);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.text, active ? styles.textActive : styles.textInactive]} numberOfLines={1}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.container}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.scrollView}
+        contentContainerStyle={[styles.row, { paddingHorizontal: contentPaddingHorizontal }]}
+      >
+        {items.map((item) => {
+          const active = selectedKey === item.key;
+          return (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onSelect(item.key);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.text, active ? styles.textActive : styles.textInactive]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    height: 44,
+  },
+  scrollView: {
+    flex: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

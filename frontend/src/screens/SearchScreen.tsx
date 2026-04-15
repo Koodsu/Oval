@@ -237,34 +237,6 @@ export default function SearchScreen() {
     </View>
   );
 
-  if (mainTab === 'activities' && activitiesLoading) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Explore</Text>
-          <Text style={styles.subtitle}>Find activities and clubs at OSU</Text>
-        </View>
-        {tabSwitcher}
-        {activitiesSearchBar}
-        <ExplorePillRow
-          items={CATEGORY_PILL_ITEMS}
-          selectedKey={activityCategory ?? 'all'}
-          onSelect={(key) => setActivityCategory(key === 'all' ? null : key)}
-        />
-        <ExplorePillRow
-          items={TIME_PILL_ITEMS.map((t) => ({ key: t.key, label: t.label }))}
-          selectedKey={timeFilter}
-          onSelect={(key) => setTimeFilter(key as ExploreTimeFilter)}
-        />
-        <View style={styles.listPad}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <SkeletonActivityCard key={i} />
-          ))}
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -287,6 +259,13 @@ export default function SearchScreen() {
             selectedKey={timeFilter}
             onSelect={(key) => setTimeFilter(key as ExploreTimeFilter)}
           />
+          {activitiesLoading ? (
+            <View style={styles.listPad}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <SkeletonActivityCard key={i} />
+              ))}
+            </View>
+          ) : (
           <FlatList
             data={filteredActivities}
             keyExtractor={(item) => item.id}
@@ -329,6 +308,7 @@ export default function SearchScreen() {
               </View>
             }
           />
+          )}
         </>
       ) : clubsLoading ? (
         <View style={styles.clubsLoading}>
