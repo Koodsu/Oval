@@ -21,6 +21,8 @@ jest.mock('../context/AuthContext', () => ({
   }),
 }));
 
+const joinedAt = new Date().toISOString();
+
 const mockClub: ClubDetail = {
   id: 'c1',
   name: 'Chess Club',
@@ -30,7 +32,7 @@ const mockClub: ClubDetail = {
   isVerified: false,
   isPublic: true,
   university: 'OSU',
-  createdById: 'u1',
+  createdById: 'u-admin',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   isMember: true,
@@ -41,8 +43,24 @@ const mockClub: ClubDetail = {
       clubId: 'c1',
       userId: 'u1',
       role: 'MEMBER',
-      joinedAt: new Date().toISOString(),
+      joinedAt,
       user: { id: 'u1', name: 'Test User', classYear: '2026' },
+    },
+    {
+      id: 'm-admin',
+      clubId: 'c1',
+      userId: 'u-admin',
+      role: 'ADMIN',
+      joinedAt,
+      user: { id: 'u-admin', name: 'Zara' },
+    },
+    {
+      id: 'm-off',
+      clubId: 'c1',
+      userId: 'u-off',
+      role: 'OFFICER',
+      joinedAt,
+      user: { id: 'u-off', name: 'Amy' },
     },
   ],
   meetings: [],
@@ -109,5 +127,29 @@ describe('ClubDetailScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Test User')).toBeTruthy();
     });
+  });
+
+  it('shows Admin and Officer role badges on Members tab', async () => {
+    renderWithSafeArea(
+      <ClubDetailScreen
+        navigation={{ navigate: mockNavigate, goBack: mockGoBack, setOptions: jest.fn() } as never}
+        route={{ key: 'k', name: 'ClubDetail', params: { clubId: 'c1' } } as never}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chess Club')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Members'));
+    await waitFor(() => {
+      expect(screen.getByText('Admin')).toBeTruthy();
+      expect(screen.getByText('Officer')).toBeTruthy();
+      expect(screen.getByText('Zara')).toBeTruthy();
+      expect(screen.getByText('Amy')).toBeTruthy();
+      expect(screen.getByText('Test User')).toBeTruthy();
+    });
+    expect(screen.queryByText('ADMIN')).toBeNull();
+    expect(screen.queryByText('OFFICER')).toBeNull();
   });
 });

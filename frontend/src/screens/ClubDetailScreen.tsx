@@ -631,7 +631,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           onSend={handleSend}
           sending={sending}
           placeholder="Message..."
-          maxLength={2000}
+          maxLength={500}
         />
       </KeyboardAvoidingView>
     );
@@ -643,7 +643,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       contentContainerStyle={styles.membersList}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) => {
-        const showRoleBadge = item.role === 'ADMIN' || item.role === 'OFFICER';
+        const isAdmin = item.role === 'ADMIN';
+        const isOfficer = item.role === 'OFFICER';
+        const showRoleBadge = isAdmin || isOfficer;
         const canPromote =
           club.myRole === 'ADMIN' && item.role === 'MEMBER' && item.userId !== user?.id;
         return (
@@ -658,8 +660,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               ) : null}
             </View>
             {showRoleBadge && (
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleBadgeText}>{item.role}</Text>
+              <View style={isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeOfficer}>
+                <Text style={isAdmin ? styles.roleBadgeAdminText : styles.roleBadgeOfficerText}>
+                  {isAdmin ? 'Admin' : 'Officer'}
+                </Text>
               </View>
             )}
             {canPromote && (
@@ -1038,16 +1042,27 @@ const styles = StyleSheet.create({
     color: home.textSecondary,
     marginTop: 2,
   },
-  roleBadge: {
-    backgroundColor: '#F0EBE3',
+  roleBadgeAdmin: {
+    backgroundColor: '#FEE2E2',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  roleBadgeText: {
+  roleBadgeAdminText: {
     fontSize: 11,
     fontWeight: '700',
-    color: home.textSecondary,
+    color: home.scarlet,
+  },
+  roleBadgeOfficer: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  roleBadgeOfficerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
   },
   promoteLink: {
     fontSize: 14,

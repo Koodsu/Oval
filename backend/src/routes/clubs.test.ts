@@ -666,6 +666,29 @@ describe('Clubs API (integration)', () => {
       expect(list.body.messages).toHaveLength(1);
       expect(list.body.messages[0].content).toBe('Hello club');
     });
+
+    it('returns 400 when content exceeds 500 characters', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const tooLong = 'a'.repeat(501);
+      await request(app)
+        .post(`/clubs/${create.body.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: tooLong })
+        .expect(400);
+
+      const ok500 = 'b'.repeat(500);
+      const post = await request(app)
+        .post(`/clubs/${create.body.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: ok500 })
+        .expect(201);
+      expect(post.body.content).toHaveLength(500);
+    });
   });
 
   describe('POST /clubs/:id/typing', () => {

@@ -18,7 +18,7 @@ const RSVP_STATUSES = new Set([RSVP_GOING, RSVP_MAYBE, RSVP_NOT_GOING]);
 
 const STATUS_ATTENDED = 'ATTENDED';
 
-const MAX_CLUB_MESSAGE_LENGTH = 2000;
+const MAX_CLUB_MESSAGE_LENGTH = 500;
 
 /** Latest allowed instant for meetingTime (exclusive upper bound per product spec). */
 const MEETING_TIME_MAX = new Date('2027-06-01T00:00:00.000Z');
@@ -55,7 +55,7 @@ async function requireClubMembership(
     return { ok: false, status: 404, message: 'Club not found' };
   }
   if (club.members.length === 0) {
-    return { ok: false, status: 403, message: 'You must be a member to access club chat' };
+    return { ok: false, status: 403, message: 'You must be a member to access club messages' };
   }
   return { ok: true };
 }
