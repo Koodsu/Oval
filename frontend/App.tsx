@@ -25,6 +25,7 @@ import ActivityListScreen from './src/screens/ActivityListScreen';
 import TodayScreen from './src/screens/TodayScreen';
 import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
 import SearchScreen from './src/screens/SearchScreen';
+import ClubDetailScreen from './src/screens/ClubDetailScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import PodListScreen from './src/screens/PodListScreen';
 import CreatePodScreen from './src/screens/CreatePodScreen';
@@ -72,6 +73,7 @@ export type RootStackParamList = {
   EditProfile: undefined;
   Settings: undefined;
   PeopleYouMet: { podId: string };
+  ClubDetail: { clubId: string };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -106,6 +108,7 @@ const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.
 
 function MainTabs() {
   return (
+    <View style={{ flex: 1, backgroundColor: colors.cream }}>
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
@@ -155,6 +158,7 @@ function MainTabs() {
         options={{ tabBarLabel: 'Profile' }}
       />
     </Tab.Navigator>
+    </View>
   );
 }
 
@@ -342,6 +346,11 @@ function AppNavigator() {
               name="PeopleYouMet"
               component={PeopleYouMetScreen}
               options={{ title: 'People You Met' }}
+            />
+            <Stack.Screen
+              name="ClubDetail"
+              component={ClubDetailScreen}
+              options={{ headerShown: false }}
             />
           </>
         ) : (

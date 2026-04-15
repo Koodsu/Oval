@@ -105,6 +105,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
   },
   initial: {
     color: '#ffffff',

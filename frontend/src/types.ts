@@ -151,6 +151,94 @@ export interface ClubMeetingToday {
   attendeeCount: number;
 }
 
+export interface ClubMessage {
+  id: string;
+  clubId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl?: string | null };
+}
+
+export interface ClubMeetingWithMeta {
+  id: string;
+  clubId: string;
+  title: string;
+  description: string | null;
+  location: string;
+  meetingTime: string;
+  isPublic: boolean;
+  createdById: string;
+  createdAt: string;
+  createdBy?: { id: string; name: string; avatarUrl?: string | null };
+  rsvpCounts: { going: number; maybe: number; notGoing: number };
+  myRsvp: 'GOING' | 'MAYBE' | 'NOT_GOING' | null;
+  attendeeCount: number;
+}
+
+export interface ClubMeetingAttendeeRow {
+  id: string;
+  meetingId: string;
+  userId: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface ClubMemberWithUser {
+  id: string;
+  clubId: string;
+  userId: string;
+  role: string;
+  joinedAt: string;
+  user: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    interestTags?: string[];
+    classYear?: string | null;
+    major?: string | null;
+  };
+}
+
+export interface ClubAnnouncementRow {
+  id: string;
+  clubId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl?: string | null };
+}
+
+/** GET /clubs/:id */
+export interface ClubDetail {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  emoji: string;
+  isVerified: boolean;
+  isPublic: boolean;
+  university: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  isMember: boolean;
+  myRole: string | null;
+  members: ClubMemberWithUser[];
+  meetings: Array<{
+    id: string;
+    clubId: string;
+    title: string;
+    description: string | null;
+    location: string;
+    meetingTime: string;
+    isPublic: boolean;
+    createdById: string;
+    createdAt: string;
+  }>;
+  announcements: ClubAnnouncementRow[];
+}
+
 export interface PodMember {
   id: string;
   userId: string;

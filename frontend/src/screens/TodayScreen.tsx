@@ -33,7 +33,6 @@ import ActivityCard from '../components/ActivityCard';
 import FadeIn from '../components/FadeIn';
 import PressableScale from '../components/PressableScale';
 import GuidelinesModal from '../components/GuidelinesModal';
-import { SkeletonActivityCard } from '../components/SkeletonLoader';
 import { home, spacing, cardShadowHome, colors } from '../theme';
 import { getActivityEmoji } from '../utils/activityEmoji';
 import { getCategoryPillStyle } from '../utils/activityCategoryPill';
@@ -217,7 +216,8 @@ export default function TodayScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      setLoading(true);
+      void loadData();
     }, [loadData])
   );
 
@@ -303,96 +303,9 @@ export default function TodayScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.skeletonAvatar} />
-              <View style={styles.headerText}>
-                <View style={styles.skeletonLineLg} />
-                <View style={styles.skeletonLineSm} />
-              </View>
-            </View>
-            <View style={styles.skeletonBell} />
-          </View>
-          <View style={styles.heroSection}>
-            <View style={styles.skeletonCta} />
-            <View style={[styles.skeletonLineSm, { alignSelf: 'center', width: 220 }]} />
-          </View>
-          <View style={styles.sectionBlock}>
-            <View style={styles.skeletonSectionHeader} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.skeletonScheduleRow}>
-                {[0, 1, 2].map((i) => (
-                  <View key={i} style={styles.skeletonScheduleCard} />
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-          <View style={styles.sectionBlock}>
-            <View style={styles.skeletonSectionHeader} />
-            <View style={styles.sectionBodyPad}>
-              {[0, 1, 2].map((i) => (
-                <SkeletonActivityCard key={i} />
-              ))}
-            </View>
-          </View>
-          <View style={styles.sectionBlock}>
-            <View style={styles.skeletonSectionHeader} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.skeletonScheduleRow}>
-                {[0, 1].map((i) => (
-                  <View key={i} style={styles.skeletonClubCard} />
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-          <View style={styles.sectionBlock}>
-            <View style={styles.skeletonSectionHeader} />
-            {[0, 1, 2].map((i) => (
-              <View key={i} style={[styles.feedCard, cardShadowHome, { opacity: 0.6 }]}>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: colors.creamBorder,
-                    }}
-                  />
-                  <View style={{ flex: 1, gap: 8 }}>
-                    <View
-                      style={{
-                        height: 14,
-                        borderRadius: 4,
-                        width: '70%',
-                        backgroundColor: colors.creamBorder,
-                      }}
-                    />
-                    <View
-                      style={{
-                        height: 10,
-                        borderRadius: 4,
-                        width: '35%',
-                        backgroundColor: colors.creamBorder,
-                      }}
-                    />
-                    <View
-                      style={{
-                        height: 12,
-                        borderRadius: 4,
-                        width: '90%',
-                        backgroundColor: colors.creamBorder,
-                      }}
-                    />
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+        <View style={styles.tabLoadingInner}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
+        </View>
       </View>
     );
   }
@@ -588,6 +501,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: home.creamBg,
+  },
+  tabLoadingInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     paddingBottom: spacing.xxl,

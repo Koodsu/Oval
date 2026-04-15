@@ -139,6 +139,64 @@ export const getClubsToday = (signal?: AbortSignal) =>
 export const joinClub = (clubId: string) =>
   request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/join`, { method: 'POST' });
 
+export const leaveClub = (clubId: string) =>
+  request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/leave`, { method: 'DELETE' });
+
+export const getClub = (clubId: string, signal?: AbortSignal) =>
+  request<import('./types').ClubDetail>(`/clubs/${encodeURIComponent(clubId)}`, {}, signal);
+
+export const getClubMeetings = (clubId: string, signal?: AbortSignal) =>
+  request<import('./types').ClubMeetingWithMeta[]>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings`,
+    {},
+    signal
+  );
+
+export interface GetClubMessagesResponse {
+  messages: import('./types').ClubMessage[];
+  typingUserIds: string[];
+}
+
+export const getClubMessages = (clubId: string, signal?: AbortSignal) =>
+  request<GetClubMessagesResponse>(`/clubs/${encodeURIComponent(clubId)}/messages`, {}, signal);
+
+export const sendClubMessage = (clubId: string, content: string) =>
+  request<import('./types').ClubMessage>(`/clubs/${encodeURIComponent(clubId)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+
+export const sendClubTyping = (clubId: string) =>
+  request<{ ok: boolean }>(`/clubs/${encodeURIComponent(clubId)}/typing`, { method: 'POST' });
+
+export const promoteClubMember = (clubId: string, memberUserId: string) =>
+  request<import('./types').ClubMemberWithUser>(
+    `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}/promote`,
+    { method: 'POST' }
+  );
+
+export type ClubMeetingRsvpStatus = 'GOING' | 'MAYBE' | 'NOT_GOING';
+
+export const rsvpClubMeeting = (meetingId: string, status: ClubMeetingRsvpStatus) =>
+  request<import('./types').ClubMeetingAttendeeRow>(
+    `/clubs/meetings/${encodeURIComponent(meetingId)}/rsvp`,
+    { method: 'POST', body: JSON.stringify({ status }) }
+  );
+
+export interface CreateClubMeetingBody {
+  title: string;
+  location: string;
+  meetingTime: string;
+  description?: string;
+  isPublic?: boolean;
+}
+
+export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =>
+  request<import('./types').ClubMeetingWithMeta>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+
 // Pods
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);

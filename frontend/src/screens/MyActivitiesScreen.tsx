@@ -18,7 +18,6 @@ import { Pod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import PodCard from '../components/PodCard';
 import FadeIn from '../components/FadeIn';
-import { SkeletonPodCard } from '../components/SkeletonLoader';
 import { colors, spacing, typography } from '../theme';
 
 export default function MyActivitiesScreen() {
@@ -43,7 +42,8 @@ export default function MyActivitiesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchPods();
+      setLoading(true);
+      void fetchPods();
     }, [fetchPods])
   );
 
@@ -53,12 +53,8 @@ export default function MyActivitiesScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Text style={styles.heading}>My Activities</Text>
-          <Text style={styles.subtitle}>Pods you've joined</Text>
-        </View>
-        <View style={styles.list}>
-          {[0, 1, 2, 3].map((i) => <SkeletonPodCard key={i} />)}
+        <View style={styles.tabLoadingInner}>
+          <ActivityIndicator size="large" color={colors.scarlet} />
         </View>
       </View>
     );
@@ -132,13 +128,18 @@ export default function MyActivitiesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
+  },
+  tabLoadingInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.bg,
+    backgroundColor: colors.cream,
   },
   header: {
     paddingHorizontal: spacing.lg,

@@ -49,7 +49,6 @@ import {
 type Props = NativeStackScreenProps<RootStackParamList, 'Pod'>;
 
 const MEMBER_AVATAR = 44;
-const AVATAR_OVERLAP = 8;
 
 function PodStatusPill({ status }: { status: string }) {
   let backgroundColor = '#64748b';
@@ -350,7 +349,7 @@ export default function PodScreen({ route, navigation }: Props) {
             presenceIdleUntrackRef.current = setTimeout(() => {
               void channelRef.current?.untrack().catch(() => {});
               presenceIdleUntrackRef.current = null;
-            }, 2000);
+            }, 500);
           } else {
             void ch.untrack().catch(() => {});
           }
@@ -614,7 +613,9 @@ export default function PodScreen({ route, navigation }: Props) {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={88}
+      keyboardVerticalOffset={0}
+      // @ts-expect-error RN forwards unknown props to inner View; iOS keyboard inset helper per product spec
+      automaticallyAdjustKeyboardInsets={true}
     >
       <View style={[styles.podBackBar, { paddingTop: insets.top }]}>
         <PodBackControl onPress={() => navigation.goBack()} />
@@ -664,7 +665,10 @@ export default function PodScreen({ route, navigation }: Props) {
               return (
                 <TouchableOpacity
                   key={m.userId}
-                  style={[styles.memberAvatarWrap, i > 0 && { marginLeft: -AVATAR_OVERLAP }]}
+                  style={[
+                    i > 0 && { marginLeft: -10 },
+                    { zIndex: pod.members.length - i, backgroundColor: 'transparent' },
+                  ]}
                   onPress={() => {
                     if (!isYou) {
                       navigation.navigate('UserProfile', { userId: m.user.id, name: m.user.name });
@@ -672,14 +676,12 @@ export default function PodScreen({ route, navigation }: Props) {
                   }}
                   activeOpacity={isYou ? 1 : 0.7}
                 >
-                  <View style={styles.memberAvatarRing}>
-                    <Avatar
+                  <Avatar
                       name={m.user.name}
                       size={MEMBER_AVATAR}
                       uri={resolveAvatarUrl(m.user.avatarUrl)}
                       isYou={false}
                     />
-                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1006,21 +1008,6 @@ export default function PodScreen({ route, navigation }: Props) {
         }
       />
 
-      <ChatInput
-        value={messageText}
-        onChangeText={handleMessageTextChange}
-        onSend={handleSend}
-        sending={sending}
-        placeholder="Message..."
-        maxLength={500}
-        replyPreview={
-          replyTarget
-            ? { name: replyTarget.name, content: replyTarget.content }
-            : null
-        }
-        onCancelReply={() => setReplyTarget(null)}
-      />
-
       <ReportModal
         visible={reportModalVisible}
         onClose={() => {
@@ -1126,6 +1113,21 @@ export default function PodScreen({ route, navigation }: Props) {
         </View>
       </Modal>
       </View>
+
+      <ChatInput
+        value={messageText}
+        onChangeText={handleMessageTextChange}
+        onSend={handleSend}
+        sending={sending}
+        placeholder="Message..."
+        maxLength={500}
+        replyPreview={
+          replyTarget
+            ? { name: replyTarget.name, content: replyTarget.content }
+            : null
+        }
+        onCancelReply={() => setReplyTarget(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1228,14 +1230,8 @@ const styles = StyleSheet.create({
   },
   memberAvatarWrap: {
     zIndex: 1,
-  },
-  memberAvatarRing: {
-    width: MEMBER_AVATAR + 4,
-    height: MEMBER_AVATAR + 4,
-    borderRadius: (MEMBER_AVATAR + 4) / 2,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    elevation: 1,
+    backgroundColor: 'transparent',
   },
 
   progressSection: {
