@@ -1,7 +1,17 @@
+/**
+ * Waitlist position semantics:
+ *   - Positions are 1-indexed (first in line = 1).
+ *   - Only entries with status "WAITING" have active positions; "NOTIFIED",
+ *     "JOINED", and "EXPIRED" entries retain their last position value but are
+ *     no longer part of the live queue.
+ *   - Positions are contiguous: after any removal, remaining WAITING entries
+ *     are re-numbered 1..n in their original join order.
+ */
+
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { hasBlockingRelationship } from '../lib/blocks';
+import { getBlockedUserIds } from '../lib/blocks';
 
 const router = Router();
 
@@ -38,11 +48,11 @@ router.post('/:id/waitlist', requireAuth, async (req: AuthRequest, res: Response
       return;
     }
 
-    for (const m of pod.members) {
-      if (await hasBlockingRelationship(userId, m.userId)) {
-        res.status(403).json({ error: "You can't join this pod." });
-        return;
-      }
+    // Batch block check — one query instead of one per member
+    const blockedIds = await getBlockedUserIds(userId);
+    if (pod.members.some((m) => blockedIds.has(m.userId))) {
+      res.status(403).json({ error: "You can't join this pod." });
+      return;
     }
 
     const existing = await prisma.podWaitlist.findUnique({
@@ -64,19 +74,23 @@ router.post('/:id/waitlist', requireAuth, async (req: AuthRequest, res: Response
       return;
     }
 
-    const maxPosition = await prisma.podWaitlist.aggregate({
-      where: { podId, status: 'WAITING' },
-      _max: { position: true },
-    });
-    const position = (maxPosition._max.position ?? 0) + 1;
+    // Use a transaction to prevent two concurrent joins from receiving the
+    // same position number (read-then-increment race condition).
+    const entry = await prisma.$transaction(async (tx) => {
+      const maxPosition = await tx.podWaitlist.aggregate({
+        where: { podId, status: 'WAITING' },
+        _max: { position: true },
+      });
+      const position = (maxPosition._max.position ?? 0) + 1;
 
-    await prisma.podWaitlist.upsert({
-      where: { podId_userId: { podId, userId } },
-      update: { position, status: 'WAITING', notifiedAt: null },
-      create: { podId, userId, position, status: 'WAITING' },
+      return tx.podWaitlist.upsert({
+        where: { podId_userId: { podId, userId } },
+        update: { position, status: 'WAITING', notifiedAt: null },
+        create: { podId, userId, position, status: 'WAITING' },
+      });
     });
 
-    res.status(201).json({ position });
+    res.status(201).json({ position: entry.position });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -98,21 +112,22 @@ router.delete('/:id/waitlist', requireAuth, async (req: AuthRequest, res: Respon
       return;
     }
 
-    await prisma.podWaitlist.delete({ where: { id: entry.id } });
-
-    // Re-number remaining WAITING entries
-    const remaining = await prisma.podWaitlist.findMany({
-      where: { podId, status: 'WAITING' },
-      orderBy: { position: 'asc' },
-    });
-    for (let i = 0; i < remaining.length; i++) {
-      if (remaining[i].position !== i + 1) {
-        await prisma.podWaitlist.update({
-          where: { id: remaining[i].id },
-          data: { position: i + 1 },
-        });
-      }
-    }
+    // Delete and re-number remaining WAITING entries in a single transaction.
+    // The raw UPDATE assigns contiguous 1-based positions ordered by the
+    // existing position value, replacing the old O(n) update loop.
+    await prisma.$transaction([
+      prisma.podWaitlist.delete({ where: { id: entry.id } }),
+      prisma.$executeRaw`
+        UPDATE "PodWaitlist" pw
+        SET position = ranked.rn
+        FROM (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY position) AS rn
+          FROM "PodWaitlist"
+          WHERE "podId" = ${podId} AND status = 'WAITING'
+        ) ranked
+        WHERE pw.id = ranked.id
+      `,
+    ]);
 
     res.json({ removed: true });
   } catch (err) {

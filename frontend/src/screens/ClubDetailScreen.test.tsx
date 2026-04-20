@@ -29,6 +29,7 @@ const mockClub: ClubDetail = {
   description: 'Play chess',
   category: 'Gaming',
   emoji: '♟️',
+  avatarUrl: null,
   isVerified: false,
   isPublic: true,
   university: 'OSU',
@@ -86,12 +87,18 @@ jest.mock('../api', () => ({
   sendClubTyping: jest.fn(),
   rsvpClubMeeting: jest.fn(),
   createClubMeeting: jest.fn(),
+  uploadClubAvatar: jest.fn(),
   API_USER_MESSAGE: 'Something went wrong',
   resolveAvatarUrl: (u: string | null | undefined) => u ?? undefined,
 }));
 
 jest.mock('../lib/supabase', () => ({
   getSupabase: () => null,
+}));
+
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true, assets: [] })),
 }));
 
 describe('ClubDetailScreen', () => {

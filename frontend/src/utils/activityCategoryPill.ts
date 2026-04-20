@@ -85,7 +85,7 @@ export function getCategoryPillStyle(category: string): CategoryPillStyle {
     default: {
       const short = category.split('&')[0]?.trim() ?? 'Activity';
       return {
-        label: short.length > 14 ? `${short.slice(0, 12)}…` : short,
+        label: short.length > 12 ? `${short.slice(0, 12)}…` : short,
         pillBg: '#F4F4F5',
         pillText: '#52525B',
         emojiCircleBg: '#F4F4F5',

@@ -64,11 +64,8 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
     const blockedIds = await getBlockedUserIds(userId);
 
     const where: Record<string, unknown> = {
-      AND: [
-        { status: FORMING },
-        { status: { notIn: [EXPIRED, COMPLETED] } },
-        { meetupTime: { gt: now } },
-      ],
+      status: FORMING,
+      meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
     };
 
@@ -156,11 +153,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     const blockedIds = await getBlockedUserIds(req.user!.userId);
     const where: Record<string, unknown> = {
       activityId,
-      AND: [
-        { status: FORMING },
-        { status: { notIn: [EXPIRED, COMPLETED] } },
-        { meetupTime: { gt: now } },
-      ],
+      status: FORMING,
+      meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
     };
 
@@ -394,7 +388,9 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response): 
           });
           if (nextCreator) updates.creatorId = nextCreator.userId;
         }
-        // Reopen pod to FORMING when a member leaves a LOCKED pod
+        // Business rule: a LOCKED pod requires all members to have confirmed.
+        // If anyone leaves after locking, the pod drops back to FORMING so the
+        // remaining members can invite/wait for a replacement before re-locking.
         if (wasLocked) updates.status = FORMING;
         if (Object.keys(updates).length > 0) {
           await tx.pod.update({ where: { id }, data: updates });

@@ -483,13 +483,16 @@ export default function PodScreen({ route, navigation }: Props) {
     const msg = messages.find((m) => m.id === msgId);
     if (!msg) return;
     const myReaction = msg.reactions?.find((r) => r.userId === user?.id && r.emoji === emoji);
+    // Snapshot for rollback in case the API call fails
+    const snapshot = messages;
     try {
       const updated = myReaction
         ? await removePodMessageReaction(podId, msgId, emoji)
         : await addPodMessageReaction(podId, msgId, emoji);
       setMessages((prev) => prev.map((m) => (m.id === msgId ? updated : m)));
     } catch {
-      // silently ignore
+      // Restore pre-optimistic state so the UI stays consistent with the server
+      setMessages(snapshot);
     }
   };
 
@@ -573,11 +576,19 @@ export default function PodScreen({ route, navigation }: Props) {
   };
 
   const handleReportNoShow = async (targetUserId: string) => {
+    // Optimistically mark as reported so the button disappears immediately
+    // and a second tap while the request is in-flight cannot duplicate it.
+    setReportedNoShows((prev) => new Set([...prev, targetUserId]));
     try {
       await reportNoShow(podId, targetUserId);
-      setReportedNoShows((prev) => new Set([...prev, targetUserId]));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (err: unknown) {
+      // Roll back the optimistic update on failure
+      setReportedNoShows((prev) => {
+        const next = new Set(prev);
+        next.delete(targetUserId);
+        return next;
+      });
       Alert.alert('Error', API_USER_MESSAGE);
     }
   };

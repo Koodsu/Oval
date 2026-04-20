@@ -36,6 +36,7 @@ export default function VerifyEmailScreen() {
   }, []);
 
   function startCooldown() {
+    if (timerRef.current) clearInterval(timerRef.current);
     setCooldown(RESEND_COOLDOWN_S);
     timerRef.current = setInterval(() => {
       setCooldown((prev) => {

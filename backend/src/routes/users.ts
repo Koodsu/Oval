@@ -27,8 +27,22 @@ const router = Router();
 // ── Avatar upload setup ────────────────────────────────────────────────────────
 
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/avatars');
+// Resolved once at startup; used to guard against path traversal when deleting old avatars.
+const UPLOAD_DIR_RESOLVED = path.resolve(UPLOAD_DIR);
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+/**
+ * Safely unlinks an avatar file. Resolves the stored path and verifies it
+ * lives inside UPLOAD_DIR before deleting — prevents path traversal if the
+ * DB record were ever tampered with.
+ */
+function safeUnlinkAvatar(storedUrl: string): void {
+  const fullPath = path.resolve(path.join(__dirname, '../../', storedUrl));
+  if (fullPath.startsWith(UPLOAD_DIR_RESOLVED + path.sep)) {
+    fs.unlink(fullPath, () => {}); // best-effort, ignore ENOENT
+  }
 }
 
 const avatarStorage = multer.diskStorage({
@@ -244,8 +258,7 @@ router.patch(
       // Delete old avatar file if it exists
       const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
       if (existing?.avatarUrl) {
-        const oldPath = path.join(__dirname, '../../', existing.avatarUrl);
-        fs.unlink(oldPath, () => {}); // best-effort cleanup
+        safeUnlinkAvatar(existing.avatarUrl);
       }
 
       await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
@@ -264,8 +277,7 @@ router.delete('/me/avatar', requireAuth, async (req: AuthRequest, res: Response)
   try {
     const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
     if (existing?.avatarUrl) {
-      const oldPath = path.join(__dirname, '../../', existing.avatarUrl);
-      fs.unlink(oldPath, () => {});
+      safeUnlinkAvatar(existing.avatarUrl);
     }
     await prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
     res.json({ avatarUrl: null });

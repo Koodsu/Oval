@@ -28,7 +28,10 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet({
-  // Allow inline scripts on the pod landing page
+  // CSP is intentionally disabled because the pod invite landing page
+  // (GET /pod/:id) injects a JSON data blob via an inline <script> tag.
+  // TODO: replace the inline script with a fetch() call so CSP can be
+  // re-enabled with a strict policy across all routes.
   contentSecurityPolicy: false,
   // Allow cross-origin loading of avatar images by the React Native client
   crossOriginResourcePolicy: { policy: 'cross-origin' },

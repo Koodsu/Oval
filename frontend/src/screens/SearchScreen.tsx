@@ -368,7 +368,7 @@ export default function SearchScreen() {
               return (
                 <View style={[styles.clubCard, cardShadowHome]}>
                   <TouchableOpacity
-                    activeOpacity={0.92}
+                    activeOpacity={0.8}
                     onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}
                   >
                     <View style={styles.clubCardInner}>
@@ -391,30 +391,30 @@ export default function SearchScreen() {
                         </Text>
                       </View>
                     </View>
+                    <View style={styles.clubCardFooter}>
+                      <Text style={styles.clubMemberCount}>
+                        {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
+                      </Text>
+                      {item.isMember ? (
+                        <View style={styles.joinedPill}>
+                          <Text style={styles.joinedPillText}>Joined</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.joinOutlineBtn, joiningClubId === item.id && styles.joinOutlineBtnDisabled]}
+                          onPress={(e) => { e.stopPropagation?.(); void handleJoinClub(item.id); }}
+                          disabled={joiningClubId === item.id}
+                          activeOpacity={0.8}
+                        >
+                          {joiningClubId === item.id ? (
+                            <ActivityIndicator size="small" color={home.scarlet} />
+                          ) : (
+                            <Text style={styles.joinOutlineBtnText}>Join</Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </TouchableOpacity>
-                  <View style={styles.clubCardFooter}>
-                    <Text style={styles.clubMemberCount}>
-                      {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
-                    </Text>
-                    {item.isMember ? (
-                      <View style={styles.joinedPill}>
-                        <Text style={styles.joinedPillText}>Joined</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[styles.joinOutlineBtn, joiningClubId === item.id && styles.joinOutlineBtnDisabled]}
-                        onPress={() => void handleJoinClub(item.id)}
-                        disabled={joiningClubId === item.id}
-                        activeOpacity={0.8}
-                      >
-                        {joiningClubId === item.id ? (
-                          <ActivityIndicator size="small" color={home.scarlet} />
-                        ) : (
-                          <Text style={styles.joinOutlineBtnText}>Join</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
                 </View>
               );
             }}

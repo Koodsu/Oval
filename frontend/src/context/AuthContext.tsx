@@ -52,16 +52,34 @@ async function registerForPushNotifications(): Promise<void> {
  * SecureStore (iOS Keychain / Android Keystore). Runs on every startup but
  * is a no-op once the legacy key is gone.
  */
-async function migrateTokenToSecureStore(): Promise<void> {
+/**
+ * One-time migration: move JWT token from plaintext AsyncStorage (old) to
+ * SecureStore (iOS Keychain / Android Keystore). Returns the token that should
+ * be used this session — either the freshly migrated one or whatever was
+ * already in SecureStore.
+ *
+ * If the SecureStore write fails (e.g. Keychain locked on Android), the legacy
+ * token stays in AsyncStorage and we return it directly so the user stays
+ * logged in. The migration retries on the next launch.
+ */
+async function migrateTokenToSecureStore(): Promise<string | null> {
   try {
     const legacy = await AsyncStorage.getItem(LEGACY_TOKEN_KEY);
     if (legacy) {
-      await SecureStore.setItemAsync(TOKEN_KEY, legacy);
-      await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
+      try {
+        await SecureStore.setItemAsync(TOKEN_KEY, legacy);
+        await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
+        return legacy;
+      } catch {
+        // SecureStore write failed — keep legacy key intact and return the
+        // token so this session works; migration retries next launch.
+        return legacy;
+      }
     }
   } catch {
-    // Migration failure is non-fatal — user will be asked to log in again
+    // AsyncStorage read failed — nothing to migrate.
   }
+  return null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -89,20 +107,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Restore session from storage on startup
     async function restoreSession() {
-      // Migrate token from old plaintext AsyncStorage to SecureStore
-      await migrateTokenToSecureStore();
+      // Migrate token from old plaintext AsyncStorage to SecureStore.
+      // migratedToken is non-null when the legacy key existed but SecureStore
+      // write failed — use it as a fallback so the user stays logged in.
+      const migratedToken = await migrateTokenToSecureStore();
 
-      const [storedToken, userEntry, podTermsEntry, legacyGuidelinesEntry] = await Promise.all([
-        SecureStore.getItemAsync(TOKEN_KEY),
-        AsyncStorage.getItem('user'),
-        AsyncStorage.getItem(HAS_ACCEPTED_POD_TERMS_KEY),
-        AsyncStorage.getItem(LEGACY_GUIDELINES_ACCEPTED_KEY),
-      ]);
+      const STORAGE_TIMEOUT_MS = 5000;
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('storage_timeout')), STORAGE_TIMEOUT_MS)
+      );
+
+      let secureToken: string | null = null;
+      let userEntry: string | null = null;
+      let podTermsEntry: string | null = null;
+      let legacyGuidelinesEntry: string | null = null;
+      try {
+        [secureToken, userEntry, podTermsEntry, legacyGuidelinesEntry] = await Promise.race([
+          Promise.all([
+            SecureStore.getItemAsync(TOKEN_KEY),
+            AsyncStorage.getItem('user'),
+            AsyncStorage.getItem(HAS_ACCEPTED_POD_TERMS_KEY),
+            AsyncStorage.getItem(LEGACY_GUIDELINES_ACCEPTED_KEY),
+          ]),
+          timeout,
+        ]);
+      } catch {
+        // Storage read timed out or failed — treat as logged-out and let the
+        // user sign in again rather than blocking on the splash screen forever.
+        setIsLoading(false);
+        return;
+      }
+
+      const storedToken = secureToken ?? migratedToken;
 
       if (storedToken && userEntry) {
         try {
           const parsed = JSON.parse(userEntry);
-          if (parsed?.id && parsed?.name && parsed?.email) {
+          if (
+            parsed?.id &&
+            parsed?.name &&
+            parsed?.email &&
+            typeof parsed.verifiedUniversity === 'boolean' &&
+            parsed?.joinedAt
+          ) {
             setTokenState(storedToken);
             setToken(storedToken);
             setUser(parsed);
@@ -133,10 +180,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (newToken: string, newUser: User) => {
-    await Promise.all([
-      SecureStore.setItemAsync(TOKEN_KEY, newToken),
-      AsyncStorage.setItem('user', JSON.stringify(newUser)),
-    ]);
+    try {
+      await Promise.all([
+        SecureStore.setItemAsync(TOKEN_KEY, newToken),
+        AsyncStorage.setItem('user', JSON.stringify(newUser)),
+      ]);
+    } catch (err) {
+      // Storage write failed — do not set in-memory state so the caller's
+      // error boundary can surface the failure rather than leaving the user
+      // appearing logged-in with a token that won't survive the next launch.
+      throw err;
+    }
     setToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
