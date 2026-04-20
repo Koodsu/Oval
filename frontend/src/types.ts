@@ -224,6 +224,7 @@ export interface ClubDetail {
   description: string;
   category: string;
   emoji: string;
+  avatarUrl?: string | null;
   isVerified: boolean;
   isPublic: boolean;
   university: string;

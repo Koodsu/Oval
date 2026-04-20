@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -15,6 +16,7 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +39,7 @@ import {
   removeClubMember,
   rsvpClubMeeting,
   createClubMeeting,
+  uploadClubAvatar,
   API_USER_MESSAGE,
   resolveAvatarUrl,
 } from '../api';
@@ -205,6 +208,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [announcements, setAnnouncements] = useState<ClubAnnouncementRow[]>([]);
   const [announcementText, setAnnouncementText] = useState('');
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
+  const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -236,6 +240,31 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       setAnnouncements([]);
     }
   }, [clubId]);
+
+  const handlePickClubAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo library access in Settings.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setAvatarUploadBusy(true);
+    try {
+      const { avatarUrl } = await uploadClubAvatar(club!.id, asset.uri);
+      setClub((prev) => prev && { ...prev, avatarUrl });
+    } catch {
+      Alert.alert('Error', API_USER_MESSAGE);
+    } finally {
+      setAvatarUploadBusy(false);
+    }
+  };
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -878,9 +907,42 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.headerBlock}>
-        <View style={[styles.emojiCircle, { width: emojiSize + 24, height: emojiSize + 24, backgroundColor: clubCircleBg(club.name) }]}>
-          <Text style={{ fontSize: emojiSize * 0.55 }}>{club.emoji}</Text>
-        </View>
+        {myRole === 'ADMIN' ? (
+          <TouchableOpacity
+            onPress={() => void handlePickClubAvatar()}
+            disabled={avatarUploadBusy}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.emojiCircle, styles.emojiCircleRelative, { width: emojiSize + 24, height: emojiSize + 24, backgroundColor: clubCircleBg(club.name) }]}>
+              {avatarUploadBusy ? (
+                <ActivityIndicator color="#fff" />
+              ) : club.avatarUrl ? (
+                <Image
+                  source={{ uri: resolveAvatarUrl(club.avatarUrl) }}
+                  style={{ width: emojiSize + 24, height: emojiSize + 24, borderRadius: (emojiSize + 24) / 2 }}
+                  onError={() => setClub((prev) => prev && { ...prev, avatarUrl: null })}
+                />
+              ) : (
+                <Text style={{ fontSize: emojiSize * 0.55 }}>{club.emoji}</Text>
+              )}
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={14} color="#CC0000" />
+              </View>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.emojiCircle, { width: emojiSize + 24, height: emojiSize + 24, backgroundColor: clubCircleBg(club.name) }]}>
+            {club.avatarUrl ? (
+              <Image
+                source={{ uri: resolveAvatarUrl(club.avatarUrl) }}
+                style={{ width: emojiSize + 24, height: emojiSize + 24, borderRadius: (emojiSize + 24) / 2 }}
+                onError={() => setClub((prev) => prev && { ...prev, avatarUrl: null })}
+              />
+            ) : (
+              <Text style={{ fontSize: emojiSize * 0.55 }}>{club.emoji}</Text>
+            )}
+          </View>
+        )}
         <Text style={styles.clubName}>{club.name}</Text>
         <View style={[styles.catPill, { backgroundColor: pill.pillBg }]}>
           <Text style={[styles.catPillText, { color: pill.pillText }]}>{pill.label}</Text>
@@ -1024,6 +1086,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
+  },
+  emojiCircleRelative: {
+    position: 'relative',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   clubName: {
     fontSize: 22,

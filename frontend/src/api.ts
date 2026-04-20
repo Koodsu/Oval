@@ -60,7 +60,15 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     let data: unknown;
     try {
       res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
-      data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+      data =
+        res.status === 204
+          ? {}
+          : await res.json().catch((parseErr) => {
+              if (__DEV__) {
+                console.warn(`[api] JSON parse failed for ${path} (${res.status}):`, parseErr);
+              }
+              return {};
+            });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') throw err;
       throw new Error(err instanceof Error ? err.message : 'Network request failed');
@@ -434,7 +442,7 @@ export const updateProfile = (data: {
  * Upload a profile picture. Uses FormData (multipart), not JSON.
  * `uri` is the local file URI returned by expo-image-picker / expo-image-manipulator.
  */
-export const uploadAvatar = async (uri: string): Promise<{ avatarUrl: string }> => {
+export const uploadAvatar = async (uri: string, signal?: AbortSignal): Promise<{ avatarUrl: string }> => {
   const filename = uri.split('/').pop() ?? 'avatar.jpg';
   const formData = new FormData();
   formData.append('avatar', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
@@ -450,8 +458,10 @@ export const uploadAvatar = async (uri: string): Promise<{ avatarUrl: string }> 
       method: 'PATCH',
       headers,
       body: formData,
+      signal,
     });
   } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') throw err;
     throw new Error(err instanceof Error ? err.message : 'Upload failed');
   }
 
@@ -471,6 +481,46 @@ export const uploadAvatar = async (uri: string): Promise<{ avatarUrl: string }> 
 export const deleteAvatar = () =>
   request<{ avatarUrl: null }>('/users/me/avatar', { method: 'DELETE' });
 
+/**
+ * Upload a club avatar. ADMIN only.
+ * `uri` is the local file URI returned by expo-image-picker.
+ */
+export const uploadClubAvatar = async (clubId: string, uri: string, signal?: AbortSignal): Promise<{ avatarUrl: string }> => {
+  const filename = uri.split('/').pop() ?? 'club-avatar.jpg';
+  const formData = new FormData();
+  formData.append('image', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
+
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/clubs/${encodeURIComponent(clubId)}`, {
+      method: 'PATCH',
+      headers,
+      body: formData,
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') throw err;
+    throw new Error(err instanceof Error ? err.message : 'Upload failed');
+  }
+
+  if (res.status === 401) {
+    onUnauthorized?.();
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error ?? `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+};
+
 // Blocking
 export const blockUser = (userId: string) =>
   request<{ success: boolean; blockId?: string; createdAt?: string }>(`/users/${userId}/block`, {
@@ -487,8 +537,8 @@ export const searchUsers = (q: string) =>
   request<import('./types').FriendUser[]>(`/users/search?q=${encodeURIComponent(q)}`);
 
 // Friends
-export const getFriends = () =>
-  request<import('./types').FriendUser[]>('/friends');
+export const getFriends = (signal?: AbortSignal) =>
+  request<import('./types').FriendUser[]>('/friends', {}, signal);
 
 export const getFriendRequests = () =>
   request<{ incoming: import('./types').FriendRequest[]; outgoing: import('./types').FriendRequest[] }>(

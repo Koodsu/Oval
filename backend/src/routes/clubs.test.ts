@@ -982,6 +982,84 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('PATCH /clubs/:id (avatar upload)', () => {
+    // Minimal 1×1 pixel PNG (valid image binary)
+    const minimalPng = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d76360f8' +
+      'cfc00000000200016ef7cba40000000049454e44ae426082',
+      'hex'
+    );
+
+    it('allows ADMIN to upload avatar and returns avatarUrl', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const res = await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .attach('image', minimalPng, { filename: 'club.png', contentType: 'image/png' })
+        .expect(200);
+
+      expect(res.body.avatarUrl).toMatch(/\/uploads\/club-avatars\//);
+
+      const row = await prisma.club.findUnique({ where: { id: create.body.id } });
+      expect(row?.avatarUrl).toMatch(/\/uploads\/club-avatars\//);
+    });
+
+    it('returns 400 when no file is attached', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+    });
+
+    it('returns 403 for non-admin member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: token2 } = await registerAndGetToken(
+        'NonAdmin',
+        `non-admin-avatar-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token2}`)
+        .attach('image', minimalPng, { filename: 'club.png', contentType: 'image/png' })
+        .expect(403);
+    });
+
+    it('returns 401 when unauthenticated', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .attach('image', minimalPng, { filename: 'club.png', contentType: 'image/png' })
+        .expect(401);
+    });
+  });
+
   describe('DELETE /clubs/:id', () => {
     it('returns 403 for non-admin member', async () => {
       const create = await request(app)

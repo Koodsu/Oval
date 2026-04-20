@@ -9,8 +9,9 @@ export type PodChatListItem =
 export function buildPodChatList(messages: Message[]): PodChatListItem[] {
   const items: PodChatListItem[] = [];
   messages.forEach((msg, index) => {
-    const t = new Date(msg.createdAt).getTime();
-    const prev = index > 0 ? new Date(messages[index - 1].createdAt).getTime() : null;
+    const t = msg.createdAt ? new Date(msg.createdAt).getTime() : 0;
+    const prevCreatedAt = messages[index - 1]?.createdAt;
+    const prev = index > 0 && prevCreatedAt ? new Date(prevCreatedAt).getTime() : null;
     if (index === 0 || prev === null || t - prev > CHAT_GAP_MS) {
       items.push({ type: 'time', id: `time-${msg.id}`, date: msg.createdAt });
     }

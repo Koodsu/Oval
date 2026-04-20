@@ -24,11 +24,15 @@ export default function FriendsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      const controller = new AbortController();
       setLoading(true);
-      getFriends()
+      getFriends(controller.signal)
         .then(setFriends)
-        .catch(() => {})
+        .catch((err) => {
+          if (err instanceof Error && err.name === 'AbortError') return;
+        })
         .finally(() => setLoading(false));
+      return () => controller.abort();
     }, [])
   );
 

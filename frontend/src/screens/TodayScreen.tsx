@@ -194,9 +194,13 @@ export default function TodayScreen() {
   const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
   const [waitlistingId, setWaitlistingId] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     try {
-      const [feedPods, acts, mine] = await Promise.all([fetchFeed(), getActivities(), getMyPods()]);
+      const [feedPods, acts, mine] = await Promise.all([
+        fetchFeed({}, signal),
+        getActivities(undefined, signal),
+        getMyPods(signal),
+      ]);
       setPods(feedPods);
       setMyPods(mine);
       const sorted = [...acts].sort((a, b) => {
@@ -207,6 +211,7 @@ export default function TodayScreen() {
       });
       setActivities(sorted);
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       Alert.alert('Error', API_USER_MESSAGE);
     } finally {
       setLoading(false);
@@ -216,8 +221,10 @@ export default function TodayScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const controller = new AbortController();
       setLoading(true);
-      void loadData();
+      void loadData(controller.signal);
+      return () => controller.abort();
     }, [loadData])
   );
 

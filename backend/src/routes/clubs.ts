@@ -1,8 +1,38 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { MEMBER_USER_SELECT, parseMemberTags } from '../lib/joinExistingPod';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+
+// ── Club avatar upload setup ──────────────────────────────────────────────────
+
+const CLUB_AVATAR_DIR = path.join(__dirname, '../../uploads/club-avatars');
+if (!fs.existsSync(CLUB_AVATAR_DIR)) {
+  fs.mkdirSync(CLUB_AVATAR_DIR, { recursive: true });
+}
+
+const clubAvatarStorage = multer.diskStorage({
+  destination: CLUB_AVATAR_DIR,
+  filename: (req, _file, cb) => {
+    const clubId = req.params.id;
+    cb(null, `${clubId}-${Date.now()}.jpg`);
+  },
+});
+
+const clubAvatarUpload = multer({
+  storage: clubAvatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Only image files are allowed'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 const router = Router();
 
@@ -1054,6 +1084,56 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// PATCH /clubs/:id — upload club avatar (ADMIN only)
+router.patch(
+  '/:id',
+  requireAuth,
+  clubAvatarUpload.single('image'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId } = req.params;
+
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    try {
+      const club = await prisma.club.findUnique({ where: { id: clubId }, select: { id: true, avatarUrl: true } });
+      if (!club) {
+        res.status(404).json({ error: 'Club not found' });
+        return;
+      }
+
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership) {
+        res.status(403).json({ error: 'You must be a member of this club' });
+        return;
+      }
+      if (membership.role !== ROLE_ADMIN) {
+        res.status(403).json({ error: 'Only admins can update the club avatar' });
+        return;
+      }
+
+      const avatarUrl = `/uploads/club-avatars/${req.file.filename}`;
+
+      // Best-effort cleanup of old avatar
+      if (club.avatarUrl?.startsWith('/uploads/club-avatars/')) {
+        const oldPath = path.join(__dirname, '../../', club.avatarUrl);
+        fs.unlink(oldPath, () => {});
+      }
+
+      await prisma.club.update({ where: { id: clubId }, data: { avatarUrl } });
+      res.json({ avatarUrl });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
 
 // GET /clubs/:id — detail (register last among /:id routes)
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {

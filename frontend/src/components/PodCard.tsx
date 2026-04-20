@@ -35,7 +35,7 @@ export default function PodCard({
   const isForming = pod.status === 'FORMING';
   const canJoin = isForming && memberCount < maxMembers && !isMember;
   const isFull = isForming && memberCount >= maxMembers && !isMember;
-  const progress = memberCount / maxMembers;
+  const progress = maxMembers > 0 ? Math.min(memberCount / maxMembers, 1) : 0;
 
   const activityTitle = pod.activity?.title;
 
