@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Animated,
 } from 'react-native';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -35,6 +37,14 @@ import { CATEGORIES, CATEGORY_META } from '../constants/categories';
 import { getCategoryPillStyle } from '../utils/activityCategoryPill';
 import { clubCircleBg } from '../utils/clubCircleBg';
 import { filterActivitiesForExplore, ExploreTimeFilter } from '../utils/exploreActivityFilter';
+import {
+  OSU_CAMPUS_CENTER,
+  OSU_CAMPUS_DELTA,
+  OSU_CAMPUS_POLYGON,
+  SCARLET,
+} from '../constants/campusMap';
+import { useLocationPermission } from '../hooks/useLocationPermission';
+import { getActivityEmoji } from '../utils/activityEmoji';
 
 type MainTab = 'activities' | 'clubs';
 
@@ -66,7 +76,11 @@ export default function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
 
+  const { granted } = useLocationPermission();
   const [mainTab, setMainTab] = useState<MainTab>('activities');
+  const [activitiesViewMode, setActivitiesViewMode] = useState<'list' | 'map'>('list');
+  const [selectedMapActivity, setSelectedMapActivity] = useState<Activity | null>(null);
+  const mapSheetAnim = useRef(new Animated.Value(200)).current;
 
   const [activitiesQuery, setActivitiesQuery] = useState('');
   const [activityCategory, setActivityCategory] = useState<string | null>(null);
@@ -154,6 +168,36 @@ export default function SearchScreen() {
     setMainTab(tab);
   };
 
+  const handleSelectMapActivity = (activity: Activity) => {
+    setSelectedMapActivity(activity);
+    Animated.spring(mapSheetAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  };
+
+  const handleCloseMapSheet = () => {
+    setSelectedMapActivity(null);
+    mapSheetAnim.setValue(200);
+  };
+
+  // Build a map from activityId → first pod with coordinates (for map markers)
+  const activityPodCoords = useMemo(() => {
+    const map = new Map<string, { latitude: number; longitude: number; podCount: number }>();
+    for (const pod of feedPods) {
+      if (pod.latitude == null || pod.longitude == null) continue;
+      const existing = map.get(pod.activityId);
+      if (!existing) {
+        map.set(pod.activityId, { latitude: pod.latitude, longitude: pod.longitude, podCount: 1 });
+      } else {
+        map.set(pod.activityId, { ...existing, podCount: existing.podCount + 1 });
+      }
+    }
+    return map;
+  }, [feedPods]);
+
   const handleJoinClub = async (clubId: string) => {
     setJoiningClubId(clubId);
     try {
@@ -167,24 +211,22 @@ export default function SearchScreen() {
   };
 
   const activitiesSearchBar = (
-    <View style={styles.searchBarOuter}>
-      <View style={[styles.searchBar, cardShadowHome]}>
-        <Ionicons name="search" size={18} color="#999999" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search activities..."
-          placeholderTextColor="#999999"
-          value={activitiesQuery}
-          onChangeText={setActivitiesQuery}
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {activitiesQuery.length > 0 ? (
-          <TouchableOpacity onPress={() => setActivitiesQuery('')} hitSlop={12}>
-            <Ionicons name="close-circle" size={18} color="#999999" />
-          </TouchableOpacity>
-        ) : null}
-      </View>
+    <View style={[styles.searchBar, cardShadowHome]}>
+      <Ionicons name="search" size={18} color="#999999" />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search activities..."
+        placeholderTextColor="#999999"
+        value={activitiesQuery}
+        onChangeText={setActivitiesQuery}
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {activitiesQuery.length > 0 ? (
+        <TouchableOpacity onPress={() => setActivitiesQuery('')} hitSlop={12}>
+          <Ionicons name="close-circle" size={18} color="#999999" />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 
@@ -242,7 +284,119 @@ export default function SearchScreen() {
 
       {mainTab === 'activities' ? (
         <>
-          {activitiesSearchBar}
+          <View style={styles.activitiesHeaderRow}>
+            <View style={styles.activitiesSearchFlex}>{activitiesSearchBar}</View>
+            <View style={styles.exploreToggleRow}>
+              <TouchableOpacity
+                style={[styles.exploreToggleBtn, activitiesViewMode === 'list' && styles.exploreToggleBtnActive]}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActivitiesViewMode('list');
+                  handleCloseMapSheet();
+                }}
+              >
+                <Ionicons name="list" size={18} color={activitiesViewMode === 'list' ? '#FFFFFF' : home.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exploreToggleBtn, activitiesViewMode === 'map' && styles.exploreToggleBtnActive]}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActivitiesViewMode('map');
+                }}
+              >
+                <Ionicons name="map" size={18} color={activitiesViewMode === 'map' ? '#FFFFFF' : home.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {activitiesViewMode === 'map' ? (
+            activitiesLoading ? (
+              <View style={styles.tabLoadingInner}>
+                <ActivityIndicator size="large" color={colors.scarlet} />
+              </View>
+            ) : (
+              <View style={{ flex: 1 }}>
+                <MapView
+                  provider={PROVIDER_DEFAULT}
+                  style={{ flex: 1 }}
+                  initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+                  showsUserLocation={granted}
+                  onPress={() => handleCloseMapSheet()}
+                >
+                  <Polygon
+                    coordinates={OSU_CAMPUS_POLYGON}
+                    strokeColor={SCARLET}
+                    strokeWidth={2}
+                    fillColor="rgba(204,0,0,0.06)"
+                  />
+                  {filteredActivities.map((activity) => {
+                    const coords = activityPodCoords.get(activity.id);
+                    if (!coords) return null;
+                    const meta = CATEGORY_META[activity.category as keyof typeof CATEGORY_META];
+                    const markerColor = meta?.color ?? SCARLET;
+                    const emoji = getActivityEmoji(activity.title, activity.category);
+                    return (
+                      <Marker
+                        key={activity.id}
+                        coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleSelectMapActivity(activity);
+                        }}
+                      >
+                        <View style={[styles.activityMarker, { borderColor: markerColor, backgroundColor: markerColor + '22' }]}>
+                          <Text style={styles.activityMarkerEmoji}>{emoji}</Text>
+                        </View>
+                      </Marker>
+                    );
+                  })}
+                </MapView>
+
+                {selectedMapActivity && (() => {
+                  const coords = activityPodCoords.get(selectedMapActivity.id);
+                  const podCount = coords?.podCount ?? 0;
+                  return (
+                    <Animated.View
+                      style={[styles.exploreBottomSheet, { transform: [{ translateY: mapSheetAnim }] }]}
+                    >
+                      <TouchableOpacity style={styles.exploreSheetClose} onPress={handleCloseMapSheet} hitSlop={12}>
+                        <Ionicons name="close" size={20} color={home.textSecondary} />
+                      </TouchableOpacity>
+                      <View style={styles.exploreSheetHeader}>
+                        <Text style={styles.exploreSheetEmoji}>
+                          {getActivityEmoji(selectedMapActivity.title, selectedMapActivity.category)}
+                        </Text>
+                        <View style={styles.exploreSheetTitleBlock}>
+                          <Text style={styles.exploreSheetTitle} numberOfLines={1}>
+                            {selectedMapActivity.title}
+                          </Text>
+                          <Text style={styles.exploreSheetCategory}>{selectedMapActivity.category}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.exploreSheetPodCount}>
+                        {podCount} {podCount === 1 ? 'pod' : 'pods'} forming
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.exploreSheetBtn}
+                        onPress={() => {
+                          handleCloseMapSheet();
+                          navigation.navigate('PodList', {
+                            activityId: selectedMapActivity.id,
+                            activityTitle: selectedMapActivity.title,
+                            activityCategory: selectedMapActivity.category,
+                          });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.exploreSheetBtnText}>View Pods →</Text>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                })()}
+              </View>
+            )
+          ) : (
+            <>
           <ExplorePillRow
             items={CATEGORY_PILL_ITEMS}
             selectedKey={activityCategory ?? 'all'}
@@ -300,6 +454,8 @@ export default function SearchScreen() {
               </View>
             }
           />
+          )}
+            </>
           )}
         </>
       ) : clubsLoading ? (
@@ -686,5 +842,106 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: home.textSecondary,
+  },
+  activitiesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  activitiesSearchFlex: {
+    flex: 1,
+  },
+  exploreToggleRow: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E8E3DB',
+  },
+  exploreToggleBtn: {
+    padding: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  exploreToggleBtnActive: {
+    backgroundColor: home.scarlet,
+  },
+  activityMarker: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  activityMarkerEmoji: {
+    fontSize: 20,
+  },
+  exploreBottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 8,
+  },
+  exploreSheetClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+  },
+  exploreSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+    paddingRight: 32,
+  },
+  exploreSheetEmoji: {
+    fontSize: 28,
+  },
+  exploreSheetTitleBlock: {
+    flex: 1,
+  },
+  exploreSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  exploreSheetCategory: {
+    fontSize: 12,
+    color: home.textSecondary,
+    marginTop: 2,
+  },
+  exploreSheetPodCount: {
+    fontSize: 13,
+    color: home.textSecondary,
+    marginBottom: 12,
+    marginTop: 2,
+  },
+  exploreSheetBtn: {
+    backgroundColor: home.scarlet,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  exploreSheetBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

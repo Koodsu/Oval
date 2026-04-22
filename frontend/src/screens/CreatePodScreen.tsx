@@ -1,22 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { RootStackParamList } from '../../App';
-import { createPod, getActivityLocations, getLocationsByCategory, API_USER_MESSAGE } from '../api';
+import { createPod } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography } from '../theme';
+import {
+  OSU_CAMPUS_CENTER,
+  OSU_CAMPUS_DELTA,
+  OSU_CAMPUS_POLYGON,
+  SCARLET,
+} from '../constants/campusMap';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreatePod'>;
 
@@ -34,6 +41,23 @@ function getMaxMeetupTime(): Date {
   return max;
 }
 
+// Ray-casting point-in-polygon check (mirrors backend)
+function isInsideCampus(coord: { latitude: number; longitude: number }): boolean {
+  let inside = false;
+  const n = OSU_CAMPUS_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = OSU_CAMPUS_POLYGON[i].longitude;
+    const yi = OSU_CAMPUS_POLYGON[i].latitude;
+    const xj = OSU_CAMPUS_POLYGON[j].longitude;
+    const yj = OSU_CAMPUS_POLYGON[j].latitude;
+    const intersect =
+      yi > coord.latitude !== yj > coord.latitude &&
+      coord.longitude < ((xj - xi) * (coord.latitude - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 const GROUP_SIZE_PRESETS = [
   { min: 2, max: 3, label: '2–3' },
   { min: 2, max: 4, label: '2–4' },
@@ -46,7 +70,7 @@ const GROUP_SIZE_PRESETS = [
 ] as const;
 
 export default function CreatePodScreen({ route, navigation }: Props) {
-  const { activityId, activityTitle, activityCategory } = route.params;
+  const { activityId, activityTitle } = route.params;
 
   const [groupSizePreset, setGroupSizePreset] = useState<(typeof GROUP_SIZE_PRESETS)[number]>(
     GROUP_SIZE_PRESETS[1] // default 2–4
@@ -55,55 +79,52 @@ export default function CreatePodScreen({ route, navigation }: Props) {
   const maxMembers = groupSizePreset.max;
   const [meetupTime, setMeetupTime] = useState(getDefaultMeetupTime);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [location, setLocation] = useState('');
-  const [locations, setLocations] = useState<string[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    setLoadingLocations(true);
-    const loadLocations = async () => {
-      try {
-        const locs = await getActivityLocations(activityId);
-        if (locs.length > 0) {
-          setLocations(locs);
-          setLoadingLocations(false);
-          return;
-        }
-      } catch {
-        // Fall through to category fallback
+  const [pickedCoords, setPickedCoords] = useState<{ latitude: number; longitude: number } | null>(
+    null
+  );
+  const [locationText, setLocationText] = useState('');
+  const [mapLocationError, setMapLocationError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const handleMapPress = async (coord: { latitude: number; longitude: number }) => {
+    if (!isInsideCampus(coord)) {
+      setMapLocationError('Please select a location on OSU campus');
+      return;
+    }
+    setMapLocationError('');
+    setPickedCoords(coord);
+    try {
+      const results = await Location.reverseGeocodeAsync(coord);
+      if (results[0]) {
+        const r = results[0];
+        const label = r.name || r.street || r.district || 'OSU Campus';
+        setLocationText(label);
       }
-      try {
-        const locs = await getLocationsByCategory(activityCategory ?? 'Social');
-        setLocations(locs);
-      } catch {
-        setLocations([]);
-      } finally {
-        setLoadingLocations(false);
-      }
-    };
-    loadLocations();
-  }, [activityId, activityCategory]);
+    } catch {
+      // user can type manually
+    }
+  };
 
   const handleSubmit = async () => {
-    const min = Math.max(2, Math.min(10, minMembers));
-    const max = Math.max(min, Math.min(10, maxMembers));
-    if (max < min) {
-      Alert.alert('Error', 'Max members must be at least min members');
-      return;
-    }
+    setFormError('');
 
-    const selectedLocation = location?.trim() || '';
+    const selectedLocation = locationText.trim();
     if (!selectedLocation) {
-      Alert.alert('Error', 'Please select a location before creating a pod.');
+      setMapLocationError('Please tap the map to select a location');
       return;
     }
+    setMapLocationError('');
 
     const maxTime = getMaxMeetupTime();
     if (meetupTime > maxTime) {
-      Alert.alert('Error', 'Meetup time cannot be more than 1 week from now');
+      setFormError('Please select a date within the next week.');
       return;
     }
+
+    const min = Math.max(2, Math.min(10, minMembers));
+    const max = Math.max(min, Math.min(10, maxMembers));
 
     setSubmitting(true);
     try {
@@ -112,10 +133,12 @@ export default function CreatePodScreen({ route, navigation }: Props) {
         maxMembers: max,
         meetupTime: meetupTime.toISOString(),
         location: selectedLocation,
+        latitude: pickedCoords?.latitude,
+        longitude: pickedCoords?.longitude,
       });
       navigation.replace('Pod', { podId: pod.id });
-    } catch (err: unknown) {
-      Alert.alert('Error', API_USER_MESSAGE);
+    } catch {
+      setFormError('Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -191,37 +214,43 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       )}
 
       <Text style={styles.sectionLabel}>Location</Text>
-      {loadingLocations ? (
-        <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
-      ) : locations.length === 0 ? (
-        <Text style={styles.hint}>No locations available for this activity. Please add locations in backend/src/config/locations.ts</Text>
-      ) : (
-        <View style={styles.pickerWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {locations.map((loc) => (
-              <TouchableOpacity
-                key={loc}
-                style={[styles.locationChip, location === loc && styles.locationChipActive]}
-                onPress={() => setLocation(loc)}
-              >
-                <Text
-                  style={[styles.locationChipText, location === loc && styles.locationChipTextActive]}
-                  numberOfLines={1}
-                >
-                  {loc}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      <Text style={styles.mapHint}>Tap the map to drop a pin on campus</Text>
+      <View style={styles.mapContainer}>
+        <MapView
+          provider={PROVIDER_DEFAULT}
+          style={styles.map}
+          initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+          onPress={(e) => handleMapPress(e.nativeEvent.coordinate)}
+        >
+          <Polygon
+            coordinates={OSU_CAMPUS_POLYGON}
+            strokeColor={SCARLET}
+            strokeWidth={2}
+            fillColor="rgba(204,0,0,0.06)"
+          />
+          {pickedCoords && (
+            <Marker coordinate={pickedCoords} pinColor={SCARLET} />
+          )}
+        </MapView>
+      </View>
+      {mapLocationError ? (
+        <Text style={styles.mapError}>{mapLocationError}</Text>
+      ) : null}
+      <TextInput
+        style={styles.locationInput}
+        value={locationText}
+        onChangeText={setLocationText}
+        placeholder="e.g. RPAC Court B, Thompson Library Floor 2"
+        placeholderTextColor={colors.textTertiary}
+      />
 
       <View style={styles.submitRow}>
+        {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
         <GradientButton
           title="Create Pod"
           onPress={handleSubmit}
           loading={submitting}
-          disabled={submitting || locations.length === 0 || !location?.trim()}
+          disabled={submitting}
           icon="checkmark-circle-outline"
         />
       </View>
@@ -234,7 +263,6 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   sectionLabel: { ...typography.label, marginBottom: spacing.sm },
   activityTitle: { ...typography.h3, marginBottom: spacing.lg },
-  fieldLabel: { ...typography.caption },
   sizePresetRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
   sizePresetChip: {
     paddingHorizontal: spacing.md,
@@ -247,16 +275,6 @@ const styles = StyleSheet.create({
   sizePresetChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   sizePresetText: { ...typography.bodyBold, fontSize: 14, color: colors.textSecondary },
   sizePresetTextActive: { color: colors.textInverse },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    fontSize: 15,
-    color: colors.text,
-  },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -270,20 +288,41 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   dateText: { ...typography.body, flex: 1 },
-  pickerWrapper: { marginBottom: spacing.lg },
-  locationChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
+  mapHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  mapContainer: {
+    height: 240,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  map: { flex: 1 },
+  mapError: {
+    fontSize: 12,
+    color: SCARLET,
+    marginTop: -8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  locationInput: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    marginRight: spacing.sm,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
-  locationChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  locationChipText: { ...typography.body, fontSize: 14, color: colors.text },
-  locationChipTextActive: { color: colors.textInverse },
-  hint: { ...typography.caption, marginBottom: spacing.lg },
-  loader: { marginBottom: spacing.lg },
   submitRow: { marginTop: spacing.xl },
+  formErrorText: {
+    fontSize: 13,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
 });

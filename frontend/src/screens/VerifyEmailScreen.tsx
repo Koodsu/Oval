@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { verifyEmail, resendVerification, API_USER_MESSAGE } from '../api';
+import { verifyEmail, resendVerification } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography, shadows } from '../theme';
 
@@ -27,6 +27,7 @@ export default function VerifyEmailScreen() {
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isSendingRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function VerifyEmailScreen() {
   const handleSubmit = async () => {
     const trimmed = code.trim();
     if (trimmed.length !== 6) {
-      setError('Please enter the 6-digit code');
+      setError('Please enter the verification code');
       return;
     }
     setError(null);
@@ -61,24 +62,38 @@ export default function VerifyEmailScreen() {
       const { user: updated } = await verifyEmail(trimmed);
       await updateUser(updated);
       // Navigation updates automatically because App.tsx watches user.verifiedUniversity
-    } catch {
-      setError(API_USER_MESSAGE);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'Invalid verification code') {
+        setError('Incorrect code. Please try again.');
+      } else if (msg.includes('has expired') || msg.includes('No verification code on file')) {
+        setError('This code has expired. Please request a new one.');
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (cooldown > 0) return;
+    if (cooldown > 0 || isSendingRef.current) return;
+    isSendingRef.current = true;
     setResending(true);
     setError(null);
     try {
       await resendVerification();
       startCooldown();
       Alert.alert('Code sent', `A new verification code was sent to ${user?.email}.`);
-    } catch {
-      setError(API_USER_MESSAGE);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('Too many attempts')) {
+        setError('Too many attempts. Please wait before requesting another code.');
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
     } finally {
+      isSendingRef.current = false;
       setResending(false);
     }
   };
@@ -130,8 +145,8 @@ export default function VerifyEmailScreen() {
 
         {error ? (
           <View style={styles.errorRow}>
-            <Ionicons name="alert-circle-outline" size={16} color={colors.red} />
-            <Text style={styles.errorText}>{error}</Text>
+            <Ionicons name="alert-circle-outline" size={16} color={error.includes('Too many attempts') ? '#CC0000' : colors.red} />
+            <Text style={error.includes('Too many attempts') ? styles.rateLimitError : styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
@@ -234,7 +249,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.caption,
-    color: colors.red,
+    color: colors.scarlet,
+  },
+  rateLimitError: {
+    ...typography.caption,
+    color: '#CC0000',
   },
   resendButton: {
     marginTop: spacing.lg,

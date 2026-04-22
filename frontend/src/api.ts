@@ -249,17 +249,28 @@ export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);
 
-export const fetchFeed = (params: { category?: string; limit?: number } = {}, signal?: AbortSignal) => {
+export const fetchFeed = (
+  params: { category?: string; limit?: number; lat?: number; lng?: number } = {},
+  signal?: AbortSignal
+) => {
   const query = new URLSearchParams();
   if (params.category) query.set('category', params.category);
   if (params.limit) query.set('limit', String(params.limit));
+  if (params.lat != null) query.set('lat', String(params.lat));
+  if (params.lng != null) query.set('lng', String(params.lng));
   const qs = query.toString();
   return request<import('./types').Pod[]>(qs ? `/pods/feed?${qs}` : '/pods/feed', {}, signal);
 };
 
-export const getPodsByActivity = (activityId: string, sort?: string) => {
+export const getPodsByActivity = (
+  activityId: string,
+  sort?: string,
+  coords?: { lat?: number; lng?: number }
+) => {
   const params = new URLSearchParams({ activityId });
   if (sort) params.set('sort', sort);
+  if (coords?.lat != null) params.set('lat', String(coords.lat));
+  if (coords?.lng != null) params.set('lng', String(coords.lng));
   return request<import('./types').Pod[]>(`/pods?${params.toString()}`);
 };
 
@@ -274,6 +285,8 @@ export interface CreatePodOptions {
   maxMembers?: number;
   meetupTime?: string; // ISO string
   location?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export const createPod = (activityId: string, options?: CreatePodOptions) =>

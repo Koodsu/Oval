@@ -71,6 +71,11 @@ export default function ChatInput({
           <Ionicons name="happy-outline" size={22} color="#AAAAAA" />
         </TouchableOpacity>
         <View style={styles.inputWrapper}>
+          {value.length > 0 && (
+            <Text style={[styles.charCounter, value.length >= maxLength - 50 && styles.charCounterWarn]}>
+              {value.length}/{maxLength}
+            </Text>
+          )}
           <TextInput
             style={styles.textInput}
             placeholder={placeholder}
@@ -155,6 +160,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     justifyContent: 'center',
     minHeight: 40,
+  },
+  charCounter: {
+    fontSize: 11,
+    color: colors.textMutedLight,
+    textAlign: 'right',
+    paddingTop: 4,
+  },
+  charCounterWarn: {
+    color: colors.scarlet,
   },
   textInput: {
     ...typography.body,

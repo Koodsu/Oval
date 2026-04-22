@@ -199,6 +199,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   });
   const [mtPublic, setMtPublic] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [mtTitleError, setMtTitleError] = useState('');
+  const [mtLocationError, setMtLocationError] = useState('');
+  const [mtDateError, setMtDateError] = useState('');
+  const [mtFormError, setMtFormError] = useState('');
 
   const [messages, setMessages] = useState<ClubMessage[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -609,18 +613,30 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const submitCreateMeeting = async () => {
     const title = mtTitle.trim();
     const location = mtLocation.trim();
-    if (!title || !location) {
-      Alert.alert('Missing fields', 'Please enter title and location.');
-      return;
+    setMtFormError('');
+    let hasError = false;
+    if (!title) {
+      setMtTitleError('Title is required');
+      hasError = true;
+    } else {
+      setMtTitleError('');
+    }
+    if (!location) {
+      setMtLocationError('Location is required');
+      hasError = true;
+    } else {
+      setMtLocationError('');
     }
     if (mtWhen >= MEETING_TIME_MAX) {
-      Alert.alert('Invalid date', 'Meeting must be before June 1, 2027.');
-      return;
+      setMtDateError('Meeting must be before June 1, 2027');
+      hasError = true;
+    } else if (mtWhen <= new Date()) {
+      setMtDateError('Meeting time must be in the future');
+      hasError = true;
+    } else {
+      setMtDateError('');
     }
-    if (mtWhen <= new Date()) {
-      Alert.alert('Invalid date', 'Meeting time must be in the future.');
-      return;
-    }
+    if (hasError) return;
     setCreateBusy(true);
     try {
       await createClubMeeting(clubId, {
@@ -633,7 +649,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       setCreateOpen(false);
       await loadMeetings();
     } catch {
-      Alert.alert('Error', API_USER_MESSAGE);
+      setMtFormError('Something went wrong. Please try again.');
     } finally {
       setCreateBusy(false);
     }
@@ -986,17 +1002,40 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         {tab === 'members' && membersBody}
       </View>
 
-      <Modal visible={createOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCreateOpen(false)}>
+      <Modal
+        visible={createOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setCreateOpen(false);
+          setMtTitleError('');
+          setMtLocationError('');
+          setMtDateError('');
+          setMtFormError('');
+        }}
+      >
         <View style={styles.modalInner}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>New meeting</Text>
-            <TouchableOpacity onPress={() => setCreateOpen(false)}>
+            <TouchableOpacity onPress={() => {
+              setCreateOpen(false);
+              setMtTitleError('');
+              setMtLocationError('');
+              setMtDateError('');
+              setMtFormError('');
+            }}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
             <Text style={styles.inputLabel}>Title</Text>
-            <TextInput style={styles.input} value={mtTitle} onChangeText={setMtTitle} placeholder="Title" />
+            <TextInput
+              style={[styles.input, mtTitleError ? styles.inputError : null]}
+              value={mtTitle}
+              onChangeText={(v) => { setMtTitle(v); if (mtTitleError) setMtTitleError(''); }}
+              placeholder="Title"
+            />
+            {mtTitleError ? <Text style={styles.mtErrorText}>{mtTitleError}</Text> : null}
             <Text style={styles.inputLabel}>Description</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
@@ -1006,7 +1045,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               multiline
             />
             <Text style={styles.inputLabel}>Location</Text>
-            <TextInput style={styles.input} value={mtLocation} onChangeText={setMtLocation} placeholder="Location" />
+            <TextInput
+              style={[styles.input, mtLocationError ? styles.inputError : null]}
+              value={mtLocation}
+              onChangeText={(v) => { setMtLocation(v); if (mtLocationError) setMtLocationError(''); }}
+              placeholder="Location"
+            />
+            {mtLocationError ? <Text style={styles.mtErrorText}>{mtLocationError}</Text> : null}
             <Text style={styles.inputLabel}>When</Text>
             <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
               <Ionicons name="calendar-outline" size={18} color={home.textSecondary} />
@@ -1020,6 +1065,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                 })}
               </Text>
             </TouchableOpacity>
+            {mtDateError ? <Text style={styles.mtErrorText}>{mtDateError}</Text> : null}
             {showDatePicker && (
               <DateTimePicker
                 value={mtWhen}
@@ -1028,7 +1074,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                 maximumDate={new Date(MEETING_TIME_MAX.getTime() - 60_000)}
                 onChange={(_, d) => {
                   setShowDatePicker(Platform.OS === 'ios');
-                  if (d) setMtWhen(d);
+                  if (d) { setMtWhen(d); setMtDateError(''); }
                 }}
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               />
@@ -1037,6 +1083,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               <Text style={styles.inputLabel}>Public meeting</Text>
               <Switch value={mtPublic} onValueChange={setMtPublic} trackColor={{ false: '#ccc', true: home.scarlet }} />
             </View>
+            {mtFormError ? <Text style={styles.mtFormErrorText}>{mtFormError}</Text> : null}
             <TouchableOpacity
               style={[styles.submitMeeting, createBusy && styles.btnDisabled]}
               onPress={() => void submitCreateMeeting()}
@@ -1515,5 +1562,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  inputError: {
+    borderColor: '#CC0000',
+    borderWidth: 1,
+  },
+  mtErrorText: {
+    fontSize: 12,
+    color: '#CC0000',
+    marginTop: -4,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  mtFormErrorText: {
+    fontSize: 13,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: 8,
   },
 });

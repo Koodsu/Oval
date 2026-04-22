@@ -16,6 +16,74 @@ const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
 const EXPIRED = 'EXPIRED';
 
+const OSU_CAMPUS_POLYGON = [
+  // North - Lane Ave
+  { latitude: 40.0015, longitude: -83.0190 },
+  { latitude: 40.0015, longitude: -83.0350 },
+  { latitude: 40.0015, longitude: -83.0480 },
+  { latitude: 40.0020, longitude: -83.0580 },
+  // West - Olentangy River / ARC / Athletic facilities
+  { latitude: 40.0020, longitude: -83.0630 },
+  { latitude: 40.0000, longitude: -83.0680 },
+  { latitude: 39.9980, longitude: -83.0700 },
+  { latitude: 39.9960, longitude: -83.0690 },
+  { latitude: 39.9940, longitude: -83.0660 },
+  { latitude: 39.9920, longitude: -83.0620 },
+  { latitude: 39.9900, longitude: -83.0580 },
+  // South - 11th Ave
+  { latitude: 39.9880, longitude: -83.0540 },
+  { latitude: 39.9878, longitude: -83.0450 },
+  { latitude: 39.9878, longitude: -83.0350 },
+  { latitude: 39.9878, longitude: -83.0190 },
+  // East - High Street
+  { latitude: 39.9900, longitude: -83.0190 },
+  { latitude: 39.9930, longitude: -83.0190 },
+  { latitude: 39.9960, longitude: -83.0190 },
+  { latitude: 39.9990, longitude: -83.0190 },
+  { latitude: 40.0015, longitude: -83.0190 },
+];
+
+// Ray-casting point-in-polygon check
+function isInsideCampus(lat: number, lng: number): boolean {
+  let inside = false;
+  const n = OSU_CAMPUS_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = OSU_CAMPUS_POLYGON[i].longitude;
+    const yi = OSU_CAMPUS_POLYGON[i].latitude;
+    const xj = OSU_CAMPUS_POLYGON[j].longitude;
+    const yj = OSU_CAMPUS_POLYGON[j].latitude;
+    const intersect =
+      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// Haversine distance in metres
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Round coordinates to 3 decimal places (~100m accuracy) for non-members
+function approximateCoords<T extends { latitude: number | null; longitude: number | null }>(
+  pod: T
+): T {
+  if (pod.latitude == null || pod.longitude == null) return pod;
+  return {
+    ...pod,
+    latitude: Math.round(pod.latitude * 1000) / 1000,
+    longitude: Math.round(pod.longitude * 1000) / 1000,
+  };
+}
+
 function getMaxMeetupTime(): Date {
   const max = new Date();
   max.setDate(max.getDate() + 7);
@@ -54,8 +122,11 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
 
 // GET /pods/feed — cross-activity discovery feed, soonest first then most-joined
 router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { category, limit = '20' } = req.query;
+  const { category, limit = '20', lat, lng } = req.query;
   const userId = req.user!.userId;
+  const userLat = lat && typeof lat === 'string' ? parseFloat(lat) : null;
+  const userLng = lng && typeof lng === 'string' ? parseFloat(lng) : null;
+  const hasUserLocation = userLat !== null && userLng !== null && !isNaN(userLat) && !isNaN(userLng);
   const now = new Date();
 
   try {
@@ -127,7 +198,32 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       return b.members.length - a.members.length;
     });
 
-    const result = pods.map((p) => parsePodMembers({ ...p, recommended: preferredActivityIds.has(p.activityId) }));
+    // Optional distance sort when caller provides their location
+    if (hasUserLocation) {
+      pods.sort((a, b) => {
+        const aHasCoords = a.latitude != null && a.longitude != null;
+        const bHasCoords = b.latitude != null && b.longitude != null;
+        if (!aHasCoords && !bHasCoords) return 0;
+        if (!aHasCoords) return 1;
+        if (!bHasCoords) return -1;
+        return (
+          haversineDistance(userLat!, userLng!, a.latitude!, a.longitude!) -
+          haversineDistance(userLat!, userLng!, b.latitude!, b.longitude!)
+        );
+      });
+    }
+
+    const memberPodIds = new Set(
+      (await prisma.podMember.findMany({ where: { userId }, select: { podId: true } })).map(
+        (m) => m.podId
+      )
+    );
+
+    const result = pods.map((p) => {
+      const parsed = parsePodMembers({ ...p, recommended: preferredActivityIds.has(p.activityId) });
+      if (!memberPodIds.has(p.id)) return approximateCoords(parsed);
+      return parsed;
+    });
 
     res.json(result);
   } catch (err) {
@@ -139,7 +235,10 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
 // GET /pods?activityId=&sort=
 // Returns upcoming FORMING pods for an activity (not locked/completed/expired — public browse)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { activityId, sort } = req.query;
+  const { activityId, sort, lat, lng } = req.query;
+  const userLat = lat && typeof lat === 'string' ? parseFloat(lat) : null;
+  const userLng = lng && typeof lng === 'string' ? parseFloat(lng) : null;
+  const hasUserLocation = userLat !== null && userLng !== null && !isNaN(userLat) && !isNaN(userLng);
 
   if (!activityId || typeof activityId !== 'string') {
     res.status(400).json({ error: 'activityId query parameter is required' });
@@ -179,7 +278,37 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       result = [...pods].sort((a, b) => b.members.length - a.members.length);
     }
 
-    res.json(result.map(parsePodMembers));
+    if (hasUserLocation) {
+      result = [...result].sort((a, b) => {
+        const aHasCoords = a.latitude != null && a.longitude != null;
+        const bHasCoords = b.latitude != null && b.longitude != null;
+        if (!aHasCoords && !bHasCoords) return 0;
+        if (!aHasCoords) return 1;
+        if (!bHasCoords) return -1;
+        return (
+          haversineDistance(userLat!, userLng!, a.latitude!, a.longitude!) -
+          haversineDistance(userLat!, userLng!, b.latitude!, b.longitude!)
+        );
+      });
+    }
+
+    const userId = req.user!.userId;
+    const memberPodIds = new Set(
+      (
+        await prisma.podMember.findMany({
+          where: { userId, podId: { in: result.map((p) => p.id) } },
+          select: { podId: true },
+        })
+      ).map((m) => m.podId)
+    );
+
+    res.json(
+      result.map((p) => {
+        const parsed = parsePodMembers(p);
+        if (!memberPodIds.has(p.id)) return approximateCoords(parsed);
+        return parsed;
+      })
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -242,6 +371,16 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    // Optional coordinates
+    const rawLat = req.body.latitude != null ? parseFloat(req.body.latitude) : null;
+    const rawLng = req.body.longitude != null ? parseFloat(req.body.longitude) : null;
+    const hasCoords = rawLat !== null && rawLng !== null && !isNaN(rawLat) && !isNaN(rawLng);
+
+    if (hasCoords && !isInsideCampus(rawLat!, rawLng!)) {
+      res.status(400).json({ error: 'Location must be on or near OSU campus' });
+      return;
+    }
+
     let meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     if (req.body.meetupTime) {
       const parsed = new Date(req.body.meetupTime);
@@ -262,15 +401,19 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       meetupTime = parsed;
     }
 
-    let allowed = getLocationsForCategory(activity.category);
-    if (activity.defaultLocation && !allowed.includes(activity.defaultLocation)) {
-      allowed = [activity.defaultLocation, ...allowed];
-    }
-    if (allowed.length > 0 && !allowed.includes(locationInput)) {
-      res.status(400).json({
-        error: 'Invalid location. Must be from the activity category list.',
-      });
-      return;
+    // Only enforce the location allowlist when the user did NOT pick coordinates on a map
+    // (map already constrains to campus; allowlist is for the old chip-picker flow)
+    if (!hasCoords) {
+      let allowed = getLocationsForCategory(activity.category);
+      if (activity.defaultLocation && !allowed.includes(activity.defaultLocation)) {
+        allowed = [activity.defaultLocation, ...allowed];
+      }
+      if (allowed.length > 0 && !allowed.includes(locationInput)) {
+        res.status(400).json({
+          error: 'Invalid location. Must be from the activity category list.',
+        });
+        return;
+      }
     }
 
     const newPod = await prisma.pod.create({
@@ -283,6 +426,8 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         maxMembers,
         status: FORMING,
         creatorId: userId,
+        latitude: hasCoords ? rawLat : null,
+        longitude: hasCoords ? rawLng : null,
       },
     });
 
@@ -624,14 +769,17 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
         ? myWaitlistEntry.position
         : null;
 
-    res.json(parsePodMembers({
+    const isMember = pod.members.some((m) => m.userId === userId);
+    const podData = parsePodMembers({
       ...pod,
       noShowUserIds,
       averageRating,
       myRecap,
       waitlistCount,
       myWaitlistPosition,
-    }));
+    });
+
+    res.json(isMember ? podData : approximateCoords(podData));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

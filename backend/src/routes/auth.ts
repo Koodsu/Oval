@@ -14,6 +14,20 @@ const ALLOWED_EMAIL_SUFFIXES = ['@osu.edu', '@buckeyemail.osu.edu'];
 const VERIFY_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
+
+const RESEND_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const RESEND_RATE_LIMIT_MAX = 3;
+const resendAttempts = new Map<string, number[]>();
+
+function checkResendRateLimit(email: string): boolean {
+  const now = Date.now();
+  const windowStart = now - RESEND_RATE_LIMIT_WINDOW_MS;
+  const attempts = (resendAttempts.get(email) ?? []).filter((t) => t > windowStart);
+  if (attempts.length >= RESEND_RATE_LIMIT_MAX) return false;
+  attempts.push(now);
+  resendAttempts.set(email, attempts);
+  return true;
+}
 // Allows letters, spaces, &, /, -, comma, period, parentheses — prevents garbage like "xoixhsiohxo"
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 
@@ -139,6 +153,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     });
 
     // Best-effort — don't block registration if email fails
+    console.log(`[auth] Sending verification email to ${user.email} at ${new Date().toISOString()}`);
     sendVerificationEmail(user.email, code).catch((err) =>
       console.error('[auth] Failed to send verification email:', err)
     );
@@ -267,6 +282,22 @@ router.post('/resend-verification', requireAuth, async (req: AuthRequest, res: R
       return;
     }
 
+    // Idempotency: if a code was generated < 30s ago, don't send again
+    const CODE_RECENT_THRESHOLD_MS = 30_000;
+    if (user.emailVerifyExpiry) {
+      const codeAge = VERIFY_CODE_TTL_MS - (user.emailVerifyExpiry.getTime() - Date.now());
+      if (codeAge < CODE_RECENT_THRESHOLD_MS) {
+        res.json({ message: 'Verification code sent' });
+        return;
+      }
+    }
+
+    // Rate limit: max 3 resends per 10 minutes per email
+    if (!checkResendRateLimit(user.email)) {
+      res.status(429).json({ error: 'Too many attempts. Please wait before requesting another code.' });
+      return;
+    }
+
     const code = generateVerifyCode();
     const expiry = new Date(Date.now() + VERIFY_CODE_TTL_MS);
 
@@ -275,6 +306,7 @@ router.post('/resend-verification', requireAuth, async (req: AuthRequest, res: R
       data: { emailVerifyCode: code, emailVerifyExpiry: expiry },
     });
 
+    console.log(`[auth] Resending verification email to ${user.email} at ${new Date().toISOString()}`);
     sendVerificationEmail(user.email, code).catch((err) =>
       console.error('[auth] Failed to resend verification email:', err)
     );

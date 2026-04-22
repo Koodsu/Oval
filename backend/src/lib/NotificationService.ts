@@ -9,6 +9,10 @@ interface NotificationPreferences {
   meetupReminder: boolean;
   recapPrompt: boolean;
   waitlistSpot: boolean;
+  clubMeetingCreated: boolean;
+  clubKick: boolean;
+  clubRoleChange: boolean;
+  clubAttendanceOpen: boolean;
 }
 
 export const DEFAULT_PREFS: NotificationPreferences = {
@@ -17,6 +21,10 @@ export const DEFAULT_PREFS: NotificationPreferences = {
   meetupReminder: true,
   recapPrompt: true,
   waitlistSpot: true,
+  clubMeetingCreated: true,
+  clubKick: true,
+  clubRoleChange: true,
+  clubAttendanceOpen: true,
 };
 
 export function parsePreferences(raw: string | null | undefined): NotificationPreferences {
@@ -296,6 +304,145 @@ export const NotificationService = {
       }
     } catch (err) {
       console.error('[NotificationService] expireStaleWaitlistEntries error:', err);
+    }
+  },
+
+  /** Notify all club members (except creator) when a new meeting is created. */
+  async notifyClubMeetingCreated(meetingId: string, creatorId: string): Promise<void> {
+    try {
+      const meeting = await prisma.clubMeeting.findUnique({
+        where: { id: meetingId },
+        include: {
+          club: {
+            include: {
+              members: {
+                include: {
+                  user: { select: { id: true, pushToken: true, notificationPreferences: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!meeting) return;
+
+      const meetingDate = new Date(meeting.meetingTime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+
+      const messages: ExpoPushMessage[] = [];
+      for (const member of meeting.club.members) {
+        if (member.user.id === creatorId) continue;
+        if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
+        const prefs = parsePreferences(member.user.notificationPreferences);
+        if (!prefs.clubMeetingCreated) continue;
+        messages.push({
+          to: member.user.pushToken,
+          title: meeting.club.name,
+          body: `New meeting: ${meeting.title} on ${meetingDate}`,
+          data: { type: 'club_meeting_created', clubId: meeting.clubId, meetingId },
+          sound: 'default',
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubMeetingCreated error:', err);
+    }
+  },
+
+  /** Notify a member that they were removed from a club. */
+  async notifyClubKick(kickedUserId: string, clubId: string): Promise<void> {
+    try {
+      const [club, user] = await Promise.all([
+        prisma.club.findUnique({ where: { id: clubId }, select: { name: true } }),
+        prisma.user.findUnique({
+          where: { id: kickedUserId },
+          select: { pushToken: true, notificationPreferences: true },
+        }),
+      ]);
+      if (!club || !user) return;
+      if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) return;
+      const prefs = parsePreferences(user.notificationPreferences);
+      if (!prefs.clubKick) return;
+      await send([
+        {
+          to: user.pushToken,
+          title: club.name,
+          body: `You have been removed from ${club.name}`,
+          data: { type: 'club_kick', clubId },
+          sound: 'default',
+        },
+      ]);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubKick error:', err);
+    }
+  },
+
+  /** Notify a member that their role in a club has changed. */
+  async notifyClubRoleChange(targetUserId: string, clubId: string, newRole: string): Promise<void> {
+    try {
+      const [club, user] = await Promise.all([
+        prisma.club.findUnique({ where: { id: clubId }, select: { name: true } }),
+        prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { pushToken: true, notificationPreferences: true },
+        }),
+      ]);
+      if (!club || !user) return;
+      if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) return;
+      const prefs = parsePreferences(user.notificationPreferences);
+      if (!prefs.clubRoleChange) return;
+      const roleLabel = newRole === 'OFFICER' ? 'Officer' : 'Member';
+      await send([
+        {
+          to: user.pushToken,
+          title: club.name,
+          body: `Your role in ${club.name} has been updated to ${roleLabel}`,
+          data: { type: 'club_role_change', clubId, newRole },
+          sound: 'default',
+        },
+      ]);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubRoleChange error:', err);
+    }
+  },
+
+  /** Notify all Going RSVPs when attendance is opened for a meeting. */
+  async notifyClubAttendanceOpen(meetingId: string): Promise<void> {
+    try {
+      const meeting = await prisma.clubMeeting.findUnique({
+        where: { id: meetingId },
+        include: {
+          club: { select: { name: true } },
+          attendees: {
+            where: { status: 'GOING' },
+            include: {
+              user: { select: { id: true, pushToken: true, notificationPreferences: true } },
+            },
+          },
+        },
+      });
+      if (!meeting) return;
+
+      const messages: ExpoPushMessage[] = [];
+      for (const attendee of meeting.attendees) {
+        if (!attendee.user.pushToken || !Expo.isExpoPushToken(attendee.user.pushToken)) continue;
+        const prefs = parsePreferences(attendee.user.notificationPreferences);
+        if (!prefs.clubAttendanceOpen) continue;
+        messages.push({
+          to: attendee.user.pushToken,
+          title: meeting.club.name,
+          body: `${meeting.club.name} meeting started — check in now!`,
+          data: { type: 'club_attendance_open', meetingId },
+          sound: 'default',
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubAttendanceOpen error:', err);
     }
   },
 

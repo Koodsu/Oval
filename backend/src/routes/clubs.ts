@@ -6,12 +6,15 @@ import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { MEMBER_USER_SELECT, parseMemberTags } from '../lib/joinExistingPod';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+import { NotificationService } from '../lib/NotificationService';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
 const CLUB_AVATAR_DIR = path.join(__dirname, '../../uploads/club-avatars');
-if (!fs.existsSync(CLUB_AVATAR_DIR)) {
+try {
   fs.mkdirSync(CLUB_AVATAR_DIR, { recursive: true });
+} catch {
+  // Vercel read-only filesystem — ignore
 }
 
 const clubAvatarStorage = multer.diskStorage({
@@ -35,6 +38,48 @@ const clubAvatarUpload = multer({
 });
 
 const router = Router();
+
+// ── OSU Campus bounds helpers ──────────────────────────────────────────────────
+
+const OSU_CAMPUS_POLYGON = [
+  { lat: 40.0015, lng: -83.0190 },
+  { lat: 40.0010, lng: -83.0340 },
+  { lat: 40.0020, lng: -83.0480 },
+  { lat: 40.0010, lng: -83.0580 },
+  { lat: 39.9990, lng: -83.0650 },
+  { lat: 39.9960, lng: -83.0700 },
+  { lat: 39.9930, lng: -83.0680 },
+  { lat: 39.9900, lng: -83.0620 },
+  { lat: 39.9878, lng: -83.0540 },
+  { lat: 39.9880, lng: -83.0430 },
+  { lat: 39.9890, lng: -83.0330 },
+  { lat: 39.9900, lng: -83.0240 },
+  { lat: 39.9920, lng: -83.0190 },
+  { lat: 39.9950, lng: -83.0190 },
+  { lat: 40.0015, lng: -83.0190 },
+];
+
+function isInsideOsuCampus(lat: number, lng: number): boolean {
+  let inside = false;
+  const n = OSU_CAMPUS_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = OSU_CAMPUS_POLYGON[i].lng;
+    const yi = OSU_CAMPUS_POLYGON[i].lat;
+    const xj = OSU_CAMPUS_POLYGON[j].lng;
+    const yj = OSU_CAMPUS_POLYGON[j].lat;
+    const intersect =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function generateAttendanceCode(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// ── Role constants ──────────────────────────────────────────────────────────────
 
 const ROLE_ADMIN = 'ADMIN';
 const ROLE_OFFICER = 'OFFICER';
@@ -164,9 +209,13 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   try {
     const where: {
       isPublic: boolean;
+      OR?: Array<{ isPrivate: boolean } | { members: { some: { userId: string } } }>;
       category?: string;
       name?: { contains: string; mode: 'insensitive' };
-    } = { isPublic: true };
+    } = {
+      isPublic: true,
+      OR: [{ isPrivate: false }, { members: { some: { userId } } }],
+    };
 
     if (category && typeof category === 'string' && category.trim()) {
       where.category = category.trim();
@@ -207,6 +256,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
         emoji: c.emoji,
         isVerified: c.isVerified,
         isPublic: c.isPublic,
+        isPrivate: c.isPrivate,
         university: c.university,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -514,14 +564,14 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
   try {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { id: true, isPublic: true, members: { where: { userId }, select: { userId: true } } },
+      select: { id: true, isPublic: true, isPrivate: true, members: { where: { userId }, select: { userId: true } } },
     });
 
     if (!club) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
-    if (!club.isPublic && club.members.length === 0) {
+    if ((!club.isPublic || club.isPrivate) && club.members.length === 0) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
@@ -581,6 +631,137 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
   }
 });
 
+// POST /clubs/:id/meetings/:meetingId/attendance/open — OFFICER/ADMIN only
+router.post(
+  '/:id/meetings/:meetingId/attendance/open',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, meetingId } = req.params;
+
+    try {
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership || !canCreateMeetings(membership.role)) {
+        res.status(403).json({ error: 'Only officers and admins can open attendance' });
+        return;
+      }
+
+      const meeting = await prisma.clubMeeting.findFirst({ where: { id: meetingId, clubId } });
+      if (!meeting) {
+        res.status(404).json({ error: 'Meeting not found' });
+        return;
+      }
+
+      const code = generateAttendanceCode();
+      await prisma.clubMeeting.update({
+        where: { id: meetingId },
+        data: { attendanceOpen: true, attendanceCode: code },
+      });
+
+      NotificationService.notifyClubAttendanceOpen(meetingId).catch(() => {});
+
+      res.json({ attendanceCode: code });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// POST /clubs/:id/meetings/:meetingId/attendance/close — OFFICER/ADMIN only
+router.post(
+  '/:id/meetings/:meetingId/attendance/close',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, meetingId } = req.params;
+
+    try {
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership || !canCreateMeetings(membership.role)) {
+        res.status(403).json({ error: 'Only officers and admins can close attendance' });
+        return;
+      }
+
+      const meeting = await prisma.clubMeeting.findFirst({ where: { id: meetingId, clubId } });
+      if (!meeting) {
+        res.status(404).json({ error: 'Meeting not found' });
+        return;
+      }
+
+      await prisma.clubMeeting.update({
+        where: { id: meetingId },
+        data: { attendanceOpen: false, attendanceCode: null },
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// POST /clubs/:id/meetings/:meetingId/attendance/checkin — any member
+router.post(
+  '/:id/meetings/:meetingId/attendance/checkin',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, meetingId } = req.params;
+    const { code } = req.body ?? {};
+
+    if (typeof code !== 'string' || !code.trim()) {
+      res.status(400).json({ error: 'code is required' });
+      return;
+    }
+
+    try {
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership) {
+        res.status(403).json({ error: 'You must be a club member to check in' });
+        return;
+      }
+
+      const meeting = await prisma.clubMeeting.findFirst({ where: { id: meetingId, clubId } });
+      if (!meeting) {
+        res.status(404).json({ error: 'Meeting not found' });
+        return;
+      }
+
+      if (!meeting.attendanceOpen) {
+        res.status(400).json({ error: 'Attendance is not currently open' });
+        return;
+      }
+      if (!meeting.attendanceCode || code.trim().toUpperCase() !== meeting.attendanceCode) {
+        res.status(400).json({ error: 'Invalid attendance code' });
+        return;
+      }
+
+      await prisma.clubMeetingAttendee.upsert({
+        where: { meetingId_userId: { meetingId, userId } },
+        create: { meetingId, userId, status: STATUS_ATTENDED },
+        update: { status: STATUS_ATTENDED },
+      });
+
+      const attendedCount = await prisma.clubMeetingAttendee.count({
+        where: { meetingId, status: STATUS_ATTENDED },
+      });
+
+      res.json({ ok: true, attendedCount });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // GET /clubs/:id/meetings/:meetingId/attendance — OFFICER and ADMIN only
 router.get(
   '/:id/meetings/:meetingId/attendance',
@@ -634,7 +815,12 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
   try {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { id: true, isPublic: true, members: { where: { userId }, select: { userId: true } } },
+      select: {
+        id: true,
+        isPublic: true,
+        isPrivate: true,
+        members: { where: { userId }, select: { userId: true, role: true } },
+      },
     });
 
     if (!club) {
@@ -642,7 +828,8 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
       return;
     }
     const isMember = club.members.length > 0;
-    if (!club.isPublic && !isMember) {
+    const myRole = isMember ? club.members[0].role : null;
+    if ((!club.isPublic || club.isPrivate) && !isMember) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
@@ -697,12 +884,15 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
       }
     }
 
+    const canSeeCode = myRole === ROLE_ADMIN || myRole === ROLE_OFFICER;
+
     res.json(
       meetings.map((m) => {
         const rsvpCounts = rsvpBuckets.get(m.id) ?? { going: 0, maybe: 0, notGoing: 0 };
         const myRsvp = myRsvpByMeeting.get(m.id) ?? null;
         return {
           ...m,
+          attendanceCode: canSeeCode ? m.attendanceCode : null,
           rsvpCounts,
           myRsvp,
           /** People who RSVP'd Going (primary display count). */
@@ -721,7 +911,7 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
   const body = req.body ?? {};
-  const { title, location, meetingTime, description, isPublic } = body;
+  const { title, location, meetingTime, description, isPublic, latitude, longitude } = body;
 
   if (typeof title !== 'string' || !title.trim()) {
     res.status(400).json({ error: 'title is required' });
@@ -766,6 +956,21 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
     publicFlag = isPublic;
   }
 
+  let lat: number | null = null;
+  let lng: number | null = null;
+  if (latitude !== undefined || longitude !== undefined) {
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      res.status(400).json({ error: 'latitude and longitude must be numbers' });
+      return;
+    }
+    if (!isInsideOsuCampus(latitude, longitude)) {
+      res.status(400).json({ error: 'Meeting location must be on OSU campus' });
+      return;
+    }
+    lat = latitude;
+    lng = longitude;
+  }
+
   try {
     const membership = await prisma.clubMember.findUnique({
       where: { clubId_userId: { clubId, userId } },
@@ -786,11 +991,15 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
           typeof description === 'string' && description.trim() ? description.trim() : null,
         isPublic: publicFlag,
         createdById: userId,
+        latitude: lat,
+        longitude: lng,
       },
       include: {
         createdBy: { select: { id: true, name: true, avatarUrl: true } },
       },
     });
+
+    NotificationService.notifyClubMeetingCreated(meeting.id, userId).catch(() => {});
 
     res.status(201).json({
       ...meeting,
@@ -889,6 +1098,100 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
   }
 });
 
+// GET /clubs/:id/officer-messages — OFFICER/ADMIN only
+router.get('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership) {
+      res.status(403).json({ error: 'You must be a club member' });
+      return;
+    }
+    if (!canCreateMeetings(membership.role)) {
+      res.status(403).json({ error: 'This channel is for officers and admins only' });
+      return;
+    }
+
+    const messages = await prisma.clubOfficerMessage.findMany({
+      where: { clubId },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const typingUserIds = getTypingUserIds('club-officer', clubId, userId);
+    res.json({ messages, typingUserIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/officer-messages — OFFICER/ADMIN only
+router.post('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const { content } = req.body ?? {};
+
+  if (typeof content !== 'string' || !content.trim()) {
+    res.status(400).json({ error: 'content is required' });
+    return;
+  }
+  if (content.trim().length > MAX_CLUB_MESSAGE_LENGTH) {
+    res.status(400).json({ error: `Message too long (max ${MAX_CLUB_MESSAGE_LENGTH} characters)` });
+    return;
+  }
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership) {
+      res.status(403).json({ error: 'You must be a club member' });
+      return;
+    }
+    if (!canCreateMeetings(membership.role)) {
+      res.status(403).json({ error: 'This channel is for officers and admins only' });
+      return;
+    }
+
+    const message = await prisma.clubOfficerMessage.create({
+      data: { clubId, userId, content: content.trim() },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+
+    res.status(201).json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/officer-typing — OFFICER/ADMIN only
+router.post('/:id/officer-typing', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership || !canCreateMeetings(membership.role)) {
+      res.status(403).json({ error: 'This channel is for officers and admins only' });
+      return;
+    }
+
+    setTyping('club-officer', clubId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PATCH /clubs/:id/members/:memberUserId — ADMIN only (MEMBER↔OFFICER)
 router.patch(
   '/:id/members/:memberUserId',
@@ -909,6 +1212,7 @@ router.patch(
         res.status(result.status).json({ error: result.error });
         return;
       }
+      NotificationService.notifyClubRoleChange(memberUserId, clubId, roleRaw).catch(() => {});
       res.json(result.member);
     } catch (err) {
       console.error(err);
@@ -960,6 +1264,7 @@ router.delete(
       }
 
       await prisma.clubMember.delete({ where: { id: target.id } });
+      NotificationService.notifyClubKick(memberUserId, clubId).catch(() => {});
       res.json({ ok: true });
     } catch (err) {
       console.error(err);

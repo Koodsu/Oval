@@ -29,8 +29,10 @@ const router = Router();
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/avatars');
 // Resolved once at startup; used to guard against path traversal when deleting old avatars.
 const UPLOAD_DIR_RESOLVED = path.resolve(UPLOAD_DIR);
-if (!fs.existsSync(UPLOAD_DIR)) {
+try {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch {
+  // Vercel read-only filesystem — ignore
 }
 
 /**
