@@ -23,13 +23,7 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker",
-      [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": ""
-        }
-      ]
+      "@react-native-community/datetimepicker"
     ],
     "ios": {
       "supportsTablet": true,
