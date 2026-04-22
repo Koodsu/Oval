@@ -57,6 +57,7 @@ model User {
   clubMeetingAttendees     ClubMeetingAttendee[]
   clubAnnouncements        ClubAnnouncement[]
   clubMessages             ClubMessage[]
+  clubOfficerMessages      ClubOfficerMessage[]
 }
 
 model Block {
@@ -98,6 +99,8 @@ model Pod {
   creatorId        String?
   createdAt        DateTime  @default(now())
   recapNotifiedAt  DateTime?
+  latitude         Float?
+  longitude        Float?
 
   activity      Activity       @relation(fields: [activityId], references: [id], onDelete: Restrict)
   creator       User?          @relation(fields: [creatorId], references: [id], onDelete: SetNull)
@@ -347,6 +350,7 @@ model Club {
   avatarUrl   String?
   isVerified  Boolean  @default(false)
   isPublic    Boolean  @default(true)
+  isPrivate   Boolean  @default(false)
   university  String   @default("OSU")
   createdById String
   createdAt   DateTime @default(now())
@@ -356,9 +360,11 @@ model Club {
   members       ClubMember[]
   meetings      ClubMeeting[]
   announcements ClubAnnouncement[]
-  messages      ClubMessage[]
+  messages        ClubMessage[]
+  officerMessages ClubOfficerMessage[]
 
   @@index([isPublic, category])
+  @@index([isPrivate, category])
 }
 
 model ClubMember {
@@ -383,9 +389,13 @@ model ClubMeeting {
   description String?
   location    String
   meetingTime DateTime
-  isPublic    Boolean  @default(true)
-  createdById String
-  createdAt   DateTime @default(now())
+  isPublic        Boolean  @default(true)
+  createdById     String
+  createdAt       DateTime @default(now())
+  latitude        Float?
+  longitude       Float?
+  attendanceOpen  Boolean  @default(false)
+  attendanceCode  String?
 
   club      Club                    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   createdBy User                    @relation("MeetingCreator", fields: [createdById], references: [id])
@@ -393,6 +403,7 @@ model ClubMeeting {
 
   @@index([clubId, meetingTime])
   @@index([meetingTime])
+  @@index([createdById])
 }
 
 model ClubMeetingAttendee {
@@ -424,6 +435,20 @@ model ClubAnnouncement {
 }
 
 model ClubMessage {
+  id        String   @id @default(uuid())
+  clubId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, createdAt])
+  @@index([userId])
+}
+
+model ClubOfficerMessage {
   id        String   @id @default(uuid())
   clubId    String
   userId    String

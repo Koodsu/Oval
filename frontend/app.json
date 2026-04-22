@@ -23,7 +23,13 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": ""
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -33,7 +39,8 @@
         "applinks:joinbridgeapp.com"
       ],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Bridge uses your location to show pods forming near you on campus."
       }
     },
     "android": {

@@ -285,6 +285,8 @@ export interface Pod {
   myRecap?: PodRecap | null;
   waitlistCount?: number;
   myWaitlistPosition?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface PeopleYouMetUser {

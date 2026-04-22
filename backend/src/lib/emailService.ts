@@ -41,9 +41,8 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
   });
 
   if (result.error) {
-    console.warn(`[emailService] Resend failed for ${to}: ${result.error.message}. Use code from terminal above.`);
-    return;
+    throw new Error(`Resend API error for ${to}: ${result.error.message}`);
   }
 
-  console.log(`[emailService] Email sent successfully to ${to} (id: ${result.data?.id})`);
+  console.log(`[emailService] Email sent successfully to ${to} (id: ${result.data?.id}) at ${new Date().toISOString()}`);
 }

@@ -38,8 +38,10 @@ import Avatar from '../components/Avatar';
 import ReportModal from '../components/ReportModal';
 import RecapPromptModal from '../components/RecapPromptModal';
 import { MessageBubble, ChatInput, DateSeparator, EmptyChatState, ReactionPicker, TypingIndicator } from '../components/chat';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { colors, spacing, radii, shadows, typography, cardShadowCream } from '../theme';
 import { formatPodTime } from '../utils/format';
+import { OSU_CAMPUS_POLYGON, SCARLET } from '../constants/campusMap';
 import { buildPodChatList } from '../utils/podChatList';
 import {
   parseTypingUsersFromPresenceState,
@@ -654,16 +656,72 @@ export default function PodScreen({ route, navigation }: Props) {
           <View style={styles.metaRow}>
             <Ionicons name="time-outline" size={14} color={colors.textMuted} />
             <Text style={styles.metaText}>{formatPodTime(pod.meetupTime)}</Text>
-            <View style={styles.metaDot} />
-            <Ionicons
-              name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
-              size={14}
-              color={colors.textMuted}
-            />
-            <Text style={styles.metaText} numberOfLines={1}>
-              {pod.location}
-            </Text>
           </View>
+
+          {/* Location: static map if coords available, text fallback otherwise */}
+          {(() => {
+            const isMember = pod.members.some((m) => m.userId === user?.id);
+            if (pod.latitude != null && pod.longitude != null) {
+              if (pod.locationType === 'private' && !isMember) {
+                return (
+                  <View style={styles.locationPrivatePlaceholder}>
+                    <Text style={styles.locationPrivateText}>📍 Location revealed after joining</Text>
+                  </View>
+                );
+              }
+              return (
+                <View style={styles.locationMapWrap}>
+                  <MapView
+                    provider={PROVIDER_DEFAULT}
+                    style={styles.locationMap}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                    rotateEnabled={false}
+                    pitchEnabled={false}
+                    region={{
+                      latitude: pod.latitude,
+                      longitude: pod.longitude,
+                      latitudeDelta: 0.003,
+                      longitudeDelta: 0.006,
+                    }}
+                  >
+                    <Polygon
+                      coordinates={OSU_CAMPUS_POLYGON}
+                      strokeColor={SCARLET}
+                      strokeWidth={2}
+                      fillColor="rgba(204,0,0,0.06)"
+                    />
+                    <Marker
+                      coordinate={{ latitude: pod.latitude, longitude: pod.longitude }}
+                      pinColor={SCARLET}
+                    />
+                  </MapView>
+                  <View style={styles.locationMapLabelRow}>
+                    <Ionicons
+                      name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+                      size={13}
+                      color={colors.textMuted}
+                    />
+                    <Text style={styles.locationMapLabel} numberOfLines={1}>
+                      {pod.location}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+            return (
+              <View style={styles.metaRow}>
+                <Ionicons
+                  name={pod.locationType === 'private' ? 'location-outline' : 'business-outline'}
+                  size={14}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.metaText} numberOfLines={1}>
+                  {pod.location}
+                </Text>
+              </View>
+            );
+          })()}
 
           <ScrollView
             horizontal
@@ -1214,6 +1272,38 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     flexWrap: 'nowrap',
     overflow: 'hidden',
+  },
+  locationMapWrap: {
+    marginBottom: spacing.sm,
+  },
+  locationMap: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+  },
+  locationMapLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  locationMapLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textMuted,
+    flexShrink: 1,
+  },
+  locationPrivatePlaceholder: {
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: '#F5F0E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  locationPrivateText: {
+    fontSize: 14,
+    color: '#666666',
   },
   metaText: {
     fontSize: 13,

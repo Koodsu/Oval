@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { register, API_USER_MESSAGE } from '../api';
+import { register } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import MajorPickerModal from '../components/MajorPickerModal';
@@ -24,6 +23,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 const CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const CUSTOM_MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OSU_SUFFIXES = ['@osu.edu', '@buckeyemail.osu.edu'];
 
 export default function RegisterScreen({ navigation }: Props) {
   const { signIn } = useAuth();
@@ -31,21 +32,29 @@ export default function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [classYear, setClassYear] = useState('');
-  // pickedMajor = the value selected in the modal (could be 'Other' or a real major)
   const [pickedMajor, setPickedMajor] = useState('');
-  // customMajor = free text typed when 'Other' is selected
   const [customMajor, setCustomMajor] = useState('');
-  const [customMajorError, setCustomMajorError] = useState('');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // The actual major value to send: custom text if "Other", else the picked preset
+  // Error states
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [classYearError, setClassYearError] = useState('');
+  const [majorError, setMajorError] = useState('');
+  const [customMajorError, setCustomMajorError] = useState('');
+  const [formError, setFormError] = useState('');
+  // After first submit attempt, validate on each keystroke
+  const [submitted, setSubmitted] = useState(false);
+
   const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
 
   const handleMajorSelect = (value: string) => {
     setPickedMajor(value);
     setCustomMajorError('');
+    setMajorError('');
     setPickerVisible(false);
   };
 
@@ -58,40 +67,86 @@ export default function RegisterScreen({ navigation }: Props) {
     return '';
   };
 
+  const validateEmail = (value: string): string => {
+    const t = value.trim();
+    if (!t) return 'Email is required';
+    if (!EMAIL_REGEX.test(t)) return 'Please enter a valid email address';
+    const lower = t.toLowerCase();
+    if (!OSU_SUFFIXES.some((s) => lower.endsWith(s))) {
+      return 'Please use your OSU email (@osu.edu or @buckeyemail.osu.edu)';
+    }
+    return '';
+  };
+
+  const validateName = (value: string): string => {
+    const t = value.trim();
+    if (!t) return 'Name is required';
+    if (t.length < 2) return 'Please enter your full name';
+    return '';
+  };
+
+  const validatePassword = (value: string): string => {
+    if (!value) return 'Password is required';
+    if (value.length < 8) return 'Password must be at least 8 characters';
+    return '';
+  };
+
+  const handleNameChange = (v: string) => {
+    setName(v);
+    if (submitted) setNameError(validateName(v));
+  };
+
+  const handleEmailChange = (v: string) => {
+    setEmail(v);
+    if (submitted) setEmailError(validateEmail(v));
+  };
+
+  const handlePasswordChange = (v: string) => {
+    setPassword(v);
+    if (submitted) setPasswordError(validatePassword(v));
+  };
+
+  const handleClassYearPress = (year: string) => {
+    setClassYear(year);
+    if (submitted) setClassYearError('');
+  };
+
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password) {
-      Alert.alert('Error', 'All fields are required.');
-      return;
-    }
-    if (name.trim().length < 2) {
-      Alert.alert('Error', 'Name must be at least 2 characters.');
-      return;
-    }
-    if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters.');
-      return;
-    }
-    if (!classYear) {
-      Alert.alert('Error', 'Please select your class year.');
-      return;
-    }
-    if (!pickedMajor) {
-      Alert.alert('Error', 'Please select your major.');
-      return;
-    }
+    setSubmitted(true);
+    setFormError('');
+
+    const nErr = validateName(name);
+    const eErr = validateEmail(email);
+    const pErr = validatePassword(password);
+    const cyErr = classYear ? '' : 'Please select your class year';
+    const mErr = pickedMajor ? '' : 'Please select your major';
+    let cmErr = '';
     if (pickedMajor === 'Other') {
-      const err = validateCustomMajor(customMajor);
-      if (err) {
-        setCustomMajorError(err);
-        return;
-      }
+      cmErr = validateCustomMajor(customMajor);
     }
+
+    setNameError(nErr);
+    setEmailError(eErr);
+    setPasswordError(pErr);
+    setClassYearError(cyErr);
+    setMajorError(mErr);
+    setCustomMajorError(cmErr);
+
+    if (nErr || eErr || pErr || cyErr || mErr || cmErr) return;
+
     setLoading(true);
     try {
       const { token, user } = await register(name.trim(), email.trim(), password, classYear, effectiveMajor);
       await signIn(token, user);
     } catch (err: unknown) {
-      Alert.alert('Registration Failed', API_USER_MESSAGE);
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'Email already in use') {
+        setEmailError('An account with this email already exists');
+      } else if (msg.includes('@osu.edu') || msg.toLowerCase().includes('osu')) {
+        setEmailError('Please use your OSU email (@osu.edu or @buckeyemail.osu.edu)');
+      } else {
+        setFormError('Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -125,20 +180,21 @@ export default function RegisterScreen({ navigation }: Props) {
           <View style={[styles.card, shadows.lg]}>
             <Text style={styles.cardTitle}>Create account</Text>
 
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, nameError ? styles.inputWrapperError : null]}>
               <Ionicons name="person-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Full name"
                 placeholderTextColor={colors.textTertiary}
                 value={name}
-                onChangeText={setName}
+                onChangeText={handleNameChange}
                 autoCorrect={false}
               />
             </View>
+            {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
 
             <Text style={styles.fieldLabel}>OSU Email</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, emailError ? styles.inputWrapperError : null]}>
               <Ionicons name="mail-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -147,15 +203,19 @@ export default function RegisterScreen({ navigation }: Props) {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={handleEmailChange}
                 autoCorrect={false}
               />
             </View>
-            <Text style={styles.emailHelper}>
-              Must be an @osu.edu or @buckeyemail.osu.edu address
-            </Text>
+            {emailError ? (
+              <Text style={styles.errorText}>{emailError}</Text>
+            ) : (
+              <Text style={styles.emailHelper}>
+                Must be an @osu.edu or @buckeyemail.osu.edu address
+              </Text>
+            )}
 
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, passwordError ? styles.inputWrapperError : null]}>
               <Ionicons name="lock-closed-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -163,7 +223,7 @@ export default function RegisterScreen({ navigation }: Props) {
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry={!showPassword}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={handlePasswordChange}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Ionicons
@@ -173,6 +233,7 @@ export default function RegisterScreen({ navigation }: Props) {
                 />
               </TouchableOpacity>
             </View>
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
             <Text style={styles.fieldLabel}>Class Year</Text>
             <View style={styles.pillRow}>
@@ -180,7 +241,7 @@ export default function RegisterScreen({ navigation }: Props) {
                 <TouchableOpacity
                   key={year}
                   style={[styles.pill, classYear === year && styles.pillSelected]}
-                  onPress={() => setClassYear(year)}
+                  onPress={() => handleClassYearPress(year)}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.pillText, classYear === year && styles.pillTextSelected]}>
@@ -189,9 +250,10 @@ export default function RegisterScreen({ navigation }: Props) {
                 </TouchableOpacity>
               ))}
             </View>
+            {classYearError ? <Text style={styles.errorText}>{classYearError}</Text> : null}
 
             <TouchableOpacity
-              style={styles.inputWrapper}
+              style={[styles.inputWrapper, majorError ? styles.inputWrapperError : null]}
               onPress={() => setPickerVisible(true)}
               activeOpacity={0.7}
             >
@@ -201,6 +263,7 @@ export default function RegisterScreen({ navigation }: Props) {
               </Text>
               <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
             </TouchableOpacity>
+            {majorError ? <Text style={styles.errorText}>{majorError}</Text> : null}
 
             {pickedMajor === 'Other' && (
               <>
@@ -230,6 +293,8 @@ export default function RegisterScreen({ navigation }: Props) {
               onSelect={handleMajorSelect}
               onClose={() => setPickerVisible(false)}
             />
+
+            {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
 
             <GradientButton
               title="Create Account"
@@ -317,8 +382,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
     paddingHorizontal: spacing.md,
+  },
+  inputWrapperError: {
+    borderColor: colors.scarlet,
   },
   inputIcon: {
     marginRight: spacing.sm,
@@ -355,7 +423,6 @@ const styles = StyleSheet.create({
   emailHelper: {
     fontSize: 12,
     color: '#999999',
-    marginTop: -spacing.sm,
     marginBottom: spacing.md,
     paddingHorizontal: spacing.xs,
   },
@@ -363,7 +430,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   pill: {
     paddingHorizontal: spacing.md,
@@ -385,17 +452,20 @@ const styles = StyleSheet.create({
   pillTextSelected: {
     color: colors.primary,
   },
-  inputWrapperError: {
-    borderColor: colors.red,
-  },
   inputPlaceholder: {
     color: colors.textTertiary,
   },
   errorText: {
     fontSize: 12,
-    color: colors.red,
-    marginTop: -spacing.sm,
+    color: colors.scarlet,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.xs,
+  },
+  formErrorText: {
+    fontSize: 13,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
   },
 });

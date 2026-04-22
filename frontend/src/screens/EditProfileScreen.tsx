@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { updateProfile, API_USER_MESSAGE } from '../api';
+import { updateProfile } from '../api';
 import { useAuth } from '../context/AuthContext';
 import GradientButton from '../components/GradientButton';
 import MajorPickerModal, { PRESET_MAJORS } from '../components/MajorPickerModal';
@@ -50,13 +49,19 @@ export default function EditProfileScreen({ navigation }: Props) {
 
   const [clubError, setClubError] = useState('');
   const [instagramError, setInstagramError] = useState('');
+  const [classYearError, setClassYearError] = useState('');
+  const [majorError, setMajorError] = useState('');
+  const [interestLimitMsg, setInterestLimitMsg] = useState('');
+  const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
+  const interestLimitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
 
   const handleMajorSelect = (value: string) => {
     setPickedMajor(value);
     setCustomMajorError('');
+    setMajorError('');
     setPickerVisible(false);
   };
 
@@ -100,33 +105,45 @@ export default function EditProfileScreen({ navigation }: Props) {
   };
 
   const handleInstagramChange = (value: string) => {
-    const stripped = value.replace(/^@/, '');
-    setInstagramHandle(stripped);
-    if (instagramError && stripped) {
-      setInstagramError(INSTAGRAM_REGEX.test(stripped) ? '' : 'Invalid handle — letters, numbers, periods, underscores only');
+    if (value.includes('@')) {
+      setInstagramError("Don't include the @ symbol");
+    } else if (instagramError === "Don't include the @ symbol") {
+      setInstagramError('');
+    } else if (instagramError && value) {
+      setInstagramError(INSTAGRAM_REGEX.test(value) ? '' : 'Invalid handle — letters, numbers, periods, underscores only');
     }
+    const stripped = value.replace(/@/g, '');
+    setInstagramHandle(stripped);
   };
 
   const handleSave = async () => {
+    setFormError('');
+    let hasError = false;
+
     if (!classYear) {
-      Alert.alert('Missing field', 'Please select your class year.');
-      return;
+      setClassYearError('Please select your class year');
+      hasError = true;
+    } else {
+      setClassYearError('');
     }
     if (!pickedMajor) {
-      Alert.alert('Missing field', 'Please select your major.');
-      return;
+      setMajorError('Please select your major');
+      hasError = true;
+    } else {
+      setMajorError('');
     }
     if (pickedMajor === 'Other') {
       const err = validateCustomMajor(customMajor);
       if (err) {
         setCustomMajorError(err);
-        return;
+        hasError = true;
       }
     }
     if (instagramHandle && !INSTAGRAM_REGEX.test(instagramHandle)) {
       setInstagramError('Invalid handle — letters, numbers, periods, underscores only');
-      return;
+      hasError = true;
     }
+    if (hasError) return;
 
     setLoading(true);
     try {
@@ -140,8 +157,8 @@ export default function EditProfileScreen({ navigation }: Props) {
       });
       await updateUser(updated);
       navigation.goBack();
-    } catch (err) {
-      Alert.alert('Save failed', API_USER_MESSAGE);
+    } catch {
+      setFormError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -166,7 +183,7 @@ export default function EditProfileScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={year}
                 style={[styles.pill, classYear === year && styles.pillSelected]}
-                onPress={() => setClassYear(year)}
+                onPress={() => { setClassYear(year); setClassYearError(''); }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.pillText, classYear === year && styles.pillTextSelected]}>
@@ -175,6 +192,7 @@ export default function EditProfileScreen({ navigation }: Props) {
               </TouchableOpacity>
             ))}
           </View>
+          {classYearError ? <Text style={styles.errorText}>{classYearError}</Text> : null}
         </View>
 
         {/* Major */}
@@ -213,6 +231,8 @@ export default function EditProfileScreen({ navigation }: Props) {
             </>
           )}
 
+          {majorError ? <Text style={styles.errorText}>{majorError}</Text> : null}
+
           <MajorPickerModal
             visible={pickerVisible}
             selected={pickedMajor}
@@ -225,15 +245,15 @@ export default function EditProfileScreen({ navigation }: Props) {
         <View style={[styles.section, shadows.sm]}>
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Bio</Text>
-            <Text style={styles.charCount}>{bio.length}/120</Text>
+            <Text style={[styles.charCount, bio.length > 130 && styles.charCountWarn]}>{bio.length}/150</Text>
           </View>
           <TextInput
             style={[styles.inputWrapper, styles.bioInput]}
             placeholder="A short vibe line — e.g. I play intramural soccer and love finding good coffee"
             placeholderTextColor={colors.textTertiary}
             value={bio}
-            onChangeText={(v) => setBio(v.slice(0, 120))}
-            maxLength={120}
+            onChangeText={(v) => setBio(v.slice(0, 150))}
+            maxLength={150}
             multiline
             numberOfLines={3}
           />
@@ -290,6 +310,7 @@ export default function EditProfileScreen({ navigation }: Props) {
           <Text style={styles.interestsHint}>
             Tap to toggle — helps others see who they'd be joining
           </Text>
+          {interestLimitMsg ? <Text style={styles.interestLimitText}>{interestLimitMsg}</Text> : null}
           <View style={styles.pillRow}>
             {INTEREST_TAGS.map((tag) => {
               const selected = interestTags.includes(tag);
@@ -308,7 +329,9 @@ export default function EditProfileScreen({ navigation }: Props) {
                     if (selected) {
                       setInterestTags(interestTags.filter((t) => t !== tag));
                     } else if (interestTags.length >= 5) {
-                      Alert.alert('Limit reached', 'You can select up to 5 interest tags.');
+                      setInterestLimitMsg('You can select up to 5 interests');
+                      if (interestLimitTimer.current) clearTimeout(interestLimitTimer.current);
+                      interestLimitTimer.current = setTimeout(() => setInterestLimitMsg(''), 2000);
                     } else {
                       setInterestTags([...interestTags, tag]);
                     }
@@ -354,6 +377,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.saveSection}>
+          {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
           <GradientButton
             title="Save Changes"
             onPress={handleSave}
@@ -443,7 +467,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   inputWrapperError: {
-    borderColor: colors.red,
+    borderColor: colors.scarlet,
   },
   inputPlaceholder: {
     color: colors.textTertiary,
@@ -515,9 +539,23 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: colors.red,
+    color: colors.scarlet,
     marginTop: -spacing.xs,
     paddingLeft: spacing.xs,
+  },
+  formErrorText: {
+    fontSize: 13,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  interestLimitText: {
+    fontSize: 12,
+    color: '#999999',
+    marginBottom: spacing.xs,
+  },
+  charCountWarn: {
+    color: colors.scarlet,
   },
   saveSection: {
     marginTop: spacing.sm,
