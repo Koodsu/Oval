@@ -237,6 +237,8 @@ export interface CreateClubMeetingBody {
   meetingTime: string;
   description?: string;
   isPublic?: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =>

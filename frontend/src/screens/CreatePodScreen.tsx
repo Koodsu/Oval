@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -110,9 +109,8 @@ export default function CreatePodScreen({ route, navigation }: Props) {
   const handleSubmit = async () => {
     setFormError('');
 
-    const selectedLocation = locationText.trim();
-    if (!selectedLocation) {
-      setMapLocationError('Please tap the map to select a location');
+    if (!pickedCoords) {
+      setMapLocationError('Please drop a pin on the map to set your location');
       return;
     }
     setMapLocationError('');
@@ -132,9 +130,9 @@ export default function CreatePodScreen({ route, navigation }: Props) {
         minMembers: min,
         maxMembers: max,
         meetupTime: meetupTime.toISOString(),
-        location: selectedLocation,
-        latitude: pickedCoords?.latitude,
-        longitude: pickedCoords?.longitude,
+        location: locationText || 'OSU Campus',
+        latitude: pickedCoords.latitude,
+        longitude: pickedCoords.longitude,
       });
       navigation.replace('Pod', { podId: pod.id });
     } catch {
@@ -236,13 +234,6 @@ export default function CreatePodScreen({ route, navigation }: Props) {
       {mapLocationError ? (
         <Text style={styles.mapError}>{mapLocationError}</Text>
       ) : null}
-      <TextInput
-        style={styles.locationInput}
-        value={locationText}
-        onChangeText={setLocationText}
-        placeholder="e.g. RPAC Court B, Thompson Library Floor 2"
-        placeholderTextColor={colors.textTertiary}
-      />
 
       <View style={styles.submitRow}>
         {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
@@ -250,7 +241,7 @@ export default function CreatePodScreen({ route, navigation }: Props) {
           title="Create Pod"
           onPress={handleSubmit}
           loading={submitting}
-          disabled={submitting}
+          disabled={submitting || !pickedCoords}
           icon="checkmark-circle-outline"
         />
       </View>
@@ -306,17 +297,6 @@ const styles = StyleSheet.create({
     marginTop: -8,
     marginBottom: 8,
     paddingHorizontal: 4,
-  },
-  locationInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: spacing.lg,
   },
   submitRow: { marginTop: spacing.xl },
   formErrorText: {

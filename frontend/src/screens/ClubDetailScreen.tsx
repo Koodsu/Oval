@@ -15,8 +15,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Animated,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,6 +62,12 @@ import { clubCircleBg } from '../utils/clubCircleBg';
 import { getCategoryPillStyle } from '../utils/activityCategoryPill';
 import { parseTypingUsersFromPresenceState, type PresenceStateRow } from '../utils/podPresenceTyping';
 import { colors, spacing, home, cardShadowHome } from '../theme';
+import {
+  OSU_CAMPUS_CENTER,
+  OSU_CAMPUS_DELTA,
+  OSU_CAMPUS_POLYGON,
+  SCARLET,
+} from '../constants/campusMap';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 
@@ -80,6 +89,22 @@ function parseClubMyRole(members: ClubMemberWithUser[], userId: string | undefin
   const r = members.find((m) => m.userId === userId)?.role;
   if (r === 'ADMIN' || r === 'OFFICER' || r === 'MEMBER') return r;
   return null;
+}
+
+function isInsideCampus(coord: { latitude: number; longitude: number }): boolean {
+  let inside = false;
+  const n = OSU_CAMPUS_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = OSU_CAMPUS_POLYGON[i].longitude;
+    const yi = OSU_CAMPUS_POLYGON[i].latitude;
+    const xj = OSU_CAMPUS_POLYGON[j].longitude;
+    const yj = OSU_CAMPUS_POLYGON[j].latitude;
+    const intersect =
+      yi > coord.latitude !== yj > coord.latitude &&
+      coord.longitude < ((xj - xi) * (coord.latitude - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function MemberRoleBadge({ role }: { role: string }) {
@@ -174,10 +199,27 @@ function ClubBackControl({ onPress }: { onPress: () => void }) {
   );
 }
 
+function buildCalendarGrid(year: number, month: number): Date[] {
+  const firstDay = new Date(year, month, 1);
+  const startOffset = firstDay.getDay();
+  const cells: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    cells.push(new Date(year, month, 1 - startOffset + i));
+  }
+  return cells;
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 export default function ClubDetailScreen({ route, navigation }: Props) {
   const { clubId } = route.params;
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+
 
   const [club, setClub] = useState<ClubDetail | null>(null);
   const [meetings, setMeetings] = useState<ClubMeetingWithMeta[]>([]);
@@ -203,6 +245,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [mtLocationError, setMtLocationError] = useState('');
   const [mtDateError, setMtDateError] = useState('');
   const [mtFormError, setMtFormError] = useState('');
+  const [mtPickedCoords, setMtPickedCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mtMapError, setMtMapError] = useState('');
 
   const [messages, setMessages] = useState<ClubMessage[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -221,6 +265,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const apiTypingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceIdleUntrackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Calendar view state
+  const [meetingViewMode, setMeetingViewMode] = useState<'list' | 'calendar'>('list');
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [calSelectedDay, setCalSelectedDay] = useState<Date | null>(null);
+  const sheetAnim = useRef(new Animated.Value(0)).current;
 
   const loadClub = useCallback(async () => {
     const data = await getClub(clubId);
@@ -506,6 +557,25 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const openDaySheet = useCallback((day: Date) => {
+    setCalSelectedDay(day);
+    sheetAnim.setValue(0);
+    Animated.spring(sheetAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  }, [sheetAnim]);
+
+  const closeDaySheet = useCallback(() => {
+    Animated.timing(sheetAnim, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => setCalSelectedDay(null));
+  }, [sheetAnim]);
+
   const patchMemberRoleAndReload = useCallback(
     async (targetUserId: string, role: 'OFFICER' | 'MEMBER') => {
       try {
@@ -607,7 +677,28 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     d.setHours(12, 0, 0, 0);
     setMtWhen(d);
     setMtPublic(true);
+    setMtPickedCoords(null);
+    setMtMapError('');
     setCreateOpen(true);
+  };
+
+  const handleMtMapPress = async (coord: { latitude: number; longitude: number }) => {
+    if (!isInsideCampus(coord)) {
+      setMtMapError('Please select a location on OSU campus');
+      return;
+    }
+    setMtMapError('');
+    setMtPickedCoords(coord);
+    try {
+      const results = await Location.reverseGeocodeAsync(coord);
+      if (results[0]) {
+        const r = results[0];
+        setMtLocation(r.name || r.street || r.district || 'OSU Campus');
+        setMtLocationError('');
+      }
+    } catch {
+      // user can edit manually
+    }
   };
 
   const submitCreateMeeting = async () => {
@@ -615,6 +706,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     const location = mtLocation.trim();
     setMtFormError('');
     let hasError = false;
+    if (!mtPickedCoords) {
+      setMtMapError('Please drop a pin on the map to set your location');
+      hasError = true;
+    } else {
+      setMtMapError('');
+    }
     if (!title) {
       setMtTitleError('Title is required');
       hasError = true;
@@ -645,6 +742,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         meetingTime: mtWhen.toISOString(),
         description: mtDesc.trim() || undefined,
         isPublic: mtPublic,
+        latitude: mtPickedCoords.latitude,
+        longitude: mtPickedCoords.longitude,
       });
       setCreateOpen(false);
       await loadMeetings();
@@ -687,61 +786,229 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const sortedMembers = sortClubMembers(club.members);
   const emojiSize = 64;
 
+  const meetingsByDay = useMemo(() => {
+    const map = new Map<string, ClubMeetingWithMeta[]>();
+    for (const m of meetings) {
+      const d = new Date(m.meetingTime);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return map;
+  }, [meetings]);
+
+  const calendarCells = useMemo(() => buildCalendarGrid(calYear, calMonth), [calYear, calMonth]);
+
+  const renderRsvpPills = (m: ClubMeetingWithMeta) =>
+    (['GOING', 'MAYBE', 'NOT_GOING'] as const).map((st) => {
+      const active = m.myRsvp === st;
+      const label = st === 'GOING' ? 'Going' : st === 'MAYBE' ? 'Maybe' : 'Not Going';
+      return (
+        <TouchableOpacity
+          key={st}
+          style={[styles.rsvpPill, active && styles.rsvpPillActive]}
+          onPress={() => void handleRsvp(m.id, st)}
+        >
+          <Text style={[styles.rsvpPillText, active && styles.rsvpPillTextActive]}>{label}</Text>
+        </TouchableOpacity>
+      );
+    });
+
   const meetingsBody = (
     <View style={styles.tabFlex}>
-      <ScrollView
-        style={styles.scrollMeetings}
-        contentContainerStyle={styles.scrollMeetingsContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      {/* ── View toggle header ── */}
+      <View style={styles.meetingsViewToggleRow}>
         <View style={styles.upcomingHeader}>
           <View style={styles.upcomingDot} />
-          <Text style={styles.upcomingLabel}>UPCOMING</Text>
+          <Text style={styles.upcomingLabel}>
+            {meetingViewMode === 'list' ? 'UPCOMING' : `${MONTH_NAMES[calMonth]} ${calYear}`}
+          </Text>
         </View>
-        {meetings.length === 0 ? (
-          <Text style={styles.emptyMeetings}>No upcoming meetings</Text>
-        ) : (
-          meetings.map((m) => (
-            <View key={m.id} style={[styles.meetingCard, cardShadowHome]}>
-              <Text style={styles.meetingTitle}>{m.title}</Text>
-              <Text style={styles.meetingWhen}>
-                {new Date(m.meetingTime).toLocaleString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-              <Text style={styles.meetingLoc}>{m.location}</Text>
-              <View style={styles.rsvpRow}>
-                {(['GOING', 'MAYBE', 'NOT_GOING'] as const).map((st) => {
-                  const active = m.myRsvp === st;
-                  const label = st === 'GOING' ? 'Going' : st === 'MAYBE' ? 'Maybe' : 'Not Going';
-                  return (
-                    <TouchableOpacity
-                      key={st}
-                      style={[styles.rsvpPill, active && styles.rsvpPillActive]}
-                      onPress={() => void handleRsvp(m.id, st)}
-                    >
-                      <Text style={[styles.rsvpPillText, active && styles.rsvpPillTextActive]}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+        <TouchableOpacity
+          onPress={() => setMeetingViewMode((prev) => (prev === 'list' ? 'calendar' : 'list'))}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons
+            name={meetingViewMode === 'list' ? 'calendar-outline' : 'list-outline'}
+            size={22}
+            color={home.scarlet}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {meetingViewMode === 'list' ? (
+        /* ── LIST VIEW ── */
+        <ScrollView
+          style={styles.scrollMeetings}
+          contentContainerStyle={styles.scrollMeetingsContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {meetings.length === 0 ? (
+            <Text style={styles.emptyMeetings}>No upcoming meetings</Text>
+          ) : (
+            meetings.map((m) => (
+              <View key={m.id} style={[styles.meetingCard, cardShadowHome]}>
+                <Text style={styles.meetingTitle}>{m.title}</Text>
+                <Text style={styles.meetingWhen}>
+                  {new Date(m.meetingTime).toLocaleString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </Text>
+                <Text style={styles.meetingLoc}>{m.location}</Text>
+                <View style={styles.rsvpRow}>{renderRsvpPills(m)}</View>
+                <Text style={styles.attendeeLine}>
+                  {m.attendeeCount} {m.attendeeCount === 1 ? 'person' : 'people'} going
+                </Text>
               </View>
-              <Text style={styles.attendeeLine}>
-                {m.attendeeCount} {m.attendeeCount === 1 ? 'person' : 'people'} going
-              </Text>
+            ))
+          )}
+        </ScrollView>
+      ) : (
+        /* ── CALENDAR VIEW ── */
+        <ScrollView
+          contentContainerStyle={styles.calendarScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Month navigation */}
+          <View style={styles.calMonthNav}>
+            <TouchableOpacity
+              onPress={() => {
+                if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
+                else setCalMonth((m) => m - 1);
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={22} color={home.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.calMonthTitle}>{MONTH_NAMES[calMonth]} {calYear}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); }
+                else setCalMonth((m) => m + 1);
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-forward" size={22} color={home.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Calendar grid card */}
+          <View style={[styles.calGrid, cardShadowHome]}>
+            {/* Day-of-week labels */}
+            <View style={styles.calDayLabelsRow}>
+              {DAY_LABELS.map((label) => (
+                <View key={label} style={styles.calDayLabelCell}>
+                  <Text style={styles.calDayLabelText}>{label}</Text>
+                </View>
+              ))}
             </View>
-          ))
-        )}
-      </ScrollView>
+
+            {/* 6 rows × 7 cells */}
+            {Array.from({ length: 6 }).map((_, rowIdx) => {
+              const rowCells = calendarCells.slice(rowIdx * 7, rowIdx * 7 + 7);
+              return (
+                <View key={rowIdx} style={styles.calRow}>
+                  {rowCells.map((cellDate, colIdx) => {
+                    const isCurrentMonth = cellDate.getMonth() === calMonth;
+                    const today = new Date();
+                    const isToday =
+                      cellDate.getFullYear() === today.getFullYear() &&
+                      cellDate.getMonth() === today.getMonth() &&
+                      cellDate.getDate() === today.getDate();
+                    const dayKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
+                    const hasMeetings = isCurrentMonth && meetingsByDay.has(dayKey);
+                    const isSelected =
+                      calSelectedDay !== null &&
+                      calSelectedDay.getFullYear() === cellDate.getFullYear() &&
+                      calSelectedDay.getMonth() === cellDate.getMonth() &&
+                      calSelectedDay.getDate() === cellDate.getDate();
+
+                    return (
+                      <TouchableOpacity
+                        key={colIdx}
+                        style={[styles.calCell, isSelected && styles.calCellSelected]}
+                        onPress={() => { if (hasMeetings) openDaySheet(cellDate); }}
+                        activeOpacity={hasMeetings ? 0.7 : 1}
+                      >
+                        <View style={[styles.calDateCircle, isToday && styles.calDateCircleToday]}>
+                          <Text
+                            style={[
+                              styles.calDateNum,
+                              !isCurrentMonth && styles.calDateNumOutside,
+                              isToday && styles.calDateNumToday,
+                            ]}
+                          >
+                            {cellDate.getDate()}
+                          </Text>
+                        </View>
+                        {hasMeetings && <View style={styles.calMeetingDot} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
+
+      {/* FAB */}
       {canCreateMeeting && (
         <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 16 }]} onPress={openCreateMeeting}>
           <Ionicons name="add" size={28} color="#fff" />
         </TouchableOpacity>
       )}
+
+      {/* ── Day bottom sheet ── */}
+      {calSelectedDay !== null && (() => {
+        const dayKey = `${calSelectedDay.getFullYear()}-${String(calSelectedDay.getMonth() + 1).padStart(2, '0')}-${String(calSelectedDay.getDate()).padStart(2, '0')}`;
+        const dayMeetings = meetingsByDay.get(dayKey) ?? [];
+        const sheetTranslate = sheetAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [400, 0],
+        });
+        return (
+          <Modal transparent visible animationType="none" onRequestClose={closeDaySheet}>
+            <Pressable style={styles.sheetOverlay} onPress={closeDaySheet} />
+            <Animated.View
+              style={[styles.sheetContainer, { transform: [{ translateY: sheetTranslate }] }]}
+            >
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetDayTitle}>
+                {calSelectedDay.toLocaleDateString(undefined, {
+                  weekday: 'long', month: 'long', day: 'numeric',
+                })}
+              </Text>
+              <ScrollView
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {dayMeetings.map((m) => (
+                  <View key={m.id} style={[styles.sheetMeetingCard, cardShadowHome]}>
+                    <Text style={styles.sheetMeetingTitle}>{m.title}</Text>
+                    <Text style={styles.sheetMeetingTime}>
+                      {new Date(m.meetingTime).toLocaleString(undefined, {
+                        hour: 'numeric', minute: '2-digit',
+                      })}
+                    </Text>
+                    <Text style={styles.sheetMeetingLoc}>{m.location}</Text>
+                    <View style={styles.rsvpRow}>{renderRsvpPills(m)}</View>
+                    <Text style={styles.attendeeLine}>
+                      {m.attendeeCount} {m.attendeeCount === 1 ? 'person' : 'people'} going
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          </Modal>
+        );
+      })()}
     </View>
   );
 
@@ -1012,6 +1279,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           setMtLocationError('');
           setMtDateError('');
           setMtFormError('');
+          setMtMapError('');
+          setMtPickedCoords(null);
         }}
       >
         <View style={styles.modalInner}>
@@ -1023,11 +1292,31 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               setMtLocationError('');
               setMtDateError('');
               setMtFormError('');
+              setMtMapError('');
+              setMtPickedCoords(null);
             }}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+            <Text style={styles.inputLabel}>Location (tap to pin)</Text>
+            <View style={styles.mtMapContainer}>
+              <MapView
+                provider={PROVIDER_DEFAULT}
+                style={styles.mtMap}
+                initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+                onPress={(e) => void handleMtMapPress(e.nativeEvent.coordinate)}
+              >
+                <Polygon
+                  coordinates={OSU_CAMPUS_POLYGON}
+                  strokeColor={SCARLET}
+                  strokeWidth={2}
+                  fillColor="rgba(204,0,0,0.06)"
+                />
+                {mtPickedCoords && <Marker coordinate={mtPickedCoords} pinColor={SCARLET} />}
+              </MapView>
+            </View>
+            {mtMapError ? <Text style={styles.mtMapError}>{mtMapError}</Text> : null}
             <Text style={styles.inputLabel}>Title</Text>
             <TextInput
               style={[styles.input, mtTitleError ? styles.inputError : null]}
@@ -1579,5 +1868,172 @@ const styles = StyleSheet.create({
     color: '#999999',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  mtMapContainer: {
+    height: 220,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  mtMap: { flex: 1 },
+  mtMapError: {
+    fontSize: 12,
+    color: SCARLET,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+
+  // ── Meetings view toggle ──────────────────────────────────────────
+  meetingsViewToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+
+  // ── Calendar grid ─────────────────────────────────────────────────
+  calendarScrollContent: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: 100,
+  },
+  calMonthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  calMonthTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  calGrid: {
+    backgroundColor: home.cardBg,
+    borderRadius: 14,
+    overflow: 'hidden',
+    paddingBottom: 4,
+  },
+  calDayLabelsRow: {
+    flexDirection: 'row',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  calDayLabelCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  calDayLabelText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#999999',
+    textTransform: 'uppercase',
+  },
+  calRow: {
+    flexDirection: 'row',
+  },
+  calCell: {
+    flex: 1,
+    height: 52,
+    alignItems: 'center',
+    paddingTop: 6,
+  },
+  calCellSelected: {
+    backgroundColor: '#FEE2F2',
+  },
+  calDateCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calDateCircleToday: {
+    backgroundColor: home.scarlet,
+  },
+  calDateNum: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: home.textPrimary,
+  },
+  calDateNumOutside: {
+    color: '#CCCCCC',
+  },
+  calDateNumToday: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  calMeetingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: home.scarlet,
+    marginTop: 2,
+  },
+
+  // ── Day bottom sheet ──────────────────────────────────────────────
+  sheetOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sheetContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: home.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingTop: 12,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DDDDDD',
+    marginBottom: 12,
+  },
+  sheetDayTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  sheetScroll: {
+    flexGrow: 0,
+  },
+  sheetScrollContent: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  sheetMeetingCard: {
+    backgroundColor: home.creamBg,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  sheetMeetingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: home.textPrimary,
+  },
+  sheetMeetingTime: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: home.scarlet,
+    marginTop: 2,
+  },
+  sheetMeetingLoc: {
+    fontSize: 13,
+    color: '#666666',
+    marginTop: 2,
   },
 });

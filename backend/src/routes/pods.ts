@@ -99,6 +99,7 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
     const blockedIds = await getBlockedUserIds(userId);
     const pods = await prisma.pod.findMany({
       where: {
+        status: { notIn: ['EXPIRED', 'COMPLETED'] },
         members: {
           some: { userId },
           none: { userId: { in: [...blockedIds] } },
