@@ -1,32 +1,18 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { MEMBER_USER_SELECT, parseMemberTags } from '../lib/joinExistingPod';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 import { NotificationService } from '../lib/NotificationService';
+import { supabaseStorage } from '../lib/supabaseStorage';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
-const CLUB_AVATAR_DIR = path.join(__dirname, '../../uploads/club-avatars');
-try {
-  fs.mkdirSync(CLUB_AVATAR_DIR, { recursive: true });
-} catch {
-  // Vercel read-only filesystem — ignore
-}
-
-const clubAvatarStorage = multer.diskStorage({
-  destination: CLUB_AVATAR_DIR,
-  filename: (req, _file, cb) => {
-    const clubId = req.params.id;
-    cb(null, `${clubId}-${Date.now()}.jpg`);
-  },
-});
+const CLUB_AVATAR_BUCKET = 'club-avatars';
 
 const clubAvatarUpload = multer({
-  storage: clubAvatarStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
@@ -1423,12 +1409,32 @@ router.patch(
         return;
       }
 
-      const avatarUrl = `/uploads/club-avatars/${req.file.filename}`;
+      const filename = `${clubId}-${Date.now()}.jpg`;
 
-      // Best-effort cleanup of old avatar
-      if (club.avatarUrl?.startsWith('/uploads/club-avatars/')) {
-        const oldPath = path.join(__dirname, '../../', club.avatarUrl);
-        fs.unlink(oldPath, () => {});
+      const { error: uploadError } = await supabaseStorage.storage
+        .from(CLUB_AVATAR_BUCKET)
+        .upload(filename, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        res.status(500).json({ error: 'Failed to upload avatar' });
+        return;
+      }
+
+      const { data: publicUrlData } = supabaseStorage.storage
+        .from(CLUB_AVATAR_BUCKET)
+        .getPublicUrl(filename);
+
+      const avatarUrl = publicUrlData.publicUrl;
+
+      // Best-effort cleanup of old avatar from Supabase Storage
+      if (club.avatarUrl) {
+        const oldFilename = club.avatarUrl.split('/').pop();
+        if (oldFilename) {
+          supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).remove([oldFilename]);
+        }
       }
 
       await prisma.club.update({ where: { id: clubId }, data: { avatarUrl } });
