@@ -19,16 +19,6 @@ const LANES = [
       { title: 'Climbing Club', meta: 'Outdoor trip this weekend', badge: 'Open' },
     ],
   },
-  {
-    eyebrow: 'Events',
-    title: 'Know where the energy is, not after it is over.',
-    body: 'Tonight, this week, this month. Events stop feeling hidden because Bridge turns campus into a pulse instead of a bulletin board.',
-    accent: 'from-white/18 via-white/6 to-transparent',
-    panels: [
-      { title: 'South Oval concert', meta: 'Student bands · 8:00 PM', badge: 'Tonight' },
-      { title: 'Career mixer', meta: 'Fisher Hall · Thu 5 PM', badge: 'Soon' },
-    ],
-  },
 ]
 
 export default function CampusLife() {
@@ -45,7 +35,7 @@ export default function CampusLife() {
           <h2 className="reveal font-display text-[clamp(38px,8vw,112px)] leading-[0.9] tracking-wider">
             ONE APP.
             <br />
-            <span className="text-white/24">THREE WHOLE WORLDS.</span>
+            <span className="text-white/24">TWO LIVE SURFACES.</span>
           </h2>
         </div>
 
@@ -53,9 +43,9 @@ export default function CampusLife() {
           <div className="reveal border border-white/8 bg-white/[0.04] p-6 md:p-8 backdrop-blur-sm">
             <div className="mb-8 flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-scarlet">Campus radar</div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-scarlet">Why it feels different</div>
                 <div className="mt-2 max-w-sm text-sm leading-relaxed text-white/55">
-                  Bridge does not just list things. It maps momentum across campus so you can feel where people are gathering.
+                  Bridge is useful when you want plans now and when you want a club that still feels alive a month from now.
                 </div>
               </div>
               <div className="hidden h-24 w-24 rounded-full border border-white/10 md:grid place-items-center">
@@ -63,31 +53,62 @@ export default function CampusLife() {
               </div>
             </div>
 
-            <div className="relative h-[360px] overflow-hidden border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]">
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{
-                  backgroundImage:
-                    'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
-                  backgroundSize: '44px 44px',
-                }}
-              />
-              <div className="absolute left-[18%] top-[24%] h-28 w-28 rounded-full border border-scarlet/22 bg-scarlet/10 animate-pulse-ring" />
-              <div className="absolute left-[54%] top-[18%] h-24 w-24 rounded-full border border-amber/18 bg-amber/10 animate-pulse-ring [animation-delay:1s]" />
-              <div className="absolute left-[42%] top-[55%] h-36 w-36 rounded-full border border-white/12 bg-white/[0.04] animate-pulse-ring [animation-delay:2s]" />
-              {[
-                ['RPAC', 'left-[16%] top-[20%]'],
-                ['Oval', 'left-[60%] top-[16%]'],
-                ['Union', 'left-[45%] top-[56%]'],
-                ['North', 'left-[74%] top-[52%]'],
-                ['South', 'left-[24%] top-[72%]'],
-              ].map(([label, style]) => (
-                <div key={label} className={`absolute ${style} -translate-x-1/2 -translate-y-1/2`}>
-                  <div className="mb-2 flex h-3 w-3 rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.35)]" />
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">{label}</div>
+            <div className="grid gap-4">
+              <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-ink/38">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-scarlet">Activity layer</div>
+                    <div className="mt-1 text-sm text-white/68">Quick plans with clear momentum.</div>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55">
+                    right now
+                  </div>
                 </div>
-              ))}
+                <div className="grid gap-3 p-4">
+                  <div className="rounded-[1rem] border border-scarlet/18 bg-scarlet/[0.08] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">3v3 at RPAC</div>
+                      <span className="rounded-full border border-scarlet/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-scarlet">Live</span>
+                    </div>
+                    <div className="mt-1 text-[12px] text-white/54">2 spots left · starts at 6:30 PM</div>
+                  </div>
+                  <div className="rounded-[1rem] border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">Sunset walk</div>
+                      <span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/58">Near you</span>
+                    </div>
+                    <div className="mt-1 text-[12px] text-white/48">Oval · starts in 22 min</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-ink/38">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber">Club layer</div>
+                    <div className="mt-1 text-sm text-white/68">Clubs stay discoverable after the fair.</div>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55">
+                    all semester
+                  </div>
+                </div>
+                <div className="grid gap-3 p-4">
+                  <div className="rounded-[1rem] border border-amber/16 bg-amber/[0.08] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">Buckeye Film Society</div>
+                      <span className="rounded-full border border-amber/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber">Trending</span>
+                    </div>
+                    <div className="mt-1 text-[12px] text-white/54">Screening tonight · 41 RSVPs</div>
+                  </div>
+                  <div className="rounded-[1rem] border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">Climbing Club</div>
+                      <span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/58">Open</span>
+                    </div>
+                    <div className="mt-1 text-[12px] text-white/48">Outdoor trip this weekend</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

@@ -70,7 +70,7 @@ export default function Nav() {
         </Link>
         <div className="hidden items-center gap-2 border border-white/12 bg-white/[0.08] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:flex">
           <span className="h-2 w-2 rounded-full bg-scarlet animate-pulse-dot" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/78">Founding class open</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Founding class open</span>
         </div>
         <a
           href="#waitlist"
