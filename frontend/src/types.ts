@@ -139,6 +139,7 @@ export interface ClubMeetingToday {
   location: string;
   meetingTime: string;
   isPublic: boolean;
+  visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
   clubId: string;
   clubName: string;
   clubEmoji: string;
@@ -146,6 +147,15 @@ export interface ClubMeetingToday {
 }
 
 export interface ClubMessage {
+  id: string;
+  clubId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl?: string | null };
+}
+
+export interface ClubOfficerMessage {
   id: string;
   clubId: string;
   userId: string;
@@ -162,9 +172,11 @@ export interface ClubMeetingWithMeta {
   location: string;
   meetingTime: string;
   isPublic: boolean;
+  visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
   createdById: string;
   createdAt: string;
   createdBy?: { id: string; name: string; avatarUrl?: string | null };
+  attendanceCode?: string | null;
   rsvpCounts: { going: number; maybe: number; notGoing: number };
   myRsvp: 'GOING' | 'MAYBE' | 'NOT_GOING' | null;
   attendeeCount: number;
@@ -176,6 +188,12 @@ export interface ClubMeetingAttendeeRow {
   userId: string;
   status: string;
   createdAt: string;
+  user?: { id: string; name: string; avatarUrl?: string | null };
+}
+
+export interface ClubMeetingAttendanceResponse {
+  attendees: ClubMeetingAttendeeRow[];
+  attendedCount: number;
 }
 
 export interface ClubMemberWithUser {
@@ -194,11 +212,43 @@ export interface ClubMemberWithUser {
   };
 }
 
+export interface MyClubMembershipRow {
+  membershipId: string;
+  role: string;
+  joinedAt: string;
+  club: {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    emoji: string;
+    isVerified: boolean;
+    isPublic: boolean;
+    university: string;
+    createdAt: string;
+    updatedAt: string;
+    memberCount: number;
+  };
+  nextMeeting: {
+    id: string;
+    clubId: string;
+    title: string;
+    description: string | null;
+    location: string;
+    meetingTime: string;
+    isPublic: boolean;
+    visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+    createdById: string;
+    createdAt: string;
+  } | null;
+}
+
 export interface ClubAnnouncementRow {
   id: string;
   clubId: string;
   userId: string;
   content: string;
+  visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
 }
@@ -236,6 +286,7 @@ export interface ClubDetail {
     location: string;
     meetingTime: string;
     isPublic: boolean;
+    visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
     createdById: string;
     createdAt: string;
   }>;

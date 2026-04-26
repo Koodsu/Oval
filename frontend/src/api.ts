@@ -2,6 +2,7 @@
 // Falls back to localhost for local development.
 // On a physical device, set this to your machine's local IP, e.g. http://192.168.1.100:3000
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://joinbridgeapp.com').replace(/\/$/, '');
 
 /** Shown in alerts instead of raw server messages after API failures. */
 export const API_USER_MESSAGE = 'Something went wrong, please try again';
@@ -17,6 +18,10 @@ export function resolveAvatarUrl(avatarUrl: string | null | undefined): string |
   if (!avatarUrl) return undefined;
   if (avatarUrl.startsWith('http')) return avatarUrl;
   return `${API_BASE}${avatarUrl}`;
+}
+
+export function getPodShareUrl(podId: string): string {
+  return `${PUBLIC_SITE_URL}/pod/${encodeURIComponent(podId)}`;
 }
 
 let authToken: string | null = null;
@@ -144,6 +149,9 @@ export const getClubs = (
 export const getClubsToday = (signal?: AbortSignal) =>
   request<import('./types').ClubMeetingToday[]>('/clubs/today', {}, signal);
 
+export const getMyClubs = (signal?: AbortSignal) =>
+  request<import('./types').MyClubMembershipRow[]>('/clubs/my', {}, signal);
+
 export const joinClub = (clubId: string) =>
   request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/join`, { method: 'POST' });
 
@@ -165,6 +173,11 @@ export interface GetClubMessagesResponse {
   typingUserIds: string[];
 }
 
+export interface GetClubOfficerMessagesResponse {
+  messages: import('./types').ClubOfficerMessage[];
+  typingUserIds: string[];
+}
+
 export const getClubMessages = (clubId: string, signal?: AbortSignal) =>
   request<GetClubMessagesResponse>(`/clubs/${encodeURIComponent(clubId)}/messages`, {}, signal);
 
@@ -176,6 +189,22 @@ export const sendClubMessage = (clubId: string, content: string) =>
 
 export const sendClubTyping = (clubId: string) =>
   request<{ ok: boolean }>(`/clubs/${encodeURIComponent(clubId)}/typing`, { method: 'POST' });
+
+export const getClubOfficerMessages = (clubId: string, signal?: AbortSignal) =>
+  request<GetClubOfficerMessagesResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/officer-messages`,
+    {},
+    signal
+  );
+
+export const sendClubOfficerMessage = (clubId: string, content: string) =>
+  request<import('./types').ClubOfficerMessage>(
+    `/clubs/${encodeURIComponent(clubId)}/officer-messages`,
+    { method: 'POST', body: JSON.stringify({ content }) }
+  );
+
+export const sendClubOfficerTyping = (clubId: string) =>
+  request<{ ok: boolean }>(`/clubs/${encodeURIComponent(clubId)}/officer-typing`, { method: 'POST' });
 
 export const promoteClubMember = (clubId: string, memberUserId: string) =>
   request<import('./types').ClubMemberWithUser>(
@@ -207,6 +236,17 @@ export const postClubAnnouncement = (clubId: string, content: string) =>
     { method: 'POST', body: JSON.stringify({ content }) }
   );
 
+export type ClubVisibility = 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+
+export const createClubAnnouncement = (
+  clubId: string,
+  body: { content: string; visibility: ClubVisibility }
+) =>
+  request<import('./types').ClubAnnouncementRow>(
+    `/clubs/${encodeURIComponent(clubId)}/announcements`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+
 export const patchClubMemberRole = (
   clubId: string,
   memberUserId: string,
@@ -236,7 +276,7 @@ export interface CreateClubMeetingBody {
   location: string;
   meetingTime: string;
   description?: string;
-  isPublic?: boolean;
+  visibility?: ClubVisibility;
   latitude?: number;
   longitude?: number;
 }
@@ -245,6 +285,29 @@ export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =
   request<import('./types').ClubMeetingWithMeta>(
     `/clubs/${encodeURIComponent(clubId)}/meetings`,
     { method: 'POST', body: JSON.stringify(body) }
+  );
+
+export const openClubAttendance = (clubId: string, meetingId: string) =>
+  request<{ attendanceCode: string }>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/attendance/open`,
+    { method: 'POST' }
+  );
+
+export const closeClubAttendance = (clubId: string, meetingId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/attendance/close`,
+    { method: 'POST' }
+  );
+
+export const checkInToClubMeeting = (clubId: string, meetingId: string, code: string) =>
+  request<{ ok: true; attendedCount: number }>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/attendance/checkin`,
+    { method: 'POST', body: JSON.stringify({ code }) }
+  );
+
+export const getClubMeetingAttendance = (clubId: string, meetingId: string) =>
+  request<import('./types').ClubMeetingAttendanceResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/attendance`
   );
 
 // Pods

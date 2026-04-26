@@ -390,6 +390,7 @@ model ClubMeeting {
   location    String
   meetingTime DateTime
   isPublic        Boolean  @default(true)
+  visibility      String   @default("PUBLIC")
   createdById     String
   createdAt       DateTime @default(now())
   latitude        Float?
@@ -426,6 +427,7 @@ model ClubAnnouncement {
   clubId    String
   userId    String
   content   String
+  visibility String  @default("PUBLIC")
   createdAt DateTime @default(now())
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)

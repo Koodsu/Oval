@@ -23,6 +23,12 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
+jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
+  getExpoPushTokenAsync: jest.fn(),
+}));
+
 // Mock @expo/vector-icons (renders nothing in tests)
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');

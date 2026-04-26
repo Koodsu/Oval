@@ -66,7 +66,7 @@ describe('Web / invite-link routes (public)', () => {
       const packageNames: string[] = res.body.map(
         (entry: { target: { package_name: string } }) => entry.target.package_name
       );
-      expect(packageNames).toContain('com.bridge.app');
+      expect(packageNames).toContain('com.bradyvb.bridgeapp');
     });
 
     it('requires no auth token', async () => {

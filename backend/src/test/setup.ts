@@ -34,9 +34,9 @@ export default function setup() {
 
   loadEnvFile(backendDir);
 
-  const testDbUrl = process.env.TEST_DATABASE_URL;
+  const testDbUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!testDbUrl) {
-    throw new Error('TEST_DATABASE_URL must be set to run tests');
+    throw new Error('TEST_DATABASE_URL or DATABASE_URL must be set to run tests');
   }
 
   const env = { ...process.env, DATABASE_URL: testDbUrl, DIRECT_URL: testDbUrl };
