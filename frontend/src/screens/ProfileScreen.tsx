@@ -13,6 +13,12 @@ import { palette, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const DEFAULT_PREFS: NotificationPreferences = {
+  podJoin: true,
+  newMessage: true,
+  meetupReminder: true,
+};
+
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { user, signOut } = useAuth();
