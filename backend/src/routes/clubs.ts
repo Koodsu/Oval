@@ -70,12 +70,16 @@ function generateAttendanceCode(): string {
 const ROLE_ADMIN = 'ADMIN';
 const ROLE_OFFICER = 'OFFICER';
 const ROLE_MEMBER = 'MEMBER';
+const VISIBILITY_PUBLIC = 'PUBLIC';
+const VISIBILITY_MEMBERS = 'MEMBERS';
+const VISIBILITY_OFFICERS = 'OFFICERS';
 
 const RSVP_GOING = 'GOING';
 const RSVP_MAYBE = 'MAYBE';
 const RSVP_NOT_GOING = 'NOT_GOING';
 
 const RSVP_STATUSES = new Set([RSVP_GOING, RSVP_MAYBE, RSVP_NOT_GOING]);
+const CLUB_VISIBILITIES = new Set([VISIBILITY_PUBLIC, VISIBILITY_MEMBERS, VISIBILITY_OFFICERS]);
 
 const STATUS_ATTENDED = 'ATTENDED';
 
@@ -99,6 +103,23 @@ function canCreateMeetings(role: string): boolean {
 }
 
 const canPostAnnouncements = canCreateMeetings;
+
+function parseVisibility(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const normalized = raw.trim().toUpperCase();
+  return CLUB_VISIBILITIES.has(normalized) ? normalized : null;
+}
+
+function canAccessVisibility(
+  visibility: string,
+  isMember: boolean,
+  role: string | null | undefined
+): boolean {
+  if (visibility === VISIBILITY_PUBLIC) return true;
+  if (visibility === VISIBILITY_MEMBERS) return isMember;
+  if (visibility === VISIBILITY_OFFICERS) return canCreateMeetings(role ?? '');
+  return false;
+}
 
 async function requireClubMembership(
   clubId: string,
@@ -325,29 +346,31 @@ router.get('/today', requireAuth, async (req: AuthRequest, res: Response): Promi
     const meetings = await prisma.clubMeeting.findMany({
       where: {
         meetingTime: { gte: start, lte: end },
-        OR: [
-          { isPublic: true },
-          {
-            club: {
-              members: { some: { userId } },
-            },
-          },
-        ],
       },
       include: {
-        club: { select: { id: true, name: true, emoji: true } },
+        club: {
+          select: {
+            id: true,
+            name: true,
+            emoji: true,
+            members: { where: { userId }, select: { role: true } },
+          },
+        },
         _count: { select: { attendees: true } },
       },
       orderBy: { meetingTime: 'asc' },
     });
 
     res.json(
-      meetings.map((m) => ({
+      meetings
+        .filter((m) => canAccessVisibility(m.visibility, m.club.members.length > 0, m.club.members[0]?.role))
+        .map((m) => ({
         id: m.id,
         title: m.title,
         location: m.location,
         meetingTime: m.meetingTime,
-        isPublic: m.isPublic,
+        isPublic: m.visibility === VISIBILITY_PUBLIC,
+        visibility: m.visibility,
         clubId: m.club.id,
         clubName: m.club.name,
         clubEmoji: m.club.emoji,
@@ -462,7 +485,7 @@ router.post('/meetings/:meetingId/rsvp', requireAuth, async (req: AuthRequest, r
         club: {
           select: {
             id: true,
-            members: { where: { userId }, select: { userId: true } },
+            members: { where: { userId }, select: { userId: true, role: true } },
           },
         },
       },
@@ -473,8 +496,9 @@ router.post('/meetings/:meetingId/rsvp', requireAuth, async (req: AuthRequest, r
       return;
     }
 
-    const isMember = meeting.club.members.length > 0;
-    if (!meeting.isPublic && !isMember) {
+    const membership = meeting.club.members[0];
+    const isMember = !!membership;
+    if (!canAccessVisibility(meeting.visibility, isMember, membership?.role)) {
       res.status(403).json({ error: 'You cannot RSVP to this meeting' });
       return;
     }
@@ -562,18 +586,28 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
       return;
     }
 
-    const [total, items] = await Promise.all([
-      prisma.clubAnnouncement.count({ where: { clubId } }),
-      prisma.clubAnnouncement.findMany({
-        where: { clubId },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
-      }),
-    ]);
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      select: { role: true },
+    });
+    const isMember = !!membership;
 
-    res.json({ items, page, limit, total });
+    const allItems = await prisma.clubAnnouncement.findMany({
+      where: { clubId },
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+
+    const visibleItems = allItems.filter((item) =>
+      canAccessVisibility(item.visibility, isMember, membership?.role)
+    );
+
+    res.json({
+      items: visibleItems.slice(skip, skip + limit),
+      page,
+      limit,
+      total: visibleItems.length,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -584,10 +618,16 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
 router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
-  const { content } = req.body ?? {};
+  const { content, visibility } = req.body ?? {};
 
   if (typeof content !== 'string' || !content.trim()) {
     res.status(400).json({ error: 'content is required' });
+    return;
+  }
+
+  const parsedVisibility = visibility === undefined ? VISIBILITY_PUBLIC : parseVisibility(visibility);
+  if (!parsedVisibility) {
+    res.status(400).json({ error: 'visibility must be PUBLIC, MEMBERS, or OFFICERS' });
     return;
   }
 
@@ -606,7 +646,7 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
     }
 
     const announcement = await prisma.clubAnnouncement.create({
-      data: { clubId, userId, content: content.trim() },
+      data: { clubId, userId, content: content.trim(), visibility: parsedVisibility },
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },
     });
 
@@ -824,7 +864,6 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
       where: {
         clubId,
         meetingTime: { gt: now },
-        ...(isMember ? {} : { isPublic: true }),
       },
       orderBy: { meetingTime: 'asc' },
       include: {
@@ -835,9 +874,10 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
     const meetingIds = meetings.map((m) => m.id);
     const rsvpBuckets = new Map<string, { going: number; maybe: number; notGoing: number }>();
     const myRsvpByMeeting = new Map<string, string>();
+    const attendedCountByMeeting = new Map<string, number>();
 
     if (meetingIds.length > 0) {
-      const [groups, mine] = await Promise.all([
+      const [groups, mine, attendedGroups] = await Promise.all([
         prisma.clubMeetingAttendee.groupBy({
           by: ['meetingId', 'status'],
           where: {
@@ -850,10 +890,19 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
           where: { meetingId: { in: meetingIds }, userId },
           select: { meetingId: true, status: true },
         }),
+        prisma.clubMeetingAttendee.groupBy({
+          by: ['meetingId'],
+          where: {
+            meetingId: { in: meetingIds },
+            status: STATUS_ATTENDED,
+          },
+          _count: { _all: true },
+        }),
       ]);
 
       for (const id of meetingIds) {
         rsvpBuckets.set(id, { going: 0, maybe: 0, notGoing: 0 });
+        attendedCountByMeeting.set(id, 0);
       }
       for (const row of groups) {
         const b = rsvpBuckets.get(row.meetingId);
@@ -868,21 +917,27 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
           myRsvpByMeeting.set(row.meetingId, row.status);
         }
       }
+      for (const row of attendedGroups) {
+        attendedCountByMeeting.set(row.meetingId, row._count._all);
+      }
     }
 
     const canSeeCode = myRole === ROLE_ADMIN || myRole === ROLE_OFFICER;
+    const visibleMeetings = meetings.filter((meeting) =>
+      canAccessVisibility(meeting.visibility, isMember, myRole)
+    );
 
     res.json(
-      meetings.map((m) => {
+      visibleMeetings.map((m) => {
         const rsvpCounts = rsvpBuckets.get(m.id) ?? { going: 0, maybe: 0, notGoing: 0 };
         const myRsvp = myRsvpByMeeting.get(m.id) ?? null;
         return {
           ...m,
+          isPublic: m.visibility === VISIBILITY_PUBLIC,
           attendanceCode: canSeeCode ? m.attendanceCode : null,
           rsvpCounts,
           myRsvp,
-          /** People who RSVP'd Going (primary display count). */
-          attendeeCount: rsvpCounts.going,
+          attendeeCount: attendedCountByMeeting.get(m.id) ?? 0,
         };
       })
     );
@@ -897,7 +952,7 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
   const body = req.body ?? {};
-  const { title, location, meetingTime, description, isPublic, latitude, longitude } = body;
+  const { title, location, meetingTime, description, visibility, latitude, longitude } = body;
 
   if (typeof title !== 'string' || !title.trim()) {
     res.status(400).json({ error: 'title is required' });
@@ -933,13 +988,10 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
     return;
   }
 
-  let publicFlag = true;
-  if (isPublic !== undefined) {
-    if (typeof isPublic !== 'boolean') {
-      res.status(400).json({ error: 'isPublic must be a boolean' });
-      return;
-    }
-    publicFlag = isPublic;
+  const parsedVisibility = visibility === undefined ? VISIBILITY_PUBLIC : parseVisibility(visibility);
+  if (!parsedVisibility) {
+    res.status(400).json({ error: 'visibility must be PUBLIC, MEMBERS, or OFFICERS' });
+    return;
   }
 
   let lat: number | null = null;
@@ -975,7 +1027,8 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
         meetingTime: when,
         description:
           typeof description === 'string' && description.trim() ? description.trim() : null,
-        isPublic: publicFlag,
+        isPublic: parsedVisibility === VISIBILITY_PUBLIC,
+        visibility: parsedVisibility,
         createdById: userId,
         latitude: lat,
         longitude: lng,
@@ -989,6 +1042,7 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
 
     res.status(201).json({
       ...meeting,
+      isPublic: meeting.visibility === VISIBILITY_PUBLIC,
       rsvpCounts: { going: 0, maybe: 0, notGoing: 0 },
       myRsvp: null,
       attendeeCount: 0,
@@ -1483,8 +1537,21 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const visibleMeetings = club.meetings
+      .filter((meeting) => canAccessVisibility(meeting.visibility, !!myMembership, myMembership?.role))
+      .map((meeting) => ({
+        ...meeting,
+        isPublic: meeting.visibility === VISIBILITY_PUBLIC,
+      }));
+
+    const visibleAnnouncements = club.announcements.filter((announcement) =>
+      canAccessVisibility(announcement.visibility, !!myMembership, myMembership?.role)
+    );
+
     res.json({
       ...club,
+      meetings: visibleMeetings,
+      announcements: visibleAnnouncements,
       members: club.members.map(parseMemberTags),
       isMember: !!myMembership,
       myRole: myMembership?.role ?? null,

@@ -1,390 +1,188 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View, Platform, Linking } from 'react-native';
-import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import React from 'react';
+import { LinkingOptions } from '@react-navigation/native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { enableScreens } from 'react-native-screens';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
-
-// Show notifications as banners when the app is foregrounded
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
-enableScreens();
-
+import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import LoginScreen from './src/screens/LoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen';
-import ActivityListScreen from './src/screens/ActivityListScreen';
-import TodayScreen from './src/screens/TodayScreen';
-import MyActivitiesScreen from './src/screens/MyActivitiesScreen';
-import SearchScreen from './src/screens/SearchScreen';
-import ClubDetailScreen from './src/screens/ClubDetailScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import PodListScreen from './src/screens/PodListScreen';
-import CreatePodScreen from './src/screens/CreatePodScreen';
-import PodScreen from './src/screens/PodScreen';
-import UserProfileScreen from './src/screens/UserProfileScreen';
-import MyReportsScreen from './src/screens/MyReportsScreen';
-import FindAGroupScreen from './src/screens/FindAGroupScreen';
+import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
-import FriendsScreen from './src/screens/FriendsScreen';
-import FriendRequestsScreen from './src/screens/FriendRequestsScreen';
-import UserSearchScreen from './src/screens/UserSearchScreen';
-import MessagesInboxScreen from './src/screens/MessagesInboxScreen';
-import DirectMessageThreadScreen from './src/screens/DirectMessageThreadScreen';
-import PodInvitesScreen from './src/screens/PodInvitesScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import ExploreScreen from './src/screens/ExploreScreen';
+import PodsScreen from './src/screens/PodsScreen';
+import InboxScreen from './src/screens/InboxScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import ActivityPodsScreen from './src/screens/ActivityPodsScreen';
+import PodDetailScreen from './src/screens/PodDetailScreen';
+import ClubDetailScreen from './src/screens/ClubDetailScreen';
+import ThreadScreen from './src/screens/ThreadScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
-import PeopleYouMetScreen from './src/screens/PeopleYouMetScreen';
-import BlockedUsersScreen from './src/screens/BlockedUsersScreen';
-import { colors, home } from './src/theme';
-import { ErrorBoundary } from './src/components/ErrorBoundary';
+import UserProfileScreen from './src/screens/UserProfileScreen';
+import UserSearchScreen from './src/screens/UserSearchScreen';
+import { Activity } from './src/types';
+import { palette } from './src/theme';
 
 export type MainTabParamList = {
-  Today: undefined;
-  MyActivities: undefined;
+  Home: undefined;
   Explore: undefined;
-  Messages: undefined;
+  Pods: undefined;
+  Inbox: undefined;
   Profile: undefined;
 };
 
 export type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  VerifyEmail: undefined;
-  MainTabs: undefined;
-  PodList: { activityId: string; activityTitle: string; activityCategory?: string };
-  CreatePod: { activityId: string; activityTitle: string; activityCategory: string };
-  Pod: { podId: string };
-  UserProfile: { userId: string; name: string };
-  MyReports: undefined;
-  FindAGroup: undefined;
-  Friends: undefined;
-  FriendRequests: undefined;
-  UserSearch: undefined;
-  DirectMessageThread: { threadId: string; otherUserId: string; otherUserName: string };
-  PodInvites: undefined;
-  EditProfile: undefined;
-  Settings: undefined;
-  PeopleYouMet: { podId: string };
+  MainTabs: { screen?: keyof MainTabParamList } | undefined;
+  ActivityPods: { activity: Activity };
+  PodDetail: { podId: string };
   ClubDetail: { clubId: string };
-  BlockedUsers: undefined;
+  Thread: { threadId: string; title: string };
+  EditProfile: undefined;
+  UserProfile: { userId: string };
+  UserSearch: undefined;
 };
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
-// Supported URL prefixes for deep links
-const LINKING_PREFIXES = ['bridge://', 'https://bridge.app'];
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: 'transparent',
+    card: palette.paper,
+    text: palette.ink,
+    border: 'transparent',
+    primary: palette.scarlet,
+  },
+};
 
-// Extracts a podId from any supported invite URL, returns null if not a pod link
-function extractPodId(url: string): string | null {
-  // Matches bridge://pod/ID or https://bridge.app/pod/ID
-  const match = url.match(/(?:bridge:\/\/|https:\/\/bridge\.app)\/pod\/([^/?#]+)/);
-  return match ? match[1] : null;
-}
-
-const linking = {
-  prefixes: LINKING_PREFIXES,
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ['bridge://', 'https://joinbridgeapp.com', 'https://bridge.app'],
   config: {
     screens: {
-      Pod: 'pod/:podId',
+      PodDetail: 'pod/:podId',
+      ClubDetail: 'clubs/:clubId',
+      UserProfile: 'users/:userId',
     },
   },
 };
 
-const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
-  Today: { active: 'flash', inactive: 'flash-outline' },
-  MyActivities: { active: 'people', inactive: 'people-outline' },
-  Explore: { active: 'compass', inactive: 'compass-outline' },
-  Messages: { active: 'chatbubble', inactive: 'chatbubble-outline' },
-  Profile: { active: 'person', inactive: 'person-outline' },
-};
-
 function MainTabs() {
   return (
-    <View style={{ flex: 1, backgroundColor: colors.cream }}>
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          const icons = TAB_ICONS[route.name];
-          return <Ionicons name={focused ? icons.active : icons.inactive} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: home.tabActive,
-        tabBarInactiveTintColor: home.tabInactive,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
-        tabBarStyle: {
-          backgroundColor: home.tabBarBg,
-          borderTopColor: home.tabBarBorder,
-          borderTopWidth: 1,
-          paddingTop: 4,
-          elevation: 0,
-        },
-        animation: 'fade',
+        tabBarStyle: styles.tabBar,
+        tabBarActiveTintColor: palette.scarlet,
+        tabBarInactiveTintColor: '#6F818C',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIcon: ({ color, size, focused }) => (
+          <Ionicons
+            name={tabIcon(route.name, focused)}
+            size={size}
+            color={color}
+          />
+        ),
       })}
     >
-      <Tab.Screen
-        name="Today"
-        component={TodayScreen}
-        options={{ tabBarLabel: 'Today' }}
-      />
-      <Tab.Screen
-        name="MyActivities"
-        component={MyActivitiesScreen}
-        options={{ tabBarLabel: 'My Pods' }}
-      />
-      <Tab.Screen
-        name="Explore"
-        component={SearchScreen}
-        options={{ tabBarLabel: 'Explore' }}
-      />
-      <Tab.Screen
-        name="Messages"
-        component={MessagesInboxScreen}
-        options={{ tabBarLabel: 'Messages' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile' }}
-      />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Explore" component={ExploreScreen} />
+      <Tab.Screen name="Pods" component={PodsScreen} />
+      <Tab.Screen name="Inbox" component={InboxScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
-    </View>
   );
 }
 
-function AppNavigator() {
+function AuthedApp() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
+      <Stack.Screen name="PodDetail" component={PodDetailScreen} />
+      <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <Stack.Screen name="Thread" component={ThreadScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen name="UserSearch" component={UserSearchScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function AppGate() {
   const { user, isLoading } = useAuth();
-  const navigationRef = useNavigationContainerRef<RootStackParamList>();
-  const [pendingPodId, setPendingPodId] = useState<string | null>(null);
-  // Track whether the navigator is ready to accept programmatic navigation
-  const isNavigatorReady = useRef(false);
-
-  // On mount: check if the app was cold-started from an invite link or notification
-  useEffect(() => {
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        const podId = extractPodId(url);
-        if (podId) setPendingPodId(podId);
-      }
-    });
-
-    // Check if app was opened by tapping a push notification (cold start)
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      const podId = response?.notification.request.content.data?.podId as string | undefined;
-      if (podId) setPendingPodId(podId);
-    });
-
-    // Handle links received while the app is already open
-    const linkSub = Linking.addEventListener('url', ({ url }) => {
-      const podId = extractPodId(url);
-      if (!podId) return;
-      if (isNavigatorReady.current && navigationRef.isReady()) {
-        navigationRef.navigate('Pod', { podId });
-      } else {
-        // Not logged in yet — store and navigate after login
-        setPendingPodId(podId);
-      }
-    });
-
-    // Handle notification taps while the app is open or in the background
-    const notifSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const podId = response.notification.request.content.data?.podId as string | undefined;
-      if (!podId) return;
-      if (isNavigatorReady.current && navigationRef.isReady()) {
-        navigationRef.navigate('Pod', { podId });
-      } else {
-        setPendingPodId(podId);
-      }
-    });
-
-    return () => {
-      linkSub.remove();
-      notifSub.remove();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Once the user logs in and a pending pod link is waiting, navigate to it
-  useEffect(() => {
-    if (user && pendingPodId && isNavigatorReady.current && navigationRef.isReady()) {
-      navigationRef.navigate('Pod', { podId: pendingPodId });
-      setPendingPodId(null);
-    }
-  }, [user, pendingPodId, navigationRef]);
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={palette.scarlet} />
+        <Text style={styles.loadingText}>Loading Bridge</Text>
       </View>
     );
   }
 
-  return (
-    <NavigationContainer
-      ref={navigationRef}
-      linking={linking}
-      onReady={() => {
-        isNavigatorReady.current = true;
-        // If there's a pending pod link and the user is already logged in, navigate now
-        if (user && pendingPodId) {
-          navigationRef.navigate('Pod', { podId: pendingPodId });
-          setPendingPodId(null);
-        }
-      }}
-    >
-      <Stack.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: '700', color: colors.text },
-          headerShadowVisible: false,
-          headerBackButtonDisplayMode: 'minimal',
-          contentStyle: { backgroundColor: colors.bg },
-          animation: 'slide_from_right',
-          animationDuration: 250,
-        }}
-      >
-        {user && !user.verifiedUniversity ? (
-          <>
-            <Stack.Screen
-              name="VerifyEmail"
-              component={VerifyEmailScreen}
-              options={{ headerShown: false }}
-            />
-          </>
-        ) : user ? (
-          <>
-            <Stack.Screen
-              name="MainTabs"
-              component={MainTabs}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="PodList"
-              component={PodListScreen}
-              options={({ route }) => ({
-                title: route.params.activityTitle,
-                headerLargeTitle: false,
-              })}
-            />
-            <Stack.Screen
-              name="CreatePod"
-              component={CreatePodScreen}
-              options={{ title: 'Create Pod' }}
-            />
-            <Stack.Screen
-              name="Pod"
-              component={PodScreen}
-              options={{
-                title: 'Pod',
-                headerShown: false,
-                animation: 'fade_from_bottom',
-              }}
-            />
-            <Stack.Screen
-              name="UserProfile"
-              component={UserProfileScreen}
-              options={{ title: 'Profile' }}
-            />
-            <Stack.Screen
-              name="MyReports"
-              component={MyReportsScreen}
-              options={{ title: 'My Reports' }}
-            />
-            <Stack.Screen
-              name="FindAGroup"
-              component={FindAGroupScreen}
-              options={{ title: 'Find a Group' }}
-            />
-            <Stack.Screen
-              name="Friends"
-              component={FriendsScreen}
-              options={{ title: 'Friends' }}
-            />
-            <Stack.Screen
-              name="FriendRequests"
-              component={FriendRequestsScreen}
-              options={{ title: 'Friend Requests' }}
-            />
-            <Stack.Screen
-              name="UserSearch"
-              component={UserSearchScreen}
-              options={{ title: 'Find People' }}
-            />
-            <Stack.Screen
-              name="DirectMessageThread"
-              component={DirectMessageThreadScreen}
-              options={({ route }) => ({ title: route.params.otherUserName })}
-            />
-            <Stack.Screen
-              name="PodInvites"
-              component={PodInvitesScreen}
-              options={{ title: 'Pod Invites' }}
-            />
-            <Stack.Screen
-              name="EditProfile"
-              component={EditProfileScreen}
-              options={{ title: 'Edit Profile' }}
-            />
-            <Stack.Screen
-              name="Settings"
-              component={SettingsScreen}
-              options={{ title: 'Settings' }}
-            />
-            <Stack.Screen
-              name="PeopleYouMet"
-              component={PeopleYouMetScreen}
-              options={{ title: 'People You Met' }}
-            />
-            <Stack.Screen
-              name="ClubDetail"
-              component={ClubDetailScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="BlockedUsers"
-              component={BlockedUsersScreen}
-              options={{ title: 'Blocked Users' }}
-            />
-          </>
-        ) : (
-          <>
-            <Stack.Screen
-              name="Login"
-              component={LoginScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="Register"
-              component={RegisterScreen}
-              options={{ headerShown: false }}
-            />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
-  );
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  if (!user.verifiedUniversity) {
+    return <VerifyEmailScreen />;
+  }
+
+  return <AuthedApp />;
 }
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <AppNavigator />
-      </AuthProvider>
-    </ErrorBoundary>
+    <AuthProvider>
+      <NavigationContainer theme={navTheme} linking={linking}>
+        <StatusBar style="dark" />
+        <AppGate />
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
+
+function tabIcon(routeName: keyof MainTabParamList, focused: boolean): keyof typeof Ionicons.glyphMap {
+  switch (routeName) {
+    case 'Home':
+      return focused ? 'home' : 'home-outline';
+    case 'Explore':
+      return focused ? 'compass' : 'compass-outline';
+    case 'Pods':
+      return focused ? 'flash' : 'flash-outline';
+    case 'Inbox':
+      return focused ? 'mail' : 'mail-outline';
+    case 'Profile':
+      return focused ? 'person' : 'person-outline';
+  }
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: 'rgba(251, 249, 244, 0.96)',
+    borderTopWidth: 0,
+    height: Platform.select({ ios: 86, default: 68 }),
+    paddingTop: 8,
+    paddingBottom: Platform.select({ ios: 20, default: 10 }),
+    elevation: 0,
+  },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.paper,
+    gap: 12,
+  },
+  loadingText: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

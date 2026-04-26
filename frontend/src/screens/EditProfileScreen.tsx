@@ -1,563 +1,195 @@
-import React, { useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { deleteAvatar, updateProfile, uploadAvatar } from '../api';
+import { useAuth } from '../context/AuthContext';
+import { Chip, Hero, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
+import { INTEREST_TAGS } from '../constants/interestTags';
+import { palette, radii, spacing, typography } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { updateProfile } from '../api';
-import { useAuth } from '../context/AuthContext';
-import GradientButton from '../components/GradientButton';
-import MajorPickerModal, { PRESET_MAJORS } from '../components/MajorPickerModal';
-import { INTEREST_TAGS, INTEREST_TAG_META } from '../constants/interestTags';
-import { colors, spacing, radii, typography, shadows } from '../theme';
+import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
-const CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
-const CUSTOM_MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
-const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
-const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
-
-function initMajorState(savedMajor: string | null | undefined): { picked: string; custom: string } {
-  if (!savedMajor) return { picked: '', custom: '' };
-  if (PRESET_MAJORS.includes(savedMajor)) return { picked: savedMajor, custom: '' };
-  return { picked: 'Other', custom: savedMajor };
-}
-
 export default function EditProfileScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
-
-  const initialMajor = initMajorState(user?.major);
   const [classYear, setClassYear] = useState(user?.classYear ?? '');
-  const [pickedMajor, setPickedMajor] = useState(initialMajor.picked);
-  const [customMajor, setCustomMajor] = useState(initialMajor.custom);
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [customMajorError, setCustomMajorError] = useState('');
+  const [major, setMajor] = useState(user?.major ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
-  const [clubs, setClubs] = useState<string[]>(user?.clubs ?? []);
-  const [clubInput, setClubInput] = useState('');
   const [instagramHandle, setInstagramHandle] = useState(user?.instagramHandle ?? '');
   const [interestTags, setInterestTags] = useState<string[]>(user?.interestTags ?? []);
+  const [busy, setBusy] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
-  const [clubError, setClubError] = useState('');
-  const [instagramError, setInstagramError] = useState('');
-  const [classYearError, setClassYearError] = useState('');
-  const [majorError, setMajorError] = useState('');
-  const [interestLimitMsg, setInterestLimitMsg] = useState('');
-  const [formError, setFormError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const interestLimitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const effectiveMajor = pickedMajor === 'Other' ? customMajor.trim() : pickedMajor;
-
-  const handleMajorSelect = (value: string) => {
-    setPickedMajor(value);
-    setCustomMajorError('');
-    setMajorError('');
-    setPickerVisible(false);
+  const toggleTag = (tag: string) => {
+    setInterestTags((current) =>
+      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
+    );
   };
 
-  const validateCustomMajor = (value: string) => {
-    const t = value.trim();
-    if (!t) return 'Please specify your major';
-    if (t.length < 2) return 'Major must be at least 2 characters';
-    if (t.length > 60) return 'Major must be 60 characters or fewer';
-    if (!CUSTOM_MAJOR_REGEX.test(t)) return 'Major can only contain letters and common punctuation';
-    return '';
-  };
-
-  const validateClub = (value: string) => {
-    const t = value.trim();
-    if (!t) return '';
-    if (t.length < 2) return 'Club name must be at least 2 characters';
-    if (t.length > 50) return 'Club name must be 50 characters or fewer';
-    if (!CLUB_REGEX.test(t)) return 'Club names can only contain letters, spaces, &, and hyphens';
-    return '';
-  };
-
-  const handleAddClub = () => {
-    const err = validateClub(clubInput);
-    if (err) {
-      setClubError(err);
-      return;
-    }
-    const trimmed = clubInput.trim();
-    if (!trimmed) return;
-    if (clubs.length >= 5) {
-      setClubError('You can add up to 5 clubs');
-      return;
-    }
-    setClubs([...clubs, trimmed]);
-    setClubInput('');
-    setClubError('');
-  };
-
-  const handleRemoveClub = (index: number) => {
-    setClubs(clubs.filter((_, i) => i !== index));
-  };
-
-  const handleInstagramChange = (value: string) => {
-    if (value.includes('@')) {
-      setInstagramError("Don't include the @ symbol");
-    } else if (instagramError === "Don't include the @ symbol") {
-      setInstagramError('');
-    } else if (instagramError && value) {
-      setInstagramError(INSTAGRAM_REGEX.test(value) ? '' : 'Invalid handle — letters, numbers, periods, underscores only');
-    }
-    const stripped = value.replace(/@/g, '');
-    setInstagramHandle(stripped);
-  };
-
-  const handleSave = async () => {
-    setFormError('');
-    let hasError = false;
-
-    if (!classYear) {
-      setClassYearError('Please select your class year');
-      hasError = true;
-    } else {
-      setClassYearError('');
-    }
-    if (!pickedMajor) {
-      setMajorError('Please select your major');
-      hasError = true;
-    } else {
-      setMajorError('');
-    }
-    if (pickedMajor === 'Other') {
-      const err = validateCustomMajor(customMajor);
-      if (err) {
-        setCustomMajorError(err);
-        hasError = true;
-      }
-    }
-    if (instagramHandle && !INSTAGRAM_REGEX.test(instagramHandle)) {
-      setInstagramError('Invalid handle — letters, numbers, periods, underscores only');
-      hasError = true;
-    }
-    if (hasError) return;
-
-    setLoading(true);
+  const save = async () => {
+    setBusy(true);
     try {
       const updated = await updateProfile({
         classYear,
-        major: effectiveMajor,
-        bio: bio.trim() || null,
-        clubs,
-        instagramHandle: instagramHandle.trim() || null,
+        major,
+        bio,
+        instagramHandle,
         interestTags,
       });
       await updateUser(updated);
-      navigation.goBack();
-    } catch {
-      setFormError('Something went wrong. Please try again.');
+      Alert.alert('Saved', 'Your profile now matches the new experience.');
+    } catch (error) {
+      Alert.alert('Could not save', error instanceof Error ? error.message : 'Please try again.');
     } finally {
-      setLoading(false);
+      setBusy(false);
+    }
+  };
+
+  const pickAvatar = async () => {
+    setAvatarBusy(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Photos permission needed', 'Allow photo access so you can upload a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets[0]?.uri) return;
+
+      const response = await uploadAvatar(result.assets[0].uri);
+      await updateUser({ avatarUrl: response.avatarUrl });
+      Alert.alert('Profile photo updated', 'Your avatar is now live.');
+    } catch (error) {
+      Alert.alert('Could not update photo', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const removeCurrentAvatar = async () => {
+    setAvatarBusy(true);
+    try {
+      await deleteAvatar();
+      await updateUser({ avatarUrl: null });
+      Alert.alert('Profile photo removed', 'Your avatar has been removed.');
+    } catch (error) {
+      Alert.alert('Could not remove photo', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Class Year */}
-        <View style={[styles.section, shadows.sm]}>
-          <Text style={styles.sectionTitle}>Class Year</Text>
-          <View style={styles.pillRow}>
-            {CLASS_YEARS.map((year) => (
-              <TouchableOpacity
-                key={year}
-                style={[styles.pill, classYear === year && styles.pillSelected]}
-                onPress={() => { setClassYear(year); setClassYearError(''); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.pillText, classYear === year && styles.pillTextSelected]}>
-                  {year}
-                </Text>
-              </TouchableOpacity>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
+        <Hero eyebrow="Edit profile" title="Make your identity legible at a glance." subtitle="The goal is better social signal, not more form fields." />
+        <Panel>
+          <View style={styles.avatarSection}>
+            <UserAvatar name={user?.name ?? 'User'} avatarUrl={user?.avatarUrl} size={84} />
+            <View style={styles.avatarActions}>
+              <PrimaryButton label="Change photo" onPress={() => void pickAvatar()} loading={avatarBusy} />
+              {user?.avatarUrl ? (
+                <PrimaryButton label="Remove photo" onPress={() => void removeCurrentAvatar()} kind="ghost" disabled={avatarBusy} />
+              ) : null}
+            </View>
+          </View>
+          <Text style={styles.label}>Class year</Text>
+          <View style={styles.tagWrap}>
+            {CLASS_YEAR_OPTIONS.map((option) => (
+              <Chip key={option} label={option} active={classYear === option} onPress={() => setClassYear(option)} />
             ))}
           </View>
-          {classYearError ? <Text style={styles.errorText}>{classYearError}</Text> : null}
-        </View>
-
-        {/* Major */}
-        <View style={[styles.section, shadows.sm]}>
-          <Text style={styles.sectionTitle}>Major</Text>
-          <TouchableOpacity
-            style={styles.inputWrapper}
-            onPress={() => setPickerVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="school-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
-            <Text style={[styles.input, !pickedMajor && styles.inputPlaceholder]}>
-              {pickedMajor || 'Select your major'}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          {pickedMajor === 'Other' && (
-            <>
-              <View style={[styles.inputWrapper, customMajorError ? styles.inputWrapperError : null]}>
-                <Ionicons name="create-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Specify your major"
-                  placeholderTextColor={colors.textTertiary}
-                  value={customMajor}
-                  onChangeText={(v) => {
-                    setCustomMajor(v);
-                    if (customMajorError) setCustomMajorError(validateCustomMajor(v));
-                  }}
-                  maxLength={60}
-                  autoCorrect={false}
-                />
-              </View>
-              {customMajorError ? <Text style={styles.errorText}>{customMajorError}</Text> : null}
-            </>
-          )}
-
-          {majorError ? <Text style={styles.errorText}>{majorError}</Text> : null}
-
-          <MajorPickerModal
-            visible={pickerVisible}
-            selected={pickedMajor}
-            onSelect={handleMajorSelect}
-            onClose={() => setPickerVisible(false)}
-          />
-        </View>
-
-        {/* Bio */}
-        <View style={[styles.section, shadows.sm]}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Bio</Text>
-            <Text style={[styles.charCount, bio.length > 130 && styles.charCountWarn]}>{bio.length}/150</Text>
+          <Field label="Major" value={major} onChangeText={setMajor} placeholder="Computer Science" />
+          <Field label="Instagram" value={instagramHandle} onChangeText={setInstagramHandle} placeholder="@bridgeperson" />
+          <Field label="Bio" value={bio} onChangeText={setBio} placeholder="What should people know before they join your pod?" multiline />
+          <Text style={styles.label}>Interests</Text>
+          <View style={styles.tagWrap}>
+            {INTEREST_TAGS.map((tag) => (
+              <Chip key={tag} label={tag} active={interestTags.includes(tag)} onPress={() => toggleTag(tag)} />
+            ))}
           </View>
-          <TextInput
-            style={[styles.inputWrapper, styles.bioInput]}
-            placeholder="A short vibe line — e.g. I play intramural soccer and love finding good coffee"
-            placeholderTextColor={colors.textTertiary}
-            value={bio}
-            onChangeText={(v) => setBio(v.slice(0, 150))}
-            maxLength={150}
-            multiline
-            numberOfLines={3}
-          />
-        </View>
-
-        {/* Clubs / Orgs */}
-        <View style={[styles.section, shadows.sm]}>
-          <Text style={styles.sectionTitle}>Clubs & Orgs <Text style={styles.optionalTag}>optional · up to 5</Text></Text>
-          {clubs.length > 0 && (
-            <View style={styles.tagRow}>
-              {clubs.map((club, i) => (
-                <View key={i} style={styles.tag}>
-                  <Text style={styles.tagText}>{club}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveClub(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Ionicons name="close" size={13} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-          {clubs.length < 5 && (
-            <>
-              <View style={[styles.inputWrapper, styles.clubInputRow, clubError ? styles.inputWrapperError : null]}>
-                <Ionicons name="people-outline" size={18} color={colors.textTertiary} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="e.g. Intramural Soccer"
-                  placeholderTextColor={colors.textTertiary}
-                  value={clubInput}
-                  onChangeText={(v) => {
-                    setClubInput(v);
-                    if (clubError) setClubError(validateClub(v));
-                  }}
-                  maxLength={50}
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={handleAddClub}
-                />
-                <TouchableOpacity onPress={handleAddClub} style={styles.addButton}>
-                  <Text style={styles.addButtonText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-              {clubError ? <Text style={styles.errorText}>{clubError}</Text> : null}
-            </>
-          )}
-        </View>
-
-        {/* Interests */}
-        <View style={[styles.section, shadows.sm]}>
-          <Text style={styles.sectionTitle}>
-            Interests{' '}
-            <Text style={styles.optionalTag}>optional · up to 5</Text>
-          </Text>
-          <Text style={styles.interestsHint}>
-            Tap to toggle — helps others see who they'd be joining
-          </Text>
-          {interestLimitMsg ? <Text style={styles.interestLimitText}>{interestLimitMsg}</Text> : null}
-          <View style={styles.pillRow}>
-            {INTEREST_TAGS.map((tag) => {
-              const selected = interestTags.includes(tag);
-              const meta = INTEREST_TAG_META[tag];
-              return (
-                <TouchableOpacity
-                  key={tag}
-                  style={[
-                    styles.pill,
-                    selected && {
-                      borderColor: meta.color,
-                      backgroundColor: meta.bg,
-                    },
-                  ]}
-                  onPress={() => {
-                    if (selected) {
-                      setInterestTags(interestTags.filter((t) => t !== tag));
-                    } else if (interestTags.length >= 5) {
-                      setInterestLimitMsg('You can select up to 5 interests');
-                      if (interestLimitTimer.current) clearTimeout(interestLimitTimer.current);
-                      interestLimitTimer.current = setTimeout(() => setInterestLimitMsg(''), 2000);
-                    } else {
-                      setInterestTags([...interestTags, tag]);
-                    }
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.pillText, selected && { color: meta.color }]}>
-                    {tag}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.save}>
+            <PrimaryButton label="Save profile" onPress={save} loading={busy} />
           </View>
-        </View>
-
-        {/* Instagram */}
-        <View style={[styles.section, shadows.sm]}>
-          <Text style={styles.sectionTitle}>Instagram <Text style={styles.optionalTag}>optional</Text></Text>
-          <View style={[styles.inputWrapper, instagramError ? styles.inputWrapperError : null]}>
-            <Text style={styles.atSign}>@</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="yourhandle"
-              placeholderTextColor={colors.textTertiary}
-              value={instagramHandle}
-              onChangeText={handleInstagramChange}
-              onBlur={() => {
-                if (instagramHandle && !INSTAGRAM_REGEX.test(instagramHandle)) {
-                  setInstagramError('Invalid handle — letters, numbers, periods, underscores only');
-                } else {
-                  setInstagramError('');
-                }
-              }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={30}
-            />
-          </View>
-          {instagramError ? <Text style={styles.errorText}>{instagramError}</Text> : null}
-          {!instagramError && instagramHandle ? (
-            <Text style={styles.instagramPreview}>@{instagramHandle}</Text>
-          ) : null}
-        </View>
-
-        <View style={styles.saveSection}>
-          {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
-          <GradientButton
-            title="Save Changes"
-            onPress={handleSave}
-            loading={loading}
-            disabled={loading}
-          />
-        </View>
+        </Panel>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </Screen>
+  );
+}
+
+function Field({
+  label,
+  ...props
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  multiline?: boolean;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        {...props}
+        placeholderTextColor={palette.slate}
+        style={[styles.input, props.multiline && styles.inputMultiline]}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
   content: {
-    padding: spacing.lg,
-    gap: spacing.md,
-    paddingBottom: spacing.xxxl,
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
   },
-  section: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
+  avatarSection: {
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  avatarActions: {
+    width: '100%',
     gap: spacing.sm,
   },
-  sectionTitle: {
-    ...typography.bodyBold,
-    fontSize: 14,
-    color: colors.text,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  charCount: {
-    ...typography.tiny,
-    color: colors.textTertiary,
-  },
-  optionalTag: {
-    ...typography.tiny,
-    color: colors.textTertiary,
-    fontWeight: '500',
-  },
-  interestsHint: {
-    ...typography.tiny,
-    color: colors.textTertiary,
-    marginTop: -spacing.xs,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  field: {
     gap: spacing.xs,
-    marginTop: spacing.xs,
+    marginBottom: spacing.md,
   },
-  pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm - 2,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  pillSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + '15',
-  },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  pillTextSelected: {
-    color: colors.primary,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-  },
-  inputWrapperError: {
-    borderColor: colors.scarlet,
-  },
-  inputPlaceholder: {
-    color: colors.textTertiary,
-  },
-  inputIcon: {
-    marginRight: spacing.sm,
+  label: {
+    ...typography.label,
   },
   input: {
-    flex: 1,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: colors.text,
+    borderRadius: radii.md,
+    backgroundColor: palette.cream,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    ...typography.body,
+    color: palette.ink,
   },
-  bioInput: {
-    paddingVertical: spacing.md,
-    minHeight: 80,
+  inputMultiline: {
+    minHeight: 100,
     textAlignVertical: 'top',
-    alignItems: 'flex-start',
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
   },
-  tagRow: {
+  tagWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    rowGap: spacing.sm,
   },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primary + '15',
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
-  },
-  tagText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  clubInputRow: {
-    paddingRight: spacing.xs,
-  },
-  addButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-  },
-  addButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textInverse,
-  },
-  atSign: {
-    fontSize: 16,
-    color: colors.textTertiary,
-    marginRight: 2,
-  },
-  instagramPreview: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: -spacing.xs,
-    paddingLeft: spacing.xs,
-  },
-  errorText: {
-    fontSize: 12,
-    color: colors.scarlet,
-    marginTop: -spacing.xs,
-    paddingLeft: spacing.xs,
-  },
-  formErrorText: {
-    fontSize: 13,
-    color: '#999999',
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  interestLimitText: {
-    fontSize: 12,
-    color: '#999999',
-    marginBottom: spacing.xs,
-  },
-  charCountWarn: {
-    color: colors.scarlet,
-  },
-  saveSection: {
-    marginTop: spacing.sm,
+  save: {
+    marginTop: spacing.md,
   },
 });

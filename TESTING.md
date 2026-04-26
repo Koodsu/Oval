@@ -17,8 +17,8 @@ npm run test:frontend  # Component tests
 
 ### Backend
 - **Vitest** + **supertest** for API integration tests
-- Separate SQLite test DB (`prisma/test.db`) — migrations and seed run automatically
-- Tests cover: auth, activities, pods, messages, locations config
+- Separate Postgres test DB via `TEST_DATABASE_URL` (or fallback to `DATABASE_URL` if you intentionally want that)
+- Global setup resets migrations and reseeds before the suite
 
 ### Frontend
 - **Jest 29** + **jest-expo** + **React Native Testing Library**
@@ -27,12 +27,14 @@ npm run test:frontend  # Component tests
 
 ## Your Setup (One-Time)
 
-### 1. Backend: Add `DATABASE_URL` to `.env`
+### 1. Backend: Add `DATABASE_URL` and `TEST_DATABASE_URL` to `.env`
 
-The Prisma schema now uses `DATABASE_URL`. Create or update `backend/.env`:
+Create or update `backend/.env`:
 
 ```
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://..."
+DIRECT_URL="postgresql://..."
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/bridge_test"
 ```
 
 Copy from `backend/.env.example` if you prefer.

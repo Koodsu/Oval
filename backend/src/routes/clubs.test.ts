@@ -1100,4 +1100,92 @@ describe('Clubs API (integration)', () => {
       expect(gone).toBeNull();
     });
   });
+
+  describe('Club visibility and officer channels', () => {
+    it('filters officer-only announcements for regular members', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: token2, user: u2 } = await registerAndGetToken(
+        'Officer Two',
+        `officer-two-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+
+      await prisma.clubMember.update({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+        data: { role: 'OFFICER' },
+      });
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ content: 'Officer eyes only', visibility: 'OFFICERS' })
+        .expect(201);
+
+      const memberRes = await request(app)
+        .get(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(memberRes.body.items).toHaveLength(0);
+
+      const officerRes = await request(app)
+        .get(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(200);
+
+      expect(officerRes.body.items).toHaveLength(1);
+      expect(officerRes.body.items[0].visibility).toBe('OFFICERS');
+    });
+
+    it('allows only officers and admins into the officer channel', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: token2, user: u2 } = await registerAndGetToken(
+        'Channel Officer',
+        `channel-officer-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+
+      await request(app)
+        .get(`/clubs/${create.body.id}/officer-messages`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(403);
+
+      await prisma.clubMember.update({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+        data: { role: 'OFFICER' },
+      });
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/officer-messages`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ content: 'Officer planning note' })
+        .expect(201);
+
+      const res = await request(app)
+        .get(`/clubs/${create.body.id}/officer-messages`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(200);
+
+      expect(res.body.messages).toHaveLength(1);
+      expect(res.body.messages[0].content).toBe('Officer planning note');
+    });
+  });
 });

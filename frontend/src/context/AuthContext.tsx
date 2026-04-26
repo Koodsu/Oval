@@ -113,9 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const migratedToken = await migrateTokenToSecureStore();
 
       const STORAGE_TIMEOUT_MS = 5000;
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('storage_timeout')), STORAGE_TIMEOUT_MS)
-      );
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('storage_timeout')), STORAGE_TIMEOUT_MS);
+      });
 
       let secureToken: string | null = null;
       let userEntry: string | null = null;
@@ -134,9 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Storage read timed out or failed — treat as logged-out and let the
         // user sign in again rather than blocking on the splash screen forever.
+        if (timeoutId) clearTimeout(timeoutId);
         setIsLoading(false);
         return;
       }
+      if (timeoutId) clearTimeout(timeoutId);
 
       const storedToken = secureToken ?? migratedToken;
 

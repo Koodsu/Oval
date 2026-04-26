@@ -1,9 +1,15 @@
 import { Router, Request, Response } from 'express';
 
 const router = Router();
+const APP_HOST = process.env.APP_HOST?.trim() || 'joinbridgeapp.com';
+const IOS_APP_ID = process.env.IOS_APP_ID?.trim() || 'com.bradyvb.bridgeapp';
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.bradyvb.bridgeapp';
+const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID?.trim();
+const ANDROID_SHA256 = process.env.ANDROID_SHA256_CERT_FINGERPRINT?.trim();
 
 // iOS Universal Links verification
-// Replace APPLE_TEAM_ID and IOS_BUNDLE_ID with real values before publishing to App Store
+// Uses env values when available; falls back to the local app bundle id so
+// the emitted config stays aligned with the mobile app even before release.
 router.get('/.well-known/apple-app-site-association', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
   res.json({
@@ -11,7 +17,7 @@ router.get('/.well-known/apple-app-site-association', (_req: Request, res: Respo
       apps: [],
       details: [
         {
-          appID: 'APPLE_TEAM_ID.com.bridge.app',
+          appID: APPLE_TEAM_ID ? `${APPLE_TEAM_ID}.${IOS_APP_ID}` : IOS_APP_ID,
           paths: ['/pod/*'],
         },
       ],
@@ -20,7 +26,7 @@ router.get('/.well-known/apple-app-site-association', (_req: Request, res: Respo
 });
 
 // Android App Links verification
-// Replace SHA256_CERT_FINGERPRINT with the real SHA-256 fingerprint of your signing key before publishing
+// Uses the configured package id and optional SHA env override.
 router.get('/.well-known/assetlinks.json', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
   res.json([
@@ -28,8 +34,8 @@ router.get('/.well-known/assetlinks.json', (_req: Request, res: Response) => {
       relation: ['delegate_permission/common.handle_all_urls'],
       target: {
         namespace: 'android_app',
-        package_name: 'com.bridge.app',
-        sha256_cert_fingerprints: ['SHA256_CERT_FINGERPRINT'],
+        package_name: ANDROID_PACKAGE,
+        sha256_cert_fingerprints: ANDROID_SHA256 ? [ANDROID_SHA256] : [],
       },
     },
   ]);
@@ -49,7 +55,7 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
   }
 
   const deepLink = `bridge://pod/${podId}`;
-  const universalLink = `https://bridge.app/pod/${podId}`;
+  const universalLink = `https://${APP_HOST}/pod/${podId}`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">

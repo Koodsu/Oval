@@ -4,8 +4,46 @@ import { asyncHandler } from '../lib/asyncHandler';
 
 const router = Router();
 const resend = new Resend(process.env.RESEND_API_KEY);
+const WAITLIST_SEGMENT_ID = process.env.RESEND_WAITLIST_SEGMENT_ID?.trim() || undefined;
 
 const OSU_EMAIL_RE = /@(osu\.edu|buckeyemail\.osu\.edu)$/i;
+
+async function getWaitlistCount(): Promise<number> {
+  let total = 0;
+  let after: string | undefined;
+
+  for (;;) {
+    const result = await resend.contacts.list({
+      limit: 100,
+      ...(WAITLIST_SEGMENT_ID ? { segmentId: WAITLIST_SEGMENT_ID } : {}),
+      ...(after ? { after } : {}),
+    });
+
+    if (result.error || !result.data) {
+      throw new Error(result.error?.message || 'Could not fetch waitlist count from Resend');
+    }
+
+    total += result.data.data.length;
+
+    if (!result.data.has_more || result.data.data.length === 0) {
+      return total;
+    }
+
+    after = result.data.data[result.data.data.length - 1]?.id;
+    if (!after) return total;
+  }
+}
+
+// GET /waitlist/count — current number of waitlist signups
+router.get('/count', asyncHandler(async (_req: Request, res: Response) => {
+  if (!process.env.RESEND_API_KEY) {
+    res.status(503).json({ error: 'Waitlist counter is unavailable' });
+    return;
+  }
+
+  const count = await getWaitlistCount();
+  res.json({ count });
+}));
 
 // POST /waitlist — add an email to the Resend contact list
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
@@ -19,6 +57,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   await resend.contacts.create({
     email: email.trim(),
     unsubscribed: false,
+    ...(WAITLIST_SEGMENT_ID ? { segments: [{ id: WAITLIST_SEGMENT_ID }] } : {}),
   });
 
   res.status(201).json({ success: true });

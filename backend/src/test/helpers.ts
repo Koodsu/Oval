@@ -37,7 +37,7 @@ export async function registerAndGetToken(
   const osuEmail = email.includes('@') ? email.split('@')[0] + '@osu.edu' : email + '@osu.edu';
   const res = await request(app)
     .post('/auth/register')
-    .send({ name, email: osuEmail, password })
+    .send({ name, email: osuEmail, password, classYear: 'Freshman', major: 'Computer Science' })
     .expect(201);
   return res.body;
 }

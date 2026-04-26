@@ -23,13 +23,10 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
-// Mock expo-notifications (no real push tokens in tests)
 jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
   requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
-  getExpoPushTokenAsync: jest.fn().mockResolvedValue({ data: 'ExponentPushToken[test]' }),
-  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
-  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
-  setNotificationHandler: jest.fn(),
+  getExpoPushTokenAsync: jest.fn(),
 }));
 
 // Mock @expo/vector-icons (renders nothing in tests)

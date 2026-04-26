@@ -1,157 +1,124 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
+import { API_USER_MESSAGE, searchUsers, sendFriendRequest } from '../api';
 import { RootStackParamList } from '../../App';
-import { searchUsers, resolveAvatarUrl } from '../api';
 import { FriendUser } from '../types';
-import Avatar from '../components/Avatar';
-import { colors, spacing, radii, typography, shadows } from '../theme';
+import { EmptyState, PrimaryButton, Screen, ScreenHeader, SearchField, UserAvatar } from '../components/ui';
+import { spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserSearch'>;
 
 export default function UserSearchScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FriendUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
 
-  const handleSearch = (text: string) => {
-    setQuery(text);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!text.trim()) {
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = query.trim();
+    if (!trimmed) {
       setResults([]);
-      setSearched(false);
       return;
     }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const data = await searchUsers(text.trim());
-        setResults(data);
-        setSearched(true);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 350);
+
+    const timeout = setTimeout(() => {
+      searchUsers(trimmed)
+        .then((users) => {
+          if (!cancelled) setResults(users);
+        })
+        .catch(() => {
+          if (!cancelled) Alert.alert('Could not search users', API_USER_MESSAGE);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [query]);
+
+  const handleAdd = async (userId: string) => {
+    setBusyUserId(userId);
+    try {
+      await sendFriendRequest(userId);
+      Alert.alert('Request sent', 'They will see your friend request in their inbox.');
+    } catch {
+      Alert.alert('Could not send request', API_USER_MESSAGE);
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <Ionicons name="search-outline" size={18} color={colors.textTertiary} />
-        <TextInput
-          style={styles.input}
-          placeholder="Search by name..."
-          placeholderTextColor={colors.textTertiary}
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScreenHeader title="Find people" onBack={() => navigation.goBack()} />
+        <SearchField
           value={query}
-          onChangeText={handleSearch}
-          autoFocus
-          returnKeyType="search"
-          autoCapitalize="words"
+          onChangeText={setQuery}
+          placeholder="Search students by name..."
         />
-        {loading && <ActivityIndicator size="small" color={colors.primary} />}
-        {!loading && query.length > 0 && (
-          <TouchableOpacity onPress={() => handleSearch('')}>
-            <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
-          </TouchableOpacity>
-        )}
-      </View>
 
-      <FlatList
-        data={results}
-        keyExtractor={(u) => u.id}
-        contentContainerStyle={results.length === 0 ? styles.emptyContainer : styles.list}
-        keyboardDismissMode="on-drag"
-        ListEmptyComponent={
-          searched && !loading ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No users found</Text>
-            </View>
-          ) : !searched ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={48} color={colors.textTertiary} />
-              <Text style={styles.emptyText}>Type a name to search</Text>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.row, shadows.sm]}
-            onPress={() => navigation.navigate('UserProfile', { userId: item.id, name: item.name })}
-            activeOpacity={0.8}
-          >
-            <Avatar name={item.name} size={44} uri={resolveAvatarUrl(item.avatarUrl)} />
-            <View style={styles.rowInfo}>
-              <Text style={styles.rowName}>{item.name}</Text>
-              {item.verifiedUniversity && (
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="shield-checkmark" size={11} color={colors.green} />
-                  <Text style={styles.verifiedText}>OSU Verified</Text>
+        {query.trim().length === 0 ? (
+          <EmptyState icon="search-outline" title="Search the campus graph" body="Look up someone you met in a pod, class, or club and send the request from here." />
+        ) : results.length ? (
+          <View style={styles.section}>
+            {results.map((user) => (
+              <TouchableOpacity
+                key={user.id}
+                style={styles.row}
+                activeOpacity={0.88}
+                onPress={() => navigation.navigate('UserProfile', { userId: user.id })}
+              >
+                <View style={styles.rowMain}>
+                  <UserAvatar name={user.name} avatarUrl={user.avatarUrl} />
+                  <View style={styles.copy}>
+                    <Text style={styles.title}>{user.name}</Text>
+                    <Text style={styles.body}>{user.verifiedUniversity ? 'Verified Ohio State student' : 'Student'}</Text>
+                  </View>
                 </View>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-          </TouchableOpacity>
+                <PrimaryButton
+                  label="Add"
+                  onPress={() => void handleAdd(user.id)}
+                  loading={busyUserId === user.id}
+                  kind="ghost"
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <EmptyState icon="person-outline" title="No matches yet" body="Try a different spelling or search for their first and last name." />
         )}
-      />
-    </View>
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  searchBar: {
+  content: {
+    paddingVertical: spacing.lg,
+    gap: spacing.md,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  row: {
+    gap: spacing.sm,
+  },
+  rowMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    margin: spacing.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  input: {
+  copy: {
     flex: 1,
-    ...typography.body,
-    color: colors.text,
-  },
-  list: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xl },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyState: { alignItems: 'center', gap: spacing.md },
-  emptyText: { ...typography.body, color: colors.textSecondary },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-  },
-  rowInfo: { flex: 1, gap: 2 },
-  rowName: { ...typography.bodyBold },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 2,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.greenLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.pill,
   },
-  verifiedText: { ...typography.tiny, color: colors.green, fontWeight: '600' },
+  title: {
+    ...typography.title,
+  },
+  body: {
+    ...typography.body,
+  },
 });
