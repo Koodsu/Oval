@@ -1,12 +1,9 @@
 import { Routes, Route, Outlet } from 'react-router-dom'
 import Nav from './components/Nav'
 import Hero from './components/Hero'
-import StatsBar from './components/StatsBar'
 import HowItWorks from './components/HowItWorks'
 import CampusLife from './components/CampusLife'
 import FeatureBento from './components/FeatureBento'
-import Categories from './components/Categories'
-import Testimonials from './components/Testimonials'
 import FinalCta from './components/FinalCta'
 import Footer from './components/Footer'
 import PrivacyPolicy from './components/PrivacyPolicy'
@@ -22,12 +19,9 @@ function LandingPage() {
   return (
     <main>
       <Hero />
-      <StatsBar />
-      <HowItWorks />
       <CampusLife />
+      <HowItWorks />
       <FeatureBento />
-      <Categories />
-      <Testimonials />
       <FinalCta />
     </main>
   )

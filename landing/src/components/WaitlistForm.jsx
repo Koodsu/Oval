@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 const API_URL = import.meta.env.VITE_BRIDGE_API_URL ?? 'http://localhost:3000'
 
-export default function WaitlistForm({ dark = false }) {
+export default function WaitlistForm({ dark = false, onSuccess }) {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -27,6 +27,7 @@ export default function WaitlistForm({ dark = false }) {
       }
 
       setSubmitted(true)
+      onSuccess?.(email.trim())
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {

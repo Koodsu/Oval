@@ -65,7 +65,7 @@ export default function FinalCta() {
       </div>
 
       <div className="relative max-w-[1400px] mx-auto">
-        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
+        <div className="grid gap-8 lg:grid-cols-[0.94fr_1.06fr] lg:items-center">
           <div>
             <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet mb-8">
               Limited Spots
@@ -76,29 +76,45 @@ export default function FinalCta() {
               <span className="text-shimmer">IN THE GROUP CHAT.</span>
             </h2>
 
-            <p className="reveal text-base text-white/35 leading-relaxed max-w-xl mb-8 font-light">
+            <p className="reveal text-base text-white/74 leading-relaxed max-w-xl mb-8 font-light">
               Bridge launches at Ohio State this fall. Early access members get in first, get founding-member
               status, and help shape the app from day one.
             </p>
 
-            <div className="reveal flex flex-wrap gap-3 text-[11px] font-bold uppercase tracking-[0.16em] text-white/44">
-              <span className="border border-white/10 bg-white/[0.04] px-3 py-2">OSU-verified access</span>
-              <span className="border border-white/10 bg-white/[0.04] px-3 py-2">Founding-member badge</span>
-              <span className="border border-white/10 bg-white/[0.04] px-3 py-2">Launch-day priority</span>
+            <div className="reveal flex flex-wrap gap-3 text-[11px] font-bold uppercase tracking-[0.16em]">
+              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">OSU-verified access</span>
+              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">Founding-member badge</span>
+              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">Launch-day priority</span>
             </div>
           </div>
 
-          <div className="reveal relative border border-white/10 bg-white/[0.04] p-6 md:p-8 backdrop-blur-sm shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <div className="reveal relative self-start border border-white/10 bg-white/[0.06] p-6 md:p-10 backdrop-blur-sm shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
             <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full border border-scarlet/20 bg-scarlet/10 blur-[2px]" />
             <div className="relative">
-              <div className="mb-5 flex items-center justify-between">
+              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-scarlet">Join the first wave</div>
-                  <div className="mt-2 text-sm text-white/45">Claim your spot before the campus feed opens.</div>
+                  <div className="mt-2 max-w-md text-sm text-white/55">
+                    Claim your spot before the campus feed opens and we start letting founding members in.
+                  </div>
                 </div>
-                <div className="hidden sm:flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/42">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white">
                   <span className="h-2 w-2 rounded-full bg-scarlet animate-pulse-dot" />
                   Launch queue active
+                </div>
+              </div>
+              <div className="mb-6 grid gap-3 sm:grid-cols-3">
+                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Access</div>
+                  <div className="mt-2 text-sm text-white">OSU-only onboarding</div>
+                </div>
+                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Signal</div>
+                  <div className="mt-2 text-sm text-white">Founding-member badge</div>
+                </div>
+                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Timing</div>
+                  <div className="mt-2 text-sm text-white">Launch-day priority</div>
                 </div>
               </div>
               <WaitlistForm dark />
