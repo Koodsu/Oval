@@ -215,6 +215,32 @@ router.post('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Resp
   }
 });
 
+// DELETE /pods/:id/messages/:msgId — delete a message (author only)
+router.delete('/:msgId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const podId = req.params.id;
+  const msgId = req.params.msgId;
+  const userId = req.user!.userId;
+
+  try {
+    const message = await prisma.message.findUnique({
+      where: { id: msgId, podId },
+    });
+    if (!message) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+    if (message.userId !== userId) {
+      res.status(403).json({ error: 'You can only delete your own messages' });
+      return;
+    }
+    await prisma.message.delete({ where: { id: msgId } });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /pods/:id/messages/:msgId/reactions — remove reaction (emoji in query)
 router.delete('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const podId = req.params.id;

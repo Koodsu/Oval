@@ -121,6 +121,35 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
+// GET /pods/mine/history — COMPLETED/EXPIRED pods from the last 14 days
+router.get('/mine/history', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const since = new Date();
+  since.setDate(since.getDate() - 14);
+
+  try {
+    const pods = await prisma.pod.findMany({
+      where: {
+        status: { in: [COMPLETED, EXPIRED] },
+        members: { some: { userId } },
+        meetupTime: { gte: since },
+      },
+      include: {
+        activity: true,
+        members: {
+          include: { user: { select: MEMBER_USER_SELECT } },
+        },
+      },
+      orderBy: { meetupTime: 'desc' },
+    });
+
+    res.json(pods.map(parsePodMembers));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /pods/feed — cross-activity discovery feed, soonest first then most-joined
 router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { category, limit = '20', lat, lng } = req.query;
@@ -139,6 +168,10 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       status: FORMING,
       meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
+      OR: [
+        { locationType: { not: 'private' } },
+        { members: { some: { userId } } },
+      ],
     };
 
     if (category && typeof category === 'string') {
@@ -256,6 +289,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       status: FORMING,
       meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
+      OR: [
+        { locationType: { not: 'private' } },
+        { members: { some: { userId: req.user!.userId } } },
+      ],
     };
 
     let orderBy: Record<string, string> = { createdAt: 'desc' };
@@ -605,6 +642,65 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
       },
     });
     res.json(parsePodMembers(updated));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/kick/:memberId — creator-only member removal
+router.post('/:id/kick/:memberId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id, memberId } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+
+    const creatorId = pod.creatorId ?? pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can remove members' });
+      return;
+    }
+    if (memberId === userId) {
+      res.status(400).json({ error: 'Use the leave endpoint to leave your own pod' });
+      return;
+    }
+    if (pod.status === COMPLETED || pod.status === EXPIRED) {
+      res.status(409).json({ error: 'Cannot remove members from a completed or expired pod' });
+      return;
+    }
+
+    const membership = pod.members.find((m) => m.userId === memberId);
+    if (!membership) {
+      res.status(404).json({ error: 'User is not a member of this pod' });
+      return;
+    }
+
+    const wasLocked = pod.status === LOCKED;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.podMember.delete({ where: { id: membership.id } });
+      if (wasLocked) {
+        await tx.pod.update({ where: { id }, data: { status: FORMING } });
+      }
+    });
+
+    const updatedPod = await prisma.pod.findUnique({
+      where: { id },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
+      },
+    });
+    res.json(updatedPod ? parsePodMembers(updatedPod) : updatedPod);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

@@ -302,6 +302,31 @@ router.delete('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest,
   }
 });
 
+// DELETE /messages/threads/:id/messages/:msgId — delete a DM (sender only)
+router.delete('/threads/:id/messages/:msgId', async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: threadId, msgId } = req.params;
+
+  try {
+    const dm = await prisma.directMessage.findUnique({
+      where: { id: msgId, threadId },
+    });
+    if (!dm) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+    if (dm.senderId !== userId) {
+      res.status(403).json({ error: 'You can only delete your own messages' });
+      return;
+    }
+    await prisma.directMessage.delete({ where: { id: msgId } });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /messages/threads/:id/messages — send a message in a thread
 router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;

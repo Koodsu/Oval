@@ -251,6 +251,9 @@ export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);
 
+export const getMyPodHistory = () =>
+  request<import('./types').Pod[]>('/pods/mine/history');
+
 export const fetchFeed = (
   params: { category?: string; limit?: number; lat?: number; lng?: number } = {},
   signal?: AbortSignal
@@ -348,6 +351,12 @@ export const removePodMessageReaction = (podId: string, msgId: string, emoji: st
   request<import('./types').Message>(`/pods/${podId}/messages/${msgId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
     method: 'DELETE',
   });
+
+export const deletePodMessage = (podId: string, msgId: string) =>
+  request(`/pods/${podId}/messages/${msgId}`, { method: 'DELETE' });
+
+export const kickPodMember = (podId: string, memberId: string) =>
+  request<import('./types').Pod>(`/pods/${podId}/kick/${memberId}`, { method: 'POST' });
 
 // Reports
 export const REPORT_REASONS = [
@@ -547,6 +556,9 @@ export const unblockUser = (userId: string) =>
     method: 'DELETE',
   });
 
+export const getBlockedUsers = () =>
+  request<{ id: string; name: string; avatarUrl: string | null; blockedAt: string }[]>('/users/blocked');
+
 // User search
 export const searchUsers = (q: string) =>
   request<import('./types').FriendUser[]>(`/users/search?q=${encodeURIComponent(q)}`);
@@ -622,6 +634,9 @@ export const removeDMReaction = (threadId: string, msgId: string, emoji: string)
     `/messages/threads/${threadId}/messages/${msgId}/reactions?emoji=${encodeURIComponent(emoji)}`,
     { method: 'DELETE' }
   );
+
+export const deleteDMMessage = (threadId: string, msgId: string) =>
+  request(`/messages/threads/${threadId}/messages/${msgId}`, { method: 'DELETE' });
 
 // Pod invites
 export const getPodInvites = () =>

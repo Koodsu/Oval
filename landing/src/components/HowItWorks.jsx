@@ -16,12 +16,26 @@ const STEPS = [
   },
 ]
 
+function handleTilt(e) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const x = ((e.clientX - rect.left) / rect.width - 0.5) * 12
+  const y = ((e.clientY - rect.top) / rect.height - 0.5) * -12
+  e.currentTarget.style.transform = `perspective(800px) rotateX(${y}deg) rotateY(${x}deg) scale(1.02)`
+}
+
+function resetTilt(e) {
+  e.currentTarget.style.transform = ''
+}
+
 export default function HowItWorks() {
   return (
-    <section className="py-24 px-5 md:px-16 bg-cream-dark">
+    <section className="section-divider relative overflow-hidden bg-cream-dark px-5 py-24 md:px-16">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-scarlet/20 to-transparent" />
+      <div aria-hidden className="absolute left-[8%] top-24 hidden h-48 w-48 rounded-full bg-scarlet/[0.05] blur-[90px] lg:block" />
+      <div aria-hidden className="absolute bottom-16 right-[10%] hidden h-40 w-40 rounded-full bg-amber/[0.08] blur-[90px] lg:block" />
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
-        <div className="mb-16">
+        <div className="mb-16 max-w-[980px]">
           <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-warm-gray mb-5">
             How it works
           </span>
@@ -29,16 +43,24 @@ export default function HowItWorks() {
             THREE STEPS.<br />
             <span className="text-scarlet">ZERO EXCUSES.</span>
           </h2>
+          <p className="reveal mt-5 max-w-2xl text-[15px] leading-relaxed text-warm-gray">
+            Every part of Bridge is meant to remove friction. You see what is real, claim a spot fast,
+            and arrive with enough context that meeting people feels easy instead of awkward.
+          </p>
         </div>
 
         {/* Step cards: separated by 1px lines */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-ink/12">
+        <div className="relative grid grid-cols-1 gap-px bg-ink/12 md:grid-cols-3">
+          <div aria-hidden className="pointer-events-none absolute left-[16.666%] right-[16.666%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-scarlet/18 to-transparent md:block" />
           {STEPS.map(({ step, title, desc }, i) => (
             <div
               key={step}
-              className="reveal relative overflow-hidden bg-cream-dark px-6 py-10 md:px-8"
+              className="reveal relative overflow-hidden bg-cream-dark px-6 py-10 md:px-8 tilt-card"
               style={{ transitionDelay: `${i * 100}ms` }}
+              onMouseMove={handleTilt}
+              onMouseLeave={resetTilt}
             >
+              <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-scarlet/70 to-transparent opacity-60" />
               {/* Watermark step number */}
               <div
                 aria-hidden
@@ -48,6 +70,12 @@ export default function HowItWorks() {
               </div>
 
               <div className="relative">
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center border border-scarlet/20 bg-scarlet/8 font-display text-2xl tracking-[0.08em] text-scarlet">
+                    {step}
+                  </div>
+                  <div className="h-px flex-1 bg-ink/10" />
+                </div>
                 <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-scarlet mb-5">
                   Step {step}
                 </div>

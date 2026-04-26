@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,6 +27,7 @@ export default function MessagesInboxScreen() {
   const { user } = useAuth();
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredThreads = useMemo(() => {
@@ -34,15 +36,22 @@ export default function MessagesInboxScreen() {
     return threads.filter((t) => t.otherUser.name.toLowerCase().includes(q));
   }, [threads, searchQuery]);
 
+  const loadThreads = useCallback(
+    () => getMessageThreads().then(setThreads).catch(() => {}),
+    []
+  );
+
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      getMessageThreads()
-        .then(setThreads)
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }, [])
+      loadThreads().finally(() => setLoading(false));
+    }, [loadThreads])
   );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadThreads().finally(() => setRefreshing(false));
+  }, [loadThreads]);
 
   if (loading) {
     return (
@@ -73,6 +82,7 @@ export default function MessagesInboxScreen() {
         data={filteredThreads}
         keyExtractor={(t) => t.id}
         contentContainerStyle={filteredThreads.length === 0 ? styles.emptyContainer : styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.scarlet} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={48} color={colors.textTertiary} />

@@ -754,6 +754,19 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const meetingsByDay = useMemo(() => {
+    const map = new Map<string, ClubMeetingWithMeta[]>();
+    for (const m of meetings) {
+      const d = new Date(m.meetingTime);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return map;
+  }, [meetings]);
+
+  const calendarCells = useMemo(() => buildCalendarGrid(calYear, calMonth), [calYear, calMonth]);
+
   if (loading) {
     return (
       <View style={styles.outer}>
@@ -785,19 +798,6 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const canPostAnnouncement = myRole === 'ADMIN' || myRole === 'OFFICER';
   const sortedMembers = sortClubMembers(club.members);
   const emojiSize = 64;
-
-  const meetingsByDay = useMemo(() => {
-    const map = new Map<string, ClubMeetingWithMeta[]>();
-    for (const m of meetings) {
-      const d = new Date(m.meetingTime);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(m);
-    }
-    return map;
-  }, [meetings]);
-
-  const calendarCells = useMemo(() => buildCalendarGrid(calYear, calMonth), [calYear, calMonth]);
 
   const renderRsvpPills = (m: ClubMeetingWithMeta) =>
     (['GOING', 'MAYBE', 'NOT_GOING'] as const).map((st) => {
@@ -1100,7 +1100,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         style={styles.announcementsFlatList}
         contentContainerStyle={styles.announcementsList}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={<Text style={styles.emptyMeetings}>No announcements yet</Text>}
+        ListEmptyComponent={
+          <View style={styles.emptyAnnouncementsState}>
+            <Ionicons name="megaphone-outline" size={40} color={home.textSecondary} />
+            <Text style={styles.emptyMeetings}>No announcements yet</Text>
+            <Text style={styles.emptyAnnouncementsBody}>Club officers can post announcements here.</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={[styles.announcementCard, cardShadowHome]}>
             <View style={styles.announcementTop}>
@@ -1530,7 +1536,21 @@ const styles = StyleSheet.create({
   emptyMeetings: {
     textAlign: 'center',
     color: home.textSecondary,
-    marginTop: spacing.lg,
+    marginTop: spacing.sm,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  emptyAnnouncementsState: {
+    alignItems: 'center',
+    paddingTop: spacing.xxl + spacing.lg,
+    gap: 2,
+  },
+  emptyAnnouncementsBody: {
+    textAlign: 'center',
+    color: home.textSecondary,
+    fontSize: 13,
+    marginTop: spacing.xs,
+    opacity: 0.7,
   },
   meetingCard: {
     backgroundColor: home.cardBg,

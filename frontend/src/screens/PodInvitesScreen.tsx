@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,17 +24,25 @@ export default function PodInvitesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [invites, setInvites] = useState<PodInvite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+
+  const loadInvites = useCallback(
+    () => getPodInvites().then(setInvites).catch(() => {}),
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      getPodInvites()
-        .then(setInvites)
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }, [])
+      loadInvites().finally(() => setLoading(false));
+    }, [loadInvites])
   );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadInvites().finally(() => setRefreshing(false));
+  }, [loadInvites]);
 
   const handleAccept = async (invite: PodInvite) => {
     setActionId(invite.id);
@@ -75,6 +84,7 @@ export default function PodInvitesScreen() {
       contentContainerStyle={invites.length === 0 ? styles.emptyContainer : styles.list}
       data={invites}
       keyExtractor={(i) => i.id}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       ListEmptyComponent={
         <View style={styles.emptyState}>
           <Ionicons name="mail-outline" size={48} color={colors.textTertiary} />
