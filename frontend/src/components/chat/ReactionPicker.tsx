@@ -11,6 +11,7 @@ export interface ReactionPickerProps {
   onSelect: (emoji: string) => void;
   onReply?: () => void;
   onReport?: () => void;
+  onDelete?: () => void;
   myReaction?: string;
 }
 
@@ -20,6 +21,7 @@ export default function ReactionPicker({
   onSelect,
   onReply,
   onReport,
+  onDelete,
   myReaction,
 }: ReactionPickerProps) {
   const handleSelect = (emoji: string) => {
@@ -36,6 +38,11 @@ export default function ReactionPicker({
   const handleReport = () => {
     onClose();
     onReport?.();
+  };
+
+  const handleDelete = () => {
+    onClose();
+    onDelete?.();
   };
 
   const scaleAnim = useRef(new Animated.Value(0.6)).current;
@@ -92,6 +99,15 @@ export default function ReactionPicker({
               <Text style={styles.reportText}>Report</Text>
             </TouchableOpacity>
           )}
+          {onDelete && (
+            <TouchableOpacity
+              style={[styles.emojiButton, styles.deleteButton]}
+              onPress={handleDelete}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </Pressable>
     </Modal>
@@ -142,5 +158,15 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.red,
     fontSize: 13,
+  },
+  deleteButton: {
+    marginLeft: spacing.xs,
+    paddingLeft: spacing.sm,
+  },
+  deleteText: {
+    ...typography.caption,
+    color: colors.red,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

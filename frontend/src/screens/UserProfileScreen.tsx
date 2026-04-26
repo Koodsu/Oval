@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  RefreshControl,
   Linking,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -44,6 +45,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [relationship, setRelationship] = useState<FriendRelationship | null>(null);
   const [friendLoading, setFriendLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const isOwnProfile = user?.id === userId;
 
   useLayoutEffect(() => {
@@ -70,6 +72,15 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     const unsubscribe = navigation.addListener('focus', loadData);
     return unsubscribe;
   }, [navigation, loadData]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    const profileP = getUserProfile(userId).then(setProfile).catch(() => {});
+    const relP = !isOwnProfile
+      ? getFriendRelationship(userId).then(setRelationship).catch(() => {})
+      : Promise.resolve();
+    Promise.all([profileP, relP]).finally(() => setRefreshing(false));
+  }, [userId, isOwnProfile]);
 
   const handleFriendAction = async () => {
     if (!relationship) return;
@@ -247,7 +258,11 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+    >
       <View style={[styles.card, shadows.md]}>
         <Avatar name={name} size={80} uri={resolveAvatarUrl(profile?.avatarUrl)} />
         <Text style={styles.name}>{name}</Text>

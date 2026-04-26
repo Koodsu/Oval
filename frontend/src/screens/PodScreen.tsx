@@ -23,8 +23,10 @@ import { RootStackParamList } from '../../App';
 import {
   API_USER_MESSAGE,
   getPod, getMessages, sendMessage, addPodMessageReaction, removePodMessageReaction,
+  deletePodMessage,
   sendPodTyping,
   lockPod, unlockPod, leavePod,
+  kickPodMember,
   confirmAttendance, reportNoShow, resolveAvatarUrl,
   getFriends, sendPodInvite,
   submitRecap,
@@ -193,6 +195,8 @@ export default function PodScreen({ route, navigation }: Props) {
   const [typingUsers, setTypingUsers] = useState<{ userId: string }[]>([]);
   const [recapModalVisible, setRecapModalVisible] = useState(false);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [membersModalVisible, setMembersModalVisible] = useState(false);
+  const [kickingId, setKickingId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -302,6 +306,21 @@ export default function PodScreen({ route, navigation }: Props) {
               return [...prev, mapped];
             });
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'Message',
+            filter: `podId=eq.${podId}`,
+          },
+          (payload) => {
+            const deletedId = (payload.old as { id?: string }).id;
+            if (typeof deletedId === 'string') {
+              setMessages((prev) => prev.filter((m) => m.id !== deletedId));
+            }
           }
         )
         .on('presence', { event: 'sync' }, () => {
@@ -503,6 +522,25 @@ export default function PodScreen({ route, navigation }: Props) {
     setReportModalVisible(true);
   };
 
+  const handleDeleteMessage = (msgId: string) => {
+    Alert.alert('Delete Message', 'Delete this message for everyone?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePodMessage(podId, msgId);
+            setMessages((prev) => prev.filter((m) => m.id !== msgId));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch {
+            Alert.alert('Error', API_USER_MESSAGE);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleRecapSubmit = async (rating: 1 | 2 | 3, note: string | null) => {
     try {
       const recap = await submitRecap(podId, { rating, note });
@@ -549,6 +587,31 @@ export default function PodScreen({ route, navigation }: Props) {
               Alert.alert('Error', API_USER_MESSAGE);
             } finally {
               setLeaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleKickMember = (memberId: string, memberName: string) => {
+    Alert.alert(
+      'Remove Member',
+      `Remove ${memberName} from this pod?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setKickingId(memberId);
+            try {
+              const updatedPod = await kickPodMember(podId, memberId);
+              setPod(updatedPod);
+            } catch {
+              Alert.alert('Error', API_USER_MESSAGE);
+            } finally {
+              setKickingId(null);
             }
           },
         },
@@ -1068,6 +1131,15 @@ export default function PodScreen({ route, navigation }: Props) {
           if (msg) openReportMessage(msg);
           setReactionTargetMsgId(null);
         }}
+        onDelete={
+          messages.find((m) => m.id === reactionTargetMsgId)?.user.id === user?.id
+            ? () => {
+                const msgId = reactionTargetMsgId;
+                setReactionTargetMsgId(null);
+                if (msgId) handleDeleteMessage(msgId);
+              }
+            : undefined
+        }
         myReaction={
           reactionTargetMsgId
             ? messages.find((m) => m.id === reactionTargetMsgId)?.reactions?.find(
@@ -1118,6 +1190,18 @@ export default function PodScreen({ route, navigation }: Props) {
               <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
               <Text style={styles.overflowItemText}>Report Pod</Text>
             </TouchableOpacity>
+            {isCreator && isMember && (pod.status === 'FORMING' || pod.status === 'LOCKED') && (
+              <>
+                <View style={styles.overflowDivider} />
+                <TouchableOpacity
+                  style={styles.overflowItem}
+                  onPress={() => { setShowOverflowMenu(false); setMembersModalVisible(true); }}
+                >
+                  <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
+                  <Text style={styles.overflowItemText}>Manage Members</Text>
+                </TouchableOpacity>
+              </>
+            )}
             {isMember && (
               <>
                 <View style={styles.overflowDivider} />
@@ -1179,6 +1263,50 @@ export default function PodScreen({ route, navigation }: Props) {
               )}
             />
           )}
+        </View>
+      </Modal>
+
+      {/* Manage Members modal — creator only */}
+      <Modal
+        visible={membersModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setMembersModalVisible(false)}
+      >
+        <View style={styles.inviteModal}>
+          <View style={styles.inviteModalHeader}>
+            <Text style={styles.inviteModalTitle}>Manage Members</Text>
+            <TouchableOpacity onPress={() => setMembersModalVisible(false)}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={pod.members.filter((m) => m.userId !== user?.id)}
+            keyExtractor={(m) => m.userId}
+            contentContainerStyle={styles.inviteList}
+            ListEmptyComponent={
+              <View style={styles.inviteEmpty}>
+                <Text style={styles.inviteEmptyText}>No other members to manage.</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.inviteRow}>
+                <Avatar name={item.user.name} size={40} uri={resolveAvatarUrl(item.user.avatarUrl)} />
+                <Text style={styles.inviteRowName}>{item.user.name}</Text>
+                <TouchableOpacity
+                  style={[styles.kickBtn, kickingId === item.userId && styles.inviteBtnDisabled]}
+                  onPress={() => handleKickMember(item.userId, item.user.name)}
+                  disabled={kickingId !== null}
+                >
+                  {kickingId === item.userId ? (
+                    <ActivityIndicator size="small" color={colors.red} />
+                  ) : (
+                    <Text style={styles.kickBtnText}>Remove</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          />
         </View>
       </Modal>
       </View>
@@ -1686,4 +1814,15 @@ const styles = StyleSheet.create({
   },
   inviteBtnDisabled: { opacity: 0.5 },
   inviteBtnText: { ...typography.bodyBold, color: colors.textInverse, fontSize: 13 },
+  kickBtn: {
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    minWidth: 72,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.red,
+  },
+  kickBtnText: { ...typography.bodyBold, color: colors.red, fontSize: 13 },
 });

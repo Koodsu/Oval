@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,20 +28,31 @@ export default function FriendRequestsScreen() {
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
+  const loadRequests = useCallback(
+    () =>
       getFriendRequests()
         .then(({ incoming: i, outgoing: o }) => {
           setIncoming(i);
           setOutgoing(o);
         })
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }, [])
+        .catch(() => {}),
+    []
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      loadRequests().finally(() => setLoading(false));
+    }, [loadRequests])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadRequests().finally(() => setRefreshing(false));
+  }, [loadRequests]);
 
   const handleAccept = async (req: FriendRequest) => {
     setActionId(req.id);
@@ -94,6 +106,7 @@ export default function FriendRequestsScreen() {
       style={styles.container}
       contentContainerStyle={hasAny ? styles.list : styles.emptyContainer}
       data={[]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       ListHeaderComponent={
         <>
           {!hasAny && (

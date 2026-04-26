@@ -43,6 +43,7 @@ import PodInvitesScreen from './src/screens/PodInvitesScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PeopleYouMetScreen from './src/screens/PeopleYouMetScreen';
+import BlockedUsersScreen from './src/screens/BlockedUsersScreen';
 import { colors, home } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -74,6 +75,7 @@ export type RootStackParamList = {
   Settings: undefined;
   PeopleYouMet: { podId: string };
   ClubDetail: { clubId: string };
+  BlockedUsers: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -351,6 +353,11 @@ function AppNavigator() {
               name="ClubDetail"
               component={ClubDetailScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="BlockedUsers"
+              component={BlockedUsersScreen}
+              options={{ title: 'Blocked Users' }}
             />
           </>
         ) : (

@@ -21,6 +21,7 @@ import {
 } from '../api';
 import GradientButton from '../components/GradientButton';
 import { colors, spacing, radii, typography, shadows } from '../theme';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
@@ -67,23 +68,57 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const appVersion = Constants.expoConfig?.version ?? '—';
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}
       showsVerticalScrollIndicator={false}
     >
-      {/* My Reports */}
-      <Text style={styles.sectionTitle}>Activity</Text>
-      <TouchableOpacity
-        style={[styles.linkRow, shadows.sm]}
-        onPress={() => navigation.navigate('MyReports')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="flag-outline" size={20} color={colors.primary} />
-        <Text style={styles.linkText}>My Reports</Text>
-        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-      </TouchableOpacity>
+      {/* Account */}
+      <Text style={styles.sectionTitle}>Account</Text>
+      <View style={[styles.card, shadows.sm]}>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('EditProfile')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="person-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Edit Profile</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.cardDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('BlockedUsers')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="ban-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Blocked Users</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.cardDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('PodInvites')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="mail-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>Pod Invites</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <View style={styles.cardDivider} />
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('MyReports')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="flag-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkText}>My Reports</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+      </View>
 
       {/* Notifications */}
       <Text style={styles.sectionTitle}>Notifications</Text>
@@ -169,6 +204,20 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Help */}
+      <Text style={styles.sectionTitle}>About</Text>
+      <View style={[styles.card, shadows.sm]}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Version</Text>
+          <Text style={styles.infoValue}>{appVersion}</Text>
+        </View>
+        <View style={styles.cardDivider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Made for OSU Buckeyes</Text>
+          <Text style={styles.infoValue}>Go Bucks!</Text>
+        </View>
+      </View>
+
       {/* Sign Out */}
       <View style={styles.signOutSection}>
         <GradientButton
@@ -196,25 +245,27 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm + 4,
   },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-  },
-  linkText: {
-    ...typography.bodyBold,
-    flex: 1,
-    color: colors.text,
-  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     marginHorizontal: spacing.lg,
     overflow: 'hidden',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginLeft: spacing.md + 20 + spacing.sm,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  linkText: {
+    ...typography.bodyBold,
+    flex: 1,
+    color: colors.text,
   },
   notifRow: {
     flexDirection: 'row',
@@ -242,6 +293,20 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.borderLight,
     marginLeft: spacing.md,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+  },
+  infoLabel: {
+    ...typography.body,
+    color: colors.text,
+  },
+  infoValue: {
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   signOutSection: {
     paddingHorizontal: spacing.lg,

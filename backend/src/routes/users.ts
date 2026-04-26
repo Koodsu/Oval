@@ -458,6 +458,24 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
   }
 });
 
+// GET /users/blocked — list users blocked by the current user
+router.get('/blocked', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const blocks = await prisma.block.findMany({
+      where: { blockerId: userId },
+      include: {
+        blocked: { select: { id: true, name: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(blocks.map((b) => ({ ...b.blocked, blockedAt: b.createdAt })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /users/:id/block – block target user
 router.post('/:id/block', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const blockerId = req.user!.userId;

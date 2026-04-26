@@ -7,6 +7,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,6 +18,7 @@ import {
   sendDirectMessage,
   addDMReaction,
   removeDMReaction,
+  deleteDMMessage,
   sendDMTyping,
   markDMThreadRead,
   resolveAvatarUrl,
@@ -51,6 +53,7 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
   const { user } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [reactionTargetMsgId, setReactionTargetMsgId] = useState<string | null>(null);
@@ -147,6 +150,29 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
     }
   };
 
+  const handleDeleteDMMessage = (msgId: string) => {
+    Alert.alert('Delete Message', 'Delete this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDMMessage(threadId, msgId);
+            setMessages((prev) => prev.filter((m) => m.id !== msgId));
+          } catch {
+            Alert.alert('Error', API_USER_MESSAGE);
+          }
+        },
+      },
+    ]);
+  };
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchMessages().finally(() => setRefreshing(false));
+  }, [fetchMessages]);
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -167,6 +193,7 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
         keyExtractor={(item) => item.type === 'date' ? item.id : item.message.id}
         contentContainerStyle={styles.messageList}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.scarlet} />}
         ListEmptyComponent={
           <EmptyChatState
             title="No messages yet"
@@ -240,6 +267,15 @@ export default function DirectMessageThreadScreen({ route, navigation }: Props) 
           }
           setReactionTargetMsgId(null);
         }}
+        onDelete={
+          messages.find((m) => m.id === reactionTargetMsgId)?.senderId === user?.id
+            ? () => {
+                const msgId = reactionTargetMsgId;
+                setReactionTargetMsgId(null);
+                if (msgId) handleDeleteDMMessage(msgId);
+              }
+            : undefined
+        }
         myReaction={
           reactionTargetMsgId
             ? messages.find((m) => m.id === reactionTargetMsgId)?.reactions?.find(

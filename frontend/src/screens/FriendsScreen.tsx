@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,20 +22,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Friends'>;
 export default function FriendsScreen({ navigation }: Props) {
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchFriends = useCallback((signal?: AbortSignal) =>
+    getFriends(signal).then(setFriends), []);
 
   useFocusEffect(
     useCallback(() => {
       const controller = new AbortController();
       setLoading(true);
-      getFriends(controller.signal)
-        .then(setFriends)
+      fetchFriends(controller.signal)
         .catch((err) => {
           if (err instanceof Error && err.name === 'AbortError') return;
         })
         .finally(() => setLoading(false));
       return () => controller.abort();
-    }, [])
+    }, [fetchFriends])
   );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchFriends().catch(() => {}).finally(() => setRefreshing(false));
+  }, [fetchFriends]);
 
   if (loading) {
     return (
@@ -50,6 +59,7 @@ export default function FriendsScreen({ navigation }: Props) {
         data={friends}
         keyExtractor={(f) => f.id}
         contentContainerStyle={friends.length === 0 ? styles.emptyContainer : styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color={colors.textTertiary} />
