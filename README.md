@@ -349,6 +349,10 @@ See [`frontend/.env.example`](./frontend/.env.example).
 | `EXPO_PUBLIC_SUPABASE_URL` | Optional/currently limited | Supabase URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Optional/currently limited | Supabase anon key |
 
+For local Expo development, this can live in `frontend/.env`.
+
+For EAS preview/production builds, you must also define these variables in EAS so they are embedded into the build at compile time. A TestFlight app cannot use your local `.env` file after the binary has already been built.
+
 ### Landing
 
 See [`landing/.env.example`](./landing/.env.example).

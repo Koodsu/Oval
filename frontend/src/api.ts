@@ -1,7 +1,17 @@
-// Set EXPO_PUBLIC_API_URL in your .env file (or EAS secrets for production builds).
-// Falls back to localhost for local development.
+// Set EXPO_PUBLIC_API_URL in your .env file (or EAS env vars for production builds).
+// Only local Expo development falls back to localhost.
 // On a physical device, set this to your machine's local IP, e.g. http://192.168.1.100:3000
-export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+const configuredApiBase = process.env.EXPO_PUBLIC_API_URL?.trim();
+const usingLocalhostApi =
+  configuredApiBase != null &&
+  /(^https?:\/\/localhost(?::\d+)?$)|(^https?:\/\/127\.0\.0\.1(?::\d+)?$)/i.test(configuredApiBase);
+
+export const API_BASE =
+  configuredApiBase && !(!__DEV__ && usingLocalhostApi)
+    ? configuredApiBase
+    : __DEV__
+      ? 'http://localhost:3000'
+      : '';
 export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://joinbridgeapp.com').replace(/\/$/, '');
 
 /** Shown in alerts instead of raw server messages after API failures. */
@@ -45,6 +55,12 @@ export function setOnUnauthorized(cb: (() => void) | null) {
 }
 
 async function request<T>(path: string, options: RequestInit = {}, signal?: AbortSignal): Promise<T> {
+  if (!API_BASE) {
+    const message = 'App config error: EXPO_PUBLIC_API_URL is missing or invalid for this production build.';
+    console.error(`[api] ${message}`);
+    throw new Error(message);
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
