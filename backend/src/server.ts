@@ -98,6 +98,10 @@ const waitlistLimiter = rateLimit({
 
 app.use('/auth', authLimiter, authRoutes);
 app.use('/activities', apiLimiter, activitiesRoutes);
+// Pod invites: /pods/invites and /pods/:id/invite
+// Must be mounted before the main pod router so /pods/invites
+// doesn't get consumed by the generic /pods/:id handler.
+app.use('/pods', apiLimiter, podInvitesRoutes);
 app.use('/pods', apiLimiter, podsRoutes);
 app.use('/pods', apiLimiter, attendanceRoutes);
 app.use('/users', apiLimiter, usersRoutes);
@@ -106,9 +110,6 @@ app.use('/reports', apiLimiter, reportsRoutes);
 app.use('/admin/reports', apiLimiter, adminReportsRoutes);
 app.use('/friends', apiLimiter, friendsRoutes);
 app.use('/messages', apiLimiter, directMessagesRoutes);
-// Pod invites: /pods/invites and /pods/:id/invite
-// Must be mounted before the pod messages router to avoid :id conflict
-app.use('/pods', apiLimiter, podInvitesRoutes);
 app.use('/pods', apiLimiter, recapsRoutes);
 app.use('/pods', apiLimiter, podWaitlistRoutes);
 

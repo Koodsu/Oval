@@ -29,16 +29,29 @@ export default function InboxScreen() {
   const [requests, setRequests] = useState<FriendRequest[]>([]);
 
   const load = useCallback(async () => {
-    try {
-      const [threadList, inviteList, requestResponse] = await Promise.all([
-        getMessageThreads(),
-        getPodInvites(),
-        getFriendRequests(),
-      ]);
-      setThreads(threadList);
-      setInvites(inviteList);
-      setRequests(requestResponse.incoming);
-    } catch {
+    const [threadResult, inviteResult, requestResult] = await Promise.allSettled([
+      getMessageThreads(),
+      getPodInvites(),
+      getFriendRequests(),
+    ]);
+
+    if (threadResult.status === 'fulfilled') {
+      setThreads(threadResult.value);
+    }
+
+    if (inviteResult.status === 'fulfilled') {
+      setInvites(inviteResult.value);
+    }
+
+    if (requestResult.status === 'fulfilled') {
+      setRequests(requestResult.value.incoming);
+    }
+
+    if (
+      threadResult.status === 'rejected' &&
+      inviteResult.status === 'rejected' &&
+      requestResult.status === 'rejected'
+    ) {
       Alert.alert('Could not load inbox', API_USER_MESSAGE);
     }
   }, []);
