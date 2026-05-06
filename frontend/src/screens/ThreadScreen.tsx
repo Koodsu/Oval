@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   addDMReaction,
   API_USER_MESSAGE,
@@ -13,13 +14,14 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { DirectMessage } from '../types';
-import { Chip, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader } from '../components/ui';
+import { EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
 import { palette, radii, spacing, typography } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { formatTime } from '../utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
-const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢'] as const;
+const HEART_EMOJI = '❤️';
 
 export default function ThreadScreen({ route, navigation }: Props) {
   const { threadId, title } = route.params;
@@ -84,15 +86,15 @@ export default function ThreadScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleReaction = async (message: DirectMessage, emoji: string) => {
-    const hasReaction = !!message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === emoji);
+  const handleHeart = async (message: DirectMessage) => {
+    const hasHeart = !!message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI);
     try {
-      const updated = hasReaction
-        ? await removeDMReaction(threadId, message.id, emoji)
-        : await addDMReaction(threadId, message.id, emoji);
+      const updated = hasHeart
+        ? await removeDMReaction(threadId, message.id, HEART_EMOJI)
+        : await addDMReaction(threadId, message.id, HEART_EMOJI);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
     } catch {
-      Alert.alert('Could not update reaction', API_USER_MESSAGE);
+      Alert.alert('Could not update heart', API_USER_MESSAGE);
     }
   };
 
@@ -107,43 +109,62 @@ export default function ThreadScreen({ route, navigation }: Props) {
           </Panel>
         ) : null}
         {messages.length ? messages.map((message) => (
-          <View key={message.id} style={styles.messageWrap}>
-            <TouchableOpacity activeOpacity={0.85} onLongPress={() => setReplyTo(message)}>
-              <Panel style={styles.message}>
-                <Text style={styles.title}>{message.sender.name}</Text>
+          <View key={message.id} style={styles.messageRow}>
+            <UserAvatar name={message.sender.name} avatarUrl={message.sender.avatarUrl} size={42} />
+
+            <View style={styles.messageStack}>
+              <View style={styles.messageMetaRow}>
+                <Text style={styles.messageMetaName}>
+                  {message.sender.id === user?.id ? 'You' : message.sender.name}
+                </Text>
+                <Text style={styles.messageMetaTime}>{formatTime(message.createdAt)}</Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onLongPress={() => setReplyTo(message)}
+                style={styles.messageContentWrap}
+              >
                 {message.replyTo ? (
                   <View style={styles.replyPreview}>
                     <Text style={styles.replyMeta}>Replying to {message.replyTo.sender.name}</Text>
-                    <Text style={styles.body} numberOfLines={1}>{message.replyTo.content}</Text>
+                    <Text style={styles.replyBody} numberOfLines={1}>{message.replyTo.content}</Text>
                   </View>
                 ) : null}
-                <Text style={styles.body}>{message.content}</Text>
-              </Panel>
-            </TouchableOpacity>
-            <View style={styles.reactionRow}>
-              {REACTION_OPTIONS.map((emoji) => {
-                const count = message.reactions?.filter((reaction) => reaction.emoji === emoji).length ?? 0;
-                return (
-                  <Chip
-                    key={`${message.id}-${emoji}`}
-                    label={count ? `${emoji} ${count}` : emoji}
-                    active={!!message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === emoji)}
-                    onPress={() => void handleReaction(message, emoji)}
-                  />
-                );
-              })}
+                <Text style={styles.messageBody}>{message.content}</Text>
+              </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              onPress={() => void handleHeart(message)}
+              style={styles.heartButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? 'heart' : 'heart-outline'}
+                size={22}
+                color={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? palette.coral : 'rgba(16, 33, 43, 0.16)'}
+              />
+              {message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ? (
+                <Text style={styles.heartCount}>
+                  {message.reactions.filter((reaction) => reaction.emoji === HEART_EMOJI).length}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
           </View>
         )) : <EmptyState icon="chatbubble-ellipses-outline" title="No messages yet" body="This conversation is ready whenever you are." />}
         {typingUserIds.length ? (
-          <Text style={styles.typingText}>Someone is typing...</Text>
+          <View style={styles.typingPill}>
+            <Ionicons name="ellipsis-horizontal" size={16} color={palette.scarlet} />
+            <Text style={styles.typingText}>Someone is typing...</Text>
+          </View>
         ) : null}
-        <Panel>
+        <Panel style={styles.composerPanel}>
           {replyTo ? (
             <View style={styles.replyComposer}>
               <View style={styles.replyComposerCopy}>
                 <Text style={styles.replyMeta}>Replying to {replyTo.sender.name}</Text>
-                <Text style={styles.body} numberOfLines={1}>{replyTo.content}</Text>
+                <Text style={styles.replyBody} numberOfLines={1}>{replyTo.content}</Text>
               </View>
               <PrimaryButton label="Clear" onPress={() => setReplyTo(null)} kind="ghost" />
             </View>
@@ -171,44 +192,100 @@ export default function ThreadScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   content: {
     paddingVertical: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   header: {
     ...typography.h1,
   },
-  messageWrap: {
-    gap: spacing.xs,
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  message: {
-    gap: 4,
+  messageStack: {
+    flex: 1,
+    gap: 2,
+    paddingTop: 2,
   },
-  title: {
-    ...typography.title,
+  messageMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  body: {
+  messageMetaName: {
+    ...typography.bodyStrong,
+    fontSize: 15,
+    lineHeight: 18,
+    color: 'rgba(16, 33, 43, 0.5)',
+  },
+  messageMetaTime: {
     ...typography.body,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.32)',
   },
   errorText: {
     ...typography.bodyStrong,
     color: palette.dangerText,
   },
+  messageContentWrap: {
+    gap: 4,
+    paddingRight: spacing.sm,
+  },
   replyPreview: {
     borderLeftWidth: 2,
-    borderLeftColor: palette.scarlet,
-    paddingLeft: spacing.sm,
-    marginVertical: 2,
+    borderLeftColor: 'rgba(16, 33, 43, 0.12)',
+    paddingLeft: 10,
+    marginBottom: 2,
   },
   replyMeta: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...typography.bodyStrong,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.46)',
   },
-  reactionRow: {
+  replyBody: {
+    ...typography.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(16, 33, 43, 0.42)',
+  },
+  messageBody: {
+    ...typography.body,
+    color: palette.ink,
+    fontSize: 17,
+    lineHeight: 25,
+    letterSpacing: -0.2,
+  },
+  heartButton: {
+    minWidth: 34,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 4,
+    paddingTop: 4,
+  },
+  heartCount: {
+    ...typography.bodyStrong,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.42)',
+  },
+  typingPill: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.xs,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   typingText: {
-    ...typography.body,
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 18,
     color: palette.scarlet,
   },
   replyComposer: {
@@ -220,6 +297,10 @@ const styles = StyleSheet.create({
   replyComposerCopy: {
     flex: 1,
     gap: 2,
+  },
+  composerPanel: {
+    padding: spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   input: {
     minHeight: 80,

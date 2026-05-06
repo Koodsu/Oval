@@ -3,6 +3,7 @@ import { AuthRequest, requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { normalizeUserPair } from '../lib/friendUtils';
+import { withDisplayName } from '../lib/userNames';
 import {
   sendFriendRequest,
   acceptFriendRequest,
@@ -17,6 +18,8 @@ router.use(requireAuth);
 const friendUserSelect = {
   id: true,
   name: true,
+  firstName: true,
+  lastName: true,
   avatarUrl: true,
   verifiedUniversity: true,
 } as const;
@@ -40,7 +43,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const friends = friendships
       .map((f) => (f.userAId === userId ? f.userB : f.userA))
-      .filter((u) => !blockedIds.has(u.id));
+      .filter((u) => !blockedIds.has(u.id))
+      .map((friend) => withDisplayName(friend, 'full'));
 
     res.json(friends);
   } catch {
@@ -64,7 +68,16 @@ router.get('/requests', async (req: AuthRequest, res: Response): Promise<void> =
         orderBy: { createdAt: 'desc' },
       }),
     ]);
-    res.json({ incoming, outgoing });
+    res.json({
+      incoming: incoming.map((request) => ({
+        ...request,
+        sender: request.sender ? withDisplayName(request.sender, 'full') : request.sender,
+      })),
+      outgoing: outgoing.map((request) => ({
+        ...request,
+        receiver: request.receiver ? withDisplayName(request.receiver, 'full') : request.receiver,
+      })),
+    });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }

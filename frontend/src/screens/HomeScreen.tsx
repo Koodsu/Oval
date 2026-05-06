@@ -99,7 +99,7 @@ export default function HomeScreen() {
       >
         <Hero
           eyebrow="Today on campus"
-          title={`Your day, ${user?.name?.split(' ')[0] ?? 'friend'}.`}
+          title={`Your day, ${user?.firstName ?? user?.name?.split(' ')[0] ?? 'friend'}.`}
           subtitle="A quick read on what you already have lined up and what campus is doing around you."
         >
           <View style={styles.heroAgenda}>

@@ -7,6 +7,7 @@ import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config/jwt';
+import { normalizeNameParts } from '../lib/userNames';
 
 export async function createTestUser(overrides: {
   name?: string;
@@ -16,10 +17,11 @@ export async function createTestUser(overrides: {
   const name = overrides.name ?? `Test User ${Date.now()}`;
   const email = overrides.email ?? `test-${Date.now()}@example.com`;
   const password = overrides.password ?? 'password123';
+  const { firstName, lastName, fullName } = normalizeNameParts({ name });
 
   const hashed = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { name, email, password: hashed },
+    data: { name: fullName, firstName, lastName, email, password: hashed },
   });
   return { ...user, plainPassword: password };
 }

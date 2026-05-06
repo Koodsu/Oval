@@ -13,14 +13,20 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [busy, setBusy] = useState(false);
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [classYear, setClassYear] = useState('');
   const [major, setMajor] = useState('');
 
   const submit = async () => {
-    if (!email.trim() || !password.trim() || (mode === 'register' && (!name.trim() || !classYear.trim() || !major.trim()))) {
+    if (
+      !email.trim() ||
+      !password.trim() ||
+      (mode === 'register' &&
+        (!firstName.trim() || !lastName.trim() || !classYear.trim() || !major.trim()))
+    ) {
       Alert.alert('Missing info', 'Fill out the required fields so we can get you into campus mode.');
       return;
     }
@@ -30,7 +36,14 @@ export default function AuthScreen() {
       const response =
         mode === 'login'
           ? await login(email.trim(), password)
-          : await register(name.trim(), email.trim(), password, classYear.trim(), major.trim());
+          : await register(
+              firstName.trim(),
+              lastName.trim(),
+              email.trim(),
+              password,
+              classYear.trim(),
+              major.trim()
+            );
       await signIn(response.token, response.user);
     } catch (error) {
       Alert.alert('Sign-in issue', error instanceof Error ? error.message || API_USER_MESSAGE : API_USER_MESSAGE);
@@ -66,9 +79,24 @@ export default function AuthScreen() {
 
           <View style={styles.form}>
             {mode === 'register' ? (
-              <Field label="Name" value={name} onChangeText={setName} placeholder="Avery Chen" />
+              <>
+                <Field
+                  label="First name"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Avery"
+                  autoCapitalize="words"
+                />
+                <Field
+                  label="Last name"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Chen"
+                  autoCapitalize="words"
+                />
+              </>
             ) : null}
-            <Field label="School email" value={email} onChangeText={setEmail} placeholder="name@osu.edu" />
+            <Field label="School email" value={email} onChangeText={setEmail} placeholder="name@osu.edu" autoCapitalize="none" />
             <Field label="Password" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
             {mode === 'register' ? (
               <>
@@ -114,11 +142,12 @@ function Field({
   onChangeText: (value: string) => void;
   placeholder: string;
   secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput {...props} style={styles.input} placeholderTextColor={palette.slate} autoCapitalize="none" />
+      <TextInput {...props} style={styles.input} placeholderTextColor={palette.slate} />
     </View>
   );
 }

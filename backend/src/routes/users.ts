@@ -5,12 +5,13 @@ import fs from 'fs';
 import prisma from '../prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getBlockedUserIds } from '../lib/blocks';
-import { normalizeUserPair } from '../lib/friendUtils';
+import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import {
   cancelPendingRequestsBetween,
   removeFriendshipIfExists,
 } from '../services/friendService';
 import { INTEREST_TAG_SET } from '../config/interestTags';
+import { getFullName, getPublicName, withDisplayName } from '../lib/userNames';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
@@ -79,7 +80,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
     }
     res.json({
       id: user.id,
-      name: user.name,
+      name: getFullName(user),
+      firstName: user.firstName,
+      lastName: user.lastName,
       email: user.email,
       verifiedUniversity: user.verifiedUniversity,
       avatarUrl: user.avatarUrl ?? null,
@@ -222,7 +225,9 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
     });
     res.json({
       id: updated.id,
-      name: updated.name,
+      name: getFullName(updated),
+      firstName: updated.firstName,
+      lastName: updated.lastName,
       email: updated.email,
       verifiedUniversity: updated.verifiedUniversity,
       avatarUrl: updated.avatarUrl ?? null,
@@ -391,19 +396,25 @@ router.get('/search', requireAuth, async (req: AuthRequest, res: Response): Prom
 
     const users = await prisma.user.findMany({
       where: {
-        name: { contains: q, mode: 'insensitive' },
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+        ],
         id: { notIn: [...excluded] },
       },
       select: {
         id: true,
         name: true,
+        firstName: true,
+        lastName: true,
         avatarUrl: true,
         verifiedUniversity: true,
       },
       take: 20,
     });
 
-    res.json(users);
+    res.json(users.map((user) => withDisplayName(user, 'full')));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -421,6 +432,9 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const isSelf = req.user!.userId === targetId;
+    const isFriend = isSelf ? true : await areFriends(req.user!.userId, targetId);
+
     const [podsJoined, noShowPods, friendCount] = await Promise.all([
       prisma.podMember.count({ where: { userId: targetId, pod: { status: 'COMPLETED' } } }),
       prisma.noShowReport.groupBy({ by: ['podId'], where: { targetUserId: targetId } }),
@@ -437,7 +451,9 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
 
     res.json({
       id: user.id,
-      name: user.name,
+      name: isFriend ? getFullName(user) : getPublicName(user),
+      firstName: user.firstName,
+      lastName: isFriend ? user.lastName : '',
       verifiedUniversity: user.verifiedUniversity,
       avatarUrl: user.avatarUrl ?? null,
       podsJoined,
@@ -465,11 +481,11 @@ router.get('/blocked', requireAuth, async (req: AuthRequest, res: Response): Pro
     const blocks = await prisma.block.findMany({
       where: { blockerId: userId },
       include: {
-        blocked: { select: { id: true, name: true, avatarUrl: true } },
+        blocked: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json(blocks.map((b) => ({ ...b.blocked, blockedAt: b.createdAt })));
+    res.json(blocks.map((b) => ({ ...withDisplayName(b.blocked, 'full'), blockedAt: b.createdAt })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

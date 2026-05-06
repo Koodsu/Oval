@@ -4,6 +4,7 @@ import prisma from '../prisma';
 import { hasBlockingRelationship } from '../lib/blocks';
 import { areFriends } from '../lib/friendUtils';
 import { joinExistingPodMember, parsePodMembers } from '../lib/joinExistingPod';
+import { withDisplayName } from '../lib/userNames';
 
 const router = Router();
 router.use(requireAuth);
@@ -89,12 +90,16 @@ router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void
       data: { podId, senderId, receiverId, status: 'PENDING' },
       include: {
         pod: { include: { activity: true } },
-        sender: { select: { id: true, name: true, avatarUrl: true } },
-        receiver: { select: { id: true, name: true, avatarUrl: true } },
+        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
+        receiver: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
       },
     });
 
-    res.status(201).json(invite);
+    res.status(201).json({
+      ...invite,
+      sender: invite.sender ? withDisplayName(invite.sender, 'full') : invite.sender,
+      receiver: invite.receiver ? withDisplayName(invite.receiver, 'full') : invite.receiver,
+    });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -117,8 +122,8 @@ router.get('/invites', async (req: AuthRequest, res: Response): Promise<void> =>
         },
       },
       include: {
-        pod: { include: { activity: true, members: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } } },
-        sender: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },
+        pod: { include: { activity: true, members: { include: { user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } } } } } },
+        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true, verifiedUniversity: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -139,7 +144,11 @@ router.get('/invites', async (req: AuthRequest, res: Response): Promise<void> =>
         .catch(() => {});
     }
 
-    res.json(valid);
+    res.json(valid.map((invite) => ({
+      ...invite,
+      pod: parsePodMembers(invite.pod),
+      sender: invite.sender ? withDisplayName(invite.sender, 'full') : invite.sender,
+    })));
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }

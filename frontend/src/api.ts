@@ -121,10 +121,17 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
 }
 
 // Auth
-export const register = (name: string, email: string, password: string, classYear: string, major: string) =>
+export const register = (
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string,
+  classYear: string,
+  major: string
+) =>
   request<{ token: string; user: import('./types').User }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name, email, password, classYear, major }),
+    body: JSON.stringify({ firstName, lastName, email, password, classYear, major }),
   });
 
 export const login = (email: string, password: string) =>
@@ -369,6 +376,7 @@ export interface CreatePodOptions {
   maxMembers?: number;
   meetupTime?: string; // ISO string
   location?: string;
+  visibility?: 'public' | 'private';
   latitude?: number;
   longitude?: number;
 }
@@ -390,6 +398,12 @@ export const lockPod = (podId: string) =>
 
 export const unlockPod = (podId: string) =>
   request<import('./types').Pod>(`/pods/${podId}/unlock`, { method: 'POST' });
+
+export const updatePodPrivacy = (podId: string, visibility: 'public' | 'private') =>
+  request<import('./types').Pod>(`/pods/${encodeURIComponent(podId)}/privacy`, {
+    method: 'PATCH',
+    body: JSON.stringify({ visibility }),
+  });
 
 export interface LeavePodResponse {
   left: boolean;

@@ -26,18 +26,19 @@ import {
   sendPodTyping,
   submitRecap,
   unlockPod,
+  updatePodPrivacy,
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Message, PeopleYouMetUser, Pod } from '../types';
 import { Chip, EmptyState, Hero, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, UserAvatar } from '../components/ui';
 import { palette, radii, spacing, typography } from '../theme';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
 
-const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢'] as const;
+const HEART_EMOJI = '❤️';
 
 export default function PodDetailScreen({ route, navigation }: Props) {
   const { podId } = route.params;
@@ -162,6 +163,19 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handlePrivacyChange = async (visibility: 'public' | 'private') => {
+    if (!pod || pod.locationType === visibility) return;
+    setActionBusy('privacy');
+    try {
+      const updated = await updatePodPrivacy(pod.id, visibility);
+      setPod(updated);
+    } catch {
+      Alert.alert('Could not update privacy', API_USER_MESSAGE);
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
   const handleConfirmAttendance = async () => {
     if (!pod) return;
     setActionBusy('confirm');
@@ -190,17 +204,17 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleReaction = async (message: Message, emoji: string) => {
-    const hasReaction = !!message.reactions?.some(
-      (reaction) => reaction.userId === user?.id && reaction.emoji === emoji
+  const handleHeart = async (message: Message) => {
+    const hasHeart = !!message.reactions?.some(
+      (reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI
     );
     try {
-      const updated = hasReaction
-        ? await removePodMessageReaction(podId, message.id, emoji)
-        : await addPodMessageReaction(podId, message.id, emoji);
+      const updated = hasHeart
+        ? await removePodMessageReaction(podId, message.id, HEART_EMOJI)
+        : await addPodMessageReaction(podId, message.id, HEART_EMOJI);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
     } catch {
-      Alert.alert('Could not update reaction', API_USER_MESSAGE);
+      Alert.alert('Could not update heart', API_USER_MESSAGE);
     }
   };
 
@@ -353,6 +367,51 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               </Panel>
             ) : null}
 
+            {meInPod && isCreator && pod.status !== 'COMPLETED' && pod.status !== 'EXPIRED' ? (
+              <Panel>
+                <SectionHeader title="Pod privacy" />
+                <View style={styles.privacyToggle}>
+                  {([
+                    {
+                      value: 'public' as const,
+                      label: 'Public',
+                      icon: 'earth-outline' as const,
+                      body: 'Shown in discovery so people can join while spots are open.',
+                    },
+                    {
+                      value: 'private' as const,
+                      label: 'Private',
+                      icon: 'lock-closed-outline' as const,
+                      body: 'Unlisted from discovery. Members can still invite friends or share the link.',
+                    },
+                  ]).map((item) => {
+                    const active = pod.locationType === item.value;
+                    return (
+                      <TouchableOpacity
+                        key={item.value}
+                        activeOpacity={0.86}
+                        disabled={actionBusy === 'privacy'}
+                        onPress={() => void handlePrivacyChange(item.value)}
+                        style={[styles.privacyOption, active && styles.privacyOptionActive]}
+                      >
+                        <View style={styles.privacyOptionTop}>
+                          <Ionicons
+                            name={item.icon}
+                            size={18}
+                            color={active ? palette.scarlet : palette.slate}
+                          />
+                          <Text style={[styles.privacyLabel, active && styles.privacyLabelActive]}>
+                            {item.label}
+                          </Text>
+                        </View>
+                        <Text style={styles.privacyBody}>{item.body}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </Panel>
+            ) : null}
+
             <Panel>
               <Text style={styles.sectionTitle}>People in the pod</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -370,28 +429,49 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               </ScrollView>
             </Panel>
 
-            {meInPod && pod.status === 'FORMING' && eligibleInviteFriends.length ? (
+            {meInPod && pod.status === 'FORMING' ? (
               <Panel>
-                <SectionHeader title="Invite friends" actionLabel="Open share" onActionPress={() => void handleShare()} />
-                <Text style={styles.body}>Use direct pod invites for friends you already know, or share the public link more broadly.</Text>
+                <SectionHeader title="Invite friends" actionLabel="Share link" onActionPress={() => void handleShare()} />
+                <Text style={styles.body}>
+                  Send an in-app invite to friends, or share a join link anywhere. Private pods stay unlisted but still work with direct invites.
+                </Text>
+                <View style={styles.shareCard}>
+                  <View style={styles.shareIcon}>
+                    <Ionicons name="link-outline" size={18} color={palette.scarlet} />
+                  </View>
+                  <View style={styles.copy}>
+                    <Text style={styles.memberName}>Invite link</Text>
+                    <Text style={styles.memberMeta} numberOfLines={1}>{getPodShareUrl(pod.id)}</Text>
+                  </View>
+                  <PrimaryButton label="Share" onPress={() => void handleShare()} kind="ghost" />
+                </View>
                 <View style={styles.inviteList}>
-                  {eligibleInviteFriends.map((friend) => (
-                    <View key={friend.id} style={styles.inviteRow}>
-                      <TouchableOpacity
-                        style={styles.inviteIdentity}
-                        onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
-                      >
-                        <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
-                        <Text style={styles.memberName}>{friend.name}</Text>
-                      </TouchableOpacity>
-                      <PrimaryButton
-                        label="Invite"
-                        onPress={() => void handleInviteFriend(friend)}
-                        loading={actionBusy === `invite-${friend.id}`}
-                        kind="ghost"
-                      />
+                  {eligibleInviteFriends.length ? (
+                    eligibleInviteFriends.map((friend) => (
+                      <View key={friend.id} style={styles.inviteRow}>
+                        <TouchableOpacity
+                          style={styles.inviteIdentity}
+                          onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                        >
+                          <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
+                          <Text style={styles.memberName}>{friend.name}</Text>
+                        </TouchableOpacity>
+                        <PrimaryButton
+                          label="Invite"
+                          onPress={() => void handleInviteFriend(friend)}
+                          loading={actionBusy === `invite-${friend.id}`}
+                          kind="ghost"
+                        />
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.emptyInline}>
+                      <Ionicons name="people-outline" size={18} color={palette.slate} />
+                      <Text style={styles.body}>
+                        Add friends from profiles or after completed pods, then invite them here.
+                      </Text>
                     </View>
-                  ))}
+                  )}
                 </View>
               </Panel>
             ) : null}
@@ -508,55 +588,56 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             {meInPod ? (
               <View style={styles.section}>
                 <SectionHeader title="Conversation" />
-                {messages.length ? messages.map((message) => (
-                  <View key={message.id} style={[styles.messageRow, message.user.id === user?.id && styles.messageRowOwn]}>
-                    {message.user.id !== user?.id ? (
+                <Panel style={styles.conversationPanel}>
+                  {messages.length ? messages.map((message) => (
+                    <View key={message.id} style={styles.messageRow}>
                       <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}>
-                        <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={34} />
+                        <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={42} />
                       </TouchableOpacity>
-                    ) : null}
-                    <View style={styles.messageStack}>
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        onLongPress={() => setReplyTo(message)}
-                        onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}
-                        style={[styles.messageBubble, message.user.id === user?.id ? styles.messageBubbleOwn : styles.messageBubbleOther]}
-                      >
-                        <Text style={[styles.messageName, message.user.id === user?.id && styles.messageNameOwn]}>
-                          {message.user.id === user?.id ? 'You' : message.user.name}
-                        </Text>
-                        {message.replyTo ? (
-                          <View style={styles.replyPreview}>
-                            <Text style={styles.replyMeta}>Replying to {message.replyTo.user.name}</Text>
-                            <Text style={styles.replyBody} numberOfLines={1}>{message.replyTo.content}</Text>
-                          </View>
-                        ) : null}
-                        <Text style={[styles.messageBody, message.user.id === user?.id && styles.messageBodyOwn]}>{message.content}</Text>
-                      </TouchableOpacity>
-                      <View style={styles.reactionRow}>
-                        {REACTION_OPTIONS.map((emoji) => {
-                          const count = message.reactions?.filter((reaction) => reaction.emoji === emoji).length ?? 0;
-                          const active = !!message.reactions?.some(
-                            (reaction) => reaction.emoji === emoji && reaction.userId === user?.id
-                          );
-                          return (
-                            <Chip
-                              key={`${message.id}-${emoji}`}
-                              label={count ? `${emoji} ${count}` : emoji}
-                              active={active}
-                              onPress={() => void handleReaction(message, emoji)}
-                            />
-                          );
-                        })}
+                      <View style={styles.messageStack}>
+                        <View style={styles.messageMetaRow}>
+                          <Text style={styles.messageName}>
+                            {message.user.id === user?.id ? 'You' : message.user.name}
+                          </Text>
+                          <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
+                        </View>
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onLongPress={() => setReplyTo(message)}
+                          onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}
+                          style={styles.messageContent}
+                        >
+                          {message.replyTo ? (
+                            <View style={styles.replyPreview}>
+                              <Text style={styles.replyMeta}>Replying to {message.replyTo.user.name}</Text>
+                              <Text style={styles.replyBody} numberOfLines={1}>{message.replyTo.content}</Text>
+                            </View>
+                          ) : null}
+                          <Text style={styles.messageBody}>{message.content}</Text>
+                        </TouchableOpacity>
                       </View>
+                      <TouchableOpacity
+                        onPress={() => void handleHeart(message)}
+                        style={styles.heartButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons
+                          name={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? 'heart' : 'heart-outline'}
+                          size={22}
+                          color={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? palette.coral : 'rgba(16, 33, 43, 0.16)'}
+                        />
+                        {message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ? (
+                          <Text style={styles.heartCount}>
+                            {message.reactions.filter((reaction) => reaction.emoji === HEART_EMOJI).length}
+                          </Text>
+                        ) : null}
+                      </TouchableOpacity>
                     </View>
-                    {message.user.id === user?.id ? <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={34} /> : null}
-                  </View>
-                )) : <EmptyState icon="chatbubble-outline" title="No messages yet" body="A quieter chat is fine, but this is where the pod should coordinate the actual meetup." />}
-                {typingUserIds.length ? (
-                  <Text style={styles.typingText}>Someone is typing...</Text>
-                ) : null}
-                <Panel>
+                  )) : <EmptyState icon="chatbubble-outline" title="No messages yet" body="A quieter chat is fine, but this is where the pod should coordinate the actual meetup." />}
+                  {typingUserIds.length ? (
+                    <Text style={styles.typingText}>Someone is typing...</Text>
+                  ) : null}
+
                   {replyTo ? (
                     <View style={styles.replyComposer}>
                       <View style={styles.replyComposerCopy}>
@@ -566,19 +647,30 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       <PrimaryButton label="Clear" onPress={() => setReplyTo(null)} kind="ghost" />
                     </View>
                   ) : null}
-                  <TextInput
-                    value={messageText}
-                    onChangeText={(value) => {
-                      setMessageText(value);
-                      if (value.trim()) pingTyping();
-                    }}
-                    placeholder="Drop a location tweak, ETA, or quick note..."
-                    placeholderTextColor={palette.slate}
-                    style={styles.input}
-                    multiline
-                  />
-                  <View style={styles.inputAction}>
-                    <PrimaryButton label="Send" onPress={() => void handleSend()} loading={sending} />
+                  <View style={styles.composerRow}>
+                    <TextInput
+                      value={messageText}
+                      onChangeText={(value) => {
+                        setMessageText(value);
+                        if (value.trim()) pingTyping();
+                      }}
+                      placeholder="Drop a location tweak, ETA, or quick note..."
+                      placeholderTextColor={palette.slate}
+                      style={styles.input}
+                      returnKeyType="send"
+                      onSubmitEditing={() => void handleSend()}
+                    />
+                    <TouchableOpacity
+                      onPress={() => void handleSend()}
+                      disabled={sending || !messageText.trim()}
+                      style={[styles.sendButtonInline, (!messageText.trim() || sending) && styles.sendButtonInlineDisabled]}
+                    >
+                      {sending ? (
+                        <ActivityIndicator size="small" color={palette.white} />
+                      ) : (
+                        <Ionicons name="arrow-up" size={18} color={palette.white} />
+                      )}
+                    </TouchableOpacity>
                   </View>
                 </Panel>
               </View>
@@ -622,6 +714,38 @@ const styles = StyleSheet.create({
   body: {
     ...typography.body,
   },
+  privacyToggle: {
+    gap: spacing.sm,
+  },
+  privacyOption: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.cream,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  privacyOptionActive: {
+    borderColor: 'rgba(199, 59, 34, 0.34)',
+    backgroundColor: 'rgba(252, 232, 228, 0.56)',
+  },
+  privacyOptionTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  privacyLabel: {
+    ...typography.bodyStrong,
+    color: palette.slate,
+  },
+  privacyLabelActive: {
+    color: palette.ink,
+  },
+  privacyBody: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   errorText: {
     ...typography.bodyStrong,
     color: palette.dangerText,
@@ -644,6 +768,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     gap: spacing.sm,
   },
+  shareCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.cream,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  shareIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.dangerBg,
+  },
   inviteRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,6 +798,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     flex: 1,
+  },
+  emptyInline: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: 'rgba(255,255,255,0.56)',
+    padding: spacing.md,
   },
   copy: {
     flex: 1,
@@ -696,78 +849,89 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
   },
+  conversationPanel: {
+    gap: spacing.md,
+    padding: spacing.md,
+  },
   messageRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'flex-end',
-  },
-  messageRowOwn: {
-    justifyContent: 'flex-end',
+    gap: 12,
+    alignItems: 'flex-start',
   },
   messageStack: {
-    maxWidth: '78%',
-    gap: spacing.xs,
+    flex: 1,
+    gap: 2,
+    paddingTop: 2,
   },
-  messageBubble: {
-    borderRadius: 24,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    gap: 4,
-    borderWidth: 1,
-  },
-  messageBubbleOwn: {
-    backgroundColor: palette.ink,
-    borderColor: palette.ink,
-    borderBottomRightRadius: 8,
-  },
-  messageBubbleOther: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderColor: palette.border,
-    borderBottomLeftRadius: 8,
+  messageMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   messageName: {
     ...typography.bodyStrong,
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 18,
+    color: 'rgba(16, 33, 43, 0.5)',
   },
-  messageNameOwn: {
-    color: palette.white,
-    textAlign: 'right',
+  messageTime: {
+    ...typography.body,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.32)',
+  },
+  messageContent: {
+    gap: 4,
+    paddingRight: spacing.sm,
   },
   messageBody: {
     ...typography.body,
     color: palette.ink,
-  },
-  messageBodyOwn: {
-    color: 'rgba(255,255,255,0.92)',
-    textAlign: 'right',
-  },
-  reactionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.xs,
+    fontSize: 17,
+    lineHeight: 25,
+    letterSpacing: -0.2,
   },
   replyPreview: {
     borderLeftWidth: 2,
-    borderLeftColor: 'rgba(255,255,255,0.45)',
-    paddingLeft: spacing.sm,
+    borderLeftColor: 'rgba(16, 33, 43, 0.12)',
+    paddingLeft: 10,
     marginBottom: 2,
   },
   replyMeta: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...typography.bodyStrong,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.46)',
   },
   replyBody: {
     ...typography.body,
-    color: palette.slate,
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(16, 33, 43, 0.42)',
+  },
+  heartButton: {
+    minWidth: 34,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 4,
+    paddingTop: 4,
+  },
+  heartCount: {
+    ...typography.bodyStrong,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(16, 33, 43, 0.42)',
   },
   typingText: {
     ...typography.body,
     color: palette.scarlet,
+    marginTop: 2,
   },
   replyComposer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },
   replyComposerCopy: {
@@ -775,18 +939,34 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   input: {
-    minHeight: 80,
-    borderRadius: radii.md,
+    flex: 1,
+    height: 56,
+    borderRadius: radii.pill,
     backgroundColor: palette.cream,
     borderWidth: 1,
     borderColor: palette.border,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 0,
     ...typography.body,
     color: palette.ink,
-    textAlignVertical: 'top',
+    fontSize: 16,
+    lineHeight: 20,
   },
-  inputAction: {
-    marginTop: spacing.sm,
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  sendButtonInline: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.scarlet,
+  },
+  sendButtonInlineDisabled: {
+    backgroundColor: 'rgba(16, 33, 43, 0.16)',
   },
   loadingContainer: {
     flex: 1,
