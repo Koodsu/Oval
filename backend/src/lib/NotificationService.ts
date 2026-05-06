@@ -1,5 +1,6 @@
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import prisma from '../prisma';
+import { getPublicName } from './userNames';
 
 const expo = new Expo();
 
@@ -61,9 +62,9 @@ export const NotificationService = {
         include: {
           activity: { select: { title: true } },
           creator: {
-            select: { id: true, name: true, pushToken: true, notificationPreferences: true },
+            select: { id: true, name: true, firstName: true, lastName: true, pushToken: true, notificationPreferences: true },
           },
-          members: { include: { user: { select: { id: true, name: true } } } },
+          members: { include: { user: { select: { id: true, name: true, firstName: true, lastName: true } } } },
         },
       });
 
@@ -75,7 +76,7 @@ export const NotificationService = {
       if (!prefs.podJoin) return;
 
       const joiner = pod.members.find((m) => m.user.id === joinerId);
-      const joinerName = joiner?.user.name ?? 'Someone';
+      const joinerName = joiner?.user ? getPublicName(joiner.user) : 'Someone';
 
       await send([
         {
@@ -101,7 +102,7 @@ export const NotificationService = {
           members: {
             include: {
               user: {
-                select: { id: true, name: true, pushToken: true, notificationPreferences: true },
+                select: { id: true, name: true, firstName: true, lastName: true, pushToken: true, notificationPreferences: true },
               },
             },
           },
@@ -111,7 +112,7 @@ export const NotificationService = {
       if (!pod) return;
 
       const sender = pod.members.find((m) => m.user.id === senderId);
-      const senderName = sender?.user.name ?? 'Someone';
+      const senderName = sender?.user ? getPublicName(sender.user) : 'Someone';
 
       const messages: ExpoPushMessage[] = [];
       for (const member of pod.members) {

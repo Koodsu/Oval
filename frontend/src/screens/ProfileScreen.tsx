@@ -17,6 +17,8 @@ const DEFAULT_PREFS: NotificationPreferences = {
   podJoin: true,
   newMessage: true,
   meetupReminder: true,
+  recapPrompt: true,
+  waitlistSpot: true,
 };
 
 export default function ProfileScreen() {

@@ -7,6 +7,8 @@ export interface NotificationPreferences {
 export interface User {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   verifiedUniversity: boolean;
   avatarUrl?: string | null;
@@ -22,6 +24,8 @@ export interface User {
 export interface PublicProfile {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   verifiedUniversity: boolean;
   avatarUrl?: string | null;
   podsJoined: number;
@@ -53,6 +57,8 @@ export interface FriendRelationship {
 export interface FriendUser {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   avatarUrl?: string | null;
   verifiedUniversity: boolean;
 }

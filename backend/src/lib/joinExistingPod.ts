@@ -9,13 +9,19 @@ type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 export const MEMBER_USER_SELECT = {
   id: true,
   name: true,
+  firstName: true,
+  lastName: true,
   avatarUrl: true,
   interestTags: true,
   classYear: true,
   major: true,
 } as const;
 
-export function parseMemberTags<T extends { user: { interestTags?: string | null } }>(member: T) {
+export function parseMemberTags<T extends { user: Record<string, unknown> & { interestTags?: string | null } }>(member: T) {
+  const publicName =
+    'firstName' in member.user && typeof member.user.firstName === 'string' && member.user.firstName.trim()
+      ? member.user.firstName.trim()
+      : ('name' in member.user && typeof member.user.name === 'string' ? member.user.name : '');
   let tags: string[] = [];
   if (member.user.interestTags) {
     try {
@@ -24,10 +30,10 @@ export function parseMemberTags<T extends { user: { interestTags?: string | null
       /* ignore */
     }
   }
-  return { ...member, user: { ...member.user, interestTags: tags } };
+  return { ...member, user: { ...member.user, name: publicName, interestTags: tags } };
 }
 
-export function parsePodMembers<T extends { members: Array<{ user: { interestTags?: string | null } }> }>(pod: T) {
+export function parsePodMembers<T extends { members: Array<{ user: Record<string, unknown> & { interestTags?: string | null } }> }>(pod: T) {
   return { ...pod, members: pod.members.map(parseMemberTags) };
 }
 

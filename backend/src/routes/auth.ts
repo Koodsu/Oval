@@ -5,6 +5,7 @@ import prisma from '../prisma';
 import { getJwtSecret } from '../config/jwt';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail } from '../lib/emailService';
+import { getFullName, normalizeNameParts } from '../lib/userNames';
 
 const router = Router();
 
@@ -47,6 +48,8 @@ function generateVerifyCode(): string {
 function safeUser(user: {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   verifiedUniversity: boolean;
   avatarUrl?: string | null;
@@ -59,7 +62,9 @@ function safeUser(user: {
 }) {
   return {
     id: user.id,
-    name: user.name,
+    name: getFullName(user),
+    firstName: user.firstName,
+    lastName: user.lastName,
     email: user.email,
     verifiedUniversity: user.verifiedUniversity,
     avatarUrl: user.avatarUrl ?? null,
@@ -75,24 +80,35 @@ function safeUser(user: {
 // POST /auth/register
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   const rawName = req.body?.name;
+  const rawFirstName = req.body?.firstName;
+  const rawLastName = req.body?.lastName;
   const rawEmail = req.body?.email;
   const rawPassword = req.body?.password;
   const rawClassYear = req.body?.classYear;
   const rawMajor = req.body?.major;
 
-  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  const { firstName, lastName, fullName } = normalizeNameParts({
+    firstName: typeof rawFirstName === 'string' ? rawFirstName : null,
+    lastName: typeof rawLastName === 'string' ? rawLastName : null,
+    name: typeof rawName === 'string' ? rawName : null,
+  });
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
   const password = typeof rawPassword === 'string' ? rawPassword : '';
   const classYear = typeof rawClassYear === 'string' ? rawClassYear.trim() : '';
   const major = typeof rawMajor === 'string' ? rawMajor.trim() : '';
 
-  if (!name || !email || !password) {
-    res.status(400).json({ error: 'name, email, and password are required' });
+  if (!firstName || !email || !password) {
+    res.status(400).json({ error: 'firstName, email, and password are required' });
     return;
   }
 
-  if (name.length < 2) {
-    res.status(400).json({ error: 'Name must be at least 2 characters' });
+  if (firstName.length < 2) {
+    res.status(400).json({ error: 'First name must be at least 2 characters' });
+    return;
+  }
+
+  if (lastName && lastName.length < 2) {
+    res.status(400).json({ error: 'Last name must be at least 2 characters when provided' });
     return;
   }
 
@@ -142,7 +158,9 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     const user = await prisma.user.create({
       data: {
-        name: name.trim(),
+        name: fullName,
+        firstName,
+        lastName,
         email: email.toLowerCase(),
         password: hashed,
         emailVerifyCode: code,

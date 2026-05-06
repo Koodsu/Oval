@@ -125,6 +125,67 @@ describe('Pods API (integration)', () => {
     });
   });
 
+  describe('PATCH /pods/:id/privacy', () => {
+    it('lets the creator make a pod private and removes it from discovery', async () => {
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const podId = createRes.body.id as string;
+
+      const privacyRes = await request(app)
+        .patch(`/pods/${podId}/privacy`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ visibility: 'private' })
+        .expect(200);
+
+      expect(privacyRes.body.locationType).toBe('private');
+
+      const { token: viewerToken } = await registerAndGetToken(
+        'Private Viewer',
+        `private-viewer-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const feedRes = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+
+      expect(feedRes.body.map((p: { id: string }) => p.id)).not.toContain(podId);
+    });
+
+    it('rejects privacy changes from non-creators', async () => {
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const { token: otherToken } = await registerAndGetToken(
+        'Privacy Other',
+        `privacy-other-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .patch(`/pods/${createRes.body.id}/privacy`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ visibility: 'private' })
+        .expect(403);
+    });
+  });
+
   describe('GET /pods/feed', () => {
     it('returns empty array when no pods exist', async () => {
       const res = await request(app)

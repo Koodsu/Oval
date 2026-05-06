@@ -8,6 +8,7 @@ import { setTyping } from '../lib/typingStore';
 import { expireOldPods } from '../lib/expireOldPods';
 import { getActivityEmoji } from '../lib/activityEmoji';
 import { joinExistingPodMember, parsePodMembers, MEMBER_USER_SELECT } from '../lib/joinExistingPod';
+import { withDisplayName } from '../lib/userNames';
 
 const router = Router();
 
@@ -15,6 +16,8 @@ const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
 const EXPIRED = 'EXPIRED';
+const PUBLIC_LOCATION_TYPE = 'public';
+const PRIVATE_LOCATION_TYPE = 'private';
 
 const OSU_CAMPUS_POLYGON = [
   // North - Lane Ave
@@ -169,7 +172,7 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
       OR: [
-        { locationType: { not: 'private' } },
+        { locationType: { not: PRIVATE_LOCATION_TYPE } },
         { members: { some: { userId } } },
       ],
     };
@@ -290,7 +293,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       meetupTime: { gt: now },
       members: { none: { userId: { in: [...blockedIds] } } },
       OR: [
-        { locationType: { not: 'private' } },
+        { locationType: { not: PRIVATE_LOCATION_TYPE } },
         { members: { some: { userId: req.user!.userId } } },
       ],
     };
@@ -403,6 +406,17 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     const minMembers = Math.max(2, Math.min(10, Number(req.body.minMembers) || 2));
     const maxMembers = Math.max(minMembers, Math.min(10, Number(req.body.maxMembers) || 4));
     const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    const visibilityInput =
+      typeof req.body.visibility === 'string'
+        ? req.body.visibility.trim().toLowerCase()
+        : typeof req.body.locationType === 'string'
+          ? req.body.locationType.trim().toLowerCase()
+          : PUBLIC_LOCATION_TYPE;
+
+    if (![PUBLIC_LOCATION_TYPE, PRIVATE_LOCATION_TYPE].includes(visibilityInput)) {
+      res.status(400).json({ error: 'visibility must be public or private' });
+      return;
+    }
 
     if (!locationInput) {
       res.status(400).json({ error: 'Location is required. Please select a location before creating a pod.' });
@@ -459,7 +473,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         activityId,
         meetupTime,
         location: locationInput,
-        locationType: 'public',
+        locationType: visibilityInput,
         minMembers,
         maxMembers,
         status: FORMING,
@@ -481,6 +495,61 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     });
 
     res.status(201).json(updatedPod ? parsePodMembers(updatedPod) : updatedPod);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /pods/:id/privacy - creator only; controls discovery visibility
+router.patch('/:id/privacy', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+  const visibility =
+    typeof req.body.visibility === 'string'
+      ? req.body.visibility.trim().toLowerCase()
+      : typeof req.body.locationType === 'string'
+        ? req.body.locationType.trim().toLowerCase()
+        : undefined;
+
+  if (!visibility || ![PUBLIC_LOCATION_TYPE, PRIVATE_LOCATION_TYPE].includes(visibility)) {
+    res.status(400).json({ error: 'visibility must be public or private' });
+    return;
+  }
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+
+    const creatorId = pod.creatorId ?? pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can change pod privacy' });
+      return;
+    }
+
+    if (pod.status === COMPLETED || pod.status === EXPIRED) {
+      res.status(409).json({ error: 'Cannot change privacy for a completed or expired pod' });
+      return;
+    }
+
+    const updated = await prisma.pod.update({
+      where: { id },
+      data: { locationType: visibility },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
+      },
+    });
+
+    res.json(parsePodMembers(updated));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -898,6 +967,8 @@ router.get('/:id/people-you-met', requireAuth, async (req: AuthRequest, res: Res
               select: {
                 id: true,
                 name: true,
+                firstName: true,
+                lastName: true,
                 avatarUrl: true,
                 classYear: true,
                 major: true,
@@ -981,7 +1052,7 @@ router.get('/:id/people-you-met', requireAuth, async (req: AuthRequest, res: Res
         }
         return {
           id: m.user.id,
-          name: m.user.name,
+          name: withDisplayName(m.user, 'public').name,
           avatarUrl: m.user.avatarUrl,
           classYear: m.user.classYear,
           major: m.user.major,

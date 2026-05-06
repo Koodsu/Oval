@@ -5,11 +5,27 @@ import { hasBlockingRelationship, getBlockedUserIds } from '../lib/blocks';
 import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+import { withDisplayName } from '../lib/userNames';
 
 const router = Router();
 router.use(requireAuth);
 
 const MAX_DM_LENGTH = 2000;
+
+function formatDmMessage<T extends {
+  sender: { id: string; name: string; firstName?: string | null; lastName?: string | null };
+  replyTo?: {
+    sender: { id: string; name: string; firstName?: string | null; lastName?: string | null };
+  } | null;
+}>(message: T): T {
+  return {
+    ...message,
+    sender: withDisplayName(message.sender, 'full'),
+    replyTo: message.replyTo
+      ? { ...message.replyTo, sender: withDisplayName(message.replyTo.sender, 'full') }
+      : message.replyTo,
+  };
+}
 
 // GET /messages/threads — list DM threads for the current user
 router.get('/threads', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -22,8 +38,8 @@ router.get('/threads', async (req: AuthRequest, res: Response): Promise<void> =>
         OR: [{ userAId: userId }, { userBId: userId }],
       },
       include: {
-        userA: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },
-        userB: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },
+        userA: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true, verifiedUniversity: true } },
+        userB: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true, verifiedUniversity: true } },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -48,7 +64,7 @@ router.get('/threads', async (req: AuthRequest, res: Response): Promise<void> =>
         (!myLastReadAt || myLastReadAt < lastMsg.createdAt);
       return {
         id: t.id,
-        otherUser: t.userAId === userId ? t.userB : t.userA,
+        otherUser: withDisplayName(t.userAId === userId ? t.userB : t.userA, 'full'),
         lastMessage: lastMsg,
         updatedAt: t.updatedAt,
         hasUnread,
@@ -98,14 +114,14 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
     const messages = await prisma.directMessage.findMany({
       where: { threadId },
       include: {
-        sender: { select: { id: true, name: true, avatarUrl: true } },
+        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             senderId: true,
-            sender: { select: { id: true, name: true } },
+            sender: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
@@ -116,7 +132,11 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
     const otherLastReadAt =
       thread.userAId === userId ? thread.userBLastReadAt : thread.userALastReadAt;
 
-    res.json({ messages, typingUserIds, otherLastReadAt: otherLastReadAt?.toISOString() ?? null });
+    res.json({
+      messages: messages.map(formatDmMessage),
+      typingUserIds,
+      otherLastReadAt: otherLastReadAt?.toISOString() ?? null,
+    });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -229,20 +249,20 @@ router.post('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest, r
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
       include: {
-        sender: { select: { id: true, name: true, avatarUrl: true } },
+        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             senderId: true,
-            sender: { select: { id: true, name: true } },
+            sender: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
     });
 
-    res.json(updated);
+    res.json(updated ? formatDmMessage(updated) : updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -282,20 +302,20 @@ router.delete('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest,
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
       include: {
-        sender: { select: { id: true, name: true, avatarUrl: true } },
+        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             senderId: true,
-            sender: { select: { id: true, name: true } },
+            sender: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
     });
 
-    res.json(updated);
+    res.json(updated ? formatDmMessage(updated) : updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -387,14 +407,14 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
       prisma.directMessage.create({
         data,
         include: {
-          sender: { select: { id: true, name: true, avatarUrl: true } },
+          sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
           reactions: { select: { emoji: true, userId: true } },
           replyTo: {
             select: {
               id: true,
               content: true,
               senderId: true,
-              sender: { select: { id: true, name: true } },
+              sender: { select: { id: true, name: true, firstName: true, lastName: true } },
             },
           },
         },
@@ -405,7 +425,7 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
       }),
     ]);
 
-    res.status(201).json(message);
+    res.status(201).json(formatDmMessage(message));
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -442,14 +462,14 @@ router.get('/threads/by-user/:userId', async (req: AuthRequest, res: Response): 
       update: {},
       create: { userAId, userBId },
       include: {
-        userA: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },
-        userB: { select: { id: true, name: true, avatarUrl: true, verifiedUniversity: true } },
+        userA: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true, verifiedUniversity: true } },
+        userB: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true, verifiedUniversity: true } },
       },
     });
 
     res.json({
       id: thread.id,
-      otherUser: thread.userAId === myId ? thread.userB : thread.userA,
+      otherUser: withDisplayName(thread.userAId === myId ? thread.userB : thread.userA, 'full'),
       updatedAt: thread.updatedAt,
     });
   } catch {

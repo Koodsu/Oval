@@ -12,8 +12,9 @@ import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import PodsScreen from './src/screens/PodsScreen';
+import ClubsScreen from './src/screens/ClubsScreen';
+import ClubMeetingsTonightScreen from './src/screens/ClubMeetingsTonightScreen';
 import InboxScreen from './src/screens/InboxScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
 import ActivityPodsScreen from './src/screens/ActivityPodsScreen';
 import PodDetailScreen from './src/screens/PodDetailScreen';
 import ClubDetailScreen from './src/screens/ClubDetailScreen';
@@ -28,8 +29,8 @@ export type MainTabParamList = {
   Home: undefined;
   Explore: undefined;
   Pods: undefined;
+  Clubs: undefined;
   Inbox: undefined;
-  Profile: undefined;
 };
 
 export type RootStackParamList = {
@@ -37,6 +38,7 @@ export type RootStackParamList = {
   ActivityPods: { activity: Activity };
   PodDetail: { podId: string };
   ClubDetail: { clubId: string };
+  ClubMeetingsTonight: undefined;
   Thread: { threadId: string; title: string };
   EditProfile: undefined;
   UserProfile: { userId: string };
@@ -90,8 +92,8 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
       <Tab.Screen name="Pods" component={PodsScreen} />
+      <Tab.Screen name="Clubs" component={ClubsScreen} />
       <Tab.Screen name="Inbox" component={InboxScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -103,6 +105,7 @@ function AuthedApp() {
       <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
       <Stack.Screen name="PodDetail" component={PodDetailScreen} />
       <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <Stack.Screen name="ClubMeetingsTonight" component={ClubMeetingsTonightScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
@@ -153,10 +156,10 @@ function tabIcon(routeName: keyof MainTabParamList, focused: boolean): keyof typ
       return focused ? 'compass' : 'compass-outline';
     case 'Pods':
       return focused ? 'flash' : 'flash-outline';
+    case 'Clubs':
+      return focused ? 'people' : 'people-outline';
     case 'Inbox':
       return focused ? 'mail' : 'mail-outline';
-    case 'Profile':
-      return focused ? 'person' : 'person-outline';
   }
 }
 

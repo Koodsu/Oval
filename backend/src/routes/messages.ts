@@ -5,8 +5,24 @@ import { hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+import { withDisplayName } from '../lib/userNames';
 
 const router = Router({ mergeParams: true });
+
+function formatPodMessage<T extends {
+  user: { id: string; name: string; firstName?: string | null; lastName?: string | null };
+  replyTo?: {
+    user: { id: string; name: string; firstName?: string | null; lastName?: string | null };
+  } | null;
+}>(message: T): T {
+  return {
+    ...message,
+    user: withDisplayName(message.user, 'public'),
+    replyTo: message.replyTo
+      ? { ...message.replyTo, user: withDisplayName(message.replyTo.user, 'public') }
+      : message.replyTo,
+  };
+}
 
 // GET /pods/:id/messages
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -39,14 +55,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     const messages = await prisma.message.findMany({
       where: { podId },
       include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
+        user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             userId: true,
-            user: { select: { id: true, name: true } },
+            user: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
@@ -55,7 +71,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
 
     const typingUserIds = getTypingUserIds('pod', podId, userId);
 
-    res.json({ messages, typingUserIds });
+    res.json({ messages: messages.map(formatPodMessage), typingUserIds });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -118,14 +134,14 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     const message = await prisma.message.create({
       data,
       include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
+        user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             userId: true,
-            user: { select: { id: true, name: true } },
+            user: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
@@ -134,7 +150,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     // Fire-and-forget — don't await so message response isn't delayed
     NotificationService.notifyNewMessage(podId, userId).catch(() => {});
 
-    res.status(201).json(message);
+    res.status(201).json(formatPodMessage(message));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -195,20 +211,20 @@ router.post('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Resp
     const updated = await prisma.message.findUnique({
       where: { id: msgId },
       include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
+        user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             userId: true,
-            user: { select: { id: true, name: true } },
+            user: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
     });
 
-    res.json(updated);
+    res.json(updated ? formatPodMessage(updated) : updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -276,20 +292,20 @@ router.delete('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Re
     const updated = await prisma.message.findUnique({
       where: { id: msgId },
       include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
+        user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
         reactions: { select: { emoji: true, userId: true } },
         replyTo: {
           select: {
             id: true,
             content: true,
             userId: true,
-            user: { select: { id: true, name: true } },
+            user: { select: { id: true, name: true, firstName: true, lastName: true } },
           },
         },
       },
     });
 
-    res.json(updated);
+    res.json(updated ? formatPodMessage(updated) : updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

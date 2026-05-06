@@ -6,14 +6,16 @@ import {
   acceptFriendRequest,
   acceptPodInvite,
   API_USER_MESSAGE,
+  cancelFriendRequest,
   declineFriendRequest,
   declinePodInvite,
+  getFriends,
   getFriendRequests,
   getMessageThreads,
   getPodInvites,
 } from '../api';
 import { RootStackParamList } from '../../App';
-import { DirectMessageThread, FriendRequest, PodInvite } from '../types';
+import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
 import { CompactHeader, EmptyState, Panel, PrimaryButton, Screen, SegmentedControl, UserAvatar } from '../components/ui';
 import { formatDateTime } from '../utils/format';
 import { radii, spacing, typography, palette } from '../theme';
@@ -27,12 +29,16 @@ export default function InboxScreen() {
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
   const [invites, setInvites] = useState<PodInvite[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [threadResult, inviteResult, requestResult] = await Promise.allSettled([
+    const [threadResult, inviteResult, requestResult, friendResult] = await Promise.allSettled([
       getMessageThreads(),
       getPodInvites(),
       getFriendRequests(),
+      getFriends(),
     ]);
 
     if (threadResult.status === 'fulfilled') {
@@ -45,12 +51,18 @@ export default function InboxScreen() {
 
     if (requestResult.status === 'fulfilled') {
       setRequests(requestResult.value.incoming);
+      setOutgoingRequests(requestResult.value.outgoing);
+    }
+
+    if (friendResult.status === 'fulfilled') {
+      setFriends(friendResult.value);
     }
 
     if (
       threadResult.status === 'rejected' &&
       inviteResult.status === 'rejected' &&
-      requestResult.status === 'rejected'
+      requestResult.status === 'rejected' &&
+      friendResult.status === 'rejected'
     ) {
       Alert.alert('Could not load inbox', API_USER_MESSAGE);
     }
@@ -63,19 +75,24 @@ export default function InboxScreen() {
   );
 
   const handleInvite = async (inviteId: string, accept: boolean) => {
+    setBusyId(`invite-${inviteId}`);
     try {
       if (accept) {
-        await acceptPodInvite(inviteId);
+        const pod = await acceptPodInvite(inviteId);
+        navigation.navigate('PodDetail', { podId: pod.id });
       } else {
         await declinePodInvite(inviteId);
       }
       await load();
     } catch {
       Alert.alert('Could not update invite', API_USER_MESSAGE);
+    } finally {
+      setBusyId(null);
     }
   };
 
   const handleRequest = async (requestId: string, accept: boolean) => {
+    setBusyId(`request-${requestId}`);
     try {
       if (accept) {
         await acceptFriendRequest(requestId);
@@ -85,6 +102,20 @@ export default function InboxScreen() {
       await load();
     } catch {
       Alert.alert('Could not update request', API_USER_MESSAGE);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleCancelRequest = async (requestId: string) => {
+    setBusyId(`request-${requestId}`);
+    try {
+      await cancelFriendRequest(requestId);
+      await load();
+    } catch {
+      Alert.alert('Could not cancel request', API_USER_MESSAGE);
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -104,9 +135,12 @@ export default function InboxScreen() {
         <SegmentedControl
           value={mode}
           options={[
-            { value: 'messages', label: 'Messages' },
-            { value: 'invites', label: 'Pod invites' },
-            { value: 'friends', label: 'Friend requests' },
+            { value: 'messages', label: threads.length ? `Messages (${threads.length})` : 'Messages' },
+            { value: 'invites', label: invites.length ? `Invites (${invites.length})` : 'Invites' },
+            {
+              value: 'friends',
+              label: requests.length ? `Friends (${requests.length})` : 'Friends',
+            },
           ]}
           onChange={setMode}
         />
@@ -132,12 +166,42 @@ export default function InboxScreen() {
         {mode === 'invites' ? (
           <View style={styles.section}>
             {invites.length ? invites.map((invite) => (
-              <Panel key={invite.id}>
-                <Text style={styles.title}>{invite.pod?.activity.title ?? 'Pod invite'}</Text>
-                <Text style={styles.body}>From {invite.sender?.name ?? 'Someone'} • {formatDateTime(invite.createdAt)}</Text>
+              <Panel key={invite.id} style={styles.inviteCard}>
+                <View style={styles.cardTopRow}>
+                  <View style={styles.copy}>
+                    <Text style={styles.title}>{invite.pod?.activity.title ?? 'Pod invite'}</Text>
+                    <Text style={styles.body}>
+                      From {invite.sender?.name ?? 'Someone'} • {formatDateTime(invite.createdAt)}
+                    </Text>
+                  </View>
+                  {invite.sender ? (
+                    <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: invite.senderId })}>
+                      <UserAvatar name={invite.sender.name} avatarUrl={invite.sender.avatarUrl} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {invite.pod ? (
+                  <TouchableOpacity
+                    activeOpacity={0.84}
+                    style={styles.podPreview}
+                    onPress={() => navigation.navigate('PodDetail', { podId: invite.podId })}
+                  >
+                    <Text style={styles.previewMeta}>{formatDateTime(invite.pod.meetupTime)}</Text>
+                    <Text style={styles.previewBody}>{invite.pod.location}</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.buttonRow}>
-                  <PrimaryButton label="Accept" onPress={() => void handleInvite(invite.id, true)} />
-                  <PrimaryButton label="Decline" onPress={() => void handleInvite(invite.id, false)} kind="ghost" />
+                  <PrimaryButton
+                    label="Accept"
+                    onPress={() => void handleInvite(invite.id, true)}
+                    loading={busyId === `invite-${invite.id}`}
+                  />
+                  <PrimaryButton
+                    label="Decline"
+                    onPress={() => void handleInvite(invite.id, false)}
+                    disabled={busyId != null}
+                    kind="ghost"
+                  />
                 </View>
               </Panel>
             )) : <EmptyState icon="paper-plane-outline" title="No invites waiting" body="When pod creators invite you into something, it’ll show up here." />}
@@ -146,16 +210,102 @@ export default function InboxScreen() {
 
         {mode === 'friends' ? (
           <View style={styles.section}>
-            {requests.length ? requests.map((request) => (
-              <Panel key={request.id}>
-                <Text style={styles.title}>{request.sender?.name ?? 'Friend request'}</Text>
-                <Text style={styles.body}>Sent {formatDateTime(request.createdAt)}</Text>
-                <View style={styles.buttonRow}>
-                  <PrimaryButton label="Accept" onPress={() => void handleRequest(request.id, true)} />
-                  <PrimaryButton label="Decline" onPress={() => void handleRequest(request.id, false)} kind="ghost" />
-                </View>
-              </Panel>
-            )) : <EmptyState icon="person-add-outline" title="No requests" body="Friend activity will show up here once people start connecting after meetups." />}
+            {requests.length ? (
+              <>
+                <Text style={styles.sectionLabel}>Requests</Text>
+                {requests.map((request) => (
+                  <Panel key={request.id}>
+                    <View style={styles.cardTopRow}>
+                      {request.sender ? (
+                        <TouchableOpacity
+                          style={styles.identity}
+                          onPress={() => navigation.navigate('UserProfile', { userId: request.senderId })}
+                        >
+                          <UserAvatar name={request.sender.name} avatarUrl={request.sender.avatarUrl} />
+                          <View style={styles.copy}>
+                            <Text style={styles.title}>{request.sender.name}</Text>
+                            <Text style={styles.body}>Sent {formatDateTime(request.createdAt)}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.copy}>
+                          <Text style={styles.title}>Friend request</Text>
+                          <Text style={styles.body}>Sent {formatDateTime(request.createdAt)}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.buttonRow}>
+                      <PrimaryButton
+                        label="Accept"
+                        onPress={() => void handleRequest(request.id, true)}
+                        loading={busyId === `request-${request.id}`}
+                      />
+                      <PrimaryButton
+                        label="Decline"
+                        onPress={() => void handleRequest(request.id, false)}
+                        disabled={busyId != null}
+                        kind="ghost"
+                      />
+                    </View>
+                  </Panel>
+                ))}
+              </>
+            ) : null}
+
+            {outgoingRequests.length ? (
+              <>
+                <Text style={styles.sectionLabel}>Sent</Text>
+                {outgoingRequests.map((request) => (
+                  <Panel key={request.id}>
+                    <View style={styles.cardTopRow}>
+                      {request.receiver ? (
+                        <TouchableOpacity
+                          style={styles.identity}
+                          onPress={() => navigation.navigate('UserProfile', { userId: request.receiverId })}
+                        >
+                          <UserAvatar name={request.receiver.name} avatarUrl={request.receiver.avatarUrl} />
+                          <View style={styles.copy}>
+                            <Text style={styles.title}>{request.receiver.name}</Text>
+                            <Text style={styles.body}>Waiting since {formatDateTime(request.createdAt)}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    <View style={styles.buttonRow}>
+                      <PrimaryButton
+                        label="Cancel"
+                        onPress={() => void handleCancelRequest(request.id)}
+                        loading={busyId === `request-${request.id}`}
+                        kind="ghost"
+                      />
+                    </View>
+                  </Panel>
+                ))}
+              </>
+            ) : null}
+
+            {friends.length ? (
+              <>
+                <Text style={styles.sectionLabel}>Friends</Text>
+                {friends.map((friend) => (
+                  <TouchableOpacity
+                    key={friend.id}
+                    style={styles.row}
+                    onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                  >
+                    <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
+                    <View style={styles.copy}>
+                      <Text style={styles.title}>{friend.name}</Text>
+                      <Text style={styles.body}>View profile</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : null}
+
+            {!requests.length && !outgoingRequests.length && !friends.length ? (
+              <EmptyState icon="person-add-outline" title="No friend activity" body="Find people from pods, profiles, or search to start building your Bridge circle." />
+            ) : null}
           </View>
         ) : null}
       </ScrollView>
@@ -184,6 +334,21 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     padding: spacing.md,
   },
+  inviteCard: {
+    gap: spacing.sm,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  identity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   copy: {
     flex: 1,
     gap: 4,
@@ -193,6 +358,29 @@ const styles = StyleSheet.create({
   },
   body: {
     ...typography.body,
+  },
+  sectionLabel: {
+    ...typography.label,
+    color: palette.slate,
+    marginTop: spacing.sm,
+  },
+  podPreview: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.cream,
+    padding: spacing.md,
+    gap: 2,
+  },
+  previewMeta: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  previewBody: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
   },
   buttonRow: {
     flexDirection: 'row',
