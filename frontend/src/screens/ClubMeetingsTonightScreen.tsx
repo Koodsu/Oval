@@ -39,7 +39,9 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Meeting tonight" onBack={() => navigation.goBack()} />
 
         {items.length ? items.map((meeting) => (

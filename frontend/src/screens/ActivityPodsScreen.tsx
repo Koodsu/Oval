@@ -140,7 +140,9 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Pods" onBack={() => navigation.goBack()} />
         <Hero eyebrow={activity.category} title={activity.title} subtitle={activity.description} />
 

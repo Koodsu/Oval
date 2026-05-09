@@ -164,7 +164,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   if (!profile && loadError) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
           <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
           <EmptyState icon="alert-circle-outline" title="Could not load profile" body={loadError} />
           <PrimaryButton label="Try again" onPress={() => void load(false)} />
@@ -175,7 +177,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
         {profile ? (
           <>

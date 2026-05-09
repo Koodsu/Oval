@@ -100,7 +100,9 @@ export default function ThreadScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Message" onBack={() => navigation.goBack()} />
         <Text style={styles.header}>{title}</Text>
         {loadError ? (

@@ -536,7 +536,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   if (!club && loadError) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
           <ScreenHeader title="Club" onBack={() => navigation.goBack()} />
           <EmptyState icon="alert-circle-outline" title="Could not load club" body={loadError} />
           <PrimaryButton label="Try again" onPress={() => void load(false)} />
@@ -547,7 +549,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         {club ? (
           <>
             <View style={styles.heroShell}>

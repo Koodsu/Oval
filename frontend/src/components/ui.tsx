@@ -2,9 +2,13 @@ import React from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   TouchableOpacity,
   View,
   ViewStyle,
@@ -37,7 +41,14 @@ export function Screen({
   return (
     <SafeAreaView style={styles.flex} edges={['top', 'left', 'right']}>
       <AppBackdrop>
-        <View style={[styles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.flex}
+          >
+            <View style={[styles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </AppBackdrop>
     </SafeAreaView>
   );
