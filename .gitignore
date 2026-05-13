@@ -1,0 +1,25 @@
+# Backend
+backend/node_modules/
+backend/dist/
+backend/src/generated/
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+backend/prisma/test.db
+backend/prisma/test.db-journal
+backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+frontend/web-build/
+frontend/.env
+
+# Landing
+landing/node_modules/
+landing/dist/
+landing/.env
+
+# General
+.DS_Store
+*.log

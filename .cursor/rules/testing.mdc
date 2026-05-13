@@ -1,0 +1,34 @@
+---
+description: Testing standards — write and run tests when developing
+alwaysApply: true
+---
+
+# Testing Standards
+
+When implementing features or fixing bugs, **write tests** and **run them** before considering work done.
+
+## Backend (Express + Prisma)
+
+- **Location**: `backend/src/**/*.test.ts`
+- **Run**: `cd backend && npm run test`
+- **Stack**: Vitest, supertest, SQLite test DB
+- **Patterns**:
+  - Unit tests for pure logic (e.g. `config/locations.test.ts`)
+  - Integration tests for API routes (e.g. `routes/auth.test.ts`)
+  - Use `registerAndGetToken()` from `src/test/helpers.ts` for auth in protected routes
+  - Test DB is auto-created and seeded before each run
+
+## Frontend (React Native + Expo)
+
+- **Location**: `frontend/src/**/*.test.tsx` or `**/__tests__/**/*.test.tsx`
+- **Run**: `cd frontend && npm run test`
+- **Stack**: Jest 29, jest-expo, @testing-library/react-native
+- **Patterns**:
+  - Component tests for UI (render, user interactions)
+  - Mock `expo-haptics` and `expo-linear-gradient` in `jest.setup.js` when needed
+
+## Before Submitting
+
+1. Run `cd backend && npm run test`
+2. Run `cd frontend && npm run test`
+3. Fix any failing tests
