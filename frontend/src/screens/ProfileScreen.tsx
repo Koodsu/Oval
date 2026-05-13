@@ -63,7 +63,9 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <CompactHeader
           eyebrow="Profile"
           title={user?.name ?? 'Your profile'}
@@ -163,6 +165,7 @@ function labelForPref(key: keyof NotificationPreferences): string {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

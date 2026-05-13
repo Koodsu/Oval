@@ -1,6 +1,6 @@
 import React from 'react';
 import { LinkingOptions } from '@react-navigation/native';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -24,6 +24,7 @@ import UserProfileScreen from './src/screens/UserProfileScreen';
 import UserSearchScreen from './src/screens/UserSearchScreen';
 import { Activity } from './src/types';
 import { palette } from './src/theme';
+import { AppBackdrop, SkeletonBlock, SkeletonCard } from './src/components/ui';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -119,10 +120,14 @@ function AppGate() {
 
   if (isLoading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={palette.scarlet} />
-        <Text style={styles.loadingText}>Loading Bridge</Text>
-      </View>
+      <AppBackdrop>
+        <View style={styles.loading}>
+          <SkeletonBlock width="58%" height={38} radius={16} />
+          <SkeletonBlock width="82%" height={14} radius={7} />
+          <SkeletonCard />
+          <SkeletonCard compact />
+        </View>
+      </AppBackdrop>
     );
   }
 
@@ -178,14 +183,8 @@ const styles = StyleSheet.create({
   },
   loading: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.paper,
+    paddingHorizontal: 24,
     gap: 12,
-  },
-  loadingText: {
-    color: palette.ink,
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

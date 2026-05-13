@@ -1,7 +1,9 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -37,7 +39,12 @@ export function Screen({
   return (
     <SafeAreaView style={styles.flex} edges={['top', 'left', 'right']}>
       <AppBackdrop>
-        <View style={[styles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flex}
+        >
+          <View style={[styles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
+        </KeyboardAvoidingView>
       </AppBackdrop>
     </SafeAreaView>
   );
@@ -98,9 +105,20 @@ export function ScreenHeader({
     <View style={styles.screenHeader}>
       <View style={styles.screenHeaderSide}>
         {onBack ? (
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Tooltip label="Go back">
+            <TouchableOpacity
+              onPress={() => {
+                Keyboard.dismiss();
+                onBack();
+              }}
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              accessibilityHint="Returns to the previous screen"
+            >
             <Ionicons name="chevron-back" size={20} color={palette.ink} />
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </Tooltip>
         ) : null}
       </View>
       <Text style={styles.screenHeaderTitle} numberOfLines={1}>
@@ -239,15 +257,17 @@ export function PrimaryButton({
   disabled,
   loading,
   kind = 'solid',
+  tooltip,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   kind?: 'solid' | 'ghost';
+  tooltip?: string;
 }) {
   const isGhost = kind === 'ghost';
-  return (
+  const button = (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
@@ -256,13 +276,154 @@ export function PrimaryButton({
         isGhost ? styles.buttonGhost : styles.buttonSolid,
         (disabled || loading) && styles.buttonDisabled,
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={tooltip}
     >
       {loading ? (
-        <ActivityIndicator color={isGhost ? palette.ink : palette.white} />
+        <SkeletonBlock
+          width={Math.max(44, Math.min(120, label.length * 8))}
+          height={16}
+          radius={8}
+          color={isGhost ? 'rgba(16,33,43,0.16)' : 'rgba(255,255,255,0.36)'}
+        />
       ) : (
         <Text style={[styles.buttonLabel, isGhost && styles.buttonGhostLabel]}>{label}</Text>
       )}
     </TouchableOpacity>
+  );
+
+  return tooltip ? <Tooltip label={tooltip}>{button}</Tooltip> : button;
+}
+
+export function IconButton({
+  icon,
+  onPress,
+  tooltip,
+  size = 44,
+  iconSize = 22,
+  style,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  tooltip: string;
+  size?: number;
+  iconSize?: number;
+  style?: ViewStyle;
+}) {
+  return (
+    <Tooltip label={tooltip}>
+      <TouchableOpacity
+        style={[styles.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}
+        activeOpacity={0.85}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={tooltip}
+        accessibilityHint={tooltip}
+      >
+        <Ionicons name={icon} size={iconSize} color={palette.ink} />
+      </TouchableOpacity>
+    </Tooltip>
+  );
+}
+
+export function Tooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactElement<Record<string, unknown>>;
+}) {
+  const [visible, setVisible] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const show = React.useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    setVisible(true);
+    timer.current = setTimeout(() => setVisible(false), 1600);
+  }, []);
+
+  React.useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const childProps = children.props as {
+    onLongPress?: (...args: unknown[]) => void;
+    delayLongPress?: number;
+    onHoverIn?: (...args: unknown[]) => void;
+    onHoverOut?: (...args: unknown[]) => void;
+  };
+
+  const child = React.cloneElement(children, {
+    onLongPress: (...args: unknown[]) => {
+      show();
+      childProps.onLongPress?.(...args);
+    },
+    delayLongPress: childProps.delayLongPress ?? 300,
+    onHoverIn: (...args: unknown[]) => {
+      show();
+      childProps.onHoverIn?.(...args);
+    },
+    onHoverOut: (...args: unknown[]) => {
+      setVisible(false);
+      childProps.onHoverOut?.(...args);
+    },
+  });
+
+  return (
+    <View style={styles.tooltipAnchor}>
+      {child}
+      {visible ? (
+        <View style={styles.tooltipBubble} pointerEvents="none">
+          <Text style={styles.tooltipText}>{label}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function SkeletonBlock({
+  width = '100%',
+  height,
+  radius = radii.md,
+  color = 'rgba(16, 33, 43, 0.09)',
+  style,
+}: {
+  width?: ViewStyle['width'];
+  height: number;
+  radius?: number;
+  color?: string;
+  style?: ViewStyle;
+}) {
+  return (
+    <View
+      style={[
+        styles.skeletonBlock,
+        { width, height, borderRadius: radius, backgroundColor: color },
+        style,
+      ]}
+    />
+  );
+}
+
+export function SkeletonLine({ width = '100%' }: { width?: ViewStyle['width'] }) {
+  return <SkeletonBlock width={width} height={12} radius={6} />;
+}
+
+export function SkeletonCard({ compact = false }: { compact?: boolean }) {
+  return (
+    <Panel style={styles.skeletonCard}>
+      <SkeletonBlock width={compact ? 72 : 120} height={14} radius={7} />
+      <SkeletonBlock width="82%" height={compact ? 20 : 28} radius={8} />
+      <SkeletonLine width="64%" />
+      <View style={styles.skeletonRow}>
+        <SkeletonBlock width={34} height={34} radius={17} />
+        <View style={styles.skeletonTextStack}>
+          <SkeletonLine width="78%" />
+          <SkeletonLine width="48%" />
+        </View>
+      </View>
+    </Panel>
   );
 }
 
@@ -325,6 +486,48 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: spacing.md,
+  },
+  iconButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  tooltipAnchor: {
+    position: 'relative',
+  },
+  tooltipBubble: {
+    position: 'absolute',
+    right: 0,
+    bottom: '100%',
+    marginBottom: 8,
+    maxWidth: 220,
+    borderRadius: radii.sm,
+    backgroundColor: palette.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    zIndex: 50,
+  },
+  tooltipText: {
+    color: palette.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  skeletonBlock: {
+    overflow: 'hidden',
+  },
+  skeletonCard: {
+    gap: spacing.sm,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  skeletonTextStack: {
+    flex: 1,
+    gap: 8,
   },
   glowTop: {
     position: 'absolute',

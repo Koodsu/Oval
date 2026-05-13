@@ -90,7 +90,9 @@ export default function EditProfileScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
         <Hero eyebrow="Edit profile" title="Make your identity legible at a glance." subtitle="The goal is better social signal, not more form fields." />
         <Panel>
@@ -151,6 +153,7 @@ function Field({
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

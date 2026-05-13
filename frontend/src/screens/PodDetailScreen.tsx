@@ -30,7 +30,7 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Message, PeopleYouMetUser, Pod } from '../types';
-import { Chip, EmptyState, Hero, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, UserAvatar } from '../components/ui';
+import { Chip, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard, UserAvatar } from '../components/ui';
 import { palette, radii, spacing, typography } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
@@ -53,6 +53,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (showAlert = true) => {
@@ -286,7 +287,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   if (!pod && loadError) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
           <ScreenHeader title="Pod" onBack={() => navigation.goBack()} />
           <EmptyState icon="alert-circle-outline" title="Could not load pod" body={loadError} />
           <PrimaryButton label="Try again" onPress={() => void load(false)} />
@@ -297,7 +300,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         {pod ? (
           <>
             <ScreenHeader
@@ -309,29 +314,54 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 </TouchableOpacity>
               )}
             />
-            <Hero
-              eyebrow={pod.status}
-              title={pod.activity?.title ?? 'Pod detail'}
-              subtitle={`${formatDateTime(pod.meetupTime)} • ${pod.location}`}
-            >
-              <View style={styles.heroActions}>
-                <PrimaryButton
-                  label={meInPod ? 'Leave pod' : pod.members.length >= pod.maxMembers ? 'Join waitlist' : 'Join pod'}
-                  onPress={() => void handlePrimaryAction()}
-                  loading={actionBusy === 'primary'}
-                />
-                <PrimaryButton label="Share invite link" onPress={() => void handleShare()} kind="ghost" />
-                {isCreator ? (
+            <Panel style={styles.podHeaderPanel}>
+              <View style={styles.podHeaderTop}>
+                <View style={styles.podTitleBlock}>
+                  <Text style={styles.statusLabel}>{pod.status}</Text>
+                  <Text style={styles.podTitle}>{pod.activity?.title ?? 'Pod detail'}</Text>
+                </View>
+                <View style={styles.memberCountPill}>
+                  <Ionicons name="people-outline" size={15} color={palette.ink} />
+                  <Text style={styles.memberCountText}>{pod.members.length}/{pod.maxMembers}</Text>
+                </View>
+              </View>
+              <View style={styles.quickMetaGrid}>
+                <View style={styles.quickMetaItem}>
+                  <Ionicons name="calendar-outline" size={16} color={palette.slate} />
+                  <Text style={styles.quickMetaText} numberOfLines={1}>{formatDateTime(pod.meetupTime)}</Text>
+                </View>
+                <View style={styles.quickMetaItem}>
+                  <Ionicons name="location-outline" size={16} color={palette.slate} />
+                  <Text style={styles.quickMetaText} numberOfLines={1}>{pod.location}</Text>
+                </View>
+              </View>
+              <View style={styles.primaryActionRow}>
+                <View style={styles.primaryActionFill}>
                   <PrimaryButton
-                    label={pod.status === 'LOCKED' ? 'Re-open pod' : 'Lock pod'}
-                    onPress={() => void handleLockToggle()}
-                    kind="ghost"
-                    disabled={actionBusy != null}
-                    loading={actionBusy === 'lock'}
+                    label={meInPod ? 'Leave pod' : pod.members.length >= pod.maxMembers ? 'Join waitlist' : 'Join pod'}
+                    onPress={() => void handlePrimaryAction()}
+                    loading={actionBusy === 'primary'}
+                    kind={meInPod ? 'ghost' : 'solid'}
                   />
+                </View>
+                <TouchableOpacity onPress={() => void handleShare()} style={styles.squareAction}>
+                  <Ionicons name="link-outline" size={18} color={palette.ink} />
+                </TouchableOpacity>
+                {isCreator ? (
+                  <TouchableOpacity
+                    onPress={() => void handleLockToggle()}
+                    disabled={actionBusy != null}
+                    style={[styles.squareAction, actionBusy != null && styles.squareActionDisabled]}
+                  >
+                    {actionBusy === 'lock' ? (
+                      <ActivityIndicator size="small" color={palette.ink} />
+                    ) : (
+                      <Ionicons name={pod.status === 'LOCKED' ? 'lock-open-outline' : 'lock-closed-outline'} size={18} color={palette.ink} />
+                    )}
+                  </TouchableOpacity>
                 ) : null}
               </View>
-            </Hero>
+            </Panel>
 
             {loadError ? (
               <Panel>
@@ -352,147 +382,265 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             ) : null}
 
             {meInPod && pod.status === 'LOCKED' ? (
-              <Panel>
-                <Text style={styles.sectionTitle}>Attendance</Text>
-                <Text style={styles.body}>
-                  {myMember?.confirmedAt
-                    ? 'You already confirmed you are showing up for this locked pod.'
-                    : 'Locking means the group is committed. Confirm once you know you are going.'}
-                </Text>
+              <View style={styles.actionNotice}>
+                <View style={styles.actionNoticeCopy}>
+                  <Ionicons name={myMember?.confirmedAt ? 'checkmark-circle' : 'alert-circle-outline'} size={18} color={myMember?.confirmedAt ? palette.successText : palette.warnText} />
+                  <Text style={styles.actionNoticeText}>
+                    {myMember?.confirmedAt ? 'Attendance confirmed' : 'Confirm you are showing up'}
+                  </Text>
+                </View>
                 {!myMember?.confirmedAt ? (
-                  <View style={styles.inlineAction}>
-                    <PrimaryButton label="Confirm attendance" onPress={() => void handleConfirmAttendance()} loading={actionBusy === 'confirm'} />
-                  </View>
-                ) : null}
-              </Panel>
-            ) : null}
-
-            {meInPod && isCreator && pod.status !== 'COMPLETED' && pod.status !== 'EXPIRED' ? (
-              <Panel>
-                <SectionHeader title="Pod privacy" />
-                <View style={styles.privacyToggle}>
-                  {([
-                    {
-                      value: 'public' as const,
-                      label: 'Public',
-                      icon: 'earth-outline' as const,
-                      body: 'Shown in discovery so people can join while spots are open.',
-                    },
-                    {
-                      value: 'private' as const,
-                      label: 'Private',
-                      icon: 'lock-closed-outline' as const,
-                      body: 'Unlisted from discovery. Members can still invite friends or share the link.',
-                    },
-                  ]).map((item) => {
-                    const active = pod.locationType === item.value;
-                    return (
-                      <TouchableOpacity
-                        key={item.value}
-                        activeOpacity={0.86}
-                        disabled={actionBusy === 'privacy'}
-                        onPress={() => void handlePrivacyChange(item.value)}
-                        style={[styles.privacyOption, active && styles.privacyOptionActive]}
-                      >
-                        <View style={styles.privacyOptionTop}>
-                          <Ionicons
-                            name={item.icon}
-                            size={18}
-                            color={active ? palette.scarlet : palette.slate}
-                          />
-                          <Text style={[styles.privacyLabel, active && styles.privacyLabelActive]}>
-                            {item.label}
-                          </Text>
-                        </View>
-                        <Text style={styles.privacyBody}>{item.body}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </Panel>
-            ) : null}
-
-            <Panel>
-              <Text style={styles.sectionTitle}>People in the pod</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {pod.members.map((member) => (
-                  <TouchableOpacity
-                    key={member.id}
-                    style={styles.member}
-                    onPress={() => navigation.navigate('UserProfile', { userId: member.userId })}
-                  >
-                    <UserAvatar name={member.user.name} avatarUrl={member.user.avatarUrl} />
-                    <Text style={styles.memberName}>{member.user.name}</Text>
-                    {member.confirmedAt ? <Text style={styles.memberMeta}>Confirmed</Text> : null}
+                  <TouchableOpacity onPress={() => void handleConfirmAttendance()} style={styles.noticeButton} disabled={actionBusy === 'confirm'}>
+                    {actionBusy === 'confirm' ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.noticeButtonText}>Confirm</Text>}
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </Panel>
+                ) : null}
+              </View>
+            ) : null}
 
-            {meInPod && pod.status === 'FORMING' ? (
-              <Panel>
-                <SectionHeader title="Invite friends" actionLabel="Share link" onActionPress={() => void handleShare()} />
-                <Text style={styles.body}>
-                  Send an in-app invite to friends, or share a join link anywhere. Private pods stay unlisted but still work with direct invites.
-                </Text>
-                <View style={styles.shareCard}>
-                  <View style={styles.shareIcon}>
-                    <Ionicons name="link-outline" size={18} color={palette.scarlet} />
+            {meInPod ? (
+              <Panel style={styles.conversationPanel}>
+                <View style={styles.conversationHeader}>
+                  <View>
+                    <Text style={styles.conversationTitle}>Conversation</Text>
+                    <Text style={styles.conversationMeta}>{pod.members.length} members coordinating here</Text>
                   </View>
-                  <View style={styles.copy}>
-                    <Text style={styles.memberName}>Invite link</Text>
-                    <Text style={styles.memberMeta} numberOfLines={1}>{getPodShareUrl(pod.id)}</Text>
+                  <View style={styles.livePill}>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.liveText}>Pod chat</Text>
                   </View>
-                  <PrimaryButton label="Share" onPress={() => void handleShare()} kind="ghost" />
                 </View>
-                <View style={styles.inviteList}>
-                  {eligibleInviteFriends.length ? (
-                    eligibleInviteFriends.map((friend) => (
-                      <View key={friend.id} style={styles.inviteRow}>
-                        <TouchableOpacity
-                          style={styles.inviteIdentity}
-                          onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
-                        >
-                          <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
-                          <Text style={styles.memberName}>{friend.name}</Text>
-                        </TouchableOpacity>
-                        <PrimaryButton
-                          label="Invite"
-                          onPress={() => void handleInviteFriend(friend)}
-                          loading={actionBusy === `invite-${friend.id}`}
-                          kind="ghost"
-                        />
+
+                <ScrollView
+                  style={styles.messageList}
+                  contentContainerStyle={styles.messageListContent}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+                >
+                  {messages.length ? messages.map((message) => {
+                    const mine = message.user.id === user?.id;
+                    const heartCount = message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ?? 0;
+                    const hasHeart = !!message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI);
+
+                    return (
+                      <View key={message.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
+                        {!mine ? (
+                          <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}>
+                            <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={34} />
+                          </TouchableOpacity>
+                        ) : null}
+                        <View style={[styles.messageStack, mine && styles.messageStackMine]}>
+                          <View style={[styles.messageMetaRow, mine && styles.messageMetaRowMine]}>
+                            <Text style={styles.messageName}>{mine ? 'You' : message.user.name}</Text>
+                            <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
+                          </View>
+                          <TouchableOpacity
+                            activeOpacity={0.82}
+                            onLongPress={() => setReplyTo(message)}
+                            onPress={() => !mine && navigation.navigate('UserProfile', { userId: message.user.id })}
+                            style={[styles.messageContent, mine && styles.messageContentMine]}
+                          >
+                            {message.replyTo ? (
+                              <View style={[styles.replyPreview, mine && styles.replyPreviewMine]}>
+                                <Text style={[styles.replyMeta, mine && styles.replyMetaMine]}>Replying to {message.replyTo.user.name}</Text>
+                                <Text style={[styles.replyBody, mine && styles.replyBodyMine]} numberOfLines={1}>{message.replyTo.content}</Text>
+                              </View>
+                            ) : null}
+                            <Text style={[styles.messageBody, mine && styles.messageBodyMine]}>{message.content}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => void handleHeart(message)}
+                            style={[styles.heartButton, mine && styles.heartButtonMine]}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons
+                              name={hasHeart ? 'heart' : 'heart-outline'}
+                              size={16}
+                              color={hasHeart ? palette.coral : 'rgba(16, 33, 43, 0.32)'}
+                            />
+                            {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    ))
-                  ) : (
-                    <View style={styles.emptyInline}>
-                      <Ionicons name="people-outline" size={18} color={palette.slate} />
-                      <Text style={styles.body}>
-                        Add friends from profiles or after completed pods, then invite them here.
-                      </Text>
+                    );
+                  }) : (
+                    <View style={styles.emptyChat}>
+                      <View style={styles.emptyChatIcon}>
+                        <Ionicons name="chatbubble-outline" size={20} color={palette.scarlet} />
+                      </View>
+                      <Text style={styles.emptyChatTitle}>No messages yet</Text>
+                      <Text style={styles.emptyChatBody}>Start with an ETA, meetup note, or quick check-in.</Text>
                     </View>
                   )}
+                  {typingUserIds.length ? (
+                    <Text style={styles.typingText}>Someone is typing...</Text>
+                  ) : null}
+                </ScrollView>
+
+                {replyTo ? (
+                  <View style={styles.replyComposer}>
+                    <View style={styles.replyComposerCopy}>
+                      <Text style={styles.replyMeta}>Replying to {replyTo.user.name}</Text>
+                      <Text style={styles.replyBody} numberOfLines={1}>{replyTo.content}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.clearReplyButton}>
+                      <Ionicons name="close" size={16} color={palette.ink} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                <View style={styles.composerRow}>
+                  <TextInput
+                    value={messageText}
+                    onChangeText={(value) => {
+                      setMessageText(value);
+                      if (value.trim()) pingTyping();
+                    }}
+                    placeholder="Message the pod"
+                    placeholderTextColor={palette.slate}
+                    style={styles.input}
+                    returnKeyType="send"
+                    onSubmitEditing={() => void handleSend()}
+                  />
+                  <TouchableOpacity
+                    onPress={() => void handleSend()}
+                    disabled={sending || !messageText.trim()}
+                    style={[styles.sendButtonInline, (!messageText.trim() || sending) && styles.sendButtonInlineDisabled]}
+                  >
+                    {sending ? (
+                      <ActivityIndicator size="small" color={palette.white} />
+                    ) : (
+                      <Ionicons name="arrow-up" size={18} color={palette.white} />
+                    )}
+                  </TouchableOpacity>
                 </View>
               </Panel>
-            ) : null}
+            ) : (
+              <EmptyState icon="lock-closed-outline" title="Join to open the chat" body="Pod conversation, recaps, and member coordination unlock once you join." />
+            )}
 
-            {pod.latitude != null && pod.longitude != null ? (
-              <Panel style={styles.mapPanel}>
-                <Text style={styles.sectionTitle}>Meetup point</Text>
-                <MapView
-                  provider={PROVIDER_DEFAULT}
-                  style={styles.map}
-                  initialRegion={{
-                    latitude: pod.latitude,
-                    longitude: pod.longitude,
-                    latitudeDelta: 0.006,
-                    longitudeDelta: 0.006,
-                  }}
-                >
-                  <Marker coordinate={{ latitude: pod.latitude, longitude: pod.longitude }} />
-                </MapView>
-              </Panel>
-            ) : null}
+            <Panel style={styles.detailsPanel}>
+              <TouchableOpacity activeOpacity={0.84} onPress={() => setDetailsOpen((open) => !open)} style={styles.detailsHeader}>
+                <View style={styles.detailsHeaderCopy}>
+                  <Text style={styles.detailsTitle}>Pod details</Text>
+                  <Text style={styles.detailsSubtitle}>Members, privacy, invites, and meetup point</Text>
+                </View>
+                <Ionicons name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={20} color={palette.ink} />
+              </TouchableOpacity>
+
+              {detailsOpen ? (
+                <View style={styles.detailsBody}>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailLabel}>People</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {pod.members.map((member) => (
+                        <TouchableOpacity
+                          key={member.id}
+                          style={styles.member}
+                          onPress={() => navigation.navigate('UserProfile', { userId: member.userId })}
+                        >
+                          <UserAvatar name={member.user.name} avatarUrl={member.user.avatarUrl} />
+                          <Text style={styles.memberName}>{member.user.name}</Text>
+                          {member.confirmedAt ? <Text style={styles.memberMeta}>Confirmed</Text> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {meInPod && isCreator && pod.status !== 'COMPLETED' && pod.status !== 'EXPIRED' ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Privacy</Text>
+                      <View style={styles.privacyToggle}>
+                        {([
+                          { value: 'public' as const, label: 'Public', icon: 'earth-outline' as const },
+                          { value: 'private' as const, label: 'Private', icon: 'lock-closed-outline' as const },
+                        ]).map((item) => {
+                          const active = pod.locationType === item.value;
+                          return (
+                            <TouchableOpacity
+                              key={item.value}
+                              activeOpacity={0.86}
+                              disabled={actionBusy === 'privacy'}
+                              onPress={() => void handlePrivacyChange(item.value)}
+                              style={[styles.privacyOption, active && styles.privacyOptionActive]}
+                            >
+                              <Ionicons name={item.icon} size={17} color={active ? palette.scarlet : palette.slate} />
+                              <Text style={[styles.privacyLabel, active && styles.privacyLabelActive]}>{item.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {meInPod && pod.status === 'FORMING' ? (
+                    <View style={styles.detailSection}>
+                      <SectionHeader title="Invite friends" actionLabel="Share link" onActionPress={() => void handleShare()} />
+                      <View style={styles.shareCard}>
+                        <View style={styles.shareIcon}>
+                          <Ionicons name="link-outline" size={18} color={palette.scarlet} />
+                        </View>
+                        <View style={styles.copy}>
+                          <Text style={styles.memberName}>Invite link</Text>
+                          <Text style={styles.memberMeta} numberOfLines={1}>{getPodShareUrl(pod.id)}</Text>
+                        </View>
+                        <TouchableOpacity onPress={() => void handleShare()} style={styles.smallTextButton}>
+                          <Text style={styles.smallTextButtonLabel}>Share</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.inviteList}>
+                        {eligibleInviteFriends.length ? (
+                          eligibleInviteFriends.map((friend) => (
+                            <View key={friend.id} style={styles.inviteRow}>
+                              <TouchableOpacity
+                                style={styles.inviteIdentity}
+                                onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                              >
+                                <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
+                                <Text style={styles.memberName}>{friend.name}</Text>
+                              </TouchableOpacity>
+                              <PrimaryButton
+                                label="Invite"
+                                onPress={() => void handleInviteFriend(friend)}
+                                loading={actionBusy === `invite-${friend.id}`}
+                                kind="ghost"
+                              />
+                            </View>
+                          ))
+                        ) : (
+                          <View style={styles.emptyInline}>
+                            <Ionicons name="people-outline" size={18} color={palette.slate} />
+                            <Text style={styles.body}>
+                              Add friends from profiles or after completed pods, then invite them here.
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {pod.latitude != null && pod.longitude != null ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Meetup point</Text>
+                      <View style={styles.mapFrame}>
+                        <MapView
+                          provider={PROVIDER_DEFAULT}
+                          style={styles.map}
+                          initialRegion={{
+                            latitude: pod.latitude,
+                            longitude: pod.longitude,
+                            latitudeDelta: 0.006,
+                            longitudeDelta: 0.006,
+                          }}
+                        >
+                          <Marker coordinate={{ latitude: pod.latitude, longitude: pod.longitude }} />
+                        </MapView>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </Panel>
 
             {pod.status === 'COMPLETED' ? (
               <>
@@ -584,103 +732,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 ) : null}
               </>
             ) : null}
-
-            {meInPod ? (
-              <View style={styles.section}>
-                <SectionHeader title="Conversation" />
-                <Panel style={styles.conversationPanel}>
-                  {messages.length ? messages.map((message) => (
-                    <View key={message.id} style={styles.messageRow}>
-                      <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}>
-                        <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={42} />
-                      </TouchableOpacity>
-                      <View style={styles.messageStack}>
-                        <View style={styles.messageMetaRow}>
-                          <Text style={styles.messageName}>
-                            {message.user.id === user?.id ? 'You' : message.user.name}
-                          </Text>
-                          <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
-                        </View>
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onLongPress={() => setReplyTo(message)}
-                          onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}
-                          style={styles.messageContent}
-                        >
-                          {message.replyTo ? (
-                            <View style={styles.replyPreview}>
-                              <Text style={styles.replyMeta}>Replying to {message.replyTo.user.name}</Text>
-                              <Text style={styles.replyBody} numberOfLines={1}>{message.replyTo.content}</Text>
-                            </View>
-                          ) : null}
-                          <Text style={styles.messageBody}>{message.content}</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => void handleHeart(message)}
-                        style={styles.heartButton}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Ionicons
-                          name={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? 'heart' : 'heart-outline'}
-                          size={22}
-                          color={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? palette.coral : 'rgba(16, 33, 43, 0.16)'}
-                        />
-                        {message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ? (
-                          <Text style={styles.heartCount}>
-                            {message.reactions.filter((reaction) => reaction.emoji === HEART_EMOJI).length}
-                          </Text>
-                        ) : null}
-                      </TouchableOpacity>
-                    </View>
-                  )) : <EmptyState icon="chatbubble-outline" title="No messages yet" body="A quieter chat is fine, but this is where the pod should coordinate the actual meetup." />}
-                  {typingUserIds.length ? (
-                    <Text style={styles.typingText}>Someone is typing...</Text>
-                  ) : null}
-
-                  {replyTo ? (
-                    <View style={styles.replyComposer}>
-                      <View style={styles.replyComposerCopy}>
-                        <Text style={styles.replyMeta}>Replying to {replyTo.user.name}</Text>
-                        <Text style={styles.replyBody} numberOfLines={1}>{replyTo.content}</Text>
-                      </View>
-                      <PrimaryButton label="Clear" onPress={() => setReplyTo(null)} kind="ghost" />
-                    </View>
-                  ) : null}
-                  <View style={styles.composerRow}>
-                    <TextInput
-                      value={messageText}
-                      onChangeText={(value) => {
-                        setMessageText(value);
-                        if (value.trim()) pingTyping();
-                      }}
-                      placeholder="Drop a location tweak, ETA, or quick note..."
-                      placeholderTextColor={palette.slate}
-                      style={styles.input}
-                      returnKeyType="send"
-                      onSubmitEditing={() => void handleSend()}
-                    />
-                    <TouchableOpacity
-                      onPress={() => void handleSend()}
-                      disabled={sending || !messageText.trim()}
-                      style={[styles.sendButtonInline, (!messageText.trim() || sending) && styles.sendButtonInlineDisabled]}
-                    >
-                      {sending ? (
-                        <ActivityIndicator size="small" color={palette.white} />
-                      ) : (
-                        <Ionicons name="arrow-up" size={18} color={palette.white} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </Panel>
-              </View>
-            ) : (
-              <EmptyState icon="lock-closed-outline" title="Join to open the chat" body="Pod conversation, recaps, and member coordination unlock once you join." />
-            )}
           </>
         ) : (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={palette.scarlet} />
+            <SkeletonCard />
+            <SkeletonCard compact />
+            <SkeletonCard compact />
           </View>
         )}
       </ScrollView>
@@ -690,8 +747,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
-    paddingVertical: spacing.lg,
-    gap: spacing.lg,
+    flexGrow: 1,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
   },
   headerAction: {
     width: 40,
@@ -703,9 +761,113 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  heroActions: {
-    marginTop: spacing.sm,
+  podHeaderPanel: {
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  podHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  podTitleBlock: {
+    flex: 1,
+    gap: 3,
+  },
+  statusLabel: {
+    ...typography.label,
+    color: palette.scarlet,
+  },
+  podTitle: {
+    ...typography.h2,
+    letterSpacing: 0,
+  },
+  memberCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  memberCountText: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  quickMetaGrid: {
+    gap: spacing.xs,
+  },
+  quickMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  quickMetaText: {
+    ...typography.body,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  primaryActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+  },
+  primaryActionFill: {
+    flex: 1,
+  },
+  squareAction: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.cream,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  squareActionDisabled: {
+    opacity: 0.6,
+  },
+  actionNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    backgroundColor: palette.warnBg,
+    borderWidth: 1,
+    borderColor: 'rgba(154, 94, 23, 0.16)',
+  },
+  actionNoticeCopy: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  actionNoticeText: {
+    ...typography.bodyStrong,
+    flex: 1,
+    color: palette.ink,
+  },
+  noticeButton: {
+    minWidth: 78,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.ink,
+    paddingHorizontal: spacing.sm,
+  },
+  noticeButtonText: {
+    ...typography.bodyStrong,
+    color: palette.white,
+    fontSize: 13,
+    lineHeight: 16,
   },
   sectionTitle: {
     ...typography.title,
@@ -715,14 +877,20 @@ const styles = StyleSheet.create({
     ...typography.body,
   },
   privacyToggle: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
   privacyOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: palette.cream,
-    padding: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.sm,
     gap: spacing.xs,
   },
   privacyOptionActive: {
@@ -737,6 +905,8 @@ const styles = StyleSheet.create({
   privacyLabel: {
     ...typography.bodyStrong,
     color: palette.slate,
+    fontSize: 14,
+    lineHeight: 18,
   },
   privacyLabelActive: {
     color: palette.ink,
@@ -754,7 +924,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
     alignItems: 'center',
     gap: spacing.xs,
-    width: 82,
+    width: 76,
   },
   memberName: {
     ...typography.bodyStrong,
@@ -819,9 +989,15 @@ const styles = StyleSheet.create({
   mapPanel: {
     gap: spacing.sm,
   },
+  mapFrame: {
+    height: 158,
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
   map: {
-    height: 200,
-    borderRadius: radii.lg,
+    flex: 1,
   },
   recapRow: {
     flexDirection: 'row',
@@ -850,28 +1026,84 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   conversationPanel: {
-    gap: spacing.md,
+    gap: spacing.sm,
     padding: spacing.md,
+  },
+  conversationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(16, 33, 43, 0.06)',
+  },
+  conversationTitle: {
+    ...typography.title,
+  },
+  conversationMeta: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    backgroundColor: palette.successBg,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: palette.successText,
+  },
+  liveText: {
+    ...typography.bodyStrong,
+    color: palette.successText,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  messageList: {
+    minHeight: 236,
+    maxHeight: 360,
+  },
+  messageListContent: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
   },
   messageRow: {
     flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
+    gap: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  messageRowMine: {
+    justifyContent: 'flex-end',
   },
   messageStack: {
-    flex: 1,
-    gap: 2,
-    paddingTop: 2,
+    maxWidth: '82%',
+    gap: 4,
+  },
+  messageStackMine: {
+    alignItems: 'flex-end',
   },
   messageMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  messageMetaRowMine: {
+    justifyContent: 'flex-end',
   },
   messageName: {
     ...typography.bodyStrong,
-    fontSize: 15,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 15,
     color: 'rgba(16, 33, 43, 0.5)',
   },
   messageTime: {
@@ -882,20 +1114,38 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     gap: 4,
-    paddingRight: spacing.sm,
+    borderRadius: 18,
+    borderBottomLeftRadius: 6,
+    backgroundColor: palette.cream,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  messageContentMine: {
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 6,
+    backgroundColor: palette.ink,
+    borderColor: palette.ink,
   },
   messageBody: {
     ...typography.body,
     color: palette.ink,
-    fontSize: 17,
-    lineHeight: 25,
-    letterSpacing: -0.2,
+    fontSize: 15,
+    lineHeight: 21,
+    letterSpacing: 0,
+  },
+  messageBodyMine: {
+    color: palette.white,
   },
   replyPreview: {
     borderLeftWidth: 2,
     borderLeftColor: 'rgba(16, 33, 43, 0.12)',
     paddingLeft: 10,
     marginBottom: 2,
+  },
+  replyPreviewMine: {
+    borderLeftColor: 'rgba(255, 255, 255, 0.36)',
   },
   replyMeta: {
     ...typography.bodyStrong,
@@ -909,12 +1159,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: 'rgba(16, 33, 43, 0.42)',
   },
+  replyMetaMine: {
+    color: 'rgba(255, 255, 255, 0.68)',
+  },
+  replyBodyMine: {
+    color: 'rgba(255, 255, 255, 0.72)',
+  },
   heartButton: {
-    minWidth: 34,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     gap: 4,
-    paddingTop: 4,
+    minHeight: 24,
+    paddingHorizontal: 6,
+  },
+  heartButtonMine: {
+    alignSelf: 'flex-end',
   },
   heartCount: {
     ...typography.bodyStrong,
@@ -931,8 +1192,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.xs,
-    marginBottom: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(16, 33, 43, 0.05)',
+    padding: spacing.sm,
   },
   replyComposerCopy: {
     flex: 1,
@@ -940,7 +1202,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 56,
+    minHeight: 48,
     borderRadius: radii.pill,
     backgroundColor: palette.cream,
     borderWidth: 1,
@@ -958,15 +1220,103 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sendButtonInline: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.scarlet,
   },
   sendButtonInlineDisabled: {
     backgroundColor: 'rgba(16, 33, 43, 0.16)',
+  },
+  clearReplyButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  emptyChat: {
+    minHeight: 174,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(16, 33, 43, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.05)',
+    padding: spacing.lg,
+  },
+  emptyChatIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.dangerBg,
+  },
+  emptyChatTitle: {
+    ...typography.title,
+    marginTop: spacing.xs,
+  },
+  emptyChatBody: {
+    ...typography.body,
+    textAlign: 'center',
+  },
+  detailsPanel: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  detailsHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  detailsTitle: {
+    ...typography.title,
+  },
+  detailsSubtitle: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  detailsBody: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+  },
+  detailSection: {
+    gap: spacing.sm,
+  },
+  detailLabel: {
+    ...typography.label,
+    color: palette.slate,
+  },
+  smallTextButton: {
+    minHeight: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    backgroundColor: palette.white,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  smallTextButtonLabel: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 16,
   },
   loadingContainer: {
     flex: 1,

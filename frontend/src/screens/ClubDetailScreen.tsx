@@ -48,6 +48,7 @@ import {
   Screen,
   ScreenHeader,
   SegmentedControl,
+  SkeletonCard,
   UserAvatar,
 } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -536,7 +537,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   if (!club && loadError) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
           <ScreenHeader title="Club" onBack={() => navigation.goBack()} />
           <EmptyState icon="alert-circle-outline" title="Could not load club" body={loadError} />
           <PrimaryButton label="Try again" onPress={() => void load(false)} />
@@ -547,7 +550,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         {club ? (
           <>
             <View style={styles.heroShell}>
@@ -1219,11 +1224,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           </>
         ) : (
           <View style={styles.loadingWrap}>
-            <EmptyState
-              icon="hourglass-outline"
-              title="Loading club"
-              body="Pulling meetings, members, and chats into the new club dashboard."
-            />
+            <SkeletonCard />
+            <SkeletonCard compact />
+            <SkeletonCard compact />
           </View>
         )}
       </ScrollView>
@@ -1307,6 +1310,7 @@ function MessageBubble({
 
 const styles = StyleSheet.create({
   page: {
+    flexGrow: 1,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
   },
@@ -1924,6 +1928,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

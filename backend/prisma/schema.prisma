@@ -55,6 +55,7 @@ model User {
   receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
   clubsCreated             Club[]                     @relation("ClubCreator")
   clubMemberships          ClubMember[]
+  clubRolesCreated          ClubRole[]                 @relation("ClubRoleCreator")
   clubMeetingsCreated      ClubMeeting[]              @relation("MeetingCreator")
   clubMeetingAttendees     ClubMeetingAttendee[]
   clubAnnouncements        ClubAnnouncement[]
@@ -355,11 +356,13 @@ model Club {
   isPrivate   Boolean  @default(false)
   university  String   @default("OSU")
   createdById String
+  officerPermissions String @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   createdBy     User               @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
   members       ClubMember[]
+  roles         ClubRole[]
   meetings      ClubMeeting[]
   announcements ClubAnnouncement[]
   messages        ClubMessage[]
@@ -378,10 +381,44 @@ model ClubMember {
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customRoles ClubMemberRole[]
 
   @@unique([clubId, userId])
   @@index([clubId])
   @@index([userId])
+}
+
+model ClubRole {
+  id          String   @id @default(uuid())
+  clubId      String
+  name        String
+  permissions String   @default("[]")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  club        Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("ClubRoleCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignments ClubMemberRole[]
+
+  @@unique([clubId, name])
+  @@index([clubId])
+}
+
+model ClubMemberRole {
+  id        String   @id @default(uuid())
+  clubId    String
+  memberId  String
+  roleId    String
+  assignedById String
+  createdAt DateTime @default(now())
+
+  member ClubMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  role   ClubRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, roleId])
+  @@index([clubId])
+  @@index([roleId])
 }
 
 model ClubMeeting {
@@ -393,6 +430,7 @@ model ClubMeeting {
   meetingTime DateTime
   isPublic        Boolean  @default(true)
   visibility      String   @default("PUBLIC")
+  targetRoleIds   String?
   createdById     String
   createdAt       DateTime @default(now())
   latitude        Float?
@@ -430,6 +468,7 @@ model ClubAnnouncement {
   userId    String
   content   String
   visibility String  @default("PUBLIC")
+  targetRoleIds String?
   createdAt DateTime @default(now())
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)

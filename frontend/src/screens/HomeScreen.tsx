@@ -8,7 +8,7 @@ import { API_USER_MESSAGE, fetchFeed, getActivities, getClubsToday, getMyPods } 
 import { useAuth } from '../context/AuthContext';
 import { Activity, ClubMeetingToday, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Hero, Panel, Screen, SectionHeader, PrimaryButton, EmptyState } from '../components/ui';
+import { Hero, Panel, Screen, SectionHeader, PrimaryButton, EmptyState, SkeletonCard } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { spacing, typography, palette, radii } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
@@ -25,6 +25,7 @@ export default function HomeScreen() {
   const [myPods, setMyPods] = useState<Pod[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [clubsToday, setClubsToday] = useState<ClubMeetingToday[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [agendaExpanded, setAgendaExpanded] = useState(false);
 
@@ -47,6 +48,7 @@ export default function HomeScreen() {
     } catch {
       Alert.alert('Could not load home', API_USER_MESSAGE);
     } finally {
+      setLoaded(true);
       setRefreshing(false);
     }
   }, [userLocation]);
@@ -91,6 +93,8 @@ export default function HomeScreen() {
     <Screen>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
           setRefreshing(true);
@@ -195,7 +199,9 @@ export default function HomeScreen() {
             actionLabel="All pods"
             onActionPress={() => navigation.navigate('MainTabs', { screen: 'Pods' })}
           />
-          {yourNextPod ? (
+          {!loaded ? (
+            <SkeletonCard />
+          ) : yourNextPod ? (
             <Panel>
               <Text style={styles.cardEyebrow}>{formatDateTime(yourNextPod.meetupTime)}</Text>
               <Text style={styles.cardTitle}>{yourNextPod.activity?.title ?? 'Upcoming pod'}</Text>
@@ -211,7 +217,12 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <SectionHeader title="Open right now" actionLabel="Explore" onActionPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })} />
-          {activePods.length ? activePods.map((pod) => (
+          {!loaded ? (
+            <>
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </>
+          ) : activePods.length ? activePods.map((pod) => (
             <TouchableOpacity key={pod.id} style={styles.feedCard} onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}>
               <View style={styles.feedRow}>
                 <View style={styles.feedText}>
@@ -226,6 +237,15 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <SectionHeader title="Activity momentum" />
+          {!loaded ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {[0, 1, 2].map((item) => (
+                <View key={item} style={styles.activityCard}>
+                  <SkeletonCard compact />
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {featuredActivities.map((activity) => (
               <TouchableOpacity
@@ -239,11 +259,17 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+          )}
         </View>
 
         <View style={styles.section}>
           <SectionHeader title="Club pulse today" />
-          {clubsToday.length ? clubsToday.slice(0, 4).map((meeting) => (
+          {!loaded ? (
+            <>
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </>
+          ) : clubsToday.length ? clubsToday.slice(0, 4).map((meeting) => (
             <TouchableOpacity
               key={meeting.id}
               style={styles.clubRow}
@@ -269,6 +295,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

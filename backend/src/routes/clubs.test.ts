@@ -26,7 +26,7 @@ describe('Clubs API (integration)', () => {
   });
 
   describe('POST /clubs', () => {
-    it('creates a club and adds creator as ADMIN', async () => {
+    it('creates a club and adds creator as OWNER', async () => {
       const res = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -35,15 +35,15 @@ describe('Clubs API (integration)', () => {
 
       expect(res.body.id).toBeDefined();
       expect(res.body.isMember).toBe(true);
-      expect(res.body.myRole).toBe('ADMIN');
+      expect(res.body.myRole).toBe('OWNER');
       expect(res.body.members).toHaveLength(1);
-      expect(res.body.members[0].role).toBe('ADMIN');
+      expect(res.body.members[0].role).toBe('OWNER');
       expect(res.body.members[0].userId).toBe(userId);
 
       const row = await prisma.clubMember.findUnique({
         where: { clubId_userId: { clubId: res.body.id, userId } },
       });
-      expect(row?.role).toBe('ADMIN');
+      expect(row?.role).toBe('OWNER');
     });
 
     it('returns 400 when required fields are missing', async () => {
@@ -198,7 +198,7 @@ describe('Clubs API (integration)', () => {
         .expect(403);
     });
 
-    it('allows OFFICER to create a meeting', async () => {
+    it('allows OFFICER with the meeting permission to create a meeting', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -218,6 +218,10 @@ describe('Clubs API (integration)', () => {
       await prisma.clubMember.update({
         where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
         data: { role: 'OFFICER' },
+      });
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { officerPermissions: JSON.stringify(['CREATE_MEETINGS']) },
       });
 
       const when = new Date(Date.now() + 86400000).toISOString();
@@ -640,7 +644,7 @@ describe('Clubs API (integration)', () => {
         .expect(403);
     });
 
-    it('returns 400 when targeting another ADMIN', async () => {
+    it('returns 400 when an ADMIN targets the OWNER', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -659,8 +663,8 @@ describe('Clubs API (integration)', () => {
       });
 
       await request(app)
-        .patch(`/clubs/${create.body.id}/members/${u2.id}`)
-        .set('Authorization', `Bearer ${token}`)
+        .patch(`/clubs/${create.body.id}/members/${userId}`)
+        .set('Authorization', `Bearer ${t2}`)
         .send({ role: 'MEMBER' })
         .expect(400);
     });
@@ -692,7 +696,7 @@ describe('Clubs API (integration)', () => {
       expect(gone).toBeNull();
     });
 
-    it('returns 400 when removing another ADMIN', async () => {
+    it('returns 400 when an ADMIN removes the OWNER', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -711,8 +715,8 @@ describe('Clubs API (integration)', () => {
       });
 
       await request(app)
-        .delete(`/clubs/${create.body.id}/members/${u2.id}`)
-        .set('Authorization', `Bearer ${token}`)
+        .delete(`/clubs/${create.body.id}/members/${userId}`)
+        .set('Authorization', `Bearer ${t2}`)
         .expect(400);
     });
 
@@ -982,6 +986,95 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('Club ping roles', () => {
+    it('lets leadership create, assign, target, and delete ping roles', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: targetToken, user: target } = await registerAndGetToken(
+        'Dues Target',
+        `dues-target-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: otherToken } = await registerAndGetToken(
+        'Dues Other',
+        `dues-other-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${targetToken}`).expect(201);
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${otherToken}`).expect(201);
+
+      const role = await request(app)
+        .post(`/clubs/${create.body.id}/roles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: "Hasn't paid dues" })
+        .expect(201);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/roles/${role.body.id}/members/${target.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Please pay dues', visibility: 'MEMBERS', targetRoleIds: [role.body.id] })
+        .expect(201);
+
+      const targetAnnouncements = await request(app)
+        .get(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${targetToken}`)
+        .expect(200);
+      expect(targetAnnouncements.body.items).toHaveLength(1);
+      expect(targetAnnouncements.body.items[0].targetRoleIds).toEqual([role.body.id]);
+
+      const otherAnnouncements = await request(app)
+        .get(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect(otherAnnouncements.body.items).toHaveLength(0);
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/roles/${role.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+    });
+
+    it('prevents admins from assigning ping roles to owners', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: adminToken, user: admin } = await registerAndGetToken(
+        'Role Admin',
+        `role-admin-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${adminToken}`).expect(201);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${admin.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ role: 'ADMIN' })
+        .expect(200);
+
+      const role = await request(app)
+        .post(`/clubs/${create.body.id}/roles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Level 2 member' })
+        .expect(201);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/roles/${role.body.id}/members/${userId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(400);
+    });
+  });
+
   describe('PATCH /clubs/:id (avatar upload)', () => {
     // Minimal 1×1 pixel PNG (valid image binary)
     const minimalPng = Buffer.from(
@@ -1114,9 +1207,18 @@ describe('Clubs API (integration)', () => {
         `officer-two-${Date.now()}@example.com`,
         'password123'
       );
+      const { token: memberToken } = await registerAndGetToken(
+        'Regular Member',
+        `regular-member-${Date.now()}@example.com`,
+        'password123'
+      );
       await request(app)
         .post(`/clubs/${create.body.id}/join`)
         .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(201);
 
       await prisma.clubMember.update({
@@ -1132,7 +1234,7 @@ describe('Clubs API (integration)', () => {
 
       const memberRes = await request(app)
         .get(`/clubs/${create.body.id}/announcements`)
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(200);
 
       expect(memberRes.body.items).toHaveLength(0);

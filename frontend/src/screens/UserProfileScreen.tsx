@@ -20,7 +20,7 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { PublicProfile } from '../types';
-import { Chip, CompactHeader, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, StatTile, UserAvatar } from '../components/ui';
+import { Chip, CompactHeader, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SkeletonCard, StatTile, UserAvatar } from '../components/ui';
 import { INTEREST_TAG_META } from '../constants/interestTags';
 import { palette, spacing, typography } from '../theme';
 
@@ -164,7 +164,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   if (!profile && loadError) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
           <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
           <EmptyState icon="alert-circle-outline" title="Could not load profile" body={loadError} />
           <PrimaryButton label="Try again" onPress={() => void load(false)} />
@@ -175,7 +177,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
         {profile ? (
           <>
@@ -256,7 +260,11 @@ export default function UserProfileScreen({ route, navigation }: Props) {
             </Panel>
           </>
         ) : (
-          <EmptyState icon="hourglass-outline" title="Loading profile" body="Pulling in profile, relationship, and trust info." />
+          <>
+            <SkeletonCard />
+            <SkeletonCard compact />
+            <SkeletonCard compact />
+          </>
         )}
       </ScrollView>
     </Screen>
@@ -265,6 +273,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

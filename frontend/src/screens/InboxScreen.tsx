@@ -16,7 +16,7 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
-import { CompactHeader, EmptyState, Panel, PrimaryButton, Screen, SegmentedControl, UserAvatar } from '../components/ui';
+import { CompactHeader, EmptyState, Panel, PrimaryButton, Screen, SegmentedControl, SkeletonCard, UserAvatar } from '../components/ui';
 import { formatDateTime } from '../utils/format';
 import { radii, spacing, typography, palette } from '../theme';
 
@@ -32,6 +32,7 @@ export default function InboxScreen() {
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const [threadResult, inviteResult, requestResult, friendResult] = await Promise.allSettled([
@@ -66,6 +67,7 @@ export default function InboxScreen() {
     ) {
       Alert.alert('Could not load inbox', API_USER_MESSAGE);
     }
+    setLoaded(true);
   }, []);
 
   useFocusEffect(
@@ -76,6 +78,8 @@ export default function InboxScreen() {
 
   const handleInvite = async (inviteId: string, accept: boolean) => {
     setBusyId(`invite-${inviteId}`);
+    const previousInvites = invites;
+    setInvites((current) => current.filter((invite) => invite.id !== inviteId));
     try {
       if (accept) {
         const pod = await acceptPodInvite(inviteId);
@@ -85,6 +89,7 @@ export default function InboxScreen() {
       }
       await load();
     } catch {
+      setInvites(previousInvites);
       Alert.alert('Could not update invite', API_USER_MESSAGE);
     } finally {
       setBusyId(null);
@@ -93,6 +98,8 @@ export default function InboxScreen() {
 
   const handleRequest = async (requestId: string, accept: boolean) => {
     setBusyId(`request-${requestId}`);
+    const previousRequests = requests;
+    setRequests((current) => current.filter((request) => request.id !== requestId));
     try {
       if (accept) {
         await acceptFriendRequest(requestId);
@@ -101,6 +108,7 @@ export default function InboxScreen() {
       }
       await load();
     } catch {
+      setRequests(previousRequests);
       Alert.alert('Could not update request', API_USER_MESSAGE);
     } finally {
       setBusyId(null);
@@ -109,10 +117,13 @@ export default function InboxScreen() {
 
   const handleCancelRequest = async (requestId: string) => {
     setBusyId(`request-${requestId}`);
+    const previousOutgoing = outgoingRequests;
+    setOutgoingRequests((current) => current.filter((request) => request.id !== requestId));
     try {
       await cancelFriendRequest(requestId);
       await load();
     } catch {
+      setOutgoingRequests(previousOutgoing);
       Alert.alert('Could not cancel request', API_USER_MESSAGE);
     } finally {
       setBusyId(null);
@@ -121,7 +132,9 @@ export default function InboxScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <CompactHeader
           eyebrow="Inbox"
           title="Stay in the loop."
@@ -147,7 +160,12 @@ export default function InboxScreen() {
 
         {mode === 'messages' ? (
           <View style={styles.section}>
-            {threads.length ? threads.map((thread) => (
+            {!loaded ? (
+              <>
+                <SkeletonCard compact />
+                <SkeletonCard compact />
+              </>
+            ) : threads.length ? threads.map((thread) => (
               <TouchableOpacity
                 key={thread.id}
                 style={styles.row}
@@ -165,7 +183,12 @@ export default function InboxScreen() {
 
         {mode === 'invites' ? (
           <View style={styles.section}>
-            {invites.length ? invites.map((invite) => (
+            {!loaded ? (
+              <>
+                <SkeletonCard />
+                <SkeletonCard compact />
+              </>
+            ) : invites.length ? invites.map((invite) => (
               <Panel key={invite.id} style={styles.inviteCard}>
                 <View style={styles.cardTopRow}>
                   <View style={styles.copy}>
@@ -210,7 +233,13 @@ export default function InboxScreen() {
 
         {mode === 'friends' ? (
           <View style={styles.section}>
-            {requests.length ? (
+            {!loaded ? (
+              <>
+                <SkeletonCard compact />
+                <SkeletonCard compact />
+              </>
+            ) : null}
+            {loaded && requests.length ? (
               <>
                 <Text style={styles.sectionLabel}>Requests</Text>
                 {requests.map((request) => (
@@ -252,7 +281,7 @@ export default function InboxScreen() {
               </>
             ) : null}
 
-            {outgoingRequests.length ? (
+            {loaded && outgoingRequests.length ? (
               <>
                 <Text style={styles.sectionLabel}>Sent</Text>
                 {outgoingRequests.map((request) => (
@@ -284,7 +313,7 @@ export default function InboxScreen() {
               </>
             ) : null}
 
-            {friends.length ? (
+            {loaded && friends.length ? (
               <>
                 <Text style={styles.sectionLabel}>Friends</Text>
                 {friends.map((friend) => (
@@ -303,7 +332,7 @@ export default function InboxScreen() {
               </>
             ) : null}
 
-            {!requests.length && !outgoingRequests.length && !friends.length ? (
+            {loaded && !requests.length && !outgoingRequests.length && !friends.length ? (
               <EmptyState icon="person-add-outline" title="No friend activity" body="Find people from pods, profiles, or search to start building your Bridge circle." />
             ) : null}
           </View>
@@ -315,6 +344,7 @@ export default function InboxScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
