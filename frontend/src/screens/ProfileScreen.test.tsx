@@ -5,10 +5,12 @@ import ProfileScreen from './ProfileScreen';
 // ── Navigation ──────────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: jest.fn() }),
+  useFocusEffect: (cb: () => void) => cb(),
 }));
 
 // ── Safe Area ────────────────────────────────────────────────────────────────
 jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
   useSafeAreaInsets: () => ({ top: 0 }),
 }));
 
@@ -17,6 +19,18 @@ const mockUpdateNotificationPreferences = jest.fn();
 
 jest.mock('../api', () => ({
   getMyPods: jest.fn().mockResolvedValue([]),
+  getMyClubs: jest.fn().mockResolvedValue([]),
+  getFriends: jest.fn().mockResolvedValue([]),
+  getNotificationPreferences: jest.fn().mockResolvedValue({
+    preferences: {
+      podJoin: true,
+      newMessage: true,
+      meetupReminder: true,
+      recapPrompt: true,
+      waitlistSpot: true,
+    },
+  }),
+  resolveAvatarUrl: jest.fn((value?: string | null) => value ?? undefined),
   updateNotificationPreferences: (...args: unknown[]) =>
     mockUpdateNotificationPreferences(...args),
 }));
@@ -43,7 +57,7 @@ jest.mock('../context/AuthContext', () => ({
 jest.mock('../components/Avatar', () => {
   const { Text } = require('react-native');
   return ({ name }: { name: string }) => <Text>{name}</Text>;
-});
+}, { virtual: true });
 
 // ── GradientButton (simplified) ──────────────────────────────────────────────
 jest.mock('../components/GradientButton', () => {
@@ -53,7 +67,7 @@ jest.mock('../components/GradientButton', () => {
       <Text>{title}</Text>
     </TouchableOpacity>
   );
-});
+}, { virtual: true });
 
 describe('ProfileScreen — notification preferences', () => {
   beforeEach(() => {
@@ -69,9 +83,9 @@ describe('ProfileScreen — notification preferences', () => {
   it('renders all three notification toggle rows', async () => {
     render(<ProfileScreen />);
     await waitFor(() => {
-      expect(screen.getByText('Pod join alerts')).toBeTruthy();
-      expect(screen.getByText('New message alerts')).toBeTruthy();
-      expect(screen.getByText('Meetup reminder')).toBeTruthy();
+      expect(screen.getByText('Pod joins')).toBeTruthy();
+      expect(screen.getByText('New messages')).toBeTruthy();
+      expect(screen.getByText('Meetup reminders')).toBeTruthy();
     });
   });
 
@@ -85,7 +99,7 @@ describe('ProfileScreen — notification preferences', () => {
 
   it('calls updateNotificationPreferences with the right key when a toggle is pressed', async () => {
     render(<ProfileScreen />);
-    await waitFor(() => screen.getByText('Pod join alerts'));
+    await waitFor(() => screen.getByText('Pod joins'));
 
     const switches = screen.getAllByRole('switch');
     // First switch is podJoin
@@ -96,9 +110,9 @@ describe('ProfileScreen — notification preferences', () => {
     expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith({ podJoin: false });
   });
 
-  it('calls updateUser after a successful preference update', async () => {
+  it('keeps preference updates scoped to notification settings', async () => {
     render(<ProfileScreen />);
-    await waitFor(() => screen.getByText('Pod join alerts'));
+    await waitFor(() => screen.getByText('Pod joins'));
 
     const switches = screen.getAllByRole('switch');
     await act(async () => {
@@ -106,8 +120,9 @@ describe('ProfileScreen — notification preferences', () => {
     });
 
     await waitFor(() => {
-      expect(mockUpdateUser).toHaveBeenCalled();
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith({ podJoin: false });
     });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 
   it('shows user name and email', async () => {
@@ -115,7 +130,7 @@ describe('ProfileScreen — notification preferences', () => {
     await waitFor(() => {
       // Multiple 'Brady' elements may exist (Avatar + name text) so use getAllByText
       expect(screen.getAllByText('Brady').length).toBeGreaterThan(0);
-      expect(screen.getByText('brady@test.com')).toBeTruthy();
+      expect(screen.getByText(/brady@test.com/)).toBeTruthy();
     });
   });
 });

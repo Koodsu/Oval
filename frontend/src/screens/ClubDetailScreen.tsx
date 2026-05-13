@@ -48,6 +48,7 @@ import {
   Screen,
   ScreenHeader,
   SegmentedControl,
+  SkeletonCard,
   UserAvatar,
 } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -1223,11 +1224,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           </>
         ) : (
           <View style={styles.loadingWrap}>
-            <EmptyState
-              icon="hourglass-outline"
-              title="Loading club"
-              body="Pulling meetings, members, and chats into the new club dashboard."
-            />
+            <SkeletonCard />
+            <SkeletonCard compact />
+            <SkeletonCard compact />
           </View>
         )}
       </ScrollView>
@@ -1311,6 +1310,7 @@ function MessageBubble({
 
 const styles = StyleSheet.create({
   page: {
+    flexGrow: 1,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
   },
@@ -1928,6 +1928,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

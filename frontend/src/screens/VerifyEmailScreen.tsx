@@ -70,7 +70,7 @@ export default function VerifyEmailScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     gap: spacing.lg,
   },

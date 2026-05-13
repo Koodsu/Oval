@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { API_USER_MESSAGE, fetchFeed, getActivities } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, Screen, SearchField, SectionHeader } from '../components/ui';
+import { Chip, EmptyState, IconButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
@@ -74,6 +74,7 @@ export default function ExploreScreen() {
   const [category, setCategory] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [feed, setFeed] = useState<Pod[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
@@ -86,6 +87,8 @@ export default function ExploreScreen() {
       setFeed(podFeed);
     } catch {
       Alert.alert('Could not load explore', API_USER_MESSAGE);
+    } finally {
+      setLoaded(true);
     }
   }, [category]);
 
@@ -131,13 +134,11 @@ export default function ExploreScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Explore</Text>
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.85}
+          <IconButton
+            icon={showSearch ? 'close' : 'search'}
+            tooltip={showSearch ? 'Close search' : 'Search activities'}
             onPress={() => setShowSearch((current) => !current)}
-          >
-            <Ionicons name={showSearch ? 'close' : 'search'} size={22} color={palette.ink} />
-          </TouchableOpacity>
+          />
         </View>
 
         {showSearch ? (
@@ -166,7 +167,13 @@ export default function ExploreScreen() {
 
         <View style={styles.section}>
           <SectionHeader title="Happening now" />
-          {cards.length ? cards.map((item, index) => {
+          {!loaded ? (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          ) : cards.length ? cards.map((item, index) => {
             const meta = CATEGORY_META[item.activity.category];
             const imageUri = imageForActivity(item.activity);
             return (
@@ -260,6 +267,7 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { API_USER_MESSAGE, getClubs, getClubsToday, joinClub } from '../api';
 import { ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, PrimaryButton, Screen, SearchField, SectionHeader } from '../components/ui';
+import { Chip, EmptyState, IconButton, PrimaryButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -59,6 +59,7 @@ export default function ClubsScreen() {
   const [clubs, setClubs] = useState<ClubDirectoryEntry[]>([]);
   const [meetingsToday, setMeetingsToday] = useState<ClubMeetingToday[]>([]);
   const [joiningClubId, setJoiningClubId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
@@ -71,6 +72,8 @@ export default function ClubsScreen() {
       setMeetingsToday(meetings);
     } catch {
       Alert.alert('Could not load clubs', API_USER_MESSAGE);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -103,14 +106,18 @@ export default function ClubsScreen() {
 
   const handleJoinClub = async (clubId: string) => {
     setJoiningClubId(clubId);
+    const previousClubs = clubs;
+    setClubs((current) => (
+      current.map((club) => (
+        club.id === clubId
+          ? { ...club, isMember: true, memberCount: club.isMember ? club.memberCount : club.memberCount + 1 }
+          : club
+      ))
+    ));
     try {
       await joinClub(clubId);
-      setClubs((current) => current.map((club) => (
-        club.id === clubId
-          ? { ...club, isMember: true, memberCount: club.memberCount + 1 }
-          : club
-      )));
     } catch {
+      setClubs(previousClubs);
       Alert.alert('Could not join club', API_USER_MESSAGE);
     } finally {
       setJoiningClubId(null);
@@ -124,13 +131,11 @@ export default function ClubsScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Clubs</Text>
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.85}
+          <IconButton
+            icon={showSearch ? 'close' : 'search'}
+            tooltip={showSearch ? 'Close search' : 'Search clubs'}
             onPress={() => setShowSearch((current) => !current)}
-          >
-            <Ionicons name={showSearch ? 'close' : 'search'} size={22} color={palette.ink} />
-          </TouchableOpacity>
+          />
         </View>
 
         {showSearch ? (
@@ -159,7 +164,9 @@ export default function ClubsScreen() {
 
         <View style={styles.section}>
           <SectionHeader title="Featured clubs" actionLabel="See all" />
-          {featuredClubs.length ? featuredClubs.map((club, index) => {
+          {!loaded ? (
+            <SkeletonCard />
+          ) : featuredClubs.length ? featuredClubs.map((club, index) => {
             const meeting = meetingsToday.find((item) => item.clubId === club.id);
             return (
               <TouchableOpacity
@@ -214,7 +221,14 @@ export default function ClubsScreen() {
           )}
         </View>
 
-        {popularClubs.length ? (
+        {!loaded ? (
+          <View style={styles.section}>
+            <SectionHeader title="Popular on campus" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow}>
+              {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
+            </ScrollView>
+          </View>
+        ) : popularClubs.length ? (
           <View style={styles.section}>
             <SectionHeader title="Popular on campus" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow}>
@@ -267,7 +281,12 @@ export default function ClubsScreen() {
             actionLabel={tonightMeetings.length ? 'See all' : undefined}
             onActionPress={() => navigation.navigate('ClubMeetingsTonight')}
           />
-          {tonightMeetings.length ? tonightMeetings.slice(0, 4).map((meeting) => (
+          {!loaded ? (
+            <>
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </>
+          ) : tonightMeetings.length ? tonightMeetings.slice(0, 4).map((meeting) => (
             <TouchableOpacity
               key={meeting.id}
               style={styles.tonightCard}
@@ -301,6 +320,7 @@ export default function ClubsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

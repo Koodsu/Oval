@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { API_USER_MESSAGE, fetchFeed, getFriends, getMyPodHistory, getMyPods, resolveAvatarUrl } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Pod, PodMember } from '../types';
-import { EmptyState, Screen, SectionHeader } from '../components/ui';
+import { EmptyState, IconButton, Screen, SectionHeader, SkeletonCard } from '../components/ui';
 import { formatShortDate, formatTime, getInitials } from '../utils/format';
 import { sortUpcomingPods } from '../utils/experience';
 import { palette, radii, shadows, spacing, typography } from '../theme';
@@ -140,6 +140,7 @@ export default function PodsScreen() {
   const [historyPods, setHistoryPods] = useState<Pod[]>([]);
   const [feedPods, setFeedPods] = useState<Pod[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -155,6 +156,8 @@ export default function PodsScreen() {
       setFriends(friendRows);
     } catch {
       Alert.alert('Could not load your pods', API_USER_MESSAGE);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -188,13 +191,13 @@ export default function PodsScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Pods</Text>
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.86}
+          <IconButton
+            icon="add"
+            tooltip="Find or start a pod"
+            size={46}
+            iconSize={24}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-          >
-            <Ionicons name="add" size={24} color={palette.ink} />
-          </TouchableOpacity>
+          />
         </View>
 
         <View style={styles.modeTabs}>
@@ -225,7 +228,9 @@ export default function PodsScreen() {
                 actionLabel={currentPods.length > 1 ? `See all (${currentPods.length})` : undefined}
               />
 
-              {primaryPod ? (
+              {!loaded ? (
+                <SkeletonCard />
+              ) : primaryPod ? (
                 <TouchableOpacity
                   activeOpacity={0.93}
                   onPress={() => navigation.navigate('PodDetail', { podId: primaryPod.id })}
@@ -344,7 +349,11 @@ export default function PodsScreen() {
                 actionLabel={startingSoonPods.length ? 'See all' : undefined}
                 onActionPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
               />
-              {startingSoonPods.length ? (
+              {!loaded ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
+                  {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
+                </ScrollView>
+              ) : startingSoonPods.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
                   {startingSoonPods.map((pod) => (
                     <TouchableOpacity
@@ -388,7 +397,11 @@ export default function PodsScreen() {
 
             <View style={styles.section}>
               <SectionHeader title="Friends active now" actionLabel={friendActivity.length ? 'See all' : undefined} />
-              {friendActivity.length ? (
+              {!loaded ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendActivityRow}>
+                  {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
+                </ScrollView>
+              ) : friendActivity.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendActivityRow}>
                   {friendActivity.map((item) => (
                     <View key={`${item.friend.id}-${item.pod.id}`} style={styles.friendActivityCard}>
@@ -415,7 +428,11 @@ export default function PodsScreen() {
 
             <View style={styles.section}>
               <SectionHeader title="Recommended for you" actionLabel={recommendedPods.length ? 'Based on your activity' : undefined} />
-              {recommendedPods.length ? (
+              {!loaded ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
+                  {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
+                </ScrollView>
+              ) : recommendedPods.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
                   {recommendedPods.map((pod) => (
                     <TouchableOpacity
@@ -482,6 +499,7 @@ export default function PodsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

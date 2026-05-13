@@ -13,6 +13,7 @@ export default function UserSearchScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FriendUser[]>([]);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [sentUserIds, setSentUserIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -40,10 +41,15 @@ export default function UserSearchScreen({ navigation }: Props) {
 
   const handleAdd = async (userId: string) => {
     setBusyUserId(userId);
+    setSentUserIds((current) => new Set(current).add(userId));
     try {
       await sendFriendRequest(userId);
-      Alert.alert('Request sent', 'They will see your friend request in their inbox.');
     } catch {
+      setSentUserIds((current) => {
+        const next = new Set(current);
+        next.delete(userId);
+        return next;
+      });
       Alert.alert('Could not send request', API_USER_MESSAGE);
     } finally {
       setBusyUserId(null);
@@ -81,9 +87,10 @@ export default function UserSearchScreen({ navigation }: Props) {
                   </View>
                 </View>
                 <PrimaryButton
-                  label="Add"
+                  label={sentUserIds.has(user.id) ? 'Sent' : 'Add'}
                   onPress={() => void handleAdd(user.id)}
                   loading={busyUserId === user.id}
+                  disabled={sentUserIds.has(user.id)}
                   kind="ghost"
                 />
               </TouchableOpacity>
@@ -99,6 +106,7 @@ export default function UserSearchScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

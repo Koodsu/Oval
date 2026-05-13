@@ -9,7 +9,7 @@ import * as Location from 'expo-location';
 import { API_USER_MESSAGE, createPod, getPodsByActivity, joinPod, joinWaitlist } from '../api';
 import { RootStackParamList } from '../../App';
 import { Pod } from '../types';
-import { EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader } from '../components/ui';
+import { EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { formatDateTime } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme';
@@ -27,6 +27,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(null);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [resolvingAddress, setResolvingAddress] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const composerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -44,6 +45,8 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       setPods(response);
     } catch {
       Alert.alert('Could not load pods', API_USER_MESSAGE);
+    } finally {
+      setLoaded(true);
     }
   }, [activity.id]);
 
@@ -229,7 +232,12 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
         <View style={styles.section}>
           <SectionHeader title="Available pods" />
-          {pods.length ? pods.map((pod) => (
+          {!loaded ? (
+            <>
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </>
+          ) : pods.length ? pods.map((pod) => (
             <TouchableOpacity key={pod.id} style={styles.row} onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}>
               <View style={styles.rowText}>
                 <Text style={styles.title}>{formatDateTime(pod.meetupTime)}</Text>
@@ -253,6 +261,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

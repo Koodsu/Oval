@@ -165,6 +165,7 @@ function labelForPref(key: keyof NotificationPreferences): string {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

@@ -30,7 +30,7 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Message, PeopleYouMetUser, Pod } from '../types';
-import { Chip, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, UserAvatar } from '../components/ui';
+import { Chip, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard, UserAvatar } from '../components/ui';
 import { palette, radii, spacing, typography } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
@@ -735,7 +735,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
           </>
         ) : (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={palette.scarlet} />
+            <SkeletonCard />
+            <SkeletonCard compact />
+            <SkeletonCard compact />
           </View>
         )}
       </ScrollView>
@@ -745,6 +747,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.md,
     gap: spacing.md,
   },

@@ -156,6 +156,7 @@ function Field({
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },

@@ -193,6 +193,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },

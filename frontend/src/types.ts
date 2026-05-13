@@ -152,6 +152,7 @@ export interface ClubMeetingToday {
   meetingTime: string;
   isPublic: boolean;
   visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+  targetRoleIds?: string[];
   clubId: string;
   clubName: string;
   clubEmoji: string;
@@ -185,6 +186,7 @@ export interface ClubMeetingWithMeta {
   meetingTime: string;
   isPublic: boolean;
   visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+  targetRoleIds?: string[];
   createdById: string;
   createdAt: string;
   createdBy?: { id: string; name: string; avatarUrl?: string | null };
@@ -222,6 +224,23 @@ export interface ClubMemberWithUser {
     classYear?: string | null;
     major?: string | null;
   };
+  customRoles?: Array<{
+    id: string;
+    roleId: string;
+    createdAt: string;
+    role: ClubRole;
+  }>;
+}
+
+export interface ClubRole {
+  id: string;
+  clubId: string;
+  name: string;
+  permissions: string[];
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  memberCount?: number;
 }
 
 export interface MyClubMembershipRow {
@@ -261,6 +280,7 @@ export interface ClubAnnouncementRow {
   userId: string;
   content: string;
   visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+  targetRoleIds?: string[];
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
 }
@@ -289,6 +309,7 @@ export interface ClubDetail {
   updatedAt: string;
   isMember: boolean;
   myRole: string | null;
+  roles?: ClubRole[];
   members: ClubMemberWithUser[];
   meetings: Array<{
     id: string;
@@ -299,6 +320,7 @@ export interface ClubDetail {
     meetingTime: string;
     isPublic: boolean;
     visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
+    targetRoleIds?: string[];
     createdById: string;
     createdAt: string;
   }>;

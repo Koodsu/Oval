@@ -19,6 +19,35 @@ export const API_USER_MESSAGE = 'Something went wrong, please try again';
 
 const RETRY_BACKOFF_MS = [250, 500, 1000] as const;
 const MAX_RETRY_ATTEMPTS = 3;
+const GET_CACHE_TTL_MS = 45_000;
+
+type CacheEntry = {
+  expiresAt: number;
+  data: unknown;
+};
+
+const getCache = new Map<string, CacheEntry>();
+
+function cacheKey(path: string) {
+  return `${authToken ?? 'anonymous'}:${path}`;
+}
+
+function isGetRequest(options: RequestInit) {
+  return !options.method || options.method.toUpperCase() === 'GET';
+}
+
+export function clearApiCache(prefix?: string) {
+  if (!prefix) {
+    getCache.clear();
+    return;
+  }
+
+  for (const key of getCache.keys()) {
+    if (key.includes(`:${prefix}`)) {
+      getCache.delete(key);
+    }
+  }
+}
 
 /**
  * Resolves a stored avatar path (e.g. /uploads/avatars/x.jpg) to a full URL.
@@ -39,6 +68,7 @@ let onUnauthorized: (() => void) | null = null;
 
 export function setToken(token: string | null) {
   authToken = token;
+  clearApiCache();
 }
 
 export function getToken(): string | null {
@@ -68,6 +98,17 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
 
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  const shouldUseCache = isGetRequest(options);
+  const key = shouldUseCache ? cacheKey(path) : null;
+  if (key) {
+    const cached = getCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data as T;
+    }
+  } else {
+    clearApiCache();
   }
 
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
@@ -101,6 +142,12 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     }
 
     if (res.ok) {
+      if (key) {
+        getCache.set(key, {
+          data,
+          expiresAt: Date.now() + GET_CACHE_TTL_MS,
+        });
+      }
       return data as T;
     }
 
@@ -210,6 +257,12 @@ export const sendClubMessage = (clubId: string, content: string) =>
     body: JSON.stringify({ content }),
   });
 
+export const deleteClubMessage = (clubId: string, messageId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE' }
+  );
+
 export const sendClubTyping = (clubId: string) =>
   request<{ ok: boolean }>(`/clubs/${encodeURIComponent(clubId)}/typing`, { method: 'POST' });
 
@@ -224,6 +277,12 @@ export const sendClubOfficerMessage = (clubId: string, content: string) =>
   request<import('./types').ClubOfficerMessage>(
     `/clubs/${encodeURIComponent(clubId)}/officer-messages`,
     { method: 'POST', body: JSON.stringify({ content }) }
+  );
+
+export const deleteClubOfficerMessage = (clubId: string, messageId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/officer-messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE' }
   );
 
 export const sendClubOfficerTyping = (clubId: string) =>
@@ -263,7 +322,7 @@ export type ClubVisibility = 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
 
 export const createClubAnnouncement = (
   clubId: string,
-  body: { content: string; visibility: ClubVisibility }
+  body: { content: string; visibility: ClubVisibility; targetRoleIds?: string[] }
 ) =>
   request<import('./types').ClubAnnouncementRow>(
     `/clubs/${encodeURIComponent(clubId)}/announcements`,
@@ -273,11 +332,50 @@ export const createClubAnnouncement = (
 export const patchClubMemberRole = (
   clubId: string,
   memberUserId: string,
-  body: { role: 'OFFICER' | 'MEMBER' }
+  body: { role: 'ADMIN' | 'OFFICER' | 'MEMBER' }
 ) =>
   request<import('./types').ClubMemberWithUser>(
     `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}`,
     { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
+export const getClubRoles = (clubId: string) =>
+  request<import('./types').ClubRole[]>(`/clubs/${encodeURIComponent(clubId)}/roles`);
+
+export const createClubRole = (clubId: string, name: string) =>
+  request<import('./types').ClubRole>(
+    `/clubs/${encodeURIComponent(clubId)}/roles`,
+    { method: 'POST', body: JSON.stringify({ name }) }
+  );
+
+export const updateClubRole = (clubId: string, roleId: string, name: string) =>
+  request<import('./types').ClubRole>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}`,
+    { method: 'PATCH', body: JSON.stringify({ name }) }
+  );
+
+export const deleteClubRole = (clubId: string, roleId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}`,
+    { method: 'DELETE' }
+  );
+
+export const assignClubRole = (clubId: string, roleId: string, memberUserId: string) =>
+  request<import('./types').ClubMemberWithUser>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}/members/${encodeURIComponent(memberUserId)}`,
+    { method: 'POST' }
+  );
+
+export const removeClubRole = (clubId: string, roleId: string, memberUserId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}/members/${encodeURIComponent(memberUserId)}`,
+    { method: 'DELETE' }
+  );
+
+export const updateOfficerPermissions = (clubId: string, permissions: string[]) =>
+  request<{ id: string; officerPermissions: string[] }>(
+    `/clubs/${encodeURIComponent(clubId)}/officer-permissions`,
+    { method: 'PATCH', body: JSON.stringify({ permissions }) }
   );
 
 export const removeClubMember = (clubId: string, memberUserId: string) =>
@@ -300,6 +398,7 @@ export interface CreateClubMeetingBody {
   meetingTime: string;
   description?: string;
   visibility?: ClubVisibility;
+  targetRoleIds?: string[];
   latitude?: number;
   longitude?: number;
 }
