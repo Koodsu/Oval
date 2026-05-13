@@ -320,7 +320,18 @@ router.get('/notifications', requireAuth, async (req: AuthRequest, res: Response
   const userId = req.user!.userId;
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    const defaults = { podJoin: true, newMessage: true, meetupReminder: true, recapPrompt: true, waitlistSpot: true };
+    const defaults = {
+      podJoin: true,
+      newMessage: true,
+      meetupReminder: true,
+      recapPrompt: true,
+      waitlistSpot: true,
+      clubMeetingCreated: true,
+      clubAnnouncementCreated: true,
+      clubKick: true,
+      clubRoleChange: true,
+      clubAttendanceOpen: true,
+    };
     const prefs = user?.notificationPreferences
       ? (() => {
           try { return { ...defaults, ...JSON.parse(user.notificationPreferences) }; } catch { return defaults; }
@@ -336,14 +347,30 @@ router.get('/notifications', requireAuth, async (req: AuthRequest, res: Response
 // PATCH /users/notifications — update notification preferences
 router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
-  const { podJoin, newMessage, meetupReminder, recapPrompt, waitlistSpot } = req.body;
+  const {
+    podJoin,
+    newMessage,
+    meetupReminder,
+    recapPrompt,
+    waitlistSpot,
+    clubMeetingCreated,
+    clubAnnouncementCreated,
+    clubKick,
+    clubRoleChange,
+    clubAttendanceOpen,
+  } = req.body;
 
   if (
     (podJoin !== undefined && typeof podJoin !== 'boolean') ||
     (newMessage !== undefined && typeof newMessage !== 'boolean') ||
     (meetupReminder !== undefined && typeof meetupReminder !== 'boolean') ||
     (recapPrompt !== undefined && typeof recapPrompt !== 'boolean') ||
-    (waitlistSpot !== undefined && typeof waitlistSpot !== 'boolean')
+    (waitlistSpot !== undefined && typeof waitlistSpot !== 'boolean') ||
+    (clubMeetingCreated !== undefined && typeof clubMeetingCreated !== 'boolean') ||
+    (clubAnnouncementCreated !== undefined && typeof clubAnnouncementCreated !== 'boolean') ||
+    (clubKick !== undefined && typeof clubKick !== 'boolean') ||
+    (clubRoleChange !== undefined && typeof clubRoleChange !== 'boolean') ||
+    (clubAttendanceOpen !== undefined && typeof clubAttendanceOpen !== 'boolean')
   ) {
     res.status(400).json({ error: 'Preference values must be booleans' });
     return;
@@ -356,7 +383,18 @@ router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Respon
           try { return JSON.parse(user.notificationPreferences); } catch { return {}; }
         })()
       : {};
-    const defaults = { podJoin: true, newMessage: true, meetupReminder: true, recapPrompt: true, waitlistSpot: true };
+    const defaults = {
+      podJoin: true,
+      newMessage: true,
+      meetupReminder: true,
+      recapPrompt: true,
+      waitlistSpot: true,
+      clubMeetingCreated: true,
+      clubAnnouncementCreated: true,
+      clubKick: true,
+      clubRoleChange: true,
+      clubAttendanceOpen: true,
+    };
     const updated = {
       ...defaults,
       ...current,
@@ -365,6 +403,11 @@ router.patch('/notifications', requireAuth, async (req: AuthRequest, res: Respon
       ...(meetupReminder !== undefined && { meetupReminder }),
       ...(recapPrompt !== undefined && { recapPrompt }),
       ...(waitlistSpot !== undefined && { waitlistSpot }),
+      ...(clubMeetingCreated !== undefined && { clubMeetingCreated }),
+      ...(clubAnnouncementCreated !== undefined && { clubAnnouncementCreated }),
+      ...(clubKick !== undefined && { clubKick }),
+      ...(clubRoleChange !== undefined && { clubRoleChange }),
+      ...(clubAttendanceOpen !== undefined && { clubAttendanceOpen }),
     };
 
     await prisma.user.update({

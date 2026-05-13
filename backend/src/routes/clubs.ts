@@ -794,6 +794,8 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },
     });
 
+    NotificationService.notifyClubAnnouncementCreated(announcement.id, userId).catch(() => {});
+
     res.status(201).json({
       ...announcement,
       targetRoleIds: parseStringList(announcement.targetRoleIds),

@@ -11,6 +11,7 @@ interface NotificationPreferences {
   recapPrompt: boolean;
   waitlistSpot: boolean;
   clubMeetingCreated: boolean;
+  clubAnnouncementCreated: boolean;
   clubKick: boolean;
   clubRoleChange: boolean;
   clubAttendanceOpen: boolean;
@@ -23,6 +24,7 @@ export const DEFAULT_PREFS: NotificationPreferences = {
   recapPrompt: true,
   waitlistSpot: true,
   clubMeetingCreated: true,
+  clubAnnouncementCreated: true,
   clubKick: true,
   clubRoleChange: true,
   clubAttendanceOpen: true,
@@ -51,6 +53,34 @@ async function send(messages: ExpoPushMessage[]): Promise<void> {
       console.error('[NotificationService] Push send failed:', err);
     }
   }
+}
+
+function parseStringList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function roleRank(role: string | null | undefined): number {
+  if (role === 'OWNER') return 4;
+  if (role === 'ADMIN') return 3;
+  if (role === 'OFFICER') return 2;
+  if (role === 'MEMBER') return 1;
+  return 0;
+}
+
+function canReceiveClubBroadcast(
+  member: { role: string; customRoles?: Array<{ roleId: string }> },
+  visibility: string,
+  targetRoleIds: string[]
+): boolean {
+  if (visibility === 'OFFICERS' && roleRank(member.role) < roleRank('OFFICER')) return false;
+  if (targetRoleIds.length === 0) return true;
+  return member.customRoles?.some((assignment) => targetRoleIds.includes(assignment.roleId)) ?? false;
 }
 
 export const NotificationService = {
@@ -308,7 +338,7 @@ export const NotificationService = {
     }
   },
 
-  /** Notify all club members (except creator) when a new meeting is created. */
+  /** Notify visible club members (except creator) when a new meeting is created. */
   async notifyClubMeetingCreated(meetingId: string, creatorId: string): Promise<void> {
     try {
       const meeting = await prisma.clubMeeting.findUnique({
@@ -319,6 +349,7 @@ export const NotificationService = {
               members: {
                 include: {
                   user: { select: { id: true, pushToken: true, notificationPreferences: true } },
+                  customRoles: { select: { roleId: true } },
                 },
               },
             },
@@ -326,6 +357,7 @@ export const NotificationService = {
         },
       });
       if (!meeting) return;
+      const targetRoleIds = parseStringList(meeting.targetRoleIds);
 
       const meetingDate = new Date(meeting.meetingTime).toLocaleDateString('en-US', {
         month: 'short',
@@ -337,6 +369,7 @@ export const NotificationService = {
       const messages: ExpoPushMessage[] = [];
       for (const member of meeting.club.members) {
         if (member.user.id === creatorId) continue;
+        if (!canReceiveClubBroadcast(member, meeting.visibility, targetRoleIds)) continue;
         if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
         const prefs = parsePreferences(member.user.notificationPreferences);
         if (!prefs.clubMeetingCreated) continue;
@@ -351,6 +384,48 @@ export const NotificationService = {
       await send(messages);
     } catch (err) {
       console.error('[NotificationService] notifyClubMeetingCreated error:', err);
+    }
+  },
+
+  /** Notify visible club members (except creator) when a new announcement is posted. */
+  async notifyClubAnnouncementCreated(announcementId: string, creatorId: string): Promise<void> {
+    try {
+      const announcement = await prisma.clubAnnouncement.findUnique({
+        where: { id: announcementId },
+        include: {
+          club: {
+            include: {
+              members: {
+                include: {
+                  user: { select: { id: true, pushToken: true, notificationPreferences: true } },
+                  customRoles: { select: { roleId: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!announcement) return;
+
+      const targetRoleIds = parseStringList(announcement.targetRoleIds);
+      const messages: ExpoPushMessage[] = [];
+      for (const member of announcement.club.members) {
+        if (member.user.id === creatorId) continue;
+        if (!canReceiveClubBroadcast(member, announcement.visibility, targetRoleIds)) continue;
+        if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
+        const prefs = parsePreferences(member.user.notificationPreferences);
+        if (!prefs.clubAnnouncementCreated) continue;
+        messages.push({
+          to: member.user.pushToken,
+          title: announcement.club.name,
+          body: announcement.content.length > 120 ? `${announcement.content.slice(0, 117)}...` : announcement.content,
+          data: { type: 'club_announcement_created', clubId: announcement.clubId, announcementId },
+          sound: 'default',
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubAnnouncementCreated error:', err);
     }
   },
 

@@ -10,6 +10,9 @@ import {
   API_USER_MESSAGE,
   checkInToClubMeeting,
   closeClubAttendance,
+  assignClubRole,
+  createClubRole,
+  deleteClubRole,
   getClubMeetingAttendance,
   type ClubVisibility,
   createClubAnnouncement,
@@ -23,6 +26,7 @@ import {
   leaveClub,
   openClubAttendance,
   patchClubMemberRole,
+  removeClubRole,
   removeClubMember,
   rsvpClubMeeting,
   sendClubMessage,
@@ -85,6 +89,14 @@ function visibilityLabel(visibility: ClubVisibility): string {
   }[visibility] ?? 'Public';
 }
 
+function roleRank(role: string | null | undefined) {
+  if (role === 'OWNER') return 4;
+  if (role === 'ADMIN') return 3;
+  if (role === 'OFFICER') return 2;
+  if (role === 'MEMBER') return 1;
+  return 0;
+}
+
 function relativeDayLabel(iso: string) {
   const date = new Date(iso);
   const today = new Date();
@@ -122,6 +134,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [meetingVisibility, setMeetingVisibility] = useState<ClubVisibility>('PUBLIC');
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementVisibility, setAnnouncementVisibility] = useState<ClubVisibility>('PUBLIC');
+  const [announcementTargetRoleIds, setAnnouncementTargetRoleIds] = useState<string[]>([]);
+  const [roleNameDraft, setRoleNameDraft] = useState('');
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+  const [rolePanelOpen, setRolePanelOpen] = useState(false);
+  const [memberRoleEditorUserId, setMemberRoleEditorUserId] = useState<string | null>(null);
+  const [meetingTargetRoleIds, setMeetingTargetRoleIds] = useState<string[]>([]);
   const [meetingTime, setMeetingTime] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000));
   const [meetingComposerOpen, setMeetingComposerOpen] = useState(false);
   const [announcementComposerOpen, setAnnouncementComposerOpen] = useState(false);
@@ -133,11 +151,32 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const officerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canManageMeetings = useMemo(
-    () => club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER',
+    () => club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER',
     [club?.myRole]
   );
-  const canManageMembers = club?.myRole === 'ADMIN';
+  const canManageMembers = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const isMember = !!club?.isMember;
+  const clubRoles = club?.roles ?? [];
+
+  const roleAudienceLabel = useCallback(
+    (roleIds?: string[]) => {
+      const ids = roleIds ?? [];
+      if (!ids.length) return 'Everyone in visibility';
+      const names = ids
+        .map((id) => clubRoles.find((role) => role.id === id)?.name)
+        .filter(Boolean);
+      return names.length ? names.join(', ') : `${ids.length} selected`;
+    },
+    [clubRoles]
+  );
+
+  const canManageThisMember = useCallback(
+    (memberRole: string, memberUserId: string) => {
+      if (!club?.myRole || memberUserId === user?.id) return false;
+      return roleRank(memberRole) < roleRank(club.myRole);
+    },
+    [club?.myRole, user?.id]
+  );
 
   const load = useCallback(
     async (showAlert = true) => {
@@ -151,7 +190,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         if (clubResponse.isMember) {
           requests.push(getClubMessages(clubId));
         }
-        if (clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER') {
+        if (clubResponse.myRole === 'OWNER' || clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER') {
           requests.push(getClubOfficerMessages(clubId));
         }
 
@@ -162,7 +201,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           ? (results[2] as { messages: ClubMessage[]; typingUserIds: string[] })
           : null;
         const officerMessageResponse =
-          clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER'
+          clubResponse.myRole === 'OWNER' || clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER'
             ? (results[clubResponse.isMember ? 3 : 2] as {
                 messages: ClubOfficerMessage[];
                 typingUserIds: string[];
@@ -183,7 +222,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         if (!clubResponse.isMember && chatView !== 'hub') {
           setChatView('hub');
         }
-        if ((clubResponse.myRole !== 'ADMIN' && clubResponse.myRole !== 'OFFICER') && chatView === 'officers') {
+        if (
+          (clubResponse.myRole !== 'OWNER' && clubResponse.myRole !== 'ADMIN' && clubResponse.myRole !== 'OFFICER') &&
+          chatView === 'officers'
+        ) {
           setChatView('hub');
         }
         setLoadError(null);
@@ -330,8 +372,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const created = await createClubAnnouncement(clubId, {
         content: announcementText.trim(),
         visibility: announcementVisibility,
+        targetRoleIds: announcementTargetRoleIds,
       });
       setAnnouncementText('');
+      setAnnouncementTargetRoleIds([]);
       setAnnouncements((current) => [created, ...current]);
       setChatView('announcements');
     } catch {
@@ -359,11 +403,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         description: meetingDescription.trim() || undefined,
         meetingTime: meetingTime.toISOString(),
         visibility: meetingVisibility,
+        targetRoleIds: meetingTargetRoleIds,
       });
       setMeetingTitle('');
       setMeetingLocation('');
       setMeetingDescription('');
       setMeetingVisibility('PUBLIC');
+      setMeetingTargetRoleIds([]);
       setMeetings((current) => sortMeetings([newMeeting, ...current]));
       setMeetingComposerOpen(false);
       setMode('events');
@@ -445,7 +491,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleRoleChange = async (memberUserId: string, role: 'OFFICER' | 'MEMBER') => {
+  const handleRoleChange = async (memberUserId: string, role: 'ADMIN' | 'OFFICER' | 'MEMBER') => {
     setMemberActionUserId(memberUserId);
     try {
       const updated = await patchClubMemberRole(clubId, memberUserId, { role });
@@ -463,6 +509,92 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       Alert.alert('Could not update role', API_USER_MESSAGE);
     } finally {
       setMemberActionUserId(null);
+    }
+  };
+
+  const handleCreateRole = async () => {
+    if (!club || !roleNameDraft.trim()) {
+      Alert.alert('Role name required', 'Add a name before creating the role.');
+      return;
+    }
+    setRoleBusyId('create');
+    try {
+      const created = await createClubRole(club.id, roleNameDraft.trim());
+      setClub((current) =>
+        current ? { ...current, roles: [...(current.roles ?? []), created] } : current
+      );
+      setRoleNameDraft('');
+    } catch {
+      Alert.alert('Could not create role', API_USER_MESSAGE);
+    } finally {
+      setRoleBusyId(null);
+    }
+  };
+
+  const handleDeleteRole = async (roleId: string) => {
+    if (!club) return;
+    setRoleBusyId(`delete:${roleId}`);
+    try {
+      await deleteClubRole(club.id, roleId);
+      setClub((current) =>
+        current
+          ? {
+              ...current,
+              roles: (current.roles ?? []).filter((role) => role.id !== roleId),
+              members: current.members.map((member) => ({
+                ...member,
+                customRoles: (member.customRoles ?? []).filter((assignment) => assignment.roleId !== roleId),
+              })),
+            }
+          : current
+      );
+      setAnnouncementTargetRoleIds((current) => current.filter((id) => id !== roleId));
+      setMeetingTargetRoleIds((current) => current.filter((id) => id !== roleId));
+    } catch {
+      Alert.alert('Could not delete role', API_USER_MESSAGE);
+    } finally {
+      setRoleBusyId(null);
+    }
+  };
+
+  const handleTogglePingRole = async (memberUserId: string, roleId: string, assigned: boolean) => {
+    if (!club) return;
+    setRoleBusyId(`${memberUserId}:${roleId}`);
+    try {
+      if (assigned) {
+        await removeClubRole(club.id, roleId, memberUserId);
+        setClub((current) =>
+          current
+            ? {
+                ...current,
+                members: current.members.map((member) =>
+                  member.userId === memberUserId
+                    ? {
+                        ...member,
+                        customRoles: (member.customRoles ?? []).filter((role) => role.roleId !== roleId),
+                      }
+                    : member
+                ),
+              }
+            : current
+        );
+      } else {
+        const updated = await assignClubRole(club.id, roleId, memberUserId);
+        setClub((current) =>
+          current
+            ? {
+                ...current,
+                members: current.members.map((member) =>
+                  member.userId === memberUserId ? updated : member
+                ),
+              }
+            : current
+        );
+      }
+    } catch {
+      Alert.alert('Could not update role', API_USER_MESSAGE);
+    } finally {
+      setRoleBusyId(null);
     }
   };
 
@@ -749,6 +881,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               <Text style={styles.cardMeta}>
                                 {relativeDayLabel(announcement.createdAt)} • {visibilityLabel(announcement.visibility)}
                               </Text>
+                              {announcement.targetRoleIds?.length ? (
+                                <Text style={styles.targetMeta}>{roleAudienceLabel(announcement.targetRoleIds)}</Text>
+                              ) : null}
                             </View>
                           </View>
                           <TouchableOpacity onPress={() => {
@@ -866,6 +1001,17 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                       />
                                     ))}
                                   </View>
+                                  <RoleTargetPicker
+                                    roles={clubRoles}
+                                    selectedRoleIds={announcementTargetRoleIds}
+                                    onToggle={(roleId) =>
+                                      setAnnouncementTargetRoleIds((current) =>
+                                        current.includes(roleId)
+                                          ? current.filter((id) => id !== roleId)
+                                          : [...current, roleId]
+                                      )
+                                    }
+                                  />
                                   <TextInput
                                     value={announcementText}
                                     onChangeText={setAnnouncementText}
@@ -892,7 +1038,11 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               avatarUrl={announcement.user.avatarUrl}
                               content={announcement.content}
                               time={formatTime(announcement.createdAt)}
-                              audience={visibilityLabel(announcement.visibility)}
+                              audience={
+                                announcement.targetRoleIds?.length
+                                  ? roleAudienceLabel(announcement.targetRoleIds)
+                                  : visibilityLabel(announcement.visibility)
+                              }
                             />
                           )) : (
                             <EmptyState
@@ -985,11 +1135,75 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               {mode === 'members' ? (
                 <View style={styles.section}>
                   <View style={styles.membersHeader}>
-                    <Text style={styles.screenSectionTitle}>Members</Text>
-                    <Text style={styles.membersCount}>
-                      {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
-                    </Text>
+                    <View>
+                      <Text style={styles.screenSectionTitle}>Members</Text>
+                      <Text style={styles.membersCount}>
+                        {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
+                      </Text>
+                    </View>
+                    {canManageMembers ? (
+                      <TouchableOpacity
+                        style={styles.manageRolesButton}
+                        onPress={() => setRolePanelOpen((current) => !current)}
+                        activeOpacity={0.82}
+                      >
+                        <Ionicons name="pricetags-outline" size={16} color={palette.scarlet} />
+                        <Text style={styles.manageRolesButtonText}>Manage roles</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
+                  {canManageMembers && rolePanelOpen ? (
+                    <View style={styles.roleManagerPanel}>
+                      <View style={styles.roleManagerHeader}>
+                        <View>
+                          <Text style={styles.cardTitle}>Ping roles</Text>
+                          <Text style={styles.cardMeta}>
+                            Create labels for dues, levels, committees, or cohorts.
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.roleCreateRow}>
+                        <TextInput
+                          value={roleNameDraft}
+                          onChangeText={setRoleNameDraft}
+                          placeholder="Hasn't paid dues"
+                          placeholderTextColor={palette.slate}
+                          style={styles.roleNameInput}
+                        />
+                        <TouchableOpacity
+                          style={styles.roleCreateButton}
+                          onPress={() => void handleCreateRole()}
+                          disabled={roleBusyId === 'create'}
+                        >
+                          <Ionicons name="add" size={20} color={palette.white} />
+                        </TouchableOpacity>
+                      </View>
+                      {(club.roles ?? []).length ? (
+                        <View style={styles.roleList}>
+                          {(club.roles ?? []).map((role) => (
+                            <View key={role.id} style={styles.roleListItem}>
+                              <View style={styles.roleListIcon}>
+                                <Ionicons name="at-outline" size={15} color={palette.scarlet} />
+                              </View>
+                              <View style={styles.roleListCopy}>
+                                <Text style={styles.roleListTitle}>{role.name}</Text>
+                                <Text style={styles.cardMeta}>{role.memberCount ?? 0} assigned</Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => void handleDeleteRole(role.id)}
+                                disabled={roleBusyId === `delete:${role.id}`}
+                                style={styles.roleIconButton}
+                              >
+                                <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.cardMeta}>No ping roles yet. Add one above, then assign it from a member card.</Text>
+                      )}
+                    </View>
+                  ) : null}
                   {club.members.length ? club.members.map((member) => (
                     <View key={member.id} style={styles.memberCard}>
                       <TouchableOpacity
@@ -1005,30 +1219,86 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           </Text>
                         </View>
                       </TouchableOpacity>
-                      {canManageMembers && member.userId !== club.createdById ? (
+                      {(member.customRoles ?? []).length ? (
+                        <View style={styles.roleChipWrap}>
+                          {(member.customRoles ?? []).map((assignment) => (
+                            <View key={assignment.id} style={styles.memberRoleChip}>
+                              <Text style={styles.memberRoleChipText}>{assignment.role.name}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                      {canManageMembers && (club.roles ?? []).length && canManageThisMember(member.role, member.userId) ? (
+                        <TouchableOpacity
+                          style={styles.memberRoleToggle}
+                          onPress={() =>
+                            setMemberRoleEditorUserId((current) =>
+                              current === member.userId ? null : member.userId
+                            )
+                          }
+                          activeOpacity={0.82}
+                        >
+                          <Ionicons name="pricetag-outline" size={15} color={palette.scarlet} />
+                          <Text style={styles.memberRoleToggleText}>
+                            {(member.customRoles ?? []).length ? 'Edit ping roles' : 'Assign ping roles'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {memberRoleEditorUserId === member.userId ? (
+                        <View style={styles.roleAssignWrap}>
+                          {(club.roles ?? []).map((role) => {
+                            const assigned = (member.customRoles ?? []).some((assignment) => assignment.roleId === role.id);
+                            const busy = roleBusyId === `${member.userId}:${role.id}`;
+                            return (
+                              <TouchableOpacity
+                                key={role.id}
+                                style={[styles.roleAssignButton, assigned ? styles.roleAssignButtonActive : null]}
+                                onPress={() => void handleTogglePingRole(member.userId, role.id, assigned)}
+                                disabled={busy}
+                              >
+                                <Ionicons
+                                  name={assigned ? 'checkmark-circle' : 'add-circle-outline'}
+                                  size={15}
+                                  color={assigned ? palette.white : palette.scarlet}
+                                />
+                                <Text style={[styles.roleAssignText, assigned ? styles.roleAssignTextActive : null]}>
+                                  {role.name}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+                      {canManageMembers && canManageThisMember(member.role, member.userId) ? (
                         <View style={styles.memberButtons}>
+                          {club.myRole === 'OWNER' && member.role !== 'ADMIN' ? (
+                            <PrimaryButton
+                              label="Make admin"
+                              onPress={() => void handleRoleChange(member.userId, 'ADMIN')}
+                              kind="ghost"
+                              loading={memberActionUserId === member.userId}
+                            />
+                          ) : null}
                           {member.role === 'MEMBER' ? (
                             <PrimaryButton
                               label="Promote"
                               onPress={() => void handleRoleChange(member.userId, 'OFFICER')}
                               loading={memberActionUserId === member.userId}
                             />
-                          ) : member.role === 'OFFICER' ? (
+                          ) : member.role === 'OFFICER' || member.role === 'ADMIN' ? (
                             <PrimaryButton
                               label="Demote"
-                              onPress={() => void handleRoleChange(member.userId, 'MEMBER')}
+                              onPress={() => void handleRoleChange(member.userId, member.role === 'ADMIN' ? 'OFFICER' : 'MEMBER')}
                               kind="ghost"
                               loading={memberActionUserId === member.userId}
                             />
                           ) : null}
-                          {member.role !== 'ADMIN' ? (
-                            <PrimaryButton
-                              label="Remove"
-                              onPress={() => void handleRemoveMember(member.userId)}
-                              kind="ghost"
-                              disabled={memberActionUserId === member.userId}
-                            />
-                          ) : null}
+                          <PrimaryButton
+                            label="Remove"
+                            onPress={() => void handleRemoveMember(member.userId)}
+                            kind="ghost"
+                            disabled={memberActionUserId === member.userId}
+                          />
                         </View>
                       ) : null}
                     </View>
@@ -1089,6 +1359,17 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           />
                         ))}
                       </View>
+                      <RoleTargetPicker
+                        roles={clubRoles}
+                        selectedRoleIds={meetingTargetRoleIds}
+                        onToggle={(roleId) =>
+                          setMeetingTargetRoleIds((current) =>
+                            current.includes(roleId)
+                              ? current.filter((id) => id !== roleId)
+                              : [...current, roleId]
+                          )
+                        }
+                      />
                       <View style={styles.datePickerCard}>
                         <Text style={styles.cardMeta}>Date & time</Text>
                         <DateTimePicker
@@ -1143,7 +1424,11 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
                       <View style={styles.eventMetaRow}>
                         <Text style={styles.cardMeta}>{meeting.attendeeCount} checked in</Text>
-                        <Text style={styles.cardMeta}>{visibilityLabel(meeting.visibility)}</Text>
+                        <Text style={styles.cardMeta}>
+                          {meeting.targetRoleIds?.length
+                            ? roleAudienceLabel(meeting.targetRoleIds)
+                            : visibilityLabel(meeting.visibility)}
+                        </Text>
                       </View>
 
                       {canManageMeetings || isMember ? (
@@ -1274,6 +1559,58 @@ function QuickActionCard({
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardBody}>{body}</Text>
     </TouchableOpacity>
+  );
+}
+
+function RoleTargetPicker({
+  roles,
+  selectedRoleIds,
+  onToggle,
+}: {
+  roles: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onToggle: (roleId: string) => void;
+}) {
+  if (!roles.length) {
+    return (
+      <View style={styles.targetPickerEmpty}>
+        <Ionicons name="pricetags-outline" size={16} color={palette.slate} />
+        <Text style={styles.cardMeta}>Add ping roles from Members to target specific groups.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.targetPicker}>
+      <View style={styles.targetPickerHeader}>
+        <Text style={styles.targetPickerTitle}>Target ping roles</Text>
+        <Text style={styles.targetPickerCount}>
+          {selectedRoleIds.length ? `${selectedRoleIds.length} selected` : 'Optional'}
+        </Text>
+      </View>
+      <View style={styles.roleChipWrap}>
+        {roles.map((role) => {
+          const selected = selectedRoleIds.includes(role.id);
+          return (
+            <TouchableOpacity
+              key={role.id}
+              style={[styles.targetRoleChip, selected ? styles.targetRoleChipActive : null]}
+              onPress={() => onToggle(role.id)}
+              activeOpacity={0.82}
+            >
+              <Ionicons
+                name={selected ? 'checkmark-circle' : 'add-circle-outline'}
+                size={15}
+                color={selected ? palette.white : palette.scarlet}
+              />
+              <Text style={[styles.targetRoleChipText, selected ? styles.targetRoleChipTextActive : null]}>
+                {role.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -1591,6 +1928,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontSize: 13,
   },
+  targetMeta: {
+    ...typography.bodyStrong,
+    color: palette.moss,
+    fontSize: 12,
+  },
   cardBody: {
     ...typography.body,
     color: palette.ink,
@@ -1613,6 +1955,163 @@ const styles = StyleSheet.create({
     ...typography.bodyStrong,
     color: palette.slate,
     paddingBottom: 2,
+  },
+  manageRolesButton: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 59, 34, 0.18)',
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  manageRolesButtonText: {
+    ...typography.bodyStrong,
+    color: palette.scarlet,
+    fontSize: 13,
+  },
+  roleManagerPanel: {
+    gap: spacing.sm,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.08)',
+    padding: spacing.md,
+    ...shadows.card,
+  },
+  roleManagerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  roleCreateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  roleNameInput: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.10)',
+    backgroundColor: '#F8FAF9',
+    paddingHorizontal: spacing.md,
+    color: palette.ink,
+    fontSize: 15,
+  },
+  roleCreateButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.scarlet,
+  },
+  roleList: {
+    gap: 8,
+  },
+  roleListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 16,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  roleListIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+  },
+  roleListCopy: {
+    flex: 1,
+  },
+  roleListTitle: {
+    ...typography.bodyStrong,
+    color: palette.ink,
+  },
+  roleIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.dangerBg,
+  },
+  roleChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  memberRoleChip: {
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(16, 33, 43, 0.07)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  memberRoleChipText: {
+    ...typography.label,
+    color: palette.ink,
+  },
+  memberRoleToggle: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 59, 34, 0.18)',
+    backgroundColor: 'rgba(199, 59, 34, 0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  memberRoleToggleText: {
+    ...typography.bodyStrong,
+    color: palette.scarlet,
+    fontSize: 13,
+  },
+  roleAssignWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    borderRadius: 16,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  roleAssignButton: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 59, 34, 0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: palette.white,
+  },
+  roleAssignButtonActive: {
+    borderColor: palette.scarlet,
+    backgroundColor: palette.scarlet,
+  },
+  roleAssignText: {
+    ...typography.label,
+    color: palette.scarlet,
+  },
+  roleAssignTextActive: {
+    color: palette.white,
   },
   chatHeader: {
     flexDirection: 'row',
@@ -1734,6 +2233,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  targetPicker: {
+    gap: spacing.xs,
+    borderRadius: 16,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  targetPickerEmpty: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 16,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  targetPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  targetPickerTitle: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    color: palette.ink,
+  },
+  targetPickerCount: {
+    ...typography.body,
+    fontSize: 12,
+    color: palette.slate,
+  },
+  targetRoleChip: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 59, 34, 0.22)',
+    backgroundColor: palette.white,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  targetRoleChipActive: {
+    borderColor: palette.scarlet,
+    backgroundColor: palette.scarlet,
+  },
+  targetRoleChipText: {
+    ...typography.label,
+    color: palette.scarlet,
+  },
+  targetRoleChipTextActive: {
+    color: palette.white,
   },
   bubbleRow: {
     flexDirection: 'row',
