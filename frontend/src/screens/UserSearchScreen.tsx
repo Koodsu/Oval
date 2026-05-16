@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { API_USER_MESSAGE, searchUsers, sendFriendRequest } from '../api';
+import { getApiErrorMessage, searchUsers, sendFriendRequest } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser } from '../types';
 import { EmptyState, PrimaryButton, Screen, ScreenHeader, SearchField, UserAvatar } from '../components/ui';
@@ -28,8 +28,8 @@ export default function UserSearchScreen({ navigation }: Props) {
         .then((users) => {
           if (!cancelled) setResults(users);
         })
-        .catch(() => {
-          if (!cancelled) Alert.alert('Could not search users', API_USER_MESSAGE);
+        .catch((error) => {
+          if (!cancelled) Alert.alert('Could not search users', getApiErrorMessage(error));
         });
     }, 250);
 
@@ -44,13 +44,13 @@ export default function UserSearchScreen({ navigation }: Props) {
     setSentUserIds((current) => new Set(current).add(userId));
     try {
       await sendFriendRequest(userId);
-    } catch {
+    } catch (error) {
       setSentUserIds((current) => {
         const next = new Set(current);
         next.delete(userId);
         return next;
       });
-      Alert.alert('Could not send request', API_USER_MESSAGE);
+      Alert.alert('Could not send request', getApiErrorMessage(error));
     } finally {
       setBusyUserId(null);
     }

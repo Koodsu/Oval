@@ -191,6 +191,10 @@ export interface ClubMeetingWithMeta {
   createdAt: string;
   createdBy?: { id: string; name: string; avatarUrl?: string | null };
   attendanceCode?: string | null;
+  rsvpReminderSentAt?: string | null;
+  rsvpReminderStatus?: string | null;
+  rsvpReminderCount?: number;
+  rsvpReminderError?: string | null;
   rsvpCounts: { going: number; maybe: number; notGoing: number };
   myRsvp: 'GOING' | 'MAYBE' | 'NOT_GOING' | null;
   attendeeCount: number;
@@ -303,6 +307,7 @@ export interface ClubDetail {
   avatarUrl?: string | null;
   isVerified: boolean;
   isPublic: boolean;
+  officerPermissions: string[];
   university: string;
   createdById: string;
   createdAt: string;
@@ -323,6 +328,10 @@ export interface ClubDetail {
     targetRoleIds?: string[];
     createdById: string;
     createdAt: string;
+    rsvpReminderSentAt?: string | null;
+    rsvpReminderStatus?: string | null;
+    rsvpReminderCount?: number;
+    rsvpReminderError?: string | null;
   }>;
   announcements: ClubAnnouncementRow[];
 }

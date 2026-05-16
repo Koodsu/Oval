@@ -6,6 +6,7 @@ import { NotificationService } from '../lib/NotificationService';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 import { withDisplayName } from '../lib/userNames';
+import { findObjectionableContent } from '../lib/contentModeration';
 
 const router = Router({ mergeParams: true });
 
@@ -93,6 +94,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const MAX_MESSAGE_LENGTH = 2000;
   if (trimmed.length > MAX_MESSAGE_LENGTH) {
     res.status(400).json({ error: `Message cannot exceed ${MAX_MESSAGE_LENGTH} characters` });
+    return;
+  }
+  const moderationMessage = findObjectionableContent([trimmed]);
+  if (moderationMessage) {
+    res.status(400).json({ error: moderationMessage });
     return;
   }
 

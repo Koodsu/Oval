@@ -50,6 +50,21 @@ describe('request — 401 handling', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
+  it('does not fire the onUnauthorized callback when a 401 response had no token attached', async () => {
+    const onUnauthorized = jest.fn();
+    setOnUnauthorized(onUnauthorized);
+    setToken(null);
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Missing or invalid authorization header' }),
+    });
+
+    await expect(getMessages('pod-1')).rejects.toThrow('Missing or invalid authorization header');
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('does not fire onUnauthorized for non-401 errors', async () => {
     const onUnauthorized = jest.fn();
     setOnUnauthorized(onUnauthorized);

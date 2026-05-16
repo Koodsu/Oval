@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { setToken, setOnUnauthorized, registerPushToken } from '../api';
+import { setToken as setApiToken, setOnUnauthorized, registerPushToken } from '../api';
 import { User } from '../types';
 
 const TOKEN_KEY = 'auth_token';
@@ -17,6 +17,7 @@ interface AuthContextValue {
   token: string | null;
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  clearSession: () => Promise<void>;
   updateUser: (partial: Partial<User>) => Promise<void>;
   isLoading: boolean;
   hasAcceptedGuidelines: boolean;
@@ -91,12 +92,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY),
+      AsyncStorage.removeItem(LEGACY_TOKEN_KEY),
       AsyncStorage.removeItem('user'),
     ]);
-    setToken(null);
+    setApiToken(null);
     setTokenState(null);
     setUser(null);
   }, []);
+
+  const clearSession = signOut;
+
+  useEffect(() => {
+    // Fast Refresh / JS bundle reloads can reset api.ts module state while
+    // React preserves AuthContext state. Keep the request layer in sync.
+    setApiToken(token);
+  }, [token]);
 
   useEffect(() => {
     // Wire up the 401 callback so expired tokens trigger automatic sign-out
@@ -154,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             parsed?.joinedAt
           ) {
             setTokenState(storedToken);
-            setToken(storedToken);
+            setApiToken(storedToken);
             setUser(parsed);
           }
         } catch {
@@ -194,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // appearing logged-in with a token that won't survive the next launch.
       throw err;
     }
-    setToken(newToken);
+    setApiToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
     // Register for push notifications after token is set (best-effort)
@@ -215,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, signIn, signOut, updateUser, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
+      value={{ user, token, signIn, signOut, clearSession, updateUser, isLoading, hasAcceptedGuidelines, acceptGuidelines }}
     >
       {children}
     </AuthContext.Provider>

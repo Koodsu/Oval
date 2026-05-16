@@ -139,15 +139,18 @@ export function Panel({
   return <View style={[styles.panel, style]}>{children}</View>;
 }
 
+type SectionHeaderProps = {
+  title: string;
+} & (
+  | { actionLabel?: undefined; onActionPress?: undefined }
+  | { actionLabel: string | undefined; onActionPress: () => void }
+);
+
 export function SectionHeader({
   title,
   actionLabel,
   onActionPress,
-}: {
-  title: string;
-  actionLabel?: string;
-  onActionPress?: () => void;
-}) {
+}: SectionHeaderProps) {
   return (
     <View style={styles.sectionRow}>
       <Text style={styles.sectionTitle}>{title}</Text>

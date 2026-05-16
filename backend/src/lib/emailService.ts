@@ -7,7 +7,7 @@ function getResendClient(): Resend | null {
 }
 
 function getFromEmail(): string {
-  return process.env.RESEND_FROM_EMAIL ?? 'noreply@bridge.app';
+  return process.env.RESEND_FROM_EMAIL ?? 'noreply@joinbridgeapp.com';
 }
 
 export async function sendVerificationEmail(to: string, code: string): Promise<void> {

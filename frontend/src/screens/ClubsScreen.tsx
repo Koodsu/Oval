@@ -1,13 +1,13 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, type GestureResponderEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { API_USER_MESSAGE, getClubs, getClubsToday, joinClub } from '../api';
+import { getApiErrorMessage, getClubs, getClubsToday, joinClub } from '../api';
 import { ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, IconButton, PrimaryButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import { Chip, EmptyState, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -21,11 +21,6 @@ function clubMatchesFilter(club: ClubDirectoryEntry, filter: string | null) {
 
 function memberLabel(count: number) {
   return `${count} member${count === 1 ? '' : 's'}`;
-}
-
-function activeWeekLabel(club: ClubDirectoryEntry) {
-  const activeCount = Math.max(1, Math.min(club.memberCount, club.upcomingMeetingCount * 6 || Math.round(club.memberCount * 0.3)));
-  return `${activeCount} active`;
 }
 
 function meetingLabel(club: ClubDirectoryEntry, todayMeeting?: ClubMeetingToday) {
@@ -54,7 +49,6 @@ function featuredGradient(index: number) {
 export default function ClubsScreen() {
   const navigation = useNavigation<Nav>();
   const [query, setQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
   const [clubs, setClubs] = useState<ClubDirectoryEntry[]>([]);
   const [meetingsToday, setMeetingsToday] = useState<ClubMeetingToday[]>([]);
@@ -70,8 +64,8 @@ export default function ClubsScreen() {
       ]);
       setClubs(clubRows);
       setMeetingsToday(meetings);
-    } catch {
-      Alert.alert('Could not load clubs', API_USER_MESSAGE);
+    } catch (error) {
+      Alert.alert('Could not load clubs', getApiErrorMessage(error));
     } finally {
       setLoaded(true);
     }
@@ -98,7 +92,7 @@ export default function ClubsScreen() {
   }, [clubs, deferredQuery, filter]);
 
   const featuredClubs = filteredClubs.slice(0, 1);
-  const popularClubs = filteredClubs.slice(featuredClubs.length);
+  const otherClubs = filteredClubs.slice(featuredClubs.length);
   const tonightMeetings = useMemo(
     () => [...meetingsToday].sort((a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime()),
     [meetingsToday]
@@ -116,9 +110,9 @@ export default function ClubsScreen() {
     ));
     try {
       await joinClub(clubId);
-    } catch {
+    } catch (error) {
       setClubs(previousClubs);
-      Alert.alert('Could not join club', API_USER_MESSAGE);
+      Alert.alert('Could not join club', getApiErrorMessage(error));
     } finally {
       setJoiningClubId(null);
     }
@@ -131,20 +125,13 @@ export default function ClubsScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Clubs</Text>
-          <IconButton
-            icon={showSearch ? 'close' : 'search'}
-            tooltip={showSearch ? 'Close search' : 'Search clubs'}
-            onPress={() => setShowSearch((current) => !current)}
-          />
         </View>
 
-        {showSearch ? (
-          <SearchField
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search clubs and communities"
-          />
-        ) : null}
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search clubs and communities"
+        />
 
         <ScrollView
           horizontal
@@ -163,7 +150,7 @@ export default function ClubsScreen() {
         </ScrollView>
 
         <View style={styles.section}>
-          <SectionHeader title="Featured clubs" actionLabel="See all" />
+          <SectionHeader title="Club directory" />
           {!loaded ? (
             <SkeletonCard />
           ) : featuredClubs.length ? featuredClubs.map((club, index) => {
@@ -176,9 +163,7 @@ export default function ClubsScreen() {
               >
                 <View style={styles.featuredCard}>
                   <LinearGradient colors={featuredGradient(index)} style={styles.featuredBanner}>
-                    <View style={styles.featuredBadge}>
-                      <Text style={styles.featuredBadgeText}>Featured</Text>
-                    </View>
+                    <Text style={styles.featuredSignal}>{memberLabel(club.memberCount)}</Text>
                     <Text style={styles.featuredEmoji}>{club.emoji}</Text>
                   </LinearGradient>
 
@@ -194,6 +179,23 @@ export default function ClubsScreen() {
                         {meetingLabel(club, meeting)}
                       </Text>
                     </View>
+                    <TouchableOpacity
+                      style={[styles.featuredAction, club.isMember && styles.featuredActionGhost]}
+                      activeOpacity={0.88}
+                      onPress={(event: GestureResponderEvent) => {
+                        event.stopPropagation();
+                        if (club.isMember) {
+                          navigation.navigate('ClubDetail', { clubId: club.id });
+                        } else {
+                          void handleJoinClub(club.id);
+                        }
+                      }}
+                      disabled={joiningClubId === club.id}
+                    >
+                      <Text style={[styles.featuredActionText, club.isMember && styles.featuredActionTextGhost]}>
+                        {joiningClubId === club.id ? 'Joining...' : club.isMember ? 'Open' : 'Join'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -223,16 +225,16 @@ export default function ClubsScreen() {
 
         {!loaded ? (
           <View style={styles.section}>
-            <SectionHeader title="Popular on campus" />
+            <SectionHeader title="More clubs" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow}>
               {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
             </ScrollView>
           </View>
-        ) : popularClubs.length ? (
+        ) : otherClubs.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Popular on campus" />
+            <SectionHeader title="More clubs" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow}>
-              {popularClubs.map((club, index) => (
+              {otherClubs.map((club, index) => (
                 <TouchableOpacity
                   key={club.id}
                   style={styles.popularCard}
@@ -252,7 +254,7 @@ export default function ClubsScreen() {
                     <View style={styles.popularFooter}>
                       <View style={styles.popularSignal}>
                         <View style={styles.popularDot} />
-                        <Text style={styles.popularSignalText}>{activeWeekLabel(club)}</Text>
+                        <Text style={styles.popularSignalText}>{meetingLabel(club)}</Text>
                       </View>
 
                       <TouchableOpacity
@@ -364,19 +366,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: 'space-between',
   },
-  featuredBadge: {
+  featuredSignal: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(128, 104, 221, 0.95)',
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
-  },
-  featuredBadgeText: {
     color: palette.white,
     fontSize: 12,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
   },
   featuredEmoji: {
     alignSelf: 'center',
@@ -407,6 +405,25 @@ const styles = StyleSheet.create({
   },
   featuredMeetingText: {
     ...typography.bodyStrong,
+    color: palette.ink,
+  },
+  featuredAction: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    backgroundColor: palette.scarlet,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: spacing.xs,
+  },
+  featuredActionGhost: {
+    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+  },
+  featuredActionText: {
+    color: palette.white,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  featuredActionTextGhost: {
     color: palette.ink,
   },
   emptyCard: {

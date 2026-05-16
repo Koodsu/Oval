@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { API_USER_MESSAGE, getClubsToday } from '../api';
+import { getApiErrorMessage, getClubsToday } from '../api';
 import type { RootStackParamList } from '../../App';
 import { ClubMeetingToday } from '../types';
 import { EmptyState, Screen, ScreenHeader } from '../components/ui';
@@ -24,8 +24,8 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
     try {
       const rows = await getClubsToday();
       setMeetings(sortMeetings(rows));
-    } catch {
-      Alert.alert('Could not load tonight\'s meetings', API_USER_MESSAGE);
+    } catch (error) {
+      Alert.alert('Could not load tonight\'s meetings', getApiErrorMessage(error));
     }
   }, []);
 

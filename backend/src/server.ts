@@ -147,8 +147,6 @@ if (require.main === module) {
     startPodExpiryScheduler();
   });
 
-  startReminderScheduler();
-
   const gracefulShutdown = () => {
     server.close(() => {
       prisma.$disconnect().then(() => process.exit(0));

@@ -4,9 +4,11 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  addDMReaction,
-  API_USER_MESSAGE,
-  getThreadMessages,
+	  addDMReaction,
+	  blockUser,
+	  createReport,
+	  getApiErrorMessage,
+	  getThreadMessages,
   markDMThreadRead,
   removeDMReaction,
   sendDirectMessage,
@@ -41,11 +43,11 @@ export default function ThreadScreen({ route, navigation }: Props) {
       setTypingUserIds(response.typingUserIds);
       setLoadError(null);
       await markDMThreadRead(threadId);
-    } catch {
-      setLoadError(API_USER_MESSAGE);
-      if (showAlert) {
-        Alert.alert('Could not load thread', API_USER_MESSAGE);
-      }
+	    } catch (error) {
+	      setLoadError(getApiErrorMessage(error));
+	      if (showAlert) {
+	        Alert.alert('Could not load thread', getApiErrorMessage(error));
+	      }
     }
   }, [threadId]);
 
@@ -62,14 +64,14 @@ export default function ThreadScreen({ route, navigation }: Props) {
     }, [load])
   );
 
-  const pingTyping = useCallback(() => {
-    if (!messageText.trim()) return;
+  const pingTyping = useCallback((draft: string) => {
+    if (!draft.trim()) return;
     if (typingTimerRef.current) return;
     typingTimerRef.current = setTimeout(() => {
       typingTimerRef.current = null;
     }, 2500);
     void sendDMTyping(threadId).catch(() => {});
-  }, [messageText, threadId]);
+  }, [threadId]);
 
   const handleSend = async () => {
     if (!messageText.trim()) return;
@@ -79,8 +81,8 @@ export default function ThreadScreen({ route, navigation }: Props) {
       setMessageText('');
       setReplyTo(null);
       setMessages((current) => [...current, sent]);
-    } catch {
-      Alert.alert('Could not send message', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send message', getApiErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -93,9 +95,48 @@ export default function ThreadScreen({ route, navigation }: Props) {
         ? await removeDMReaction(threadId, message.id, HEART_EMOJI)
         : await addDMReaction(threadId, message.id, HEART_EMOJI);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
-    } catch {
-      Alert.alert('Could not update heart', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not update heart', getApiErrorMessage(error));
     }
+  };
+
+  const handleSafetyAction = (message: DirectMessage) => {
+    if (message.sender.id === user?.id) {
+      setReplyTo(message);
+      return;
+    }
+
+    Alert.alert('Message safety', undefined, [
+      {
+        text: 'Report message',
+        onPress: async () => {
+          try {
+            await createReport({
+              directMessageId: message.id,
+              targetUserId: message.sender.id,
+              reason: 'HARASSMENT',
+            });
+            Alert.alert('Report sent', 'Thanks. We logged this message for review.');
+          } catch (error) {
+            Alert.alert('Could not send report', getApiErrorMessage(error));
+          }
+        },
+      },
+      {
+        text: `Block ${message.sender.name}`,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await blockUser(message.sender.id);
+            Alert.alert('User blocked', 'They can no longer message you.');
+            navigation.goBack();
+          } catch (error) {
+            Alert.alert('Could not block user', getApiErrorMessage(error));
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   return (
@@ -122,9 +163,10 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 <Text style={styles.messageMetaTime}>{formatTime(message.createdAt)}</Text>
               </View>
 
-              <TouchableOpacity
-                activeOpacity={0.8}
+	              <TouchableOpacity
+	                activeOpacity={0.8}
                 onLongPress={() => setReplyTo(message)}
+                onPress={() => setReplyTo(message)}
                 style={styles.messageContentWrap}
               >
                 {message.replyTo ? (
@@ -136,6 +178,16 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 <Text style={styles.messageBody}>{message.content}</Text>
               </TouchableOpacity>
             </View>
+
+            {message.sender.id !== user?.id ? (
+              <TouchableOpacity
+                onPress={() => handleSafetyAction(message)}
+                style={styles.safetyButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="ellipsis-horizontal-circle-outline" size={22} color="rgba(16, 33, 43, 0.28)" />
+              </TouchableOpacity>
+            ) : null}
 
             <TouchableOpacity
               onPress={() => void handleHeart(message)}
@@ -175,9 +227,9 @@ export default function ThreadScreen({ route, navigation }: Props) {
             value={messageText}
             onChangeText={(value) => {
               setMessageText(value);
-              if (value.trim()) pingTyping();
+              pingTyping(value);
             }}
-            placeholder="Write a message..."
+	            placeholder="Write a message... tap a message to reply"
             placeholderTextColor={palette.slate}
             style={styles.input}
             multiline
@@ -265,6 +317,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 4,
+    paddingTop: 4,
+  },
+  safetyButton: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
     paddingTop: 4,
   },
   heartCount: {

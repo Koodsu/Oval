@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 
 const router = Router();
-const APP_HOST = process.env.APP_HOST?.trim() || 'joinbridgeapp.com';
+const APP_HOST = 'joinbridgeapp.com';
 const IOS_APP_ID = process.env.IOS_APP_ID?.trim() || 'com.bradyvb.bridgeapp';
 const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.bradyvb.bridgeapp';
 const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID?.trim();
@@ -18,7 +18,7 @@ router.get('/.well-known/apple-app-site-association', (_req: Request, res: Respo
       details: [
         {
           appID: APPLE_TEAM_ID ? `${APPLE_TEAM_ID}.${IOS_APP_ID}` : IOS_APP_ID,
-          paths: ['/pod/*'],
+          paths: ['/pod/*', '/clubs/*', '/users/*'],
         },
       ],
     },

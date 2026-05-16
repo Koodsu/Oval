@@ -1,45 +1,24 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { Alert, ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { API_USER_MESSAGE, fetchFeed, getActivities } from '../api';
+import { fetchFeed, getActivities, getApiErrorMessage } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, IconButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import { Chip, EmptyState, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
+import { useLocationPermission } from '../hooks/useLocationPermission';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const ACTIVITY_IMAGE_BY_KEYWORD: Array<{ match: RegExp; uri: string }> = [
-  { match: /basketball|hoops/i, uri: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=1200&q=80' },
-  { match: /study|exam|homework|book/i, uri: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80' },
-  { match: /jog|walk|sunrise|sunset|lake|trail/i, uri: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80' },
-  { match: /soccer|frisbee|tennis/i, uri: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80' },
-  { match: /coffee|lunch|boba|cooking|market/i, uri: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80' },
-  { match: /photo|sketch|craft|writing|open mic/i, uri: 'https://images.unsplash.com/photo-1518998053901-5348d3961a04?auto=format&fit=crop&w=1200&q=80' },
-  { match: /movie|trivia|game|smash|karaoke|concert|jam/i, uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80' },
-  { match: /meditation|journaling|stretch|detox/i, uri: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80' },
-];
+const MAX_TRUSTWORTHY_DISTANCE_MILES = 25;
 
-function imageForActivity(activity: Activity) {
-  const source = `${activity.title} ${activity.description} ${activity.category}`;
-  const match = ACTIVITY_IMAGE_BY_KEYWORD.find((item) => item.match.test(source));
-  return match?.uri ?? 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80';
-}
-
-function formatLiveLabel(pods: Pod[]) {
-  const liveCount = pods.filter((pod) => pod.status === 'FORMING').length;
-  if (liveCount > 0) return `${liveCount} active pod${liveCount === 1 ? '' : 's'}`;
-  return 'No active pods yet';
-}
-
-function formatAttendance(pods: Pod[]) {
+function formatParticipantCount(pods: Pod[]) {
   const total = pods.reduce((sum, pod) => sum + pod.members.length, 0);
-  if (total <= 0) return 'No one active yet';
-  return `${total} student${total === 1 ? '' : 's'} active`;
+  return `${total} student${total === 1 ? '' : 's'} joined`;
 }
 
 function categoryShortLabel(category: string) {
@@ -48,29 +27,92 @@ function categoryShortLabel(category: string) {
   return category;
 }
 
-function pseudoDistanceFromId(id: string) {
-  const total = id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const distance = 0.1 + (total % 8) * 0.1;
-  return `${distance.toFixed(1)} mi`;
+function distanceMiles(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+) {
+  const earthRadiusMiles = 3958.8;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLng = toRadians(to.longitude - from.longitude);
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusMiles * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistanceLabel(miles: number) {
+  if (miles < 0.1) return '<0.1 mi';
+  if (miles < 10) return `${miles.toFixed(1)} mi`;
+  return `${Math.round(miles)} mi`;
+}
+
+function isUsableCoordinate(coords: { latitude: number; longitude: number } | null | undefined) {
+  if (!coords) return false;
+  return Number.isFinite(coords.latitude)
+    && Number.isFinite(coords.longitude)
+    && Math.abs(coords.latitude) <= 90
+    && Math.abs(coords.longitude) <= 180
+    && !(coords.latitude === 0 && coords.longitude === 0);
+}
+
+function trustworthyDistanceLabel(activePods: Pod[], userLocation: { latitude: number; longitude: number } | null) {
+  if (!isUsableCoordinate(userLocation)) return null;
+  const podsWithCoordinates = activePods.filter((pod) => pod.latitude != null && pod.longitude != null);
+  if (userLocation && podsWithCoordinates.length) {
+    const nearestMiles = Math.min(...podsWithCoordinates.map((pod) => distanceMiles(userLocation, {
+      latitude: pod.latitude ?? 0,
+      longitude: pod.longitude ?? 0,
+    })));
+    if (nearestMiles > MAX_TRUSTWORTHY_DISTANCE_MILES) return null;
+    return formatDistanceLabel(nearestMiles);
+  }
+  return null;
+}
+
+function statusMeta(liveCount: number) {
+  if (liveCount > 0) {
+    return {
+      label: liveCount === 1 ? '1 active pod' : `${liveCount} active pods`,
+      icon: 'flame' as const,
+      style: 'live' as const,
+    };
+  }
+  return {
+    label: 'No pods yet',
+    icon: 'add-circle-outline' as const,
+    style: 'quiet' as const,
+  };
+}
+
+function ctaLabel(liveCount: number) {
+  if (liveCount === 1) return 'Join pod';
+  if (liveCount > 1) return 'View pods';
+  return 'Start pod';
+}
+
+function activePodLocation(activePods: Pod[]) {
+  const rawLocation = activePods.find((pod) => pod.location.trim())?.location.trim();
+  if (!rawLocation) return null;
+  const firstPart = rawLocation.split('•')[0]?.trim() ?? rawLocation;
+  const words = firstPart.split(/\s+/);
+  const cleanedWords = words.filter((word, index) => (
+    index < 2 || word.toLowerCase() !== words[index - 1]?.toLowerCase()
+  ));
+  const cleaned = cleanedWords.join(' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned || cleaned.length > 36) return 'Near campus';
+  return cleaned;
 }
 
 function displayTitle(activity: Activity) {
-  const title = activity.title;
-  if (/basketball pickup game/i.test(title)) return 'Late Night Hoops';
-  if (/go for a jog/i.test(title)) return 'Sunset Jog Crew';
-  if (/study group sprint/i.test(title)) return 'Library Lock-In';
-  if (/morning coffee walk/i.test(title)) return 'Coffee Walk Crew';
-  if (/frisbee on the lawn/i.test(title)) return 'Oval Frisbee';
-  if (/soccer kickaround/i.test(title)) return 'Pickup on the Turf';
-  if (/mirror lake hangout/i.test(title)) return 'Mirror Lake Linkup';
-  if (/open mic night/i.test(title)) return 'Open Mic After Hours';
-  return title;
+  return activity.title;
 }
 
 export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
+  const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [query, setQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [feed, setFeed] = useState<Pod[]>([]);
@@ -85,12 +127,32 @@ export default function ExploreScreen() {
       ]);
       setActivities(activityList);
       setFeed(podFeed);
-    } catch {
-      Alert.alert('Could not load explore', API_USER_MESSAGE);
+    } catch (error) {
+      Alert.alert('Could not load explore', getApiErrorMessage(error));
     } finally {
       setLoaded(true);
     }
   }, [category]);
+
+  const explainAndRequestLocation = useCallback(() => {
+    Alert.alert(
+      'Use campus location?',
+      'Bridge uses your location to sort nearby pods and show distance hints. Your exact location is not posted to pods.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            void requestLocation().then((allowed) => {
+              if (!allowed) {
+                Alert.alert('Location is off', 'No problem. You can still browse every activity and join pods normally.');
+              }
+            });
+          },
+        },
+      ]
+    );
+  }, [requestLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,9 +178,10 @@ export default function ExploreScreen() {
       })
       .map((activity) => {
         const pods = feed.filter((pod) => pod.activityId === activity.id);
-        const liveCount = pods.filter((pod) => pod.status === 'FORMING').length;
-        const totalParticipants = pods.reduce((sum, pod) => sum + pod.members.length, 0);
-        return { activity, pods, liveCount, totalParticipants };
+        const activePods = pods.filter((pod) => pod.status === 'FORMING');
+        const liveCount = activePods.length;
+        const totalParticipants = activePods.reduce((sum, pod) => sum + pod.members.length, 0);
+        return { activity, activePods, liveCount, totalParticipants };
       })
       .sort((a, b) => {
         if (b.liveCount !== a.liveCount) return b.liveCount - a.liveCount;
@@ -134,20 +197,25 @@ export default function ExploreScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Explore</Text>
-          <IconButton
-            icon={showSearch ? 'close' : 'search'}
-            tooltip={showSearch ? 'Close search' : 'Search activities'}
-            onPress={() => setShowSearch((current) => !current)}
-          />
+          {!granted && canAskAgain ? (
+            <TouchableOpacity
+              style={styles.locationButton}
+              activeOpacity={0.86}
+              onPress={explainAndRequestLocation}
+              accessibilityRole="button"
+              accessibilityLabel="Use campus location"
+            >
+              <Ionicons name="navigate-outline" size={15} color={palette.scarlet} />
+              <Text style={styles.locationButtonText}>Nearby</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {showSearch ? (
-          <SearchField
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search activities, places, and vibes"
-          />
-        ) : null}
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search activities or places"
+        />
 
         <ScrollView
           horizontal
@@ -166,97 +234,102 @@ export default function ExploreScreen() {
         </ScrollView>
 
         <View style={styles.section}>
-          <SectionHeader title="Happening now" />
+          <SectionHeader title="Browse activities" />
           {!loaded ? (
             <>
               <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </>
-          ) : cards.length ? cards.map((item, index) => {
+          ) : cards.length ? cards.map((item) => {
             const meta = CATEGORY_META[item.activity.category];
-            const imageUri = imageForActivity(item.activity);
+            const status = statusMeta(item.liveCount);
+            const podLocation = activePodLocation(item.activePods);
+            const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
+            const hasActivePods = item.liveCount > 0;
             return (
               <TouchableOpacity
                 key={item.activity.id}
                 activeOpacity={0.92}
                 onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
+                style={styles.activityCard}
               >
-                <ImageBackground
-                  source={{ uri: imageUri }}
-                  imageStyle={styles.heroImage}
-                  style={styles.heroCard}
+                <LinearGradient
+                  colors={[`${meta?.color ?? palette.scarlet}1F`, 'rgba(255,255,255,0.9)']}
+                  style={styles.categoryVisual}
                 >
-                  <LinearGradient
-                    colors={['rgba(10, 12, 16, 0.12)', 'rgba(10, 12, 16, 0.46)', 'rgba(10, 12, 16, 0.82)']}
-                    style={styles.cardOverlay}
-                  >
-                    <View style={styles.heroTopRow}>
-                      <View style={[
-                        styles.livePill,
-                        item.liveCount > 0 ? styles.livePillRed : styles.livePillAmber,
+                  <Ionicons
+                    name={meta?.icon ?? 'sparkles-outline'}
+                    size={24}
+                    color={meta?.color ?? palette.scarlet}
+                  />
+                </LinearGradient>
+
+                <View style={styles.cardBody}>
+                  <View style={styles.cardTopRow}>
+                    <View style={[
+                      styles.statusPill,
+                      status.style === 'live' ? styles.statusPillLive : styles.statusPillQuiet,
+                    ]}>
+                      <Ionicons
+                        name={status.icon}
+                        size={12}
+                        color={status.style === 'live' ? palette.white : palette.slate}
+                      />
+                      <Text style={[
+                        styles.statusText,
+                        status.style === 'live' ? styles.statusTextLive : styles.statusTextQuiet,
                       ]}>
-                        <Ionicons
-                          name={item.liveCount > 0 ? 'flame' : 'time-outline'}
-                          size={11}
-                          color={palette.white}
-                        />
-                        <Text style={styles.livePillText}>
-                          {item.liveCount > 0 ? 'Live' : 'Starts soon'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.distancePill}>
-                        <Ionicons name="location-outline" size={12} color={palette.white} />
-                        <Text style={styles.distanceText}>{pseudoDistanceFromId(item.activity.id)}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.heroMiddle}>
-                      <Text style={styles.heroTitle} numberOfLines={2}>{displayTitle(item.activity)}</Text>
-                    </View>
-
-                    <View style={styles.heroBottom}>
-                      <Text style={styles.heroMeta} numberOfLines={1}>
-                        {item.activity.defaultLocation} • {meta?.label ?? item.activity.category}
+                        {status.label}
                       </Text>
-
-                      <View style={styles.heroStatsRow}>
-                        <View style={styles.statGroup}>
-                          <Text style={styles.statPrimary}>{formatLiveLabel(item.pods)}</Text>
-                          <Text style={styles.statSecondary}>{formatAttendance(item.pods)}</Text>
-                        </View>
-
-                        <View style={styles.socialGroup}>
-                          <View style={styles.avatarRail}>
-                            {[0, 1, 2, 3].map((avatarIndex) => (
-                              <View
-                                key={avatarIndex}
-                                style={[
-                                  styles.avatarDot,
-                                  {
-                                    marginLeft: avatarIndex === 0 ? 0 : -8,
-                                    backgroundColor: ['#EEC9B7', '#D4E4F2', '#F6E2A6', '#B5D7C1'][avatarIndex],
-                                  },
-                                ]}
-                              />
-                            ))}
-                          </View>
-                          <Text style={styles.socialLabel}>
-                            {item.totalParticipants > 0 ? `${item.totalParticipants} active now` : 'Join first'}
-                          </Text>
-                        </View>
-                      </View>
                     </View>
-                  </LinearGradient>
-                </ImageBackground>
+
+                    <Text style={styles.categoryLabel} numberOfLines={1}>{meta?.label ?? item.activity.category}</Text>
+                  </View>
+
+                  <Text style={styles.activityTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
+                  <Text style={styles.activityDescription} numberOfLines={2}>{item.activity.description}</Text>
+
+                  {hasActivePods ? (
+                    <View style={styles.factRow}>
+                      {podLocation ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="location-outline" size={13} color={palette.slate} />
+                          <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.factItem}>
+                        <Ionicons name="people-outline" size={13} color={palette.slate} />
+                        <Text style={styles.factText}>{formatParticipantCount(item.activePods)}</Text>
+                      </View>
+                      {distanceLabel ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="navigate-outline" size={13} color={palette.slate} />
+                          <Text style={styles.factText}>{distanceLabel}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptySupport}>Be the first to start one.</Text>
+                  )}
+
+                  <View style={styles.actionRow}>
+                    <Text style={styles.actionHint} numberOfLines={1}>
+                      {hasActivePods ? 'View meetup options' : 'Create the first pod'}
+                    </Text>
+                    <View style={styles.ctaPill}>
+                      <Text style={styles.ctaText}>{ctaLabel(item.liveCount)}</Text>
+                      <Ionicons name="chevron-forward" size={14} color={palette.scarlet} />
+                    </View>
+                  </View>
+                </View>
               </TouchableOpacity>
             );
           }) : (
             <EmptyState
               icon="compass-outline"
               title="Nothing matches that view yet"
-              body="Try another category or open search to widen the board."
+              body="Try another category or search for a different place."
             />
           )}
         </View>
@@ -268,8 +341,9 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: 112,
+    gap: spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
@@ -278,134 +352,160 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     ...typography.h1,
-    fontSize: 48,
-    lineHeight: 52,
+    fontSize: 34,
+    lineHeight: 38,
   },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  locationButton: {
+    height: 38,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.78)',
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: 'rgba(199,59,34,0.16)',
+  },
+  locationButtonText: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.scarlet,
   },
   chipRow: {
-    paddingRight: spacing.md,
-    gap: spacing.xs,
+    paddingLeft: 1,
+    paddingTop: 2,
+    paddingBottom: 4,
+    paddingRight: spacing.xl,
   },
   section: {
     gap: spacing.sm,
+    paddingTop: 2,
   },
-  heroCard: {
-    minHeight: 174,
-    borderRadius: 24,
-    overflow: 'hidden',
+  activityCard: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.07)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 12,
     ...shadows.card,
   },
-  heroImage: {
-    borderRadius: 24,
-  },
-  cardOverlay: {
-    minHeight: 174,
-    padding: spacing.md,
-    justifyContent: 'space-between',
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  categoryVisual: {
+    width: 54,
+    minHeight: 108,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
   },
-  livePill: {
+  cardBody: {
+    flex: 1,
+    gap: 7,
+  },
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
-  livePillRed: {
-    backgroundColor: 'rgba(199, 59, 34, 0.95)',
+  statusPillLive: {
+    backgroundColor: palette.scarlet,
   },
-  livePillAmber: {
-    backgroundColor: 'rgba(230, 166, 70, 0.95)',
+  statusPillQuiet: {
+    backgroundColor: 'rgba(16, 33, 43, 0.06)',
   },
-  livePillText: {
-    color: palette.white,
+  statusText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  distancePill: {
+  statusTextLive: {
+    color: palette.white,
+  },
+  statusTextQuiet: {
+    color: palette.slate,
+  },
+  activityTitle: {
+    ...typography.title,
+    fontSize: 20,
+    lineHeight: 24,
+    color: palette.ink,
+  },
+  activityDescription: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.slate,
+  },
+  factRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  factItem: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: radii.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  distanceText: {
-    color: palette.white,
+  factText: {
+    color: palette.slate,
     fontSize: 12,
     fontWeight: '700',
+    flexShrink: 1,
   },
-  heroMiddle: {
-    paddingTop: 6,
-  },
-  heroTitle: {
-    color: palette.white,
-    fontSize: 26,
-    lineHeight: 28,
-    fontWeight: '800',
-  },
-  heroBottom: {
-    gap: 10,
-  },
-  heroMeta: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  heroStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  statGroup: {
-    gap: 2,
-    flex: 1,
-  },
-  statPrimary: {
-    color: palette.white,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  statSecondary: {
-    color: 'rgba(255,255,255,0.82)',
+  emptySupport: {
+    ...typography.body,
     fontSize: 13,
-    fontWeight: '600',
+    lineHeight: 18,
+    color: palette.slate,
   },
-  socialGroup: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  avatarRail: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    paddingTop: 8,
   },
-  avatarDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.86)',
-  },
-  socialLabel: {
-    color: palette.white,
-    fontSize: 13,
+  categoryLabel: {
+    color: palette.slate,
+    fontSize: 12,
     fontWeight: '700',
+    flex: 1,
     textAlign: 'right',
+  },
+  actionHint: {
+    color: palette.slate,
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 4,
+  },
+  ctaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+    minWidth: 76,
+    flexShrink: 0,
+  },
+  ctaText: {
+    color: palette.scarlet,
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

@@ -4,11 +4,11 @@ import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { API_USER_MESSAGE, fetchFeed, getActivities, getClubsToday, getMyPods } from '../api';
+import { fetchFeed, getActivities, getApiErrorMessage, getClubsToday, getMyPods } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Activity, ClubMeetingToday, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Hero, Panel, Screen, SectionHeader, PrimaryButton, EmptyState, SkeletonCard } from '../components/ui';
+import { Hero, Panel, Screen, SectionHeader, PrimaryButton, EmptyState, SkeletonCard, UserAvatar } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { spacing, typography, palette, radii } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
@@ -19,8 +19,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { user } = useAuth();
-  const { userLocation } = useLocationPermission();
+  const { user, token } = useAuth();
+  const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [pods, setPods] = useState<Pod[]>([]);
   const [myPods, setMyPods] = useState<Pod[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -30,6 +30,12 @@ export default function HomeScreen() {
   const [agendaExpanded, setAgendaExpanded] = useState(false);
 
   const load = useCallback(async () => {
+    if (!token) {
+      setLoaded(true);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       const [feed, mine, activityList, clubList] = await Promise.all([
         fetchFeed(
@@ -45,13 +51,33 @@ export default function HomeScreen() {
       setMyPods(mine);
       setActivities(activityList);
       setClubsToday(clubList);
-    } catch {
-      Alert.alert('Could not load home', API_USER_MESSAGE);
+    } catch (error) {
+      Alert.alert('Could not load home', getApiErrorMessage(error));
     } finally {
       setLoaded(true);
       setRefreshing(false);
     }
-  }, [userLocation]);
+  }, [token, userLocation]);
+
+  const explainAndRequestLocation = useCallback(() => {
+    Alert.alert(
+      'Use campus location?',
+      'Bridge uses your location only to sort nearby pods and show useful distances on campus.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            void requestLocation().then((allowed) => {
+              if (!allowed) {
+                Alert.alert('Location is off', 'You can still use Bridge. Turn on location later if you want nearby pod sorting.');
+              }
+            });
+          },
+        },
+      ]
+    );
+  }, [requestLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,6 +127,32 @@ export default function HomeScreen() {
           void load();
         }} />}
       >
+        <View style={styles.utilityRow}>
+          <TouchableOpacity
+            style={styles.profileChip}
+            activeOpacity={0.86}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            accessibilityHint="Opens your profile and settings"
+          >
+            <Text style={styles.profileChipLabel}>Profile</Text>
+            <UserAvatar name={user?.name ?? 'User'} avatarUrl={user?.avatarUrl} size={27} />
+          </TouchableOpacity>
+          {!granted && canAskAgain ? (
+            <TouchableOpacity
+              style={styles.locationChip}
+              activeOpacity={0.86}
+              onPress={explainAndRequestLocation}
+              accessibilityRole="button"
+              accessibilityLabel="Use campus location"
+              accessibilityHint="Explains why Bridge wants location before asking for permission"
+            >
+              <Ionicons name="navigate-outline" size={15} color={palette.scarlet} />
+              <Text style={styles.locationChipLabel}>Nearby</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <Hero
           eyebrow="Today on campus"
           title={`Your day, ${user?.firstName ?? user?.name?.split(' ')[0] ?? 'friend'}.`}
@@ -216,7 +268,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Open right now" actionLabel="Explore" onActionPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })} />
+          <SectionHeader title="Open pods" actionLabel="Explore" onActionPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })} />
           {!loaded ? (
             <>
               <SkeletonCard compact />
@@ -236,7 +288,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Activity momentum" />
+          <SectionHeader title="Activities with open pods" />
           {!loaded ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {[0, 1, 2].map((item) => (
@@ -263,7 +315,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Club pulse today" />
+          <SectionHeader title="Club meetings today" />
           {!loaded ? (
             <>
               <SkeletonCard compact />
@@ -286,7 +338,7 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.feedMeta}>{formatTime(meeting.meetingTime)}</Text>
             </TouchableOpacity>
-          )) : <EmptyState icon="people-circle-outline" title="No meetings pulled in" body="Club meetings for today will appear here once the backend has them." />}
+          )) : <EmptyState icon="people-circle-outline" title="No club meetings today" body="Club meetings for today will appear here once leaders schedule them." />}
         </View>
       </ScrollView>
     </Screen>
@@ -296,8 +348,56 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  utilityRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+  },
+  profileChip: {
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingLeft: spacing.sm,
+    paddingRight: 6,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.74)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.07)',
+    shadowColor: palette.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+  profileChipLabel: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.slate,
+  },
+  locationChip: {
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.74)',
+    borderWidth: 1,
+    borderColor: 'rgba(199,59,34,0.16)',
+  },
+  locationChipLabel: {
+    ...typography.bodyStrong,
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.scarlet,
   },
   heroAgenda: {
     marginTop: spacing.xs,
