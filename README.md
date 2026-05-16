@@ -332,10 +332,10 @@ See [`backend/.env.example`](./backend/.env.example).
 | `RESEND_WAITLIST_SEGMENT_ID` | Optional | Segment-scoped public waitlist isolation |
 | `SUPABASE_URL` | For storage | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | For storage | Service role key for storage uploads |
-| `APP_HOST` | Optional | Host used for invite/universal links, defaults to `joinbridgeapp.com` |
+| `APP_HOST` | Deprecated | Universal links are fixed to `joinbridgeapp.com` |
 | `IOS_APP_ID` | Optional | iOS bundle ID used in `apple-app-site-association` |
 | `ANDROID_PACKAGE` | Optional | Android package used in `assetlinks.json` |
-| `APPLE_TEAM_ID` | Optional | Apple team ID for fully-qualified universal-link appID |
+| `APPLE_TEAM_ID` | Required for iOS review | Apple team ID for fully-qualified universal-link appID |
 | `ANDROID_SHA256_CERT_FINGERPRINT` | Optional | Android signing fingerprint for verified app links |
 
 ### Frontend

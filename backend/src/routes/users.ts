@@ -12,6 +12,7 @@ import {
 } from '../services/friendService';
 import { INTEREST_TAG_SET } from '../config/interestTags';
 import { getFullName, getPublicName, withDisplayName } from '../lib/userNames';
+import { findObjectionableContent } from '../lib/contentModeration';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
@@ -177,6 +178,16 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
     updateData.clubs = JSON.stringify(clubs.map((c: string) => c.trim()));
   }
 
+  const moderationMessage = findObjectionableContent([
+    typeof bio === 'string' ? bio : null,
+    typeof major === 'string' ? major : null,
+    ...(Array.isArray(clubs) ? clubs.filter((club): club is string => typeof club === 'string') : []),
+  ]);
+  if (moderationMessage) {
+    res.status(400).json({ error: moderationMessage });
+    return;
+  }
+
   if (instagramHandle !== undefined) {
     if (instagramHandle !== null && typeof instagramHandle !== 'string') {
       res.status(400).json({ error: 'instagramHandle must be a string or null' });
@@ -288,6 +299,48 @@ router.delete('/me/avatar', requireAuth, async (req: AuthRequest, res: Response)
     }
     await prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
     res.json({ avatarUrl: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── DELETE /users/me — in-app account deletion ────────────────────────────────
+
+router.delete('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+    if (!existing) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (existing.avatarUrl) safeUnlinkAvatar(existing.avatarUrl);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: 'Deleted User',
+        firstName: 'Deleted',
+        lastName: 'User',
+        email: `deleted-${userId}@deleted.joinbridgeapp.com`,
+        password: `deleted-${userId}-${Date.now()}`,
+        verifiedUniversity: false,
+        emailVerifyCode: null,
+        emailVerifyExpiry: null,
+        pushToken: null,
+        notificationPreferences: null,
+        avatarUrl: null,
+        classYear: null,
+        major: null,
+        bio: null,
+        clubs: null,
+        instagramHandle: null,
+        interestTags: null,
+      },
+    });
+
+    res.status(204).send();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

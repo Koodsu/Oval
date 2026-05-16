@@ -172,6 +172,12 @@ model Report {
   targetUserId String?
   podId        String?
   messageId    String?
+  directMessageId String?
+  clubId       String?
+  clubMessageId String?
+  clubOfficerMessageId String?
+  clubAnnouncementId String?
+  targetType   String?
   reason       String
   details      String?
   status       String    @default("OPEN")
@@ -188,6 +194,11 @@ model Report {
   @@index([status, createdAt])
   @@index([podId])
   @@index([messageId])
+  @@index([directMessageId])
+  @@index([clubId])
+  @@index([clubMessageId])
+  @@index([clubOfficerMessageId])
+  @@index([clubAnnouncementId])
   @@index([targetUserId])
 }
 
@@ -437,6 +448,10 @@ model ClubMeeting {
   longitude       Float?
   attendanceOpen  Boolean  @default(false)
   attendanceCode  String?
+  rsvpReminderSentAt DateTime?
+  rsvpReminderStatus String?
+  rsvpReminderCount  Int      @default(0)
+  rsvpReminderError  String?
 
   club      Club                    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   createdBy User                    @relation("MeetingCreator", fields: [createdById], references: [id])

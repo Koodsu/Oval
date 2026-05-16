@@ -9,7 +9,18 @@ const router = Router();
 // POST /reports – create report (auth required)
 router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const reporterId = req.user!.userId;
-  const { podId, messageId, targetUserId, reason, details } = req.body;
+  const {
+    podId,
+    messageId,
+    directMessageId,
+    clubId,
+    clubMessageId,
+    clubOfficerMessageId,
+    clubAnnouncementId,
+    targetUserId,
+    reason,
+    details,
+  } = req.body;
 
   if (!reason || typeof reason !== 'string' || !isValidReason(reason)) {
     res.status(400).json({ error: 'Invalid or missing reason' });
@@ -24,6 +35,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const payload = {
     podId: typeof podId === 'string' && podId.trim() ? podId.trim() : undefined,
     messageId: typeof messageId === 'string' && messageId.trim() ? messageId.trim() : undefined,
+    directMessageId: typeof directMessageId === 'string' && directMessageId.trim() ? directMessageId.trim() : undefined,
+    clubId: typeof clubId === 'string' && clubId.trim() ? clubId.trim() : undefined,
+    clubMessageId: typeof clubMessageId === 'string' && clubMessageId.trim() ? clubMessageId.trim() : undefined,
+    clubOfficerMessageId: typeof clubOfficerMessageId === 'string' && clubOfficerMessageId.trim() ? clubOfficerMessageId.trim() : undefined,
+    clubAnnouncementId: typeof clubAnnouncementId === 'string' && clubAnnouncementId.trim() ? clubAnnouncementId.trim() : undefined,
     targetUserId: typeof targetUserId === 'string' && targetUserId.trim() ? targetUserId.trim() : undefined,
     reason,
     details: typeof details === 'string' ? details : undefined,
@@ -34,7 +50,14 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     res.status(201).json({ reportId: result.id, status: result.status });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to create report';
-    if (msg.includes('required') || msg.includes('cannot report') || msg.includes('not found') || msg.includes('does not belong')) {
+    const lower = msg.toLowerCase();
+    if (
+      lower.includes('required') ||
+      lower.includes('cannot report') ||
+      lower.includes('not found') ||
+      lower.includes('does not belong') ||
+      lower.includes('you can only')
+    ) {
       res.status(400).json({ error: msg });
       return;
     }

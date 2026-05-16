@@ -15,6 +15,7 @@ import PodsScreen from './src/screens/PodsScreen';
 import ClubsScreen from './src/screens/ClubsScreen';
 import ClubMeetingsTonightScreen from './src/screens/ClubMeetingsTonightScreen';
 import InboxScreen from './src/screens/InboxScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import ActivityPodsScreen from './src/screens/ActivityPodsScreen';
 import PodDetailScreen from './src/screens/PodDetailScreen';
 import ClubDetailScreen from './src/screens/ClubDetailScreen';
@@ -36,11 +37,12 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   MainTabs: { screen?: keyof MainTabParamList } | undefined;
-  ActivityPods: { activity: Activity };
+  ActivityPods: { activity: Activity; startCreate?: boolean };
   PodDetail: { podId: string };
   ClubDetail: { clubId: string };
   ClubMeetingsTonight: undefined;
   Thread: { threadId: string; title: string };
+  Profile: undefined;
   EditProfile: undefined;
   UserProfile: { userId: string };
   UserSearch: undefined;
@@ -62,7 +64,7 @@ const navTheme = {
 };
 
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: ['bridge://', 'https://joinbridgeapp.com', 'https://bridge.app'],
+  prefixes: ['bridge://', 'https://joinbridgeapp.com'],
   config: {
     screens: {
       PodDetail: 'pod/:podId',
@@ -108,6 +110,7 @@ function AuthedApp() {
       <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
       <Stack.Screen name="ClubMeetingsTonight" component={ClubMeetingsTonightScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="UserSearch" component={UserSearchScreen} />

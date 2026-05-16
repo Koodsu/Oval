@@ -34,7 +34,8 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Bridge uses your location to show pods forming near you on campus."
+        "NSLocationWhenInUseUsageDescription": "Bridge uses your location to show pods forming near you on campus.",
+        "NSPhotoLibraryUsageDescription": "Bridge lets you choose a photo from your library for your profile or club avatar."
       }
     },
     "android": {
@@ -54,6 +55,16 @@
               "scheme": "https",
               "host": "joinbridgeapp.com",
               "pathPrefix": "/pod"
+            },
+            {
+              "scheme": "https",
+              "host": "joinbridgeapp.com",
+              "pathPrefix": "/clubs"
+            },
+            {
+              "scheme": "https",
+              "host": "joinbridgeapp.com",
+              "pathPrefix": "/users"
             }
           ],
           "category": [

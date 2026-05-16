@@ -15,6 +15,8 @@ interface NotificationPreferences {
   clubKick: boolean;
   clubRoleChange: boolean;
   clubAttendanceOpen: boolean;
+  clubRsvpReminder: boolean;
+  clubOutreach: boolean;
 }
 
 export const DEFAULT_PREFS: NotificationPreferences = {
@@ -28,6 +30,8 @@ export const DEFAULT_PREFS: NotificationPreferences = {
   clubKick: true,
   clubRoleChange: true,
   clubAttendanceOpen: true,
+  clubRsvpReminder: true,
+  clubOutreach: true,
 };
 
 export function parsePreferences(raw: string | null | undefined): NotificationPreferences {
@@ -53,6 +57,11 @@ async function send(messages: ExpoPushMessage[]): Promise<void> {
       console.error('[NotificationService] Push send failed:', err);
     }
   }
+}
+
+async function sendAndCount(messages: ExpoPushMessage[]): Promise<number> {
+  await send(messages);
+  return messages.length;
 }
 
 function parseStringList(raw: string | null | undefined): string[] {
@@ -519,6 +528,87 @@ export const NotificationService = {
       await send(messages);
     } catch (err) {
       console.error('[NotificationService] notifyClubAttendanceOpen error:', err);
+    }
+  },
+
+  /** Send an RSVP reminder to selected club members who have not answered yet. */
+  async notifyClubRsvpReminder(meetingId: string, recipientIds: string[]): Promise<{ attempted: number; sent: number }> {
+    try {
+      const meeting = await prisma.clubMeeting.findUnique({
+        where: { id: meetingId },
+        include: {
+          club: { select: { id: true, name: true } },
+        },
+      });
+      if (!meeting || recipientIds.length === 0) return { attempted: recipientIds.length, sent: 0 };
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: Array.from(new Set(recipientIds)) } },
+        select: { id: true, pushToken: true, notificationPreferences: true },
+      });
+
+      const meetingDate = new Date(meeting.meetingTime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+
+      const messages: ExpoPushMessage[] = [];
+      for (const user of users) {
+        if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) continue;
+        const prefs = parsePreferences(user.notificationPreferences);
+        if (!prefs.clubRsvpReminder) continue;
+        messages.push({
+          to: user.pushToken,
+          title: meeting.club.name,
+          body: `RSVP for ${meeting.title} on ${meetingDate}`,
+          data: { type: 'club_rsvp_reminder', clubId: meeting.club.id, meetingId },
+          sound: 'default',
+        });
+      }
+
+      return { attempted: recipientIds.length, sent: await sendAndCount(messages) };
+    } catch (err) {
+      console.error('[NotificationService] notifyClubRsvpReminder error:', err);
+      return { attempted: recipientIds.length, sent: 0 };
+    }
+  },
+
+  /** Send a leader-composed outreach notification to a resolved member audience. */
+  async notifyClubOutreach(
+    clubId: string,
+    senderId: string,
+    recipientIds: string[],
+    content: string
+  ): Promise<{ attempted: number; sent: number }> {
+    try {
+      const club = await prisma.club.findUnique({ where: { id: clubId }, select: { name: true } });
+      if (!club || recipientIds.length === 0) return { attempted: recipientIds.length, sent: 0 };
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: Array.from(new Set(recipientIds)).filter((id) => id !== senderId) } },
+        select: { id: true, pushToken: true, notificationPreferences: true },
+      });
+
+      const messages: ExpoPushMessage[] = [];
+      for (const user of users) {
+        if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) continue;
+        const prefs = parsePreferences(user.notificationPreferences);
+        if (!prefs.clubOutreach) continue;
+        messages.push({
+          to: user.pushToken,
+          title: club.name,
+          body: content.length > 120 ? `${content.slice(0, 117)}...` : content,
+          data: { type: 'club_outreach', clubId },
+          sound: 'default',
+        });
+      }
+
+      return { attempted: recipientIds.length, sent: await sendAndCount(messages) };
+    } catch (err) {
+      console.error('[NotificationService] notifyClubOutreach error:', err);
+      return { attempted: recipientIds.length, sent: 0 };
     }
   },
 

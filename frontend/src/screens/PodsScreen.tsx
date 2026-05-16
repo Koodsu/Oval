@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  ImageBackground,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +12,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { API_USER_MESSAGE, fetchFeed, getFriends, getMyPodHistory, getMyPods, resolveAvatarUrl } from '../api';
+import { fetchFeed, getApiErrorMessage, getFriends, getMyPodHistory, getMyPods, resolveAvatarUrl } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Pod, PodMember } from '../types';
 import { EmptyState, IconButton, Screen, SectionHeader, SkeletonCard } from '../components/ui';
@@ -23,14 +22,6 @@ import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Mode = 'active' | 'past';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const POD_IMAGE_BY_KEYWORD: Array<{ match: RegExp; uri: string }> = [
-  { match: /basketball|hoops/i, uri: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=1200&q=80' },
-  { match: /study|exam|homework|library/i, uri: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80' },
-  { match: /jog|walk|sunset|sunrise|trail|lake/i, uri: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80' },
-  { match: /coffee|boba|lunch|picnic|cooking/i, uri: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80' },
-  { match: /volleyball|soccer|frisbee|tennis/i, uri: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80' },
-];
 
 function podStatusMeta(pod: Pod) {
   if (pod.status === 'COMPLETED') {
@@ -45,21 +36,17 @@ function podStatusMeta(pod: Pod) {
   return { label: 'Starts soon', bg: '#FFF1DE', text: '#9A5E17', icon: 'time-outline' as const };
 }
 
-function podImage(pod: Pod) {
+function podIcon(pod: Pod): keyof typeof Ionicons.glyphMap {
   const source = `${pod.activity?.title ?? ''} ${pod.location}`;
-  const match = POD_IMAGE_BY_KEYWORD.find((item) => item.match.test(source));
-  return match?.uri ?? 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80';
+  if (/basketball|hoops|volleyball|soccer|frisbee|tennis/i.test(source)) return 'basketball-outline';
+  if (/study|exam|homework|library/i.test(source)) return 'book-outline';
+  if (/jog|walk|trail|lake/i.test(source)) return 'walk-outline';
+  if (/coffee|boba|lunch|picnic|cooking/i.test(source)) return 'cafe-outline';
+  return 'people-outline';
 }
 
 function displayPodTitle(pod: Pod) {
-  const title = pod.activity?.title ?? 'Pod';
-  if (/basketball pickup game/i.test(title)) return 'Late Night Hoops';
-  if (/go for a jog/i.test(title)) return 'Go for a Jog';
-  if (/study group sprint/i.test(title)) return 'Library Study Session';
-  if (/morning coffee walk/i.test(title)) return 'Coffee & Chats';
-  if (/soccer kickaround/i.test(title)) return 'Pickup Volleyball';
-  if (/mirror lake hangout/i.test(title)) return 'Sunset Walk';
-  return title;
+  return pod.activity?.title ?? 'Pod';
 }
 
 function spotsFilledLabel(pod: Pod) {
@@ -72,18 +59,22 @@ function progressWidth(pod: Pod): `${number}%` {
 
 function friendCountForPod(pod: Pod, friends: FriendUser[]) {
   const friendIds = new Set(friends.map((friend) => friend.id));
-  const mutuals = pod.members.filter((member) => friendIds.has(member.userId)).length;
-  if (mutuals > 0) return mutuals;
-  return Math.min(2, Math.max(0, pod.members.length - 1));
+  return pod.members.filter((member) => friendIds.has(member.userId)).length;
+}
+
+function friendCountLabel(pod: Pod, friends: FriendUser[]) {
+  const count = friendCountForPod(pod, friends);
+  if (count <= 0) return null;
+  return `${count} friend${count === 1 ? '' : 's'} joined`;
 }
 
 function podDescriptors(pod: Pod) {
   const title = (pod.activity?.title ?? '').toLowerCase();
-  if (title.includes('jog') || title.includes('walk')) return ['Easy pace', 'All levels welcome', 'Nice weather'];
-  if (title.includes('study') || title.includes('exam') || title.includes('homework')) return ['Focus time', 'Quiet pod', 'Bring your own work'];
-  if (title.includes('basketball') || title.includes('soccer') || title.includes('frisbee')) return ['Drop in', 'Good energy', 'Spots open'];
-  if (title.includes('coffee') || title.includes('lunch') || title.includes('boba')) return ['Low pressure', 'Conversation-first', 'Quick meetup'];
-  return ['Open invite', 'Easy to join', 'Campus meetup'];
+  if (title.includes('jog') || title.includes('walk')) return ['Walk/run', 'Campus meetup', 'Open spots'];
+  if (title.includes('study') || title.includes('exam') || title.includes('homework')) return ['Study', 'Bring your work', 'Open spots'];
+  if (title.includes('basketball') || title.includes('soccer') || title.includes('frisbee')) return ['Sport', 'Drop in', 'Open spots'];
+  if (title.includes('coffee') || title.includes('lunch') || title.includes('boba')) return ['Food or coffee', 'Conversation', 'Open spots'];
+  return ['Open invite', 'Campus meetup', 'Open spots'];
 }
 
 function minutesUntil(iso: string) {
@@ -97,14 +88,15 @@ function minutesUntil(iso: string) {
 }
 
 function activityFeedForFriends(friends: FriendUser[], pods: Pod[]) {
-  return friends.slice(0, 4).map((friend, index) => {
-    const pod = pods[index % Math.max(1, pods.length)];
-    return {
-      friend,
-      pod,
-      timeAgo: `${2 + index * 3}m`,
-    };
-  }).filter((item) => item.pod);
+  const friendById = new Map(friends.map((friend) => [friend.id, friend]));
+  return pods.flatMap((pod) => (
+    pod.members
+      .map((member) => {
+        const friend = friendById.get(member.userId);
+        return friend ? { friend, pod } : null;
+      })
+      .filter((item): item is { friend: FriendUser; pod: Pod } => item != null)
+  )).slice(0, 8);
 }
 
 function Avatar({ member, size = 32 }: { member: PodMember; size?: number }) {
@@ -154,8 +146,8 @@ export default function PodsScreen() {
       setHistoryPods(history);
       setFeedPods(feed);
       setFriends(friendRows);
-    } catch {
-      Alert.alert('Could not load your pods', API_USER_MESSAGE);
+    } catch (error) {
+      Alert.alert('Could not load your pods', getApiErrorMessage(error));
     } finally {
       setLoaded(true);
     }
@@ -180,9 +172,12 @@ export default function PodsScreen() {
   }, [currentPods, feedPods]);
 
   const startingSoonPods = suggestedPods.slice(0, 4);
-  const recommendedPods = suggestedPods.slice(4, 9).length ? suggestedPods.slice(4, 9) : suggestedPods.slice(0, 5);
+  const moreOpenPods = suggestedPods.slice(4, 9).length ? suggestedPods.slice(4, 9) : suggestedPods.slice(0, 5);
   const friendActivity = useMemo(() => activityFeedForFriends(friends, suggestedPods.length ? suggestedPods : currentPods), [friends, currentPods, suggestedPods]);
   const pastItems = mode === 'past' ? pastPods : [];
+  const quickStartActivity = suggestedPods.find((pod) => pod.activity)?.activity
+    ?? currentPods.find((pod) => pod.activity)?.activity
+    ?? null;
 
   return (
     <Screen>
@@ -191,13 +186,15 @@ export default function PodsScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Pods</Text>
-          <IconButton
-            icon="add"
-            tooltip="Find or start a pod"
-            size={46}
-            iconSize={24}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-          />
+	          <IconButton
+	            icon="add"
+	            tooltip="Start a pod"
+	            size={46}
+	            iconSize={24}
+	            onPress={() => quickStartActivity
+	              ? navigation.navigate('ActivityPods', { activity: quickStartActivity, startCreate: true })
+	              : navigation.navigate('MainTabs', { screen: 'Explore' })}
+	          />
         </View>
 
         <View style={styles.modeTabs}>
@@ -225,12 +222,14 @@ export default function PodsScreen() {
             <View style={styles.section}>
               <SectionHeader
                 title="Your active pods"
-                actionLabel={currentPods.length > 1 ? `See all (${currentPods.length})` : undefined}
               />
 
               {!loaded ? (
                 <SkeletonCard />
               ) : primaryPod ? (
+                (() => {
+                  const primaryFriendLabel = friendCountLabel(primaryPod, friends);
+                  return (
                 <TouchableOpacity
                   activeOpacity={0.93}
                   onPress={() => navigation.navigate('PodDetail', { podId: primaryPod.id })}
@@ -284,9 +283,7 @@ export default function PodsScreen() {
 
                       <View style={styles.peopleTextBlock}>
                         <Text style={styles.peopleLine}>{spotsFilledLabel(primaryPod)}</Text>
-                        <Text style={styles.peopleSubline}>
-                          +{friendCountForPod(primaryPod, friends)} friend{friendCountForPod(primaryPod, friends) === 1 ? '' : 's'} joined
-                        </Text>
+                        {primaryFriendLabel ? <Text style={styles.peopleSubline}>{primaryFriendLabel}</Text> : null}
                       </View>
                     </View>
 
@@ -308,11 +305,13 @@ export default function PodsScreen() {
                     ))}
                   </View>
                 </TouchableOpacity>
+                  );
+                })()
               ) : (
                 <View style={styles.emptyMomentumCard}>
                   <Text style={styles.emptyMomentumTitle}>Nothing planned yet tonight.</Text>
                   <Text style={styles.emptyMomentumBody}>
-                    Find something happening now and this screen will start feeling alive fast.
+                    Explore shows open pods pulled from the current feed.
                   </Text>
                   <TouchableOpacity
                     style={styles.findButton}
@@ -325,6 +324,9 @@ export default function PodsScreen() {
               )}
 
               {extraActivePods.length ? extraActivePods.map((pod) => (
+                (() => {
+                  const podFriendLabel = friendCountLabel(pod, friends);
+                  return (
                 <TouchableOpacity
                   key={pod.id}
                   style={styles.secondaryActiveCard}
@@ -337,9 +339,11 @@ export default function PodsScreen() {
                   </View>
                   <Text style={styles.secondaryActiveLocation}>{pod.location}</Text>
                   <Text style={styles.secondaryActiveSubline}>
-                    {pod.members.length} going • +{friendCountForPod(pod, friends)} friends joined
+                    {[`${pod.members.length} going`, podFriendLabel].filter(Boolean).join(' • ')}
                   </Text>
                 </TouchableOpacity>
+                  );
+                })()
               )) : null}
             </View>
 
@@ -362,13 +366,14 @@ export default function PodsScreen() {
                       activeOpacity={0.92}
                       onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
                     >
-                      <ImageBackground source={{ uri: podImage(pod) }} imageStyle={styles.miniCardImage} style={styles.miniCardMedia}>
-                        <LinearGradient colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.58)']} style={styles.miniOverlay}>
+                      <LinearGradient colors={['#F7F4EE', '#E9EEF6']} style={styles.miniCardMedia}>
+                        <Ionicons name={podIcon(pod)} size={30} color={palette.scarlet} />
+                        <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(16,33,43,0.12)']} style={styles.miniOverlay}>
                           <View style={styles.miniBadge}>
                             <Text style={styles.miniBadgeText}>Starts in {minutesUntil(pod.meetupTime)}</Text>
                           </View>
                         </LinearGradient>
-                      </ImageBackground>
+                      </LinearGradient>
 
                       <View style={styles.miniCardBody}>
                         <Text style={styles.miniCardTitle} numberOfLines={1}>{displayPodTitle(pod)}</Text>
@@ -396,7 +401,7 @@ export default function PodsScreen() {
             </View>
 
             <View style={styles.section}>
-              <SectionHeader title="Friends active now" actionLabel={friendActivity.length ? 'See all' : undefined} />
+              <SectionHeader title="Friends in pods" />
               {!loaded ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendActivityRow}>
                   {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
@@ -409,46 +414,45 @@ export default function PodsScreen() {
                       <View style={styles.friendActivityCopy}>
                         <View style={styles.friendActivityTop}>
                           <Text style={styles.friendName}>{item.friend.firstName ?? item.friend.name}</Text>
-                          <Text style={styles.friendTime}>{item.timeAgo}</Text>
                         </View>
-                        <Text style={styles.friendJoined}>joined</Text>
+                        <Text style={styles.friendJoined}>is in this pod</Text>
                         <Text style={styles.friendPodName} numberOfLines={1}>{displayPodTitle(item.pod)}</Text>
                       </View>
-                      <View style={styles.onlineDot} />
                     </View>
                   ))}
                 </ScrollView>
               ) : (
                 <View style={styles.inlineEmptyState}>
-                  <Text style={styles.inlineEmptyTitle}>No friends are active right now.</Text>
-                  <Text style={styles.inlineEmptyBody}>When friends join pods, their activity will show up here.</Text>
+                  <Text style={styles.inlineEmptyTitle}>No friend activity yet.</Text>
+                  <Text style={styles.inlineEmptyBody}>When friends are members of pods, they will show up here.</Text>
                 </View>
               )}
             </View>
 
             <View style={styles.section}>
-              <SectionHeader title="Recommended for you" actionLabel={recommendedPods.length ? 'Based on your activity' : undefined} />
+              <SectionHeader title="More open pods" />
               {!loaded ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
                   {[0, 1, 2].map((item) => <SkeletonCard key={item} compact />)}
                 </ScrollView>
-              ) : recommendedPods.length ? (
+              ) : moreOpenPods.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
-                  {recommendedPods.map((pod) => (
+                  {moreOpenPods.map((pod) => (
                     <TouchableOpacity
                       key={pod.id}
                       style={styles.recommendedCard}
                       activeOpacity={0.92}
                       onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
                     >
-                      <ImageBackground source={{ uri: podImage(pod) }} imageStyle={styles.recommendedImage} style={styles.recommendedMedia}>
-                        <LinearGradient colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.56)']} style={styles.recommendedOverlay}>
+                      <LinearGradient colors={['#F7F4EE', '#E9EEF6']} style={styles.recommendedMedia}>
+                        <Ionicons name={podIcon(pod)} size={28} color={palette.scarlet} />
+                        <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(16,33,43,0.12)']} style={styles.recommendedOverlay}>
                           <View style={styles.recommendedCountPill}>
                             <Ionicons name="people-outline" size={13} color={palette.white} />
                             <Text style={styles.recommendedCountText}>{pod.members.length}</Text>
                           </View>
                         </LinearGradient>
-                      </ImageBackground>
+                      </LinearGradient>
                       <View style={styles.recommendedBody}>
                         <Text style={styles.recommendedTitle} numberOfLines={1}>{displayPodTitle(pod)}</Text>
                         <Text style={styles.recommendedLocation} numberOfLines={1}>{pod.location}</Text>
@@ -459,8 +463,8 @@ export default function PodsScreen() {
                 </ScrollView>
               ) : (
                 <View style={styles.inlineEmptyState}>
-                  <Text style={styles.inlineEmptyTitle}>No recommendations yet.</Text>
-                  <Text style={styles.inlineEmptyBody}>Join a few more pods and this row will get smarter.</Text>
+                  <Text style={styles.inlineEmptyTitle}>No more open pods right now.</Text>
+                  <Text style={styles.inlineEmptyBody}>Explore will show new pods as they are created.</Text>
                 </View>
               )}
             </View>
@@ -821,10 +825,6 @@ const styles = StyleSheet.create({
     ...typography.bodyStrong,
     color: palette.ink,
   },
-  friendTime: {
-    ...typography.body,
-    fontSize: 13,
-  },
   friendJoined: {
     ...typography.body,
     fontSize: 13,
@@ -832,12 +832,6 @@ const styles = StyleSheet.create({
   friendPodName: {
     ...typography.bodyStrong,
     color: palette.scarlet,
-  },
-  onlineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#36C275',
   },
   inlineEmptyState: {
     backgroundColor: 'rgba(255,255,255,0.9)',

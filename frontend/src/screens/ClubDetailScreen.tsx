@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,9 +12,15 @@ import {
   checkInToClubMeeting,
   closeClubAttendance,
   assignClubRole,
+  createReport,
   createClubRole,
-  deleteClubRole,
+	  deleteClub,
+	  deleteClubRole,
+	  getApiErrorMessage,
+	  getClubShareUrl,
   getClubMeetingAttendance,
+  type ClubOutreachAudience,
+  type ClubOutreachPreview,
   type ClubVisibility,
   createClubAnnouncement,
   createClubMeeting,
@@ -29,10 +36,14 @@ import {
   removeClubRole,
   removeClubMember,
   rsvpClubMeeting,
+  previewClubOutreach,
+  sendClubOutreach,
   sendClubMessage,
   sendClubOfficerMessage,
+  sendClubRsvpReminders,
   sendClubOfficerTyping,
   sendClubTyping,
+  updateOfficerPermissions,
   uploadClubAvatar,
 } from '../api';
 import { RootStackParamList } from '../../App';
@@ -60,8 +71,15 @@ import { formatDateTime, formatShortDate, formatTime } from '../utils/format';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
-type Mode = 'overview' | 'chat' | 'members' | 'events';
+type Mode = 'overview' | 'chat' | 'members' | 'events' | 'analytics';
 type ChatView = 'hub' | 'announcements' | 'general' | 'officers';
+type OutreachAudienceType = 'ALL' | 'NON_RSVP' | 'PRIMARY_ROLE' | 'CUSTOM_ROLE' | 'MANUAL';
+type SectionHeaderRowProps = {
+  title: string;
+} & (
+  | { actionLabel?: undefined; onPress?: undefined }
+  | { actionLabel: string | undefined; onPress: () => void }
+);
 
 const VISIBILITY_OPTIONS: Array<{ value: ClubVisibility; label: string }> = [
   { value: 'PUBLIC', label: 'Public' },
@@ -74,6 +92,48 @@ const RSVP_OPTIONS: Array<{ value: 'GOING' | 'MAYBE' | 'NOT_GOING'; label: strin
   { value: 'MAYBE', label: 'Maybe' },
   { value: 'NOT_GOING', label: "Can't go" },
 ];
+
+const CLUB_PERMISSION_OPTIONS = [
+  {
+    value: 'MANAGE_MEMBERS',
+    title: 'Manage members',
+    body: 'Remove members and manage roster actions.',
+  },
+  {
+    value: 'MANAGE_ROLES',
+    title: 'Manage ping roles',
+    body: 'Create, delete, and assign custom ping roles.',
+  },
+  {
+    value: 'CREATE_MEETINGS',
+    title: 'Create meetings',
+    body: 'Schedule meetings and manage attendance.',
+  },
+  {
+    value: 'POST_ANNOUNCEMENTS',
+    title: 'Post announcements',
+    body: 'Publish official club updates.',
+  },
+  {
+    value: 'DELETE_MESSAGES',
+    title: 'Moderate messages',
+    body: 'Delete member and officer chat messages.',
+  },
+  {
+    value: 'MANAGE_CLUB',
+    title: 'Manage club settings',
+    body: 'Update club assets and delete the club.',
+  },
+] as const;
+
+const DEFAULT_OFFICER_PERMISSIONS = ['POST_ANNOUNCEMENTS', 'DELETE_MESSAGES'];
+const MEETING_HORIZON_MONTHS = 12;
+
+function latestAllowedMeetingTime() {
+  const max = new Date();
+  max.setMonth(max.getMonth() + MEETING_HORIZON_MONTHS);
+  return max;
+}
 
 function sortMeetings(items: ClubMeetingWithMeta[]) {
   return [...items].sort(
@@ -147,14 +207,40 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [attendanceBusyId, setAttendanceBusyId] = useState<string | null>(null);
   const [attendancePanels, setAttendancePanels] = useState<Record<string, ClubMeetingAttendanceResponse | null>>({});
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outreachAudienceType, setOutreachAudienceType] = useState<OutreachAudienceType>('ALL');
+  const [outreachPrimaryRole, setOutreachPrimaryRole] = useState<'OWNER' | 'ADMIN' | 'OFFICER' | 'MEMBER'>('MEMBER');
+  const [outreachRoleId, setOutreachRoleId] = useState<string | null>(null);
+  const [outreachManualIds, setOutreachManualIds] = useState<string[]>([]);
+  const [outreachText, setOutreachText] = useState('');
+  const [outreachPreview, setOutreachPreview] = useState<ClubOutreachPreview | null>(null);
+  const [outreachBusy, setOutreachBusy] = useState(false);
+  const [outreachResult, setOutreachResult] = useState<string | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const officerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const canManageMeetings = useMemo(
-    () => club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER',
-    [club?.myRole]
+  const effectivePermissions = useMemo(() => {
+    if (club?.myRole === 'OWNER' || club?.myRole === 'ADMIN') {
+      return new Set(CLUB_PERMISSION_OPTIONS.map((permission) => permission.value));
+    }
+    if (club?.myRole === 'OFFICER') {
+      return new Set([...DEFAULT_OFFICER_PERMISSIONS, ...(club.officerPermissions ?? [])]);
+    }
+    return new Set<string>();
+  }, [club?.myRole, club?.officerPermissions]);
+  const hasPermission = useCallback(
+    (permission: string) => effectivePermissions.has(permission),
+    [effectivePermissions]
   );
-  const canManageMembers = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
+  const canCreateMeetings = hasPermission('CREATE_MEETINGS');
+  const canPostAnnouncements = hasPermission('POST_ANNOUNCEMENTS');
+  const canManageMembers = hasPermission('MANAGE_MEMBERS');
+  const canManageRoles = hasPermission('MANAGE_ROLES');
+  const canManageClub = hasPermission('MANAGE_CLUB');
+  const canViewOfficerChat = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER';
+  const canConfigureOfficerPermissions = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
+  const canChangePrimaryRoles = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const isMember = !!club?.isMember;
   const clubRoles = club?.roles ?? [];
 
@@ -168,6 +254,16 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       return names.length ? names.join(', ') : `${ids.length} selected`;
     },
     [clubRoles]
+  );
+
+  const nonRsvpCountForMeeting = useCallback(
+    (meeting: ClubMeetingWithMeta) => {
+      const responded =
+        meeting.rsvpCounts.going + meeting.rsvpCounts.maybe + meeting.rsvpCounts.notGoing;
+      const memberCount = (club?.members ?? []).filter((member) => member.userId !== user?.id).length;
+      return Math.max(0, memberCount - responded);
+    },
+    [club?.members, user?.id]
   );
 
   const canManageThisMember = useCallback(
@@ -229,11 +325,11 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           setChatView('hub');
         }
         setLoadError(null);
-      } catch {
-        setLoadError(API_USER_MESSAGE);
-        if (showAlert) {
-          Alert.alert('Could not load club', API_USER_MESSAGE);
-        }
+	      } catch (error) {
+	        setLoadError(getApiErrorMessage(error));
+	        if (showAlert) {
+	          Alert.alert('Could not load club', getApiErrorMessage(error));
+	        }
       }
     },
     [chatView, clubId, mode]
@@ -254,33 +350,90 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }, [load])
   );
 
-  const pingTyping = useCallback(() => {
-    if (!isMember || !messageText.trim()) return;
+  const pingTyping = useCallback((draft: string) => {
+    if (!isMember || !draft.trim()) return;
     if (typingTimerRef.current) return;
     typingTimerRef.current = setTimeout(() => {
       typingTimerRef.current = null;
     }, 2500);
     void sendClubTyping(clubId).catch(() => {});
-  }, [clubId, isMember, messageText]);
+  }, [clubId, isMember]);
 
-  const pingOfficerTyping = useCallback(() => {
-    if (!canManageMeetings || !officerMessageText.trim()) return;
+  const pingOfficerTyping = useCallback((draft: string) => {
+    if (!canViewOfficerChat || !draft.trim()) return;
     if (officerTypingTimerRef.current) return;
     officerTypingTimerRef.current = setTimeout(() => {
       officerTypingTimerRef.current = null;
     }, 2500);
     void sendClubOfficerTyping(clubId).catch(() => {});
-  }, [canManageMeetings, clubId, officerMessageText]);
+  }, [canViewOfficerChat, clubId]);
+
+  const confirmDestructive = useCallback(
+    (title: string, message: string, confirmLabel: string, onConfirm: () => void) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+      ]);
+    },
+    []
+  );
+
+  const handleShareClub = useCallback(async () => {
+    if (!club) return;
+    try {
+      await Share.share({
+        title: club.name,
+        message: `${club.name}\n${getClubShareUrl(club.id)}`,
+      });
+    } catch {
+      Alert.alert('Could not share club', API_USER_MESSAGE);
+    }
+  }, [club]);
+
+  const handleDeleteClub = useCallback(() => {
+    if (!club) return;
+    confirmDestructive(
+      'Delete club?',
+      `This permanently deletes ${club.name}, including its members, meetings, announcements, and chats.`,
+      'Delete club',
+      async () => {
+        setMembershipBusy(true);
+        try {
+          await deleteClub(club.id);
+          navigation.goBack();
+        } catch {
+          Alert.alert('Could not delete club', API_USER_MESSAGE);
+        } finally {
+          setMembershipBusy(false);
+        }
+      }
+    );
+  }, [club, confirmDestructive, navigation]);
 
   const handleMembership = async () => {
     if (!club) return;
+    if (club.isMember) {
+      confirmDestructive(
+        'Leave club?',
+        `You will lose member access to ${club.name}'s private chats, meetings, and announcements.`,
+        'Leave club',
+        async () => {
+          setMembershipBusy(true);
+          try {
+            await leaveClub(club.id);
+            await load(false);
+          } catch {
+            Alert.alert('Could not update membership', API_USER_MESSAGE);
+          } finally {
+            setMembershipBusy(false);
+          }
+        }
+      );
+      return;
+    }
     setMembershipBusy(true);
     try {
-      if (club.isMember) {
-        await leaveClub(club.id);
-      } else {
-        await joinClub(club.id);
-      }
+      await joinClub(club.id);
       await load(false);
     } catch {
       Alert.alert('Could not update membership', API_USER_MESSAGE);
@@ -317,6 +470,93 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const reportClub = useCallback(async () => {
+    if (!club) return;
+    try {
+      await createReport({
+        clubId: club.id,
+        reason: 'OTHER',
+        details: `Club profile: ${club.name}`,
+      });
+      Alert.alert('Report sent', 'Thanks. We logged this club for review.');
+    } catch (error) {
+      Alert.alert('Could not send report', getApiErrorMessage(error));
+    }
+  }, [club]);
+
+  const reportClubMessage = async (message: ClubMessage | ClubOfficerMessage, officer = false) => {
+    try {
+      await createReport({
+        clubId,
+        targetUserId: message.userId,
+        [officer ? 'clubOfficerMessageId' : 'clubMessageId']: message.id,
+        reason: 'HARASSMENT',
+      });
+      Alert.alert('Report sent', 'Thanks. We logged this message for review.');
+    } catch (error) {
+      Alert.alert('Could not send report', getApiErrorMessage(error));
+    }
+  };
+
+  const reportAnnouncement = async (announcement: ClubAnnouncementRow) => {
+    try {
+      await createReport({
+        clubId,
+        targetUserId: announcement.user.id,
+        clubAnnouncementId: announcement.id,
+        reason: 'OTHER',
+      });
+      Alert.alert('Report sent', 'Thanks. We logged this announcement for review.');
+    } catch (error) {
+      Alert.alert('Could not send report', getApiErrorMessage(error));
+    }
+  };
+
+  const handleClubActions = useCallback(() => {
+    if (!club) return;
+    const buttons: Array<{
+      text: string;
+      style?: 'default' | 'cancel' | 'destructive';
+      onPress?: () => void;
+    }> = [];
+
+    if (canManageClub) {
+      buttons.push({
+        text: avatarBusy ? 'Updating photo...' : 'Update club photo',
+        onPress: () => void handleUploadClubAvatar(),
+      });
+    }
+    if (canConfigureOfficerPermissions) {
+      buttons.push({
+        text: 'Officer permissions',
+        onPress: () => {
+          setMode('members');
+          setRolePanelOpen(true);
+        },
+      });
+    }
+    buttons.push({ text: 'Share club', onPress: () => void handleShareClub() });
+    buttons.push({ text: 'Report club', onPress: () => void reportClub() });
+    if (club.isMember) {
+      buttons.push({ text: 'Leave club', style: 'destructive', onPress: () => void handleMembership() });
+    }
+    if (canManageClub) {
+      buttons.push({ text: 'Delete club', style: 'destructive', onPress: handleDeleteClub });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert('Club actions', undefined, buttons);
+  }, [
+    avatarBusy,
+    canConfigureOfficerPermissions,
+    canManageClub,
+    club,
+    handleDeleteClub,
+    handleShareClub,
+    handleMembership,
+    reportClub,
+  ]);
+
   const handleRsvp = async (
     meetingId: string,
     status: 'GOING' | 'MAYBE' | 'NOT_GOING'
@@ -341,8 +581,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const sent = await sendClubMessage(clubId, messageText.trim());
       setMessageText('');
       setMessages((current) => [...current, sent]);
-    } catch {
-      Alert.alert('Could not send message', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send message', getApiErrorMessage(error));
     } finally {
       setSendBusy(false);
     }
@@ -355,8 +595,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const sent = await sendClubOfficerMessage(clubId, officerMessageText.trim());
       setOfficerMessageText('');
       setOfficerMessages((current) => [...current, sent]);
-    } catch {
-      Alert.alert('Could not send officer message', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send officer message', getApiErrorMessage(error));
     } finally {
       setOfficerSendBusy(false);
     }
@@ -390,9 +630,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       Alert.alert('Missing meeting info', 'Add a title and location before creating the meeting.');
       return;
     }
-    const latestAllowed = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const latestAllowed = latestAllowedMeetingTime().getTime();
     if (meetingTime.getTime() > latestAllowed || meetingTime.getTime() < Date.now()) {
-      Alert.alert('Choose a valid time', 'Meetings need to be scheduled within the next 7 days.');
+      Alert.alert('Choose a valid time', 'Meetings need to be scheduled between now and the next 12 months.');
       return;
     }
     setMeetingBusy(true);
@@ -413,14 +653,31 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       setMeetings((current) => sortMeetings([newMeeting, ...current]));
       setMeetingComposerOpen(false);
       setMode('events');
-    } catch {
-      Alert.alert('Could not create meeting', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not create meeting', getApiErrorMessage(error));
     } finally {
       setMeetingBusy(false);
     }
   };
 
   const handleOpenAttendance = async (meetingId: string) => {
+    if (!club) return;
+    const meeting = meetings.find((item) => item.id === meetingId);
+    if (meeting?.attendanceCode) {
+      confirmDestructive(
+        'Regenerate attendance code?',
+        'The current attendance code will stop working and a new code will be shown.',
+        'Regenerate code',
+        () => {
+          void handleOpenAttendanceNow(meetingId);
+        }
+      );
+      return;
+    }
+    await handleOpenAttendanceNow(meetingId);
+  };
+
+  const handleOpenAttendanceNow = async (meetingId: string) => {
     if (!club) return;
     setAttendanceBusyId(`open-${meetingId}`);
     try {
@@ -439,19 +696,26 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   const handleCloseAttendance = async (meetingId: string) => {
     if (!club) return;
-    setAttendanceBusyId(`close-${meetingId}`);
-    try {
-      await closeClubAttendance(club.id, meetingId);
-      setMeetings((current) =>
-        current.map((meeting) => (
-          meeting.id === meetingId ? { ...meeting, attendanceCode: null } : meeting
-        ))
-      );
-    } catch {
-      Alert.alert('Could not close attendance', API_USER_MESSAGE);
-    } finally {
-      setAttendanceBusyId(null);
-    }
+    confirmDestructive(
+      'Close attendance?',
+      'Members will no longer be able to check in with the current attendance code.',
+      'Close attendance',
+      async () => {
+        setAttendanceBusyId(`close-${meetingId}`);
+        try {
+          await closeClubAttendance(club.id, meetingId);
+          setMeetings((current) =>
+            current.map((meeting) => (
+              meeting.id === meetingId ? { ...meeting, attendanceCode: null } : meeting
+            ))
+          );
+        } catch {
+          Alert.alert('Could not close attendance', API_USER_MESSAGE);
+        } finally {
+          setAttendanceBusyId(null);
+        }
+      }
+    );
   };
 
   const handleCheckIn = async (meetingId: string) => {
@@ -491,7 +755,140 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleCopyAttendanceCode = async (code: string) => {
+    try {
+      await Clipboard.setStringAsync(code);
+      Alert.alert('Code copied', 'Attendance code copied to clipboard.');
+    } catch {
+      Alert.alert('Could not copy code', API_USER_MESSAGE);
+    }
+  };
+
+  const handleShareAttendanceCode = async (meeting: ClubMeetingWithMeta) => {
+    if (!meeting.attendanceCode) return;
+    try {
+      await Share.share({
+        title: meeting.title,
+        message: `${meeting.title} attendance code: ${meeting.attendanceCode}`,
+      });
+    } catch {
+      Alert.alert('Could not share code', API_USER_MESSAGE);
+    }
+  };
+
+  const handleSendRsvpReminder = (meeting: ClubMeetingWithMeta) => {
+    if (!club) return;
+    Alert.alert(
+      'Send RSVP reminder?',
+      `This will notify members who have not RSVP’d for ${meeting.title}. You’ll see the exact count after the backend checks the audience.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send reminder',
+          onPress: async () => {
+            setAttendanceBusyId(`rsvp-${meeting.id}`);
+            try {
+              const result = await sendClubRsvpReminders(club.id, meeting.id);
+              setMeetings((current) =>
+                current.map((item) =>
+                  item.id === meeting.id
+                    ? {
+                        ...item,
+                        rsvpReminderSentAt: result.lastSentAt,
+                        rsvpReminderStatus: result.status,
+                        rsvpReminderCount: result.count,
+                        rsvpReminderError: null,
+                      }
+                    : item
+                )
+              );
+              Alert.alert(
+                'Reminder sent',
+                `${result.count} member${result.count === 1 ? '' : 's'} matched. ${result.sent} push notification${result.sent === 1 ? '' : 's'} queued.`
+              );
+            } catch {
+              Alert.alert('Could not send reminder', API_USER_MESSAGE);
+            } finally {
+              setAttendanceBusyId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePreviewOutreach = async () => {
+    if (!club) return;
+    const audience = buildOutreachAudience();
+    if (!audience) {
+      Alert.alert('Choose an audience', 'Select a meeting or role before previewing outreach.');
+      return;
+    }
+    setOutreachBusy(true);
+    try {
+      const preview = await previewClubOutreach(club.id, audience);
+      setOutreachPreview(preview);
+      setOutreachResult(null);
+	    } catch (error) {
+	      Alert.alert('Could not preview audience', getApiErrorMessage(error));
+    } finally {
+      setOutreachBusy(false);
+    }
+  };
+
+  const handleSendOutreach = async () => {
+    if (!club) return;
+    const audience = buildOutreachAudience();
+    if (!audience) {
+      Alert.alert('Choose an audience', 'Select a meeting or role before sending outreach.');
+      return;
+    }
+    if (!outreachText.trim()) {
+      Alert.alert('Write a message', 'Compose the outreach message before sending.');
+      return;
+    }
+    const count = outreachPreview?.count ?? 0;
+    Alert.alert(
+      'Send outreach?',
+      `This will notify ${count} member${count === 1 ? '' : 's'}. Review the recipient list before sending.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setOutreachBusy(true);
+            try {
+              const sent = await sendClubOutreach(club.id, audience, outreachText.trim());
+              setOutreachPreview(sent);
+              setOutreachResult(
+                `Sent ${sent.sent} push notification${sent.sent === 1 ? '' : 's'} to ${sent.count} matching member${sent.count === 1 ? '' : 's'}.`
+              );
+              setOutreachText('');
+            } catch {
+              Alert.alert('Could not send outreach', API_USER_MESSAGE);
+            } finally {
+              setOutreachBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleRoleChange = async (memberUserId: string, role: 'ADMIN' | 'OFFICER' | 'MEMBER') => {
+    const member = club?.members.find((item) => item.userId === memberUserId);
+    const verb = roleRank(role) > roleRank(member?.role) ? 'Promote' : 'Demote';
+    confirmDestructive(
+      `${verb} member?`,
+      `${member?.user.name ?? 'This member'} will become ${role.toLowerCase()}. This changes their club access immediately.`,
+      verb,
+      async () => {
+        await handleRoleChangeNow(memberUserId, role);
+      }
+    );
+  };
+
+  const handleRoleChangeNow = async (memberUserId: string, role: 'ADMIN' | 'OFFICER' | 'MEMBER') => {
     setMemberActionUserId(memberUserId);
     try {
       const updated = await patchClubMemberRole(clubId, memberUserId, { role });
@@ -532,6 +929,19 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   };
 
   const handleDeleteRole = async (roleId: string) => {
+    if (!club) return;
+    const role = club.roles?.find((item) => item.id === roleId);
+    confirmDestructive(
+      'Delete ping role?',
+      `${role?.name ?? 'This role'} will be removed from the club and all assigned members.`,
+      'Delete role',
+      async () => {
+        await handleDeleteRoleNow(roleId);
+      }
+    );
+  };
+
+  const handleDeleteRoleNow = async (roleId: string) => {
     if (!club) return;
     setRoleBusyId(`delete:${roleId}`);
     try {
@@ -599,6 +1009,18 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   };
 
   const handleRemoveMember = async (memberUserId: string) => {
+    const member = club?.members.find((item) => item.userId === memberUserId);
+    confirmDestructive(
+      'Remove member?',
+      `${member?.user.name ?? 'This member'} will lose access to member-only club spaces.`,
+      'Remove',
+      async () => {
+        await handleRemoveMemberNow(memberUserId);
+      }
+    );
+  };
+
+  const handleRemoveMemberNow = async (memberUserId: string) => {
     setMemberActionUserId(memberUserId);
     try {
       await removeClubMember(clubId, memberUserId);
@@ -617,15 +1039,71 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleToggleOfficerPermission = async (permission: string) => {
+    if (!club) return;
+    const currentPermissions = club.officerPermissions ?? [];
+    const nextPermissions = currentPermissions.includes(permission)
+      ? currentPermissions.filter((item) => item !== permission)
+      : [...currentPermissions, permission];
+    setPermissionBusy(true);
+    try {
+      const updated = await updateOfficerPermissions(club.id, nextPermissions);
+      setClub((current) =>
+        current ? { ...current, officerPermissions: updated.officerPermissions } : current
+      );
+    } catch {
+      Alert.alert('Could not update permissions', API_USER_MESSAGE);
+    } finally {
+      setPermissionBusy(false);
+    }
+  };
+
   const modeOptions = useMemo(() => {
     const options: Array<{ value: Mode; label: string }> = [{ value: 'overview', label: 'Overview' }];
     if (isMember) options.push({ value: 'chat', label: 'Chats' });
     options.push({ value: 'members', label: 'Members' });
     options.push({ value: 'events', label: 'Events' });
+    if (canPostAnnouncements || canCreateMeetings || canManageMembers) {
+      options.push({ value: 'analytics', label: 'Health' });
+    }
     return options;
-  }, [isMember]);
+  }, [canCreateMeetings, canManageMembers, canPostAnnouncements, isMember]);
 
   const nextMeeting = useMemo(() => meetings[0] ?? null, [meetings]);
+  const buildOutreachAudience = useCallback((): ClubOutreachAudience | null => {
+    if (outreachAudienceType === 'ALL') return { type: 'ALL' };
+    if (outreachAudienceType === 'NON_RSVP') {
+      return nextMeeting ? { type: 'NON_RSVP', meetingId: nextMeeting.id } : null;
+    }
+    if (outreachAudienceType === 'PRIMARY_ROLE') {
+      return { type: 'PRIMARY_ROLE', role: outreachPrimaryRole };
+    }
+    if (outreachAudienceType === 'CUSTOM_ROLE') {
+      return outreachRoleId ? { type: 'CUSTOM_ROLE', roleId: outreachRoleId } : null;
+    }
+    return { type: 'MANUAL', userIds: outreachManualIds };
+  }, [nextMeeting, outreachAudienceType, outreachManualIds, outreachPrimaryRole, outreachRoleId]);
+  const analytics = useMemo(() => {
+    const memberCount = club?.members.length ?? 0;
+    const upcomingCount = meetings.length;
+    const rsvpGoing = meetings.reduce((sum, meeting) => sum + meeting.rsvpCounts.going, 0);
+    const rsvpMaybe = meetings.reduce((sum, meeting) => sum + meeting.rsvpCounts.maybe, 0);
+    const rsvpNotGoing = meetings.reduce((sum, meeting) => sum + meeting.rsvpCounts.notGoing, 0);
+    const checkedIn = meetings.reduce((sum, meeting) => sum + meeting.attendeeCount, 0);
+    return {
+      memberCount,
+      upcomingCount,
+      rsvpGoing,
+      rsvpMaybe,
+      rsvpNotGoing,
+      checkedIn,
+      announcements: announcements.length,
+      responseRate:
+        memberCount && upcomingCount
+          ? Math.round(((rsvpGoing + rsvpMaybe + rsvpNotGoing) / (memberCount * upcomingCount)) * 100)
+          : null,
+    };
+  }, [announcements.length, club?.members.length, meetings]);
   const recentMembers = useMemo(() => club?.members.slice(0, 5) ?? [], [club?.members]);
   const chatCards = useMemo(() => {
     const cards: Array<{
@@ -653,7 +1131,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         icon: 'chatbubble-ellipses-outline',
       },
     ];
-    if (canManageMeetings) {
+    if (canViewOfficerChat) {
       cards.push({
         key: 'officers',
         audience: 'OFFICERS',
@@ -664,7 +1142,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       });
     }
     return cards;
-  }, [announcements.length, canManageMeetings, messages.length, officerMessages.length]);
+  }, [announcements.length, canViewOfficerChat, messages.length, officerMessages.length]);
 
   if (!club && loadError) {
     return (
@@ -694,7 +1172,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     <Ionicons name="chevron-back" size={20} color={palette.ink} />
                   </TouchableOpacity>
                   <View style={styles.coverActions}>
-                    {canManageMembers ? (
+                    {canManageClub ? (
                       <TouchableOpacity
                         onPress={() => void handleUploadClubAvatar()}
                         style={styles.heroCircleButton}
@@ -703,7 +1181,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         <Ionicons name="camera-outline" size={18} color={palette.ink} />
                       </TouchableOpacity>
                     ) : null}
-                    <TouchableOpacity style={styles.heroCircleButton}>
+                    <TouchableOpacity style={styles.heroCircleButton} onPress={handleClubActions}>
                       <Ionicons name="ellipsis-horizontal" size={18} color={palette.ink} />
                     </TouchableOpacity>
                   </View>
@@ -841,27 +1319,31 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     />
                   )}
 
-                  {canManageMeetings ? (
+                  {canPostAnnouncements || canCreateMeetings ? (
                     <View style={styles.quickActionRow}>
-                      <QuickActionCard
-                        icon="megaphone-outline"
-                        title="Create announcement"
-                        body="Share an update with the club."
-                        onPress={() => {
-                          setMode('chat');
-                          setChatView('announcements');
-                          setAnnouncementComposerOpen(true);
-                        }}
-                      />
-                      <QuickActionCard
-                        icon="calendar-outline"
-                        title="Schedule meeting"
-                        body="Plan an event for your club."
-                        onPress={() => {
-                          setMode('events');
-                          setMeetingComposerOpen(true);
-                        }}
-                      />
+                      {canPostAnnouncements ? (
+                        <QuickActionCard
+                          icon="megaphone-outline"
+                          title="Create announcement"
+                          body="Share an update with the club."
+                          onPress={() => {
+                            setMode('chat');
+                            setChatView('announcements');
+                            setAnnouncementComposerOpen(true);
+                          }}
+                        />
+                      ) : null}
+                      {canCreateMeetings ? (
+                        <QuickActionCard
+                          icon="calendar-outline"
+                          title="Schedule meeting"
+                          body="Plan an event for your club."
+                          onPress={() => {
+                            setMode('events');
+                            setMeetingComposerOpen(true);
+                          }}
+                        />
+                      ) : null}
                     </View>
                   ) : null}
 
@@ -894,6 +1376,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           </TouchableOpacity>
                         </View>
                         <Text style={styles.cardBody}>{announcement.content}</Text>
+                        {announcement.user.id !== user?.id ? (
+                          <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
+                            <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                            <Text style={styles.reportInlineText}>Report</Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     ))
                   ) : (
@@ -915,7 +1403,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           <Text style={styles.screenSectionTitle}>Chats</Text>
                           <Text style={styles.screenSectionBody}>All conversations in one place.</Text>
                         </View>
-                        {canManageMeetings ? (
+                        {canPostAnnouncements ? (
                           <TouchableOpacity
                             style={styles.newChatButton}
                             activeOpacity={0.88}
@@ -925,7 +1413,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                             }}
                           >
                             <Ionicons name="add" size={16} color={palette.white} />
-                            <Text style={styles.newChatButtonText}>New chat</Text>
+                            <Text style={styles.newChatButtonText}>New announcement</Text>
                           </TouchableOpacity>
                         ) : null}
                       </View>
@@ -978,7 +1466,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
                       {chatView === 'announcements' ? (
                         <>
-                          {canManageMeetings ? (
+                          {canPostAnnouncements ? (
                             <View style={styles.composerCard}>
                               <TouchableOpacity
                                 activeOpacity={0.86}
@@ -1030,20 +1518,34 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                             </View>
                           ) : null}
 
-                          {announcements.length ? announcements.map((announcement, index) => (
-                            <MessageBubble
-                              key={announcement.id}
-                              align={index % 3 === 1 ? 'right' : 'left'}
-                              name={announcement.user.name}
-                              avatarUrl={announcement.user.avatarUrl}
-                              content={announcement.content}
-                              time={formatTime(announcement.createdAt)}
-                              audience={
-                                announcement.targetRoleIds?.length
-                                  ? roleAudienceLabel(announcement.targetRoleIds)
-                                  : visibilityLabel(announcement.visibility)
-                              }
-                            />
+                          {announcements.length ? announcements.map((announcement) => (
+                            <View key={announcement.id} style={styles.announcementCard}>
+                              <View style={styles.announcementHead}>
+                                <View style={styles.announcementAuthor}>
+                                  <UserAvatar name={announcement.user.name} avatarUrl={announcement.user.avatarUrl} size={34} />
+                                  <View style={styles.announcementCopy}>
+                                    <Text style={styles.cardTitle}>{announcement.user.name}</Text>
+                                    <Text style={styles.cardMeta}>
+                                      {formatDateTime(announcement.createdAt)}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.audiencePill}>
+                                  <Text style={styles.audiencePillText}>
+                                    {announcement.targetRoleIds?.length
+                                      ? roleAudienceLabel(announcement.targetRoleIds)
+                                      : visibilityLabel(announcement.visibility)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={styles.cardBody}>{announcement.content}</Text>
+                              {announcement.user.id !== user?.id ? (
+                                <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
+                                  <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                                  <Text style={styles.reportInlineText}>Report</Text>
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
                           )) : (
                             <EmptyState
                               icon="megaphone-outline"
@@ -1059,11 +1561,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           {messages.length ? messages.map((message, index) => (
                             <MessageBubble
                               key={message.id}
-                              align={message.userId === user?.id || index % 4 === 2 ? 'right' : 'left'}
+                              align={message.userId === user?.id ? 'right' : 'left'}
                               name={message.user.name}
                               avatarUrl={message.user.avatarUrl}
                               content={message.content}
                               time={formatTime(message.createdAt)}
+                              onReport={message.userId !== user?.id ? () => void reportClubMessage(message) : undefined}
                             />
                           )) : (
                             <EmptyState
@@ -1076,10 +1579,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           <View style={styles.chatComposerDock}>
                             <TextInput
                               value={messageText}
-                              onChangeText={(value) => {
-                                setMessageText(value);
-                                if (value.trim()) pingTyping();
-                              }}
+	                              onChangeText={(value) => {
+	                                setMessageText(value);
+	                                pingTyping(value);
+	                              }}
                               placeholder="Message members..."
                               placeholderTextColor={palette.slate}
                               style={styles.chatComposerInput}
@@ -1096,11 +1599,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           {officerMessages.length ? officerMessages.map((message, index) => (
                             <MessageBubble
                               key={message.id}
-                              align={message.userId === user?.id || index % 4 === 2 ? 'right' : 'left'}
+                              align={message.userId === user?.id ? 'right' : 'left'}
                               name={message.user.name}
                               avatarUrl={message.user.avatarUrl}
                               content={message.content}
                               time={formatTime(message.createdAt)}
+                              onReport={message.userId !== user?.id ? () => void reportClubMessage(message, true) : undefined}
                             />
                           )) : (
                             <EmptyState
@@ -1113,10 +1617,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           <View style={styles.chatComposerDock}>
                             <TextInput
                               value={officerMessageText}
-                              onChangeText={(value) => {
-                                setOfficerMessageText(value);
-                                if (value.trim()) pingOfficerTyping();
-                              }}
+	                              onChangeText={(value) => {
+	                                setOfficerMessageText(value);
+	                                pingOfficerTyping(value);
+	                              }}
                               placeholder="Coordinate with officers..."
                               placeholderTextColor={palette.slate}
                               style={styles.chatComposerInput}
@@ -1141,67 +1645,249 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
                       </Text>
                     </View>
-                    {canManageMembers ? (
+                    {canManageRoles || canConfigureOfficerPermissions ? (
                       <TouchableOpacity
                         style={styles.manageRolesButton}
                         onPress={() => setRolePanelOpen((current) => !current)}
                         activeOpacity={0.82}
                       >
                         <Ionicons name="pricetags-outline" size={16} color={palette.scarlet} />
-                        <Text style={styles.manageRolesButtonText}>Manage roles</Text>
+                        <Text style={styles.manageRolesButtonText}>Settings</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
-                  {canManageMembers && rolePanelOpen ? (
+                  {(canManageRoles || canConfigureOfficerPermissions) && rolePanelOpen ? (
                     <View style={styles.roleManagerPanel}>
-                      <View style={styles.roleManagerHeader}>
-                        <View>
-                          <Text style={styles.cardTitle}>Ping roles</Text>
-                          <Text style={styles.cardMeta}>
-                            Create labels for dues, levels, committees, or cohorts.
-                          </Text>
+                      {canConfigureOfficerPermissions ? (
+                        <View style={styles.permissionPanel}>
+                          <View>
+                            <Text style={styles.cardTitle}>Officer permissions</Text>
+                            <Text style={styles.cardMeta}>
+                              Choose what officers can do beyond posting announcements and moderating messages.
+                            </Text>
+                          </View>
+                          <View style={styles.permissionList}>
+                            {CLUB_PERMISSION_OPTIONS.map((permission) => {
+                              const required = DEFAULT_OFFICER_PERMISSIONS.includes(permission.value);
+                              const enabled = required || (club.officerPermissions ?? []).includes(permission.value);
+                              return (
+                                <TouchableOpacity
+                                  key={permission.value}
+                                  style={[styles.permissionRow, enabled ? styles.permissionRowActive : null]}
+                                  onPress={() => required ? undefined : void handleToggleOfficerPermission(permission.value)}
+                                  disabled={required || permissionBusy}
+                                  activeOpacity={0.82}
+                                >
+                                  <View style={styles.permissionCopy}>
+                                    <Text style={styles.permissionTitle}>{permission.title}</Text>
+                                    <Text style={styles.cardMeta}>{required ? 'Always available to officers.' : permission.body}</Text>
+                                  </View>
+                                  <Ionicons
+                                    name={enabled ? 'checkmark-circle' : 'ellipse-outline'}
+                                    size={22}
+                                    color={enabled ? palette.scarlet : palette.slate}
+                                  />
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.roleCreateRow}>
-                        <TextInput
-                          value={roleNameDraft}
-                          onChangeText={setRoleNameDraft}
-                          placeholder="Hasn't paid dues"
-                          placeholderTextColor={palette.slate}
-                          style={styles.roleNameInput}
-                        />
-                        <TouchableOpacity
-                          style={styles.roleCreateButton}
-                          onPress={() => void handleCreateRole()}
-                          disabled={roleBusyId === 'create'}
-                        >
-                          <Ionicons name="add" size={20} color={palette.white} />
-                        </TouchableOpacity>
-                      </View>
-                      {(club.roles ?? []).length ? (
-                        <View style={styles.roleList}>
-                          {(club.roles ?? []).map((role) => (
-                            <View key={role.id} style={styles.roleListItem}>
-                              <View style={styles.roleListIcon}>
-                                <Ionicons name="at-outline" size={15} color={palette.scarlet} />
-                              </View>
-                              <View style={styles.roleListCopy}>
-                                <Text style={styles.roleListTitle}>{role.name}</Text>
-                                <Text style={styles.cardMeta}>{role.memberCount ?? 0} assigned</Text>
-                              </View>
-                              <TouchableOpacity
-                                onPress={() => void handleDeleteRole(role.id)}
-                                disabled={roleBusyId === `delete:${role.id}`}
-                                style={styles.roleIconButton}
-                              >
-                                <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
-                              </TouchableOpacity>
+                      ) : null}
+                      {canManageRoles ? (
+                        <>
+                          <View style={styles.roleManagerHeader}>
+                            <View>
+                              <Text style={styles.cardTitle}>Ping roles</Text>
+                              <Text style={styles.cardMeta}>
+                                Create labels for dues, levels, committees, or cohorts.
+                              </Text>
                             </View>
-                          ))}
+                          </View>
+                          <View style={styles.roleCreateRow}>
+                            <TextInput
+                              value={roleNameDraft}
+                              onChangeText={setRoleNameDraft}
+                              placeholder="Hasn't paid dues"
+                              placeholderTextColor={palette.slate}
+                              style={styles.roleNameInput}
+                            />
+                            <TouchableOpacity
+                              style={styles.roleCreateButton}
+                              onPress={() => void handleCreateRole()}
+                              disabled={roleBusyId === 'create'}
+                            >
+                              <Ionicons name="add" size={20} color={palette.white} />
+                            </TouchableOpacity>
+                          </View>
+                          {(club.roles ?? []).length ? (
+                            <View style={styles.roleList}>
+                              {(club.roles ?? []).map((role) => (
+                                <View key={role.id} style={styles.roleListItem}>
+                                  <View style={styles.roleListIcon}>
+                                    <Ionicons name="at-outline" size={15} color={palette.scarlet} />
+                                  </View>
+                                  <View style={styles.roleListCopy}>
+                                    <Text style={styles.roleListTitle}>{role.name}</Text>
+                                    <Text style={styles.cardMeta}>{role.memberCount ?? 0} assigned</Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    onPress={() => void handleDeleteRole(role.id)}
+                                    disabled={roleBusyId === `delete:${role.id}`}
+                                    style={styles.roleIconButton}
+                                  >
+                                    <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
+                                  </TouchableOpacity>
+                                </View>
+                              ))}
+                            </View>
+                          ) : (
+                            <Text style={styles.cardMeta}>No ping roles yet. Add one above, then assign it from a member card.</Text>
+                          )}
+                        </>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {canPostAnnouncements ? (
+                    <View style={styles.outreachPanel}>
+                      <TouchableOpacity
+                        style={styles.composerHeader}
+                        activeOpacity={0.86}
+                        onPress={() => setOutreachOpen((current) => !current)}
+                      >
+                        <View>
+                          <Text style={styles.cardTitle}>Bulk outreach</Text>
+                          <Text style={styles.cardMeta}>Preview recipients before sending a notification.</Text>
                         </View>
-                      ) : (
-                        <Text style={styles.cardMeta}>No ping roles yet. Add one above, then assign it from a member card.</Text>
-                      )}
+                        <Ionicons name={outreachOpen ? 'remove' : 'add'} size={20} color={palette.scarlet} />
+                      </TouchableOpacity>
+                      {outreachOpen ? (
+                        <>
+                          <View style={styles.visibilityRow}>
+                            {(['ALL', 'NON_RSVP', 'PRIMARY_ROLE', 'CUSTOM_ROLE', 'MANUAL'] as OutreachAudienceType[]).map((type) => (
+                              <Chip
+                                key={type}
+                                label={{
+                                  ALL: 'All',
+                                  NON_RSVP: 'Non-RSVPs',
+                                  PRIMARY_ROLE: 'Role',
+                                  CUSTOM_ROLE: 'Ping role',
+                                  MANUAL: 'Manual',
+                                }[type]}
+                                active={outreachAudienceType === type}
+                                onPress={() => {
+                                  setOutreachAudienceType(type);
+                                  setOutreachPreview(null);
+                                }}
+                              />
+                            ))}
+                          </View>
+
+                          {outreachAudienceType === 'NON_RSVP' ? (
+                            <Text style={styles.cardMeta}>
+                              {nextMeeting
+                                ? `${nonRsvpCountForMeeting(nextMeeting)} members have not RSVP’d to ${nextMeeting.title}.`
+                                : 'Schedule a meeting before targeting non-RSVPs.'}
+                            </Text>
+                          ) : null}
+                          {outreachAudienceType === 'PRIMARY_ROLE' ? (
+                            <View style={styles.roleChipWrap}>
+                              {(['OWNER', 'ADMIN', 'OFFICER', 'MEMBER'] as const).map((role) => (
+                                <Chip
+                                  key={role}
+                                  label={role}
+                                  active={outreachPrimaryRole === role}
+                                  onPress={() => {
+                                    setOutreachPrimaryRole(role);
+                                    setOutreachPreview(null);
+                                  }}
+                                />
+                              ))}
+                            </View>
+                          ) : null}
+                          {outreachAudienceType === 'CUSTOM_ROLE' ? (
+                            <View style={styles.roleChipWrap}>
+                              {clubRoles.length ? clubRoles.map((role) => (
+                                <Chip
+                                  key={role.id}
+                                  label={role.name}
+                                  active={outreachRoleId === role.id}
+                                  onPress={() => {
+                                    setOutreachRoleId(role.id);
+                                    setOutreachPreview(null);
+                                  }}
+                                />
+                              )) : (
+                                <Text style={styles.cardMeta}>Create ping roles before targeting them.</Text>
+                              )}
+                            </View>
+                          ) : null}
+                          {outreachAudienceType === 'MANUAL' ? (
+                            <View style={styles.manualPicker}>
+                              {club.members.map((member) => {
+                                const selected = outreachManualIds.includes(member.userId);
+                                return (
+                                  <TouchableOpacity
+                                    key={member.id}
+                                    style={[styles.manualMemberChip, selected ? styles.manualMemberChipActive : null]}
+                                    onPress={() => {
+                                      setOutreachManualIds((current) =>
+                                        selected
+                                          ? current.filter((id) => id !== member.userId)
+                                          : [...current, member.userId]
+                                      );
+                                      setOutreachPreview(null);
+                                    }}
+                                  >
+                                    <Text style={[styles.manualMemberText, selected ? styles.manualMemberTextActive : null]}>
+                                      {member.user.name}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          ) : null}
+
+                          <TextInput
+                            value={outreachText}
+                            onChangeText={setOutreachText}
+                            placeholder="Write a clear, specific message"
+                            placeholderTextColor={palette.slate}
+                            style={[styles.input, styles.inputTall]}
+                            multiline
+                          />
+                          <View style={styles.eventButtonRow}>
+                            <PrimaryButton
+                              label="Preview audience"
+                              onPress={() => void handlePreviewOutreach()}
+                              loading={outreachBusy}
+                              kind="ghost"
+                            />
+                            <PrimaryButton
+                              label="Send outreach"
+                              onPress={() => void handleSendOutreach()}
+                              loading={outreachBusy}
+                              disabled={!outreachPreview || outreachPreview.count === 0}
+                            />
+                          </View>
+                          {outreachPreview ? (
+                            <View style={styles.previewBox}>
+                              <Text style={styles.cardTitle}>
+                                {outreachPreview.count} recipient{outreachPreview.count === 1 ? '' : 's'}
+                              </Text>
+                              <Text style={styles.cardMeta}>{outreachPreview.audience}</Text>
+                              {outreachPreview.recipients.slice(0, 12).map((recipient) => (
+                                <Text key={recipient.id} style={styles.previewRecipient}>
+                                  {recipient.name} • {recipient.role}
+                                </Text>
+                              ))}
+                              {outreachPreview.recipients.length > 12 ? (
+                                <Text style={styles.cardMeta}>+{outreachPreview.recipients.length - 12} more</Text>
+                              ) : null}
+                            </View>
+                          ) : null}
+                          {outreachResult ? <Text style={styles.successText}>{outreachResult}</Text> : null}
+                        </>
+                      ) : null}
                     </View>
                   ) : null}
                   {club.members.length ? club.members.map((member) => (
@@ -1228,7 +1914,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           ))}
                         </View>
                       ) : null}
-                      {canManageMembers && (club.roles ?? []).length && canManageThisMember(member.role, member.userId) ? (
+                      {canManageRoles && (club.roles ?? []).length && canManageThisMember(member.role, member.userId) ? (
                         <TouchableOpacity
                           style={styles.memberRoleToggle}
                           onPress={() =>
@@ -1271,7 +1957,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                       ) : null}
                       {canManageMembers && canManageThisMember(member.role, member.userId) ? (
                         <View style={styles.memberButtons}>
-                          {club.myRole === 'OWNER' && member.role !== 'ADMIN' ? (
+                          {canChangePrimaryRoles && club.myRole === 'OWNER' && member.role !== 'ADMIN' ? (
                             <PrimaryButton
                               label="Make admin"
                               onPress={() => void handleRoleChange(member.userId, 'ADMIN')}
@@ -1279,13 +1965,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               loading={memberActionUserId === member.userId}
                             />
                           ) : null}
-                          {member.role === 'MEMBER' ? (
+                          {canChangePrimaryRoles && member.role === 'MEMBER' ? (
                             <PrimaryButton
                               label="Promote"
                               onPress={() => void handleRoleChange(member.userId, 'OFFICER')}
                               loading={memberActionUserId === member.userId}
                             />
-                          ) : member.role === 'OFFICER' || member.role === 'ADMIN' ? (
+                          ) : canChangePrimaryRoles && (member.role === 'OFFICER' || member.role === 'ADMIN') ? (
                             <PrimaryButton
                               label="Demote"
                               onPress={() => void handleRoleChange(member.userId, member.role === 'ADMIN' ? 'OFFICER' : 'MEMBER')}
@@ -1316,14 +2002,14 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                 <View style={styles.section}>
                   <View style={styles.eventsHeader}>
                     <Text style={styles.screenSectionTitle}>Upcoming</Text>
-                    {canManageMeetings ? (
+                    {canCreateMeetings ? (
                       <TouchableOpacity onPress={() => setMeetingComposerOpen((current) => !current)}>
                         <Text style={styles.linkText}>{meetingComposerOpen ? 'Close' : 'Create meeting'}</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
 
-                  {canManageMeetings && meetingComposerOpen ? (
+                  {canCreateMeetings && meetingComposerOpen ? (
                     <View style={styles.composerCard}>
                       <Text style={styles.cardTitle}>Create meeting</Text>
                       <Text style={styles.cardBody}>Schedule an event for your club.</Text>
@@ -1376,7 +2062,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           value={meetingTime}
                           mode="datetime"
                           minimumDate={new Date()}
-                          maximumDate={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
+                          maximumDate={latestAllowedMeetingTime()}
                           onChange={(_, value) => {
                             if (value) setMeetingTime(value);
                           }}
@@ -1431,22 +2117,49 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         </Text>
                       </View>
 
-                      {canManageMeetings || isMember ? (
+                      {canCreateMeetings || isMember ? (
                         <View style={styles.attendanceBox}>
-                          {canManageMeetings ? (
+                          {canCreateMeetings ? (
                             <>
-                              <Text style={styles.cardBody}>
-                                {meeting.attendanceCode
-                                  ? `Attendance is open. Code: ${meeting.attendanceCode}`
-                                  : 'Attendance is closed right now.'}
-                              </Text>
+                              {meeting.attendanceCode ? (
+                                <View style={styles.attendanceCodeBlock}>
+                                  <Text style={styles.cardMeta}>Attendance code</Text>
+                                  <Text style={styles.attendanceCodeText}>{meeting.attendanceCode}</Text>
+                                  <Text style={styles.cardMeta}>Attendance is open. Regenerating this code makes the current one stop working.</Text>
+                                </View>
+                              ) : (
+                                <Text style={styles.cardBody}>Attendance is closed right now.</Text>
+                              )}
+                              {meeting.rsvpReminderSentAt ? (
+                                <Text style={styles.cardMeta}>
+                                  Last RSVP reminder: {formatDateTime(meeting.rsvpReminderSentAt)} • {meeting.rsvpReminderStatus ?? 'sent'} • {meeting.rsvpReminderCount ?? 0} targeted
+                                </Text>
+                              ) : (
+                                <Text style={styles.cardMeta}>
+                                  {nonRsvpCountForMeeting(meeting)} member{nonRsvpCountForMeeting(meeting) === 1 ? '' : 's'} have not RSVP’d.
+                                </Text>
+                              )}
                               <View style={styles.eventButtonRow}>
                                 <PrimaryButton
-                                  label={meeting.attendanceCode ? 'Refresh code' : 'Open attendance'}
+                                  label={meeting.attendanceCode ? 'Regenerate code' : 'Open attendance'}
                                   onPress={() => void handleOpenAttendance(meeting.id)}
                                   loading={attendanceBusyId === `open-${meeting.id}`}
                                   kind="ghost"
                                 />
+                                {meeting.attendanceCode ? (
+                                  <>
+                                    <PrimaryButton
+                                      label="Copy"
+                                      onPress={() => void handleCopyAttendanceCode(meeting.attendanceCode!)}
+                                      kind="ghost"
+                                    />
+                                    <PrimaryButton
+                                      label="Share"
+                                      onPress={() => void handleShareAttendanceCode(meeting)}
+                                      kind="ghost"
+                                    />
+                                  </>
+                                ) : null}
                                 {meeting.attendanceCode ? (
                                   <PrimaryButton
                                     label="Close"
@@ -1460,6 +2173,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                   onPress={() => void handleLoadAttendance(meeting.id)}
                                   loading={attendanceBusyId === `view-${meeting.id}`}
                                   kind="ghost"
+                                />
+                                <PrimaryButton
+                                  label="Remind non-RSVPs"
+                                  onPress={() => void handleSendRsvpReminder(meeting)}
+                                  loading={attendanceBusyId === `rsvp-${meeting.id}`}
+                                  kind="ghost"
+                                  disabled={nonRsvpCountForMeeting(meeting) === 0}
                                 />
                               </View>
                               {attendancePanels[meeting.id]?.attendees.length ? (
@@ -1505,6 +2225,51 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                   )}
                 </View>
               ) : null}
+
+              {mode === 'analytics' ? (
+                <View style={styles.section}>
+                  <View>
+                    <Text style={styles.screenSectionTitle}>Club health</Text>
+                    <Text style={styles.cardMeta}>
+                      Snapshot based on current members, upcoming meetings, RSVPs, attendance, and announcements.
+                    </Text>
+                  </View>
+                  <View style={styles.analyticsGrid}>
+                    <MetricCard label="Members" value={String(analytics.memberCount)} detail="Current roster" />
+                    <MetricCard label="Upcoming" value={String(analytics.upcomingCount)} detail="Scheduled meetings" />
+                    <MetricCard label="RSVPs" value={`${analytics.rsvpGoing}/${analytics.rsvpMaybe}/${analytics.rsvpNotGoing}`} detail="Going / maybe / can't go" />
+                    <MetricCard label="Attendance" value={String(analytics.checkedIn)} detail="Checked in across upcoming meetings" />
+                    <MetricCard label="Announcements" value={String(analytics.announcements)} detail="Visible recent posts" />
+                    <MetricCard
+                      label="Response rate"
+                      value={analytics.responseRate == null ? 'Limited data' : `${analytics.responseRate}%`}
+                      detail={analytics.responseRate == null ? 'Schedule meetings to build a signal' : 'Across upcoming meetings'}
+                    />
+                  </View>
+                  <View style={styles.analyticsPanel}>
+                    <Text style={styles.cardTitle}>Upcoming meeting breakdown</Text>
+                    {meetings.length ? meetings.slice(0, 5).map((meeting) => (
+                      <View key={meeting.id} style={styles.analyticsMeetingRow}>
+                        <View style={styles.feedText}>
+                          <Text style={styles.cardTitle}>{meeting.title}</Text>
+                          <Text style={styles.cardMeta}>{formatShortDate(meeting.meetingTime)} • {formatTime(meeting.meetingTime)}</Text>
+                        </View>
+                        <Text style={styles.analyticsCount}>
+                          {meeting.rsvpCounts.going} going • {meeting.attendeeCount} checked in
+                        </Text>
+                      </View>
+                    )) : (
+                      <Text style={styles.cardMeta}>No upcoming meetings yet, so meeting trends are not available.</Text>
+                    )}
+                  </View>
+                  <View style={styles.analyticsPanel}>
+                    <Text style={styles.cardTitle}>Member count trend</Text>
+                    <Text style={styles.cardMeta}>
+                      Historical member snapshots are not stored yet. Showing the current roster count only.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
           </>
         ) : (
@@ -1523,11 +2288,7 @@ function SectionHeaderRow({
   title,
   actionLabel,
   onPress,
-}: {
-  title: string;
-  actionLabel?: string;
-  onPress?: () => void;
-}) {
+}: SectionHeaderRowProps) {
   return (
     <View style={styles.sectionHeaderRow}>
       <Text style={styles.sectionHeaderTitle}>{title}</Text>
@@ -1559,6 +2320,16 @@ function QuickActionCard({
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardBody}>{body}</Text>
     </TouchableOpacity>
+  );
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.cardMeta}>{detail}</Text>
+    </View>
   );
 }
 
@@ -1621,6 +2392,7 @@ function MessageBubble({
   content,
   time,
   audience,
+  onReport,
 }: {
   align: 'left' | 'right';
   name: string;
@@ -1628,6 +2400,7 @@ function MessageBubble({
   content: string;
   time: string;
   audience?: string;
+  onReport?: () => void;
 }) {
   const isRight = align === 'right';
   return (
@@ -1640,6 +2413,12 @@ function MessageBubble({
           <Text style={[styles.bubbleText, isRight && styles.bubbleTextRight]}>{content}</Text>
         </View>
         <Text style={[styles.bubbleTime, isRight && styles.bubbleTimeRight]}>{time}</Text>
+        {onReport ? (
+          <TouchableOpacity onPress={onReport} style={[styles.reportInlineButton, isRight && styles.reportInlineRight]}>
+            <Ionicons name="flag-outline" size={15} color={palette.slate} />
+            <Text style={styles.reportInlineText}>Report</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -1933,6 +2712,17 @@ const styles = StyleSheet.create({
     color: palette.moss,
     fontSize: 12,
   },
+  audiencePill: {
+    maxWidth: 140,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  audiencePillText: {
+    ...typography.label,
+    color: palette.scarlet,
+  },
   cardBody: {
     ...typography.body,
     color: palette.ink,
@@ -1986,6 +2776,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  permissionPanel: {
+    gap: spacing.sm,
+    borderRadius: 18,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  permissionList: {
+    gap: 8,
+  },
+  permissionRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 16,
+    backgroundColor: palette.white,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.sm,
+  },
+  permissionRowActive: {
+    borderColor: 'rgba(199, 59, 34, 0.24)',
+    backgroundColor: 'rgba(199, 59, 34, 0.06)',
+  },
+  permissionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  permissionTitle: {
+    ...typography.bodyStrong,
+    color: palette.ink,
   },
   roleCreateRow: {
     flexDirection: 'row',
@@ -2051,6 +2875,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  outreachPanel: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  manualPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  manualMemberChip: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.08)',
+    backgroundColor: '#F8FAF9',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  manualMemberChipActive: {
+    backgroundColor: palette.scarlet,
+    borderColor: palette.scarlet,
+  },
+  manualMemberText: {
+    ...typography.bodyStrong,
+    color: palette.ink,
+    fontSize: 13,
+  },
+  manualMemberTextActive: {
+    color: palette.white,
+  },
+  previewBox: {
+    borderRadius: 18,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+    gap: 5,
+  },
+  previewRecipient: {
+    ...typography.body,
+    color: palette.ink,
+    fontSize: 14,
+  },
+  successText: {
+    ...typography.bodyStrong,
+    color: '#247A4B',
   },
   memberRoleChip: {
     borderRadius: radii.pill,
@@ -2342,6 +3217,22 @@ const styles = StyleSheet.create({
   bubbleTimeRight: {
     textAlign: 'right',
   },
+  reportInlineButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  reportInlineRight: {
+    alignSelf: 'flex-end',
+  },
+  reportInlineText: {
+    ...typography.bodyStrong,
+    fontSize: 12,
+    lineHeight: 16,
+    color: palette.slate,
+  },
   typingText: {
     ...typography.body,
     color: palette.scarlet,
@@ -2473,10 +3364,73 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  attendanceCodeBlock: {
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.08)',
+    padding: spacing.md,
+    gap: 6,
+  },
+  attendanceCodeText: {
+    ...typography.h1,
+    fontSize: 36,
+    lineHeight: 42,
+    letterSpacing: 2,
+    color: palette.ink,
+  },
   eventButtonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  analyticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  metricCard: {
+    width: '48%',
+    minWidth: 150,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+    gap: 4,
+  },
+  metricLabel: {
+    ...typography.bodyStrong,
+    color: palette.slate,
+    fontSize: 13,
+  },
+  metricValue: {
+    ...typography.h1,
+    fontSize: 25,
+    lineHeight: 30,
+  },
+  analyticsPanel: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  analyticsMeetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  feedText: {
+    flex: 1,
+  },
+  analyticsCount: {
+    ...typography.bodyStrong,
+    color: palette.slate,
+    fontSize: 13,
+    textAlign: 'right',
   },
   attendeeRow: {
     flexDirection: 'row',

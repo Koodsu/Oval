@@ -3,16 +3,16 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  acceptFriendRequest,
-  acceptPodInvite,
-  API_USER_MESSAGE,
-  cancelFriendRequest,
-  declineFriendRequest,
-  declinePodInvite,
-  getFriends,
-  getFriendRequests,
-  getMessageThreads,
-  getPodInvites,
+	  acceptFriendRequest,
+	  acceptPodInvite,
+	  cancelFriendRequest,
+	  declineFriendRequest,
+	  declinePodInvite,
+	  getFriends,
+	  getFriendRequests,
+	  getApiErrorMessage,
+	  getMessageThreads,
+	  getPodInvites,
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
@@ -30,9 +30,10 @@ export default function InboxScreen() {
   const [invites, setInvites] = useState<PodInvite[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
-  const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+	  const [friends, setFriends] = useState<FriendUser[]>([]);
+	  const [busyId, setBusyId] = useState<string | null>(null);
+	  const [loaded, setLoaded] = useState(false);
+	  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [threadResult, inviteResult, requestResult, friendResult] = await Promise.allSettled([
@@ -59,16 +60,29 @@ export default function InboxScreen() {
       setFriends(friendResult.value);
     }
 
-    if (
-      threadResult.status === 'rejected' &&
-      inviteResult.status === 'rejected' &&
-      requestResult.status === 'rejected' &&
-      friendResult.status === 'rejected'
-    ) {
-      Alert.alert('Could not load inbox', API_USER_MESSAGE);
-    }
-    setLoaded(true);
-  }, []);
+	    if (
+	      threadResult.status === 'rejected' &&
+	      inviteResult.status === 'rejected' &&
+	      requestResult.status === 'rejected' &&
+	      friendResult.status === 'rejected'
+	    ) {
+	      Alert.alert('Could not load inbox', getApiErrorMessage(threadResult.reason));
+	      setLoadWarning(null);
+	    } else {
+	      const failedSections = [
+	        threadResult.status === 'rejected' ? 'messages' : null,
+	        inviteResult.status === 'rejected' ? 'invites' : null,
+	        requestResult.status === 'rejected' ? 'friend requests' : null,
+	        friendResult.status === 'rejected' ? 'friends' : null,
+	      ].filter((section): section is string => section != null);
+	      setLoadWarning(
+	        failedSections.length
+	          ? `Some inbox sections could not refresh: ${failedSections.join(', ')}.`
+	          : null
+	      );
+	    }
+	    setLoaded(true);
+	  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,9 +102,9 @@ export default function InboxScreen() {
         await declinePodInvite(inviteId);
       }
       await load();
-    } catch {
+    } catch (error) {
       setInvites(previousInvites);
-      Alert.alert('Could not update invite', API_USER_MESSAGE);
+      Alert.alert('Could not update invite', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -107,9 +121,9 @@ export default function InboxScreen() {
         await declineFriendRequest(requestId);
       }
       await load();
-    } catch {
+    } catch (error) {
       setRequests(previousRequests);
-      Alert.alert('Could not update request', API_USER_MESSAGE);
+      Alert.alert('Could not update request', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -122,9 +136,9 @@ export default function InboxScreen() {
     try {
       await cancelFriendRequest(requestId);
       await load();
-    } catch {
+    } catch (error) {
       setOutgoingRequests(previousOutgoing);
-      Alert.alert('Could not cancel request', API_USER_MESSAGE);
+      Alert.alert('Could not cancel request', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -142,10 +156,11 @@ export default function InboxScreen() {
         >
           <View style={styles.headerAction}>
             <PrimaryButton label="Find people" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
+            <PrimaryButton label="Profile & settings" onPress={() => navigation.navigate('Profile')} kind="ghost" />
           </View>
         </CompactHeader>
 
-        <SegmentedControl
+	        <SegmentedControl
           value={mode}
           options={[
             { value: 'messages', label: threads.length ? `Messages (${threads.length})` : 'Messages' },
@@ -156,7 +171,15 @@ export default function InboxScreen() {
             },
           ]}
           onChange={setMode}
-        />
+	        />
+	        {loadWarning ? (
+	          <Panel style={styles.warningPanel}>
+	            <Text style={styles.warningText}>{loadWarning}</Text>
+	            <TouchableOpacity onPress={() => void load()} style={styles.retryLink}>
+	              <Text style={styles.retryLinkText}>Try again</Text>
+	            </TouchableOpacity>
+	          </Panel>
+	        ) : null}
 
         {mode === 'messages' ? (
           <View style={styles.section}>
@@ -352,6 +375,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   headerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.sm,
   },
   row: {
@@ -386,10 +412,31 @@ const styles = StyleSheet.create({
   title: {
     ...typography.title,
   },
-  body: {
-    ...typography.body,
-  },
-  sectionLabel: {
+	  body: {
+	    ...typography.body,
+	  },
+	  warningPanel: {
+	    flexDirection: 'row',
+	    alignItems: 'center',
+	    justifyContent: 'space-between',
+	    gap: spacing.sm,
+	    borderColor: 'rgba(154,94,23,0.22)',
+	    backgroundColor: '#FFF8EA',
+	  },
+	  warningText: {
+	    ...typography.body,
+	    color: palette.warnText,
+	    flex: 1,
+	  },
+	  retryLink: {
+	    paddingVertical: 6,
+	    paddingHorizontal: spacing.sm,
+	  },
+	  retryLinkText: {
+	    ...typography.bodyStrong,
+	    color: palette.scarlet,
+	  },
+	  sectionLabel: {
     ...typography.label,
     color: palette.slate,
     marginTop: spacing.sm,

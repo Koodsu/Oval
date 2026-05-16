@@ -6,8 +6,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   addPodMessageReaction,
-  API_USER_MESSAGE,
-  confirmAttendance,
+	  confirmAttendance,
+	  getApiErrorMessage,
   getFriends,
   getMessages,
   getPeopleYouMet,
@@ -51,9 +51,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const [messageText, setMessageText] = useState('');
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+	  const [sending, setSending] = useState(false);
+	  const [loadError, setLoadError] = useState<string | null>(null);
+	  const [detailsOpen, setDetailsOpen] = useState(true);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (showAlert = true) => {
@@ -78,11 +78,11 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       setFriends(friendList);
       setPeopleYouMet(metUsers);
       setLoadError(null);
-    } catch {
-      setLoadError(API_USER_MESSAGE);
-      if (showAlert) {
-        Alert.alert('Could not load pod', API_USER_MESSAGE);
-      }
+	    } catch (error) {
+	      setLoadError(getApiErrorMessage(error));
+	      if (showAlert) {
+	        Alert.alert('Could not load pod', getApiErrorMessage(error));
+	      }
     }
   }, [podId, user?.id]);
 
@@ -99,27 +99,37 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }, [load])
   );
 
-  const pingTyping = useCallback(() => {
-    if (!messageText.trim()) return;
+  const pingTyping = useCallback((draft: string) => {
+    if (!draft.trim()) return;
     if (typingTimerRef.current) return;
     typingTimerRef.current = setTimeout(() => {
       typingTimerRef.current = null;
     }, 2500);
     void sendPodTyping(podId).catch(() => {});
-  }, [messageText, podId]);
+  }, [podId]);
 
-  const meInPod = pod?.members.some((member) => member.userId === user?.id) ?? false;
-  const myMember = pod?.members.find((member) => member.userId === user?.id) ?? null;
-  const isCreator = pod?.creator?.id === user?.id || pod?.creatorId === user?.id;
+	  const meInPod = pod?.members.some((member) => member.userId === user?.id) ?? false;
+	  const myMember = pod?.members.find((member) => member.userId === user?.id) ?? null;
+	  const isCreator = pod?.creator?.id === user?.id || pod?.creatorId === user?.id;
+	  const canJoinOrWaitlist = pod?.status === 'FORMING';
+	  const primaryActionLabel = meInPod
+	    ? 'Leave pod'
+	    : canJoinOrWaitlist
+	      ? pod && pod.members.length >= pod.maxMembers ? 'Join waitlist' : 'Join pod'
+	      : 'Pod closed';
   const eligibleInviteFriends = useMemo(() => {
     if (!pod) return [];
     const memberIds = new Set(pod.members.map((member) => member.userId));
     return friends.filter((friend) => !memberIds.has(friend.id)).slice(0, 6);
   }, [friends, pod]);
 
-  const handlePrimaryAction = async () => {
-    if (!pod) return;
-    setActionBusy('primary');
+	  const handlePrimaryAction = async () => {
+	    if (!pod) return;
+	    if (!meInPod && pod.status !== 'FORMING') {
+	      Alert.alert('Pod is not open', 'This pod is already locked, completed, or expired.');
+	      return;
+	    }
+	    setActionBusy('primary');
     try {
       if (!meInPod) {
         if (pod.members.length >= pod.maxMembers) {
@@ -131,8 +141,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         await leavePod(pod.id);
       }
       await load(false);
-    } catch {
-      Alert.alert('Action failed', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Action failed', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -144,8 +154,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await leaveWaitlist(pod.id);
       await load(false);
-    } catch {
-      Alert.alert('Could not leave waitlist', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not leave waitlist', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -157,8 +167,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       const updated = await (pod.status === 'LOCKED' ? unlockPod(pod.id) : lockPod(pod.id));
       setPod(updated);
-    } catch {
-      Alert.alert('Could not update pod', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not update pod', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -170,8 +180,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       const updated = await updatePodPrivacy(pod.id, visibility);
       setPod(updated);
-    } catch {
-      Alert.alert('Could not update privacy', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not update privacy', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -183,8 +193,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await confirmAttendance(pod.id);
       await load(false);
-    } catch {
-      Alert.alert('Could not confirm attendance', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not confirm attendance', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -198,8 +208,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       setMessageText('');
       setReplyTo(null);
       setMessages((current) => [...current, sent]);
-    } catch {
-      Alert.alert('Could not send message', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send message', getApiErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -214,8 +224,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         ? await removePodMessageReaction(podId, message.id, HEART_EMOJI)
         : await addPodMessageReaction(podId, message.id, HEART_EMOJI);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
-    } catch {
-      Alert.alert('Could not update heart', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not update heart', getApiErrorMessage(error));
     }
   };
 
@@ -225,8 +235,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await submitRecap(pod.id, { rating });
       await load(false);
-    } catch {
-      Alert.alert('Could not submit recap', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not submit recap', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -240,8 +250,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         message: `Join my ${pod.activity?.title ?? 'Bridge'} pod on Bridge: ${getPodShareUrl(pod.id)}`,
         url: getPodShareUrl(pod.id),
       });
-    } catch {
-      Alert.alert('Could not open share sheet', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not open share sheet', getApiErrorMessage(error));
     }
   };
 
@@ -251,8 +261,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await sendPodInvite(pod.id, friend.id);
       Alert.alert('Invite sent', `${friend.name} will see it in their inbox.`);
-    } catch {
-      Alert.alert('Could not send invite', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send invite', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -264,8 +274,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       await sendFriendRequest(person.id);
       setPeopleYouMet((current) => current.filter((entry) => entry.id !== person.id));
       Alert.alert('Request sent', `${person.name} now has your friend request.`);
-    } catch {
-      Alert.alert('Could not send request', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send request', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -277,8 +287,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await reportNoShow(pod.id, userId);
       await load(false);
-    } catch {
-      Alert.alert('Could not report no-show', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not report no-show', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -337,12 +347,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               </View>
               <View style={styles.primaryActionRow}>
                 <View style={styles.primaryActionFill}>
-                  <PrimaryButton
-                    label={meInPod ? 'Leave pod' : pod.members.length >= pod.maxMembers ? 'Join waitlist' : 'Join pod'}
-                    onPress={() => void handlePrimaryAction()}
-                    loading={actionBusy === 'primary'}
-                    kind={meInPod ? 'ghost' : 'solid'}
-                  />
+	                  <PrimaryButton
+	                    label={primaryActionLabel}
+	                    onPress={() => void handlePrimaryAction()}
+	                    loading={actionBusy === 'primary'}
+	                    kind={meInPod || !canJoinOrWaitlist ? 'ghost' : 'solid'}
+	                  />
                 </View>
                 <TouchableOpacity onPress={() => void handleShare()} style={styles.squareAction}>
                   <Ionicons name="link-outline" size={18} color={palette.ink} />
@@ -400,10 +410,10 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             {meInPod ? (
               <Panel style={styles.conversationPanel}>
                 <View style={styles.conversationHeader}>
-                  <View>
-                    <Text style={styles.conversationTitle}>Conversation</Text>
-                    <Text style={styles.conversationMeta}>{pod.members.length} members coordinating here</Text>
-                  </View>
+	                  <View>
+	                    <Text style={styles.conversationTitle}>Conversation</Text>
+	                    <Text style={styles.conversationMeta}>{pod.members.length} members coordinating here • tap a message to reply</Text>
+	                  </View>
                   <View style={styles.livePill}>
                     <View style={styles.liveDot} />
                     <Text style={styles.liveText}>Pod chat</Text>
@@ -436,11 +446,11 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
                           </View>
                           <TouchableOpacity
-                            activeOpacity={0.82}
-                            onLongPress={() => setReplyTo(message)}
-                            onPress={() => !mine && navigation.navigate('UserProfile', { userId: message.user.id })}
-                            style={[styles.messageContent, mine && styles.messageContentMine]}
-                          >
+	                            activeOpacity={0.82}
+	                            onLongPress={() => setReplyTo(message)}
+	                            onPress={() => setReplyTo(message)}
+	                            style={[styles.messageContent, mine && styles.messageContentMine]}
+	                          >
                             {message.replyTo ? (
                               <View style={[styles.replyPreview, mine && styles.replyPreviewMine]}>
                                 <Text style={[styles.replyMeta, mine && styles.replyMetaMine]}>Replying to {message.replyTo.user.name}</Text>
@@ -492,10 +502,10 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 <View style={styles.composerRow}>
                   <TextInput
                     value={messageText}
-                    onChangeText={(value) => {
-                      setMessageText(value);
-                      if (value.trim()) pingTyping();
-                    }}
+	                    onChangeText={(value) => {
+	                      setMessageText(value);
+	                      pingTyping(value);
+	                    }}
                     placeholder="Message the pod"
                     placeholderTextColor={palette.slate}
                     style={styles.input}

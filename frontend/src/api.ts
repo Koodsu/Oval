@@ -11,11 +11,55 @@ export const API_BASE =
     ? configuredApiBase
     : __DEV__
       ? 'http://localhost:3000'
-      : '';
+      : 'https://joinbridgeapp.com';
 export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://joinbridgeapp.com').replace(/\/$/, '');
 
-/** Shown in alerts instead of raw server messages after API failures. */
-export const API_USER_MESSAGE = 'Something went wrong, please try again';
+/** Fallback alert copy when an error has no safer or more specific message. */
+export const API_USER_MESSAGE = 'We could not finish that. Please try again.';
+
+export class ApiError extends Error {
+  status?: number;
+  userMessage: string;
+
+  constructor(message: string, userMessage?: string, status?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.userMessage = userMessage ?? message;
+  }
+}
+
+function messageFromData(data: unknown) {
+  if (!data || typeof data !== 'object') return null;
+  const error = (data as { error?: unknown }).error;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  const message = (data as { message?: unknown }).message;
+  if (typeof message === 'string' && message.trim()) return message.trim();
+  return null;
+}
+
+function friendlyFailureMessage(status?: number, serverMessage?: string) {
+  if (status === 401) return serverMessage ?? 'Your session has expired. Please sign in again.';
+  if (status === 403) return serverMessage ?? 'You do not have permission to do that.';
+  if (status === 404) return serverMessage ?? 'We could not find that item. It may have changed or been removed.';
+  if (status === 409) return serverMessage ?? 'That conflicts with the latest data. Refresh and try again.';
+  if (status === 429) return 'Bridge is getting a lot of requests. Wait a moment, then try again.';
+  if (status === 503) return 'Bridge is temporarily unavailable. Try again in a minute.';
+  if (status && status >= 500) return 'Bridge hit a server error while trying that. Please try again in a minute.';
+  return serverMessage ?? API_USER_MESSAGE;
+}
+
+export function getApiErrorMessage(error: unknown, fallback = API_USER_MESSAGE) {
+  if (error instanceof ApiError) return error.userMessage || fallback;
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') return fallback;
+    if (/network request failed|failed to fetch|load failed/i.test(error.message)) {
+      return 'Bridge could not reach the server. Check your connection and try again.';
+    }
+    return error.message || fallback;
+  }
+  return fallback;
+}
 
 const RETRY_BACKOFF_MS = [250, 500, 1000] as const;
 const MAX_RETRY_ATTEMPTS = 3;
@@ -63,6 +107,10 @@ export function getPodShareUrl(podId: string): string {
   return `${PUBLIC_SITE_URL}/pod/${encodeURIComponent(podId)}`;
 }
 
+export function getClubShareUrl(clubId: string): string {
+  return `${PUBLIC_SITE_URL}/club/${encodeURIComponent(clubId)}`;
+}
+
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 
@@ -96,8 +144,9 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     ...(options.headers as Record<string, string>),
   };
 
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  const sentAuthToken = authToken;
+  if (sentAuthToken) {
+    headers['Authorization'] = `Bearer ${sentAuthToken}`;
   }
 
   const shouldUseCache = isGetRequest(options);
@@ -133,12 +182,18 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
             });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') throw err;
-      throw new Error(err instanceof Error ? err.message : 'Network request failed');
+      throw new ApiError(
+        err instanceof Error ? err.message : 'Network request failed',
+        'Bridge could not reach the server. Check your connection and try again.'
+      );
     }
 
     if (res.status === 401) {
-      onUnauthorized?.();
-      throw new Error((data as { error?: string }).error ?? 'Unauthorized');
+      if (sentAuthToken) {
+        onUnauthorized?.();
+      }
+      const serverMessage = messageFromData(data) ?? 'Unauthorized';
+      throw new ApiError(serverMessage, friendlyFailureMessage(res.status, serverMessage), res.status);
     }
 
     if (res.ok) {
@@ -158,13 +213,14 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     }
 
     if (retryable) {
-      throw new Error(API_USER_MESSAGE);
+      throw new ApiError(`Request failed: ${res.status}`, friendlyFailureMessage(res.status), res.status);
     }
 
-    throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);
+    const serverMessage = messageFromData(data) ?? `Request failed: ${res.status}`;
+    throw new ApiError(serverMessage, friendlyFailureMessage(res.status, serverMessage), res.status);
   }
 
-  throw new Error(API_USER_MESSAGE);
+  throw new ApiError('Request failed after retries', API_USER_MESSAGE);
 }
 
 // Auth
@@ -227,6 +283,9 @@ export const joinClub = (clubId: string) =>
 
 export const leaveClub = (clubId: string) =>
   request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/leave`, { method: 'DELETE' });
+
+export const deleteClub = (clubId: string) =>
+  request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}`, { method: 'DELETE' });
 
 export const getClub = (clubId: string, signal?: AbortSignal) =>
   request<import('./types').ClubDetail>(`/clubs/${encodeURIComponent(clubId)}`, {}, signal);
@@ -432,6 +491,61 @@ export const getClubMeetingAttendance = (clubId: string, meetingId: string) =>
     `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/attendance`
   );
 
+export type ClubOutreachAudience =
+  | { type: 'ALL' }
+  | { type: 'NON_RSVP'; meetingId?: string }
+  | { type: 'PRIMARY_ROLE'; role: 'OWNER' | 'ADMIN' | 'OFFICER' | 'MEMBER' }
+  | { type: 'CUSTOM_ROLE'; roleId: string }
+  | { type: 'MANUAL'; userIds: string[] };
+
+export interface ClubOutreachRecipient {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export interface ClubOutreachPreview {
+  audience: string;
+  count: number;
+  recipients: ClubOutreachRecipient[];
+}
+
+export interface ClubOutreachSendResponse extends ClubOutreachPreview {
+  ok: true;
+  sent: number;
+  attempted: number;
+  sentAt: string;
+}
+
+export const previewClubOutreach = (clubId: string, audience: ClubOutreachAudience) =>
+  request<ClubOutreachPreview>(
+    `/clubs/${encodeURIComponent(clubId)}/outreach/preview`,
+    { method: 'POST', body: JSON.stringify({ audience }) }
+  );
+
+export const sendClubOutreach = (clubId: string, audience: ClubOutreachAudience, content: string) =>
+  request<ClubOutreachSendResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/outreach/send`,
+    { method: 'POST', body: JSON.stringify({ audience, content }) }
+  );
+
+export interface ClubRsvpReminderResponse {
+  ok: true;
+  count: number;
+  recipients: ClubOutreachRecipient[];
+  sent: number;
+  attempted: number;
+  lastSentAt: string;
+  status: string;
+}
+
+export const sendClubRsvpReminders = (clubId: string, meetingId: string) =>
+  request<ClubRsvpReminderResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}/rsvp-reminders`,
+    { method: 'POST' }
+  );
+
 // Pods
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);
@@ -578,6 +692,11 @@ export const REPORT_REASON_LABELS: Record<string, string> = {
 export interface CreateReportPayload {
   podId?: string;
   messageId?: string;
+  directMessageId?: string;
+  clubId?: string;
+  clubMessageId?: string;
+  clubOfficerMessageId?: string;
+  clubAnnouncementId?: string;
   targetUserId?: string;
   reason: string;
   details?: string;
@@ -596,6 +715,12 @@ export interface MyReport {
   createdAt: string;
   podId?: string | null;
   messageId?: string | null;
+  directMessageId?: string | null;
+  clubId?: string | null;
+  clubMessageId?: string | null;
+  clubOfficerMessageId?: string | null;
+  clubAnnouncementId?: string | null;
+  targetType?: string | null;
   targetUserId?: string | null;
 }
 
@@ -664,8 +789,9 @@ export const uploadAvatar = async (uri: string, signal?: AbortSignal): Promise<{
   formData.append('avatar', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
 
   const headers: Record<string, string> = {};
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  const sentAuthToken = authToken;
+  if (sentAuthToken) {
+    headers['Authorization'] = `Bearer ${sentAuthToken}`;
   }
 
   let res: Response;
@@ -682,7 +808,9 @@ export const uploadAvatar = async (uri: string, signal?: AbortSignal): Promise<{
   }
 
   if (res.status === 401) {
-    onUnauthorized?.();
+    if (sentAuthToken) {
+      onUnauthorized?.();
+    }
     throw new Error('Unauthorized');
   }
 
@@ -697,6 +825,9 @@ export const uploadAvatar = async (uri: string, signal?: AbortSignal): Promise<{
 export const deleteAvatar = () =>
   request<{ avatarUrl: null }>('/users/me/avatar', { method: 'DELETE' });
 
+export const deleteMyAccount = () =>
+  request<void>('/users/me', { method: 'DELETE' });
+
 /**
  * Upload a club avatar. ADMIN only.
  * `uri` is the local file URI returned by expo-image-picker.
@@ -707,8 +838,9 @@ export const uploadClubAvatar = async (clubId: string, uri: string, signal?: Abo
   formData.append('image', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
 
   const headers: Record<string, string> = {};
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  const sentAuthToken = authToken;
+  if (sentAuthToken) {
+    headers['Authorization'] = `Bearer ${sentAuthToken}`;
   }
 
   let res: Response;
@@ -725,7 +857,9 @@ export const uploadClubAvatar = async (clubId: string, uri: string, signal?: Abo
   }
 
   if (res.status === 401) {
-    onUnauthorized?.();
+    if (sentAuthToken) {
+      onUnauthorized?.();
+    }
     throw new Error('Unauthorized');
   }
 

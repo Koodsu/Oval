@@ -6,6 +6,7 @@ import { MEMBER_USER_SELECT, parseMemberTags } from '../lib/joinExistingPod';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 import { NotificationService } from '../lib/NotificationService';
 import { supabaseStorage } from '../lib/supabaseStorage';
+import { findObjectionableContent } from '../lib/contentModeration';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
@@ -85,7 +86,10 @@ const CLUB_VISIBILITIES = new Set([VISIBILITY_PUBLIC, VISIBILITY_MEMBERS, VISIBI
 const STATUS_ATTENDED = 'ATTENDED';
 
 const MAX_CLUB_MESSAGE_LENGTH = 500;
+const MAX_CLUB_OUTREACH_LENGTH = 800;
 const MAX_ROLE_NAME_LENGTH = 40;
+const RSVP_REMINDER_COOLDOWN_MS = 15 * 60 * 1000;
+const OUTREACH_COOLDOWN_MS = 5 * 60 * 1000;
 
 const PERMISSION_MANAGE_MEMBERS = 'MANAGE_MEMBERS';
 const PERMISSION_MANAGE_ROLES = 'MANAGE_ROLES';
@@ -94,6 +98,8 @@ const PERMISSION_POST_ANNOUNCEMENTS = 'POST_ANNOUNCEMENTS';
 const PERMISSION_DELETE_MESSAGES = 'DELETE_MESSAGES';
 const PERMISSION_MANAGE_CLUB = 'MANAGE_CLUB';
 const PERMISSION_TRANSFER_OWNERSHIP = 'TRANSFER_OWNERSHIP';
+
+const outreachRateLimit = new Map<string, number>();
 
 const CLUB_PERMISSIONS = new Set([
   PERMISSION_MANAGE_MEMBERS,
@@ -104,8 +110,11 @@ const CLUB_PERMISSIONS = new Set([
   PERMISSION_MANAGE_CLUB,
 ]);
 
-/** Latest allowed instant for meetingTime (exclusive upper bound per product spec). */
-const MEETING_TIME_MAX = new Date('2027-06-01T00:00:00.000Z');
+function latestAllowedMeetingTime(from = new Date()): Date {
+  const max = new Date(from);
+  max.setMonth(max.getMonth() + 12);
+  return max;
+}
 
 /** Local calendar day bounds (Node process TZ; set TZ in production if needed). */
 function startEndOfLocalToday(): { start: Date; end: Date } {
@@ -241,6 +250,109 @@ function canAccessVisibility(
   if (visibility === VISIBILITY_MEMBERS) return isMember;
   if (visibility === VISIBILITY_OFFICERS) return roleRank(role) >= roleRank(ROLE_OFFICER);
   return false;
+}
+
+type OutreachAudience =
+  | { type: 'ALL' }
+  | { type: 'NON_RSVP'; meetingId?: string }
+  | { type: 'PRIMARY_ROLE'; role: string }
+  | { type: 'CUSTOM_ROLE'; roleId: string }
+  | { type: 'MANUAL'; userIds: string[] };
+
+function parseOutreachAudience(raw: unknown): OutreachAudience | null {
+  const body = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const type = typeof body.type === 'string' ? body.type.trim().toUpperCase() : '';
+  if (type === 'ALL') return { type: 'ALL' };
+  if (type === 'NON_RSVP') {
+    return { type: 'NON_RSVP', meetingId: typeof body.meetingId === 'string' ? body.meetingId : undefined };
+  }
+  if (type === 'PRIMARY_ROLE') {
+    const role = typeof body.role === 'string' ? body.role.trim().toUpperCase() : '';
+    return [ROLE_OWNER, ROLE_ADMIN, ROLE_OFFICER, ROLE_MEMBER].includes(role) ? { type: 'PRIMARY_ROLE', role } : null;
+  }
+  if (type === 'CUSTOM_ROLE') {
+    return typeof body.roleId === 'string' && body.roleId.trim() ? { type: 'CUSTOM_ROLE', roleId: body.roleId.trim() } : null;
+  }
+  if (type === 'MANUAL') {
+    const userIds = Array.isArray(body.userIds)
+      ? Array.from(new Set(body.userIds.filter((item): item is string => typeof item === 'string' && !!item.trim())))
+      : [];
+    return { type: 'MANUAL', userIds };
+  }
+  return null;
+}
+
+function audienceLabel(audience: OutreachAudience): string {
+  if (audience.type === 'ALL') return 'All members';
+  if (audience.type === 'NON_RSVP') return 'Members who have not RSVP’d';
+  if (audience.type === 'PRIMARY_ROLE') return `${audience.role.toLowerCase()} members`;
+  if (audience.type === 'CUSTOM_ROLE') return 'Selected ping role';
+  return 'Manual selection';
+}
+
+async function resolveClubAudience(
+  clubId: string,
+  audience: OutreachAudience,
+  excludeUserId?: string
+): Promise<
+  | {
+      ok: true;
+      recipients: Array<{ id: string; name: string; avatarUrl: string | null; role: string }>;
+    }
+  | { ok: false; status: number; error: string }
+> {
+  const members = await prisma.clubMember.findMany({
+    where: { clubId },
+    include: {
+      user: { select: { id: true, name: true, avatarUrl: true } },
+      customRoles: { select: { roleId: true } },
+    },
+    orderBy: { joinedAt: 'asc' },
+  });
+
+  let filtered = members;
+  if (audience.type === 'NON_RSVP') {
+    const meeting = audience.meetingId
+      ? await prisma.clubMeeting.findFirst({ where: { id: audience.meetingId, clubId } })
+      : await prisma.clubMeeting.findFirst({
+          where: { clubId, meetingTime: { gt: new Date() } },
+          orderBy: { meetingTime: 'asc' },
+        });
+    if (!meeting) return { ok: false, status: 404, error: 'Meeting not found' };
+
+    const responded = await prisma.clubMeetingAttendee.findMany({
+      where: { meetingId: meeting.id, status: { in: [RSVP_GOING, RSVP_MAYBE, RSVP_NOT_GOING] } },
+      select: { userId: true },
+    });
+    const respondedIds = new Set(responded.map((row) => row.userId));
+    filtered = members.filter((member) => !respondedIds.has(member.userId));
+  } else if (audience.type === 'PRIMARY_ROLE') {
+    filtered = members.filter((member) => member.role === audience.role);
+  } else if (audience.type === 'CUSTOM_ROLE') {
+    const role = await prisma.clubRole.findFirst({ where: { id: audience.roleId, clubId }, select: { id: true } });
+    if (!role) return { ok: false, status: 404, error: 'Role not found' };
+    filtered = members.filter((member) => member.customRoles.some((assignment) => assignment.roleId === audience.roleId));
+  } else if (audience.type === 'MANUAL') {
+    const selectedIds = new Set(audience.userIds);
+    filtered = members.filter((member) => selectedIds.has(member.userId));
+  }
+
+  const seen = new Set<string>();
+  const recipients = filtered
+    .filter((member) => {
+      if (member.userId === excludeUserId) return false;
+      if (seen.has(member.userId)) return false;
+      seen.add(member.userId);
+      return true;
+    })
+    .map((member) => ({
+      id: member.user.id,
+      name: member.user.name,
+      avatarUrl: member.user.avatarUrl,
+      role: member.role,
+    }));
+
+  return { ok: true, recipients };
 }
 
 async function requireClubMembership(
@@ -524,6 +636,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     res.status(400).json({ error: 'emoji is required' });
     return;
   }
+  const clubModerationMessage = findObjectionableContent([name, description]);
+  if (clubModerationMessage) {
+    res.status(400).json({ error: clubModerationMessage });
+    return;
+  }
   let publicFlag = true;
   if (isPublic !== undefined) {
     if (typeof isPublic !== 'boolean') {
@@ -755,6 +872,11 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
     res.status(400).json({ error: 'content is required' });
     return;
   }
+  const announcementModerationMessage = findObjectionableContent([content]);
+  if (announcementModerationMessage) {
+    res.status(400).json({ error: announcementModerationMessage });
+    return;
+  }
 
   const parsedVisibility = visibility === undefined ? VISIBILITY_PUBLIC : parseVisibility(visibility);
   if (!parsedVisibility) {
@@ -802,6 +924,208 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/outreach/preview — leaders preview exact recipient list
+router.post('/:id/outreach/preview', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const audience = parseOutreachAudience((req.body ?? {}).audience);
+
+  if (!audience) {
+    res.status(400).json({ error: 'audience is required' });
+    return;
+  }
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      include: { club: { select: { officerPermissions: true } } },
+    });
+    if (!membership || !canPostAnnouncements(membership)) {
+      res.status(403).json({ error: 'Only club leaders can preview outreach' });
+      return;
+    }
+
+    const result = await resolveClubAudience(clubId, audience, userId);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+
+    res.json({ audience: audienceLabel(audience), count: result.recipients.length, recipients: result.recipients });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/outreach/send — leaders send notification outreach after UI confirmation
+router.post('/:id/outreach/send', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const { content } = req.body ?? {};
+  const audience = parseOutreachAudience((req.body ?? {}).audience);
+  const trimmed = typeof content === 'string' ? content.trim() : '';
+
+  if (!audience) {
+    res.status(400).json({ error: 'audience is required' });
+    return;
+  }
+  if (!trimmed) {
+    res.status(400).json({ error: 'content is required' });
+    return;
+  }
+  if (trimmed.length > MAX_CLUB_OUTREACH_LENGTH) {
+    res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_OUTREACH_LENGTH} characters` });
+    return;
+  }
+  const outreachModerationMessage = findObjectionableContent([trimmed]);
+  if (outreachModerationMessage) {
+    res.status(400).json({ error: outreachModerationMessage });
+    return;
+  }
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      include: { club: { select: { officerPermissions: true } } },
+    });
+    if (!membership || !canPostAnnouncements(membership)) {
+      res.status(403).json({ error: 'Only club leaders can send outreach' });
+      return;
+    }
+
+    const rateKey = `${clubId}:${userId}:outreach`;
+    const lastSentAt = outreachRateLimit.get(rateKey) ?? 0;
+    if (Date.now() - lastSentAt < OUTREACH_COOLDOWN_MS) {
+      res.status(429).json({ error: 'Please wait a few minutes before sending another outreach message' });
+      return;
+    }
+
+    const result = await resolveClubAudience(clubId, audience, userId);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    if (result.recipients.length === 0) {
+      res.status(400).json({ error: 'No members match that audience' });
+      return;
+    }
+
+    outreachRateLimit.set(rateKey, Date.now());
+    const delivery = await NotificationService.notifyClubOutreach(
+      clubId,
+      userId,
+      result.recipients.map((recipient) => recipient.id),
+      trimmed
+    );
+    res.status(201).json({
+      ok: true,
+      audience: audienceLabel(audience),
+      count: result.recipients.length,
+      recipients: result.recipients,
+      sent: delivery.sent,
+      attempted: delivery.attempted,
+      sentAt: new Date(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/meetings/:meetingId/rsvp-reminders — leaders remind non-RSVPs
+router.post('/:id/meetings/:meetingId/rsvp-reminders', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, meetingId } = req.params;
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      include: { club: { select: { officerPermissions: true } } },
+    });
+    if (!membership || !canCreateMeetings(membership)) {
+      res.status(403).json({ error: 'Only club leaders can send RSVP reminders' });
+      return;
+    }
+
+    const meeting = await prisma.clubMeeting.findFirst({ where: { id: meetingId, clubId } });
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+    if (
+      meeting.rsvpReminderSentAt &&
+      Date.now() - meeting.rsvpReminderSentAt.getTime() < RSVP_REMINDER_COOLDOWN_MS
+    ) {
+      res.status(429).json({ error: 'Please wait before sending another RSVP reminder for this meeting' });
+      return;
+    }
+
+    const audience = await resolveClubAudience(clubId, { type: 'NON_RSVP', meetingId }, userId);
+    if (!audience.ok) {
+      res.status(audience.status).json({ error: audience.error });
+      return;
+    }
+    const recipientIds = audience.recipients.map((recipient) => recipient.id);
+    if (recipientIds.length === 0) {
+      const updated = await prisma.clubMeeting.update({
+        where: { id: meetingId },
+        data: {
+          rsvpReminderSentAt: new Date(),
+          rsvpReminderStatus: 'SUCCESS',
+          rsvpReminderCount: 0,
+          rsvpReminderError: null,
+        },
+      });
+      res.json({
+        ok: true,
+        count: 0,
+        sent: 0,
+        attempted: 0,
+        recipients: [],
+        lastSentAt: updated.rsvpReminderSentAt,
+        status: updated.rsvpReminderStatus,
+      });
+      return;
+    }
+
+    const delivery = await NotificationService.notifyClubRsvpReminder(meetingId, recipientIds);
+    const status = delivery.sent > 0 ? 'SUCCESS' : 'NO_DELIVERABLE_TOKENS';
+    const updated = await prisma.clubMeeting.update({
+      where: { id: meetingId },
+      data: {
+        rsvpReminderSentAt: new Date(),
+        rsvpReminderStatus: status,
+        rsvpReminderCount: recipientIds.length,
+        rsvpReminderError: null,
+      },
+    });
+
+    res.json({
+      ok: true,
+      count: recipientIds.length,
+      sent: delivery.sent,
+      attempted: delivery.attempted,
+      recipients: audience.recipients,
+      lastSentAt: updated.rsvpReminderSentAt,
+      status: updated.rsvpReminderStatus,
+    });
+  } catch (err) {
+    console.error(err);
+    try {
+      await prisma.clubMeeting.update({
+        where: { id: meetingId },
+        data: {
+          rsvpReminderSentAt: new Date(),
+          rsvpReminderStatus: 'FAILED',
+          rsvpReminderError: 'Internal server error',
+        },
+      });
+    } catch {}
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1142,13 +1466,18 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
     res.status(400).json({ error: 'meetingTime must be in the future' });
     return;
   }
-  if (when >= MEETING_TIME_MAX) {
-    res.status(400).json({ error: 'meetingTime must be before June 1, 2027' });
+  if (when > latestAllowedMeetingTime(now)) {
+    res.status(400).json({ error: 'meetingTime must be within the next 12 months' });
     return;
   }
 
   if (description !== undefined && description !== null && typeof description !== 'string') {
     res.status(400).json({ error: 'description must be a string' });
+    return;
+  }
+  const meetingModerationMessage = findObjectionableContent([title, location, typeof description === 'string' ? description : null]);
+  if (meetingModerationMessage) {
+    res.status(400).json({ error: meetingModerationMessage });
     return;
   }
 
@@ -1269,6 +1598,11 @@ router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
     return;
   }
+  const clubMessageModerationMessage = findObjectionableContent([trimmed]);
+  if (clubMessageModerationMessage) {
+    res.status(400).json({ error: clubMessageModerationMessage });
+    return;
+  }
 
   try {
     const gate = await requireClubMembership(clubId, userId);
@@ -1384,6 +1718,11 @@ router.post('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: 
   }
   if (content.trim().length > MAX_CLUB_MESSAGE_LENGTH) {
     res.status(400).json({ error: `Message too long (max ${MAX_CLUB_MESSAGE_LENGTH} characters)` });
+    return;
+  }
+  const officerMessageModerationMessage = findObjectionableContent([content]);
+  if (officerMessageModerationMessage) {
+    res.status(400).json({ error: officerMessageModerationMessage });
     return;
   }
 
@@ -1511,6 +1850,11 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
     res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
     return;
   }
+  const roleModerationMessage = findObjectionableContent([trimmedName]);
+  if (roleModerationMessage) {
+    res.status(400).json({ error: roleModerationMessage });
+    return;
+  }
 
   try {
     const membership = await prisma.clubMember.findUnique({
@@ -1549,6 +1893,11 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
   }
   if (trimmedName.length > MAX_ROLE_NAME_LENGTH) {
     res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
+    return;
+  }
+  const roleModerationMessage = findObjectionableContent([trimmedName]);
+  if (roleModerationMessage) {
+    res.status(400).json({ error: roleModerationMessage });
     return;
   }
 
@@ -2090,6 +2439,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
 
     res.json({
       ...club,
+      officerPermissions: parseStringList(club.officerPermissions),
       meetings: visibleMeetings,
       announcements: visibleAnnouncements,
       roles: club.roles.map((role) => ({

@@ -3,13 +3,13 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-nati
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  acceptFriendRequest,
-  API_USER_MESSAGE,
-  blockUser,
-  cancelFriendRequest,
-  createReport,
-  declineFriendRequest,
-  getFriendRelationship,
+	  acceptFriendRequest,
+	  blockUser,
+	  cancelFriendRequest,
+	  createReport,
+	  declineFriendRequest,
+	  getFriendRelationship,
+	  getApiErrorMessage,
   getThreadByUser,
   getUserProfile,
   REPORT_REASON_LABELS,
@@ -46,9 +46,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       setProfile(profileResponse);
       setRelationship(relationshipResponse);
       setLoadError(null);
-    } catch {
-      setLoadError(API_USER_MESSAGE);
-      if (showAlert) Alert.alert('Could not load profile', API_USER_MESSAGE);
+	    } catch (error) {
+	      setLoadError(getApiErrorMessage(error));
+	      if (showAlert) Alert.alert('Could not load profile', getApiErrorMessage(error));
     }
   }, [userId]);
 
@@ -76,8 +76,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       if (action === 'cancel' && relationship.requestId) await cancelFriendRequest(relationship.requestId);
       if (action === 'unfriend') await unfriend(userId);
       await refreshRelationship();
-    } catch {
-      Alert.alert('Could not update friendship', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not update friendship', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -88,8 +88,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     try {
       const thread = await getThreadByUser(userId);
       nav.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name });
-    } catch {
-      Alert.alert('Could not open messages', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not open messages', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -102,8 +102,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       if (isBlocked) await unblockUser(userId);
       else await blockUser(userId);
       await refreshRelationship();
-    } catch {
-      Alert.alert(isBlocked ? 'Could not unblock user' : 'Could not block user', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert(isBlocked ? 'Could not unblock user' : 'Could not block user', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -119,8 +119,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       });
       setReportDetails('');
       Alert.alert('Report sent', 'Thanks. We logged your report for review.');
-    } catch {
-      Alert.alert('Could not send report', API_USER_MESSAGE);
+	    } catch (error) {
+	      Alert.alert('Could not send report', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
