@@ -364,7 +364,6 @@ model Club {
   avatarUrl   String?
   isVerified  Boolean  @default(false)
   isPublic    Boolean  @default(true)
-  isPrivate   Boolean  @default(false)
   university  String   @default("OSU")
   createdById String
   officerPermissions String @default("[]")
@@ -380,7 +379,6 @@ model Club {
   officerMessages ClubOfficerMessage[]
 
   @@index([isPublic, category])
-  @@index([isPrivate, category])
 }
 
 model ClubMember {

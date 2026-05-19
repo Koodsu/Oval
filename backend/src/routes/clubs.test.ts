@@ -235,6 +235,64 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('DELETE /clubs/:id/meetings/:meetingId', () => {
+    it('allows club admins to delete meetings', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const meeting = await prisma.clubMeeting.create({
+        data: {
+          clubId: create.body.id,
+          title: 'Board meeting',
+          location: 'Union',
+          meetingTime: new Date(Date.now() + 86400000),
+          createdById: userId,
+        },
+      });
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/meetings/${meeting.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const gone = await prisma.clubMeeting.findUnique({ where: { id: meeting.id } });
+      expect(gone).toBeNull();
+    });
+
+    it('returns 403 for non-admin members', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: token2 } = await registerAndGetToken(
+        'MeetingMember',
+        `meeting-member-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${token2}`).expect(201);
+
+      const meeting = await prisma.clubMeeting.create({
+        data: {
+          clubId: create.body.id,
+          title: 'Member cannot delete',
+          location: 'Union',
+          meetingTime: new Date(Date.now() + 86400000),
+          createdById: userId,
+        },
+      });
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/meetings/${meeting.id}`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(403);
+    });
+  });
+
   describe('POST /clubs/meetings/:meetingId/rsvp', () => {
     it('upserts RSVP status', async () => {
       const create = await request(app)
@@ -586,6 +644,60 @@ describe('Clubs API (integration)', () => {
         .post(`/clubs/${create.body.id}/announcements`)
         .set('Authorization', `Bearer ${t2}`)
         .send({ content: 'Nope' })
+        .expect(403);
+    });
+  });
+
+  describe('DELETE /clubs/:id/announcements/:announcementId', () => {
+    it('allows club admins to delete announcements', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const announcement = await prisma.clubAnnouncement.create({
+        data: {
+          clubId: create.body.id,
+          userId,
+          content: 'Delete me',
+        },
+      });
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/announcements/${announcement.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const gone = await prisma.clubAnnouncement.findUnique({ where: { id: announcement.id } });
+      expect(gone).toBeNull();
+    });
+
+    it('returns 403 for non-admin members', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const { token: token2 } = await registerAndGetToken(
+        'AnnouncementMember',
+        `announcement-member-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app).post(`/clubs/${create.body.id}/join`).set('Authorization', `Bearer ${token2}`).expect(201);
+
+      const announcement = await prisma.clubAnnouncement.create({
+        data: {
+          clubId: create.body.id,
+          userId,
+          content: 'Do not delete',
+        },
+      });
+
+      await request(app)
+        .delete(`/clubs/${create.body.id}/announcements/${announcement.id}`)
+        .set('Authorization', `Bearer ${token2}`)
         .expect(403);
     });
   });
@@ -986,8 +1098,8 @@ describe('Clubs API (integration)', () => {
     });
   });
 
-  describe('Club ping roles', () => {
-    it('lets leadership create, assign, target, and delete ping roles', async () => {
+  describe('Club member tags', () => {
+    it('lets leadership create, assign, target, and delete member tags', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -1043,7 +1155,7 @@ describe('Clubs API (integration)', () => {
         .expect(200);
     });
 
-    it('prevents admins from assigning ping roles to owners', async () => {
+    it('prevents admins from assigning member tags to owners', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { deleteMyAccount, getApiErrorMessage, getFriends, getMyClubs, getNotificationPreferences, updateNotificationPreferences } from '../api';
 import { RootStackParamList } from '../../App';
 import { NotificationPreferences } from '../api';
@@ -125,7 +126,9 @@ export default function ProfileScreen() {
             <TouchableOpacity key={membership.club.id} onPress={() => navigation.navigate('ClubDetail', { clubId: membership.club.id })}>
               <Panel>
                 <View style={styles.friendRow}>
-                  <Text style={styles.clubEmoji}>{membership.club.emoji}</Text>
+                  <View style={styles.clubIcon}>
+                    <Ionicons name="people-outline" size={20} color={palette.scarlet} />
+                  </View>
                   <View style={styles.profileCopy}>
                     <Text style={styles.title}>{membership.club.name}</Text>
                     <Text style={styles.body}>
@@ -243,8 +246,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  clubEmoji: {
-    fontSize: 26,
+  clubIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(199, 59, 34, 0.10)',
   },
   prefRow: {
     flexDirection: 'row',

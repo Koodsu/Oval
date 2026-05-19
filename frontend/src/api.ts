@@ -388,6 +388,12 @@ export const createClubAnnouncement = (
     { method: 'POST', body: JSON.stringify(body) }
   );
 
+export const deleteClubAnnouncement = (clubId: string, announcementId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/announcements/${encodeURIComponent(announcementId)}`,
+    { method: 'DELETE' }
+  );
+
 export const patchClubMemberRole = (
   clubId: string,
   memberUserId: string,
@@ -466,6 +472,12 @@ export const createClubMeeting = (clubId: string, body: CreateClubMeetingBody) =
   request<import('./types').ClubMeetingWithMeta>(
     `/clubs/${encodeURIComponent(clubId)}/meetings`,
     { method: 'POST', body: JSON.stringify(body) }
+  );
+
+export const deleteClubMeeting = (clubId: string, meetingId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/meetings/${encodeURIComponent(meetingId)}`,
+    { method: 'DELETE' }
   );
 
 export const openClubAttendance = (clubId: string, meetingId: string) =>

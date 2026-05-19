@@ -7,9 +7,9 @@ const API_URL = import.meta.env.VITE_BRIDGE_API_URL ?? 'http://localhost:3000'
 const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`
 
 const CATEGORIES = [
-  'Sports & Fitness', 'Food & Drink', 'Academic', 'Arts & Creative',
-  'Social', 'Outdoors', 'Music & Entertainment', 'Wellness', 'Gaming',
-  'Volunteering', 'Other',
+  'Sports & Fitness', 'Food & Drink', 'Academic', 'Business', 'STEM',
+  'Arts & Creative', 'Social', 'Outdoors', 'Music & Entertainment',
+  'Wellness', 'Gaming', 'Volunteering', 'Other',
 ]
 
 const OPERATOR_PILLARS = [

@@ -14,10 +14,12 @@ import {
   assignClubRole,
   createReport,
   createClubRole,
-	  deleteClub,
-	  deleteClubRole,
-	  getApiErrorMessage,
-	  getClubShareUrl,
+  deleteClub,
+  deleteClubAnnouncement,
+  deleteClubMeeting,
+  deleteClubRole,
+  getApiErrorMessage,
+  getClubShareUrl,
   getClubMeetingAttendance,
   type ClubOutreachAudience,
   type ClubOutreachPreview,
@@ -101,8 +103,8 @@ const CLUB_PERMISSION_OPTIONS = [
   },
   {
     value: 'MANAGE_ROLES',
-    title: 'Manage ping roles',
-    body: 'Create, delete, and assign custom ping roles.',
+    title: 'Manage member tags',
+    body: 'Create, delete, and assign custom member tags.',
   },
   {
     value: 'CREATE_MEETINGS',
@@ -186,6 +188,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [officerSendBusy, setOfficerSendBusy] = useState(false);
   const [meetingBusy, setMeetingBusy] = useState(false);
   const [announcementBusy, setAnnouncementBusy] = useState(false);
+  const [deleteContentBusyId, setDeleteContentBusyId] = useState<string | null>(null);
   const [memberActionUserId, setMemberActionUserId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [meetingTitle, setMeetingTitle] = useState('');
@@ -238,6 +241,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const canManageMembers = hasPermission('MANAGE_MEMBERS');
   const canManageRoles = hasPermission('MANAGE_ROLES');
   const canManageClub = hasPermission('MANAGE_CLUB');
+  const canDeleteClubContent = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const canViewOfficerChat = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER';
   const canConfigureOfficerPermissions = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const canChangePrimaryRoles = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
@@ -625,6 +629,26 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleDeleteAnnouncement = (announcement: ClubAnnouncementRow) => {
+    if (!club) return;
+    confirmDestructive(
+      'Delete announcement?',
+      'This permanently removes the announcement from the club.',
+      'Delete announcement',
+      async () => {
+        setDeleteContentBusyId(`announcement:${announcement.id}`);
+        try {
+          await deleteClubAnnouncement(club.id, announcement.id);
+          setAnnouncements((current) => current.filter((item) => item.id !== announcement.id));
+        } catch {
+          Alert.alert('Could not delete announcement', API_USER_MESSAGE);
+        } finally {
+          setDeleteContentBusyId(null);
+        }
+      }
+    );
+  };
+
   const handleCreateMeeting = async () => {
     if (!club || !meetingTitle.trim() || !meetingLocation.trim()) {
       Alert.alert('Missing meeting info', 'Add a title and location before creating the meeting.');
@@ -658,6 +682,31 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     } finally {
       setMeetingBusy(false);
     }
+  };
+
+  const handleDeleteMeeting = (meeting: ClubMeetingWithMeta) => {
+    if (!club) return;
+    confirmDestructive(
+      'Delete meeting?',
+      `${meeting.title} will be removed from the club calendar.`,
+      'Delete meeting',
+      async () => {
+        setDeleteContentBusyId(`meeting:${meeting.id}`);
+        try {
+          await deleteClubMeeting(club.id, meeting.id);
+          setMeetings((current) => current.filter((item) => item.id !== meeting.id));
+          setAttendancePanels((current) => {
+            const next = { ...current };
+            delete next[meeting.id];
+            return next;
+          });
+        } catch {
+          Alert.alert('Could not delete meeting', API_USER_MESSAGE);
+        } finally {
+          setDeleteContentBusyId(null);
+        }
+      }
+    );
   };
 
   const handleOpenAttendance = async (meetingId: string) => {
@@ -932,9 +981,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     if (!club) return;
     const role = club.roles?.find((item) => item.id === roleId);
     confirmDestructive(
-      'Delete ping role?',
+      'Delete member tag?',
       `${role?.name ?? 'This role'} will be removed from the club and all assigned members.`,
-      'Delete role',
+      'Delete tag',
       async () => {
         await handleDeleteRoleNow(roleId);
       }
@@ -967,7 +1016,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleTogglePingRole = async (memberUserId: string, roleId: string, assigned: boolean) => {
+  const handleToggleMemberTag = async (memberUserId: string, roleId: string, assigned: boolean) => {
     if (!club) return;
     setRoleBusyId(`${memberUserId}:${roleId}`);
     try {
@@ -1186,15 +1235,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.coverArt}>
-                  <Text style={styles.coverEmoji}>{club.emoji}</Text>
-                </View>
+                <View style={styles.coverArt} />
               </LinearGradient>
 
               <View style={styles.heroCard}>
                 <View style={styles.identityRow}>
                   <View style={styles.clubAvatarTile}>
-                    <Text style={styles.clubAvatarEmoji}>{club.emoji}</Text>
+                    <Ionicons name="people-outline" size={34} color={palette.scarlet} />
                   </View>
                   <View style={styles.identityCopy}>
                     <Text style={styles.clubTitle}>{club.name}</Text>
@@ -1288,7 +1335,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                   {nextMeeting ? (
                     <View style={styles.upcomingCard}>
                       <LinearGradient colors={['#E8DCCB', '#F2ECE3']} style={styles.upcomingThumb}>
-                        <Text style={styles.upcomingThumbEmoji}>{club.emoji}</Text>
+                        <Ionicons name="calendar-outline" size={34} color={palette.scarlet} />
                       </LinearGradient>
 
                       <View style={styles.upcomingCopy}>
@@ -1376,12 +1423,24 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           </TouchableOpacity>
                         </View>
                         <Text style={styles.cardBody}>{announcement.content}</Text>
-                        {announcement.user.id !== user?.id ? (
-                          <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
-                            <Ionicons name="flag-outline" size={15} color={palette.slate} />
-                            <Text style={styles.reportInlineText}>Report</Text>
-                          </TouchableOpacity>
-                        ) : null}
+                        <View style={styles.inlineActionRow}>
+                          {canDeleteClubContent ? (
+                            <TouchableOpacity
+                              onPress={() => void handleDeleteAnnouncement(announcement)}
+                              style={styles.reportInlineButton}
+                              disabled={deleteContentBusyId === `announcement:${announcement.id}`}
+                            >
+                              <Ionicons name="trash-outline" size={15} color={palette.dangerText} />
+                              <Text style={[styles.reportInlineText, styles.dangerInlineText]}>Delete</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          {announcement.user.id !== user?.id ? (
+                            <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
+                              <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                              <Text style={styles.reportInlineText}>Report</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
                       </View>
                     ))
                   ) : (
@@ -1539,12 +1598,24 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                 </View>
                               </View>
                               <Text style={styles.cardBody}>{announcement.content}</Text>
-                              {announcement.user.id !== user?.id ? (
-                                <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
-                                  <Ionicons name="flag-outline" size={15} color={palette.slate} />
-                                  <Text style={styles.reportInlineText}>Report</Text>
-                                </TouchableOpacity>
-                              ) : null}
+                              <View style={styles.inlineActionRow}>
+                                {canDeleteClubContent ? (
+                                  <TouchableOpacity
+                                    onPress={() => void handleDeleteAnnouncement(announcement)}
+                                    style={styles.reportInlineButton}
+                                    disabled={deleteContentBusyId === `announcement:${announcement.id}`}
+                                  >
+                                    <Ionicons name="trash-outline" size={15} color={palette.dangerText} />
+                                    <Text style={[styles.reportInlineText, styles.dangerInlineText]}>Delete</Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                                {announcement.user.id !== user?.id ? (
+                                  <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
+                                    <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                                    <Text style={styles.reportInlineText}>Report</Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
                             </View>
                           )) : (
                             <EmptyState
@@ -1697,7 +1768,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         <>
                           <View style={styles.roleManagerHeader}>
                             <View>
-                              <Text style={styles.cardTitle}>Ping roles</Text>
+                              <Text style={styles.cardTitle}>Member tags</Text>
                               <Text style={styles.cardMeta}>
                                 Create labels for dues, levels, committees, or cohorts.
                               </Text>
@@ -1741,7 +1812,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               ))}
                             </View>
                           ) : (
-                            <Text style={styles.cardMeta}>No ping roles yet. Add one above, then assign it from a member card.</Text>
+                            <Text style={styles.cardMeta}>No member tags yet. Add one above, then assign one from a member card.</Text>
                           )}
                         </>
                       ) : null}
@@ -1770,7 +1841,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                   ALL: 'All',
                                   NON_RSVP: 'Non-RSVPs',
                                   PRIMARY_ROLE: 'Role',
-                                  CUSTOM_ROLE: 'Ping role',
+                                  CUSTOM_ROLE: 'Member tag',
                                   MANUAL: 'Manual',
                                 }[type]}
                                 active={outreachAudienceType === type}
@@ -1817,7 +1888,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                   }}
                                 />
                               )) : (
-                                <Text style={styles.cardMeta}>Create ping roles before targeting them.</Text>
+                                <Text style={styles.cardMeta}>Create member tags before targeting them.</Text>
                               )}
                             </View>
                           ) : null}
@@ -1926,7 +1997,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         >
                           <Ionicons name="pricetag-outline" size={15} color={palette.scarlet} />
                           <Text style={styles.memberRoleToggleText}>
-                            {(member.customRoles ?? []).length ? 'Edit ping roles' : 'Assign ping roles'}
+                            {(member.customRoles ?? []).length ? 'Edit member tags' : 'Assign member tags'}
                           </Text>
                         </TouchableOpacity>
                       ) : null}
@@ -1939,7 +2010,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               <TouchableOpacity
                                 key={role.id}
                                 style={[styles.roleAssignButton, assigned ? styles.roleAssignButtonActive : null]}
-                                onPress={() => void handleTogglePingRole(member.userId, role.id, assigned)}
+                                onPress={() => void handleToggleMemberTag(member.userId, role.id, assigned)}
                                 disabled={busy}
                               >
                                 <Ionicons
@@ -2081,7 +2152,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     <View key={meeting.id} style={styles.eventCard}>
                       <View style={styles.eventHead}>
                         <View style={styles.eventThumb}>
-                          <Text style={styles.eventThumbEmoji}>{club.emoji}</Text>
+                          <Ionicons name="calendar-outline" size={30} color={palette.scarlet} />
                         </View>
                         <View style={styles.eventCopy}>
                           <Text style={styles.eventDateLine}>
@@ -2090,7 +2161,18 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           <Text style={styles.eventTitle}>{meeting.title}</Text>
                           <Text style={styles.eventLocation}>{meeting.location}</Text>
                         </View>
-                        <Text style={styles.eventGoing}>{meeting.rsvpCounts.going} going</Text>
+                        <View style={styles.eventActions}>
+                          <Text style={styles.eventGoing}>{meeting.rsvpCounts.going} going</Text>
+                          {canDeleteClubContent ? (
+                            <TouchableOpacity
+                              style={styles.eventDeleteButton}
+                              onPress={() => void handleDeleteMeeting(meeting)}
+                              disabled={deleteContentBusyId === `meeting:${meeting.id}`}
+                            >
+                              <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
                       </View>
 
                       <View style={styles.rsvpRow}>
@@ -2342,11 +2424,13 @@ function RoleTargetPicker({
   selectedRoleIds: string[];
   onToggle: (roleId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+
   if (!roles.length) {
     return (
       <View style={styles.targetPickerEmpty}>
         <Ionicons name="pricetags-outline" size={16} color={palette.slate} />
-        <Text style={styles.cardMeta}>Add ping roles from Members to target specific groups.</Text>
+        <Text style={styles.cardMeta}>Add member tags from Members to target specific groups.</Text>
       </View>
     );
   }
@@ -2354,33 +2438,60 @@ function RoleTargetPicker({
   return (
     <View style={styles.targetPicker}>
       <View style={styles.targetPickerHeader}>
-        <Text style={styles.targetPickerTitle}>Target ping roles</Text>
+        <Text style={styles.targetPickerTitle}>Target member tags</Text>
         <Text style={styles.targetPickerCount}>
           {selectedRoleIds.length ? `${selectedRoleIds.length} selected` : 'Optional'}
         </Text>
       </View>
       <View style={styles.roleChipWrap}>
-        {roles.map((role) => {
-          const selected = selectedRoleIds.includes(role.id);
+        {selectedRoleIds.map((roleId) => {
+          const role = roles.find((item) => item.id === roleId);
+          if (!role) return null;
           return (
             <TouchableOpacity
               key={role.id}
-              style={[styles.targetRoleChip, selected ? styles.targetRoleChipActive : null]}
+              style={[styles.targetRoleChip, styles.targetRoleChipActive]}
               onPress={() => onToggle(role.id)}
               activeOpacity={0.82}
             >
-              <Ionicons
-                name={selected ? 'checkmark-circle' : 'add-circle-outline'}
-                size={15}
-                color={selected ? palette.white : palette.scarlet}
-              />
-              <Text style={[styles.targetRoleChipText, selected ? styles.targetRoleChipTextActive : null]}>
+              <Ionicons name="checkmark-circle" size={15} color={palette.white} />
+              <Text style={[styles.targetRoleChipText, styles.targetRoleChipTextActive]}>
                 {role.name}
               </Text>
             </TouchableOpacity>
           );
         })}
+        <TouchableOpacity
+          style={styles.targetRoleAddButton}
+          onPress={() => setOpen((current) => !current)}
+          activeOpacity={0.82}
+          accessibilityLabel={open ? 'Close member tag picker' : 'Open member tag picker'}
+        >
+          <Ionicons name={open ? 'remove' : 'add'} size={18} color={palette.scarlet} />
+        </TouchableOpacity>
       </View>
+      {open ? (
+        <View style={styles.targetRoleMenu}>
+          {roles.map((role) => {
+            const selected = selectedRoleIds.includes(role.id);
+            return (
+              <TouchableOpacity
+                key={role.id}
+                style={[styles.targetRoleMenuItem, selected ? styles.targetRoleMenuItemActive : null]}
+                onPress={() => onToggle(role.id)}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.targetRoleMenuText}>{role.name}</Text>
+                <Ionicons
+                  name={selected ? 'checkmark-circle' : 'add-circle-outline'}
+                  size={18}
+                  color={selected ? palette.scarlet : palette.slate}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -2461,9 +2572,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingBottom: 44,
   },
-  coverEmoji: {
-    fontSize: 74,
-  },
   heroCard: {
     marginTop: -38,
     marginHorizontal: spacing.md,
@@ -2487,9 +2595,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(108, 79, 220, 0.10)',
-  },
-  clubAvatarEmoji: {
-    fontSize: 40,
   },
   identityCopy: {
     flex: 1,
@@ -2609,9 +2714,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  upcomingThumbEmoji: {
-    fontSize: 38,
   },
   upcomingCopy: {
     flex: 1,
@@ -2989,12 +3091,11 @@ const styles = StyleSheet.create({
     color: palette.white,
   },
   chatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
   newChatButton: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -3166,6 +3267,40 @@ const styles = StyleSheet.create({
   targetRoleChipTextActive: {
     color: palette.white,
   },
+  targetRoleAddButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(199, 59, 34, 0.22)',
+    backgroundColor: palette.white,
+  },
+  targetRoleMenu: {
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    paddingTop: spacing.xs,
+  },
+  targetRoleMenuItem: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: palette.white,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+  },
+  targetRoleMenuItemActive: {
+    backgroundColor: '#FFF1F0',
+  },
+  targetRoleMenuText: {
+    ...typography.bodyStrong,
+    color: palette.ink,
+  },
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -3232,6 +3367,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: palette.slate,
+  },
+  inlineActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  dangerInlineText: {
+    color: palette.dangerText,
   },
   typingText: {
     ...typography.body,
@@ -3314,6 +3458,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  eventActions: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+  eventDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF1F0',
+  },
   eventThumb: {
     width: 76,
     height: 76,
@@ -3321,9 +3477,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#EFE7DA',
-  },
-  eventThumbEmoji: {
-    fontSize: 34,
   },
   eventCopy: {
     flex: 1,

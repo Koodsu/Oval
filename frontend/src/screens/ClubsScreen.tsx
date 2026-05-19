@@ -8,15 +8,13 @@ import { getApiErrorMessage, getClubs, getClubsToday, joinClub } from '../api';
 import { ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import { RootStackParamList } from '../../App';
 import { Chip, EmptyState, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import { CLUB_CATEGORIES, clubCategoryMatches } from '../constants/clubCategories';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const CLUB_FILTERS = ['Academic', 'Sports', 'Arts', 'Service', 'Cultural', 'Social'];
-
 function clubMatchesFilter(club: ClubDirectoryEntry, filter: string | null) {
-  if (!filter) return true;
-  return club.category.toLowerCase().includes(filter.toLowerCase());
+  return clubCategoryMatches(club.category, filter);
 }
 
 function memberLabel(count: number) {
@@ -139,7 +137,7 @@ export default function ClubsScreen() {
           contentContainerStyle={styles.chipRow}
         >
           <Chip label="All" active={!filter} onPress={() => setFilter(null)} />
-          {CLUB_FILTERS.map((item) => (
+          {CLUB_CATEGORIES.map((item) => (
             <Chip
               key={item}
               label={item}
@@ -164,7 +162,6 @@ export default function ClubsScreen() {
                 <View style={styles.featuredCard}>
                   <LinearGradient colors={featuredGradient(index)} style={styles.featuredBanner}>
                     <Text style={styles.featuredSignal}>{memberLabel(club.memberCount)}</Text>
-                    <Text style={styles.featuredEmoji}>{club.emoji}</Text>
                   </LinearGradient>
 
                   <View style={styles.featuredBody}>
@@ -243,7 +240,7 @@ export default function ClubsScreen() {
                 >
                   <LinearGradient colors={featuredGradient(index)} style={styles.popularMedia}>
                     <View style={styles.popularIconBadge}>
-                      <Text style={styles.popularEmoji}>{club.emoji}</Text>
+                      <Ionicons name="people-outline" size={22} color={palette.ink} />
                     </View>
                   </LinearGradient>
 
@@ -296,7 +293,7 @@ export default function ClubsScreen() {
               onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
             >
               <View style={styles.tonightIcon}>
-                <Text style={styles.tonightEmoji}>{meeting.clubEmoji}</Text>
+                <Ionicons name="calendar-outline" size={21} color={palette.scarlet} />
               </View>
               <View style={styles.tonightCopy}>
                 <Text style={styles.tonightTitle} numberOfLines={1}>{meeting.clubName}</Text>
@@ -375,10 +372,6 @@ const styles = StyleSheet.create({
     color: palette.white,
     fontSize: 12,
     fontWeight: '800',
-  },
-  featuredEmoji: {
-    alignSelf: 'center',
-    fontSize: 56,
   },
   featuredBody: {
     padding: spacing.md,
@@ -491,9 +484,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.92)',
   },
-  popularEmoji: {
-    fontSize: 22,
-  },
   popularBody: {
     padding: 12,
     gap: 6,
@@ -565,9 +555,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(16, 33, 43, 0.05)',
-  },
-  tonightEmoji: {
-    fontSize: 23,
   },
   tonightCopy: {
     flex: 1,
