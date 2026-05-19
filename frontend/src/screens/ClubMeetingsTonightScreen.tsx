@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { getApiErrorMessage, getClubsToday } from '../api';
 import type { RootStackParamList } from '../../App';
 import { ClubMeetingToday } from '../types';
@@ -52,7 +53,7 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
           >
             <View style={styles.iconTile}>
-              <Text style={styles.iconEmoji}>{meeting.clubEmoji}</Text>
+              <Ionicons name="calendar-outline" size={23} color={palette.scarlet} />
             </View>
 
             <View style={styles.copy}>
@@ -99,9 +100,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(16, 33, 43, 0.05)',
-  },
-  iconEmoji: {
-    fontSize: 24,
   },
   copy: {
     flex: 1,

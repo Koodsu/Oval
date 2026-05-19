@@ -329,7 +329,7 @@ export default function HomeScreen() {
             >
               <View style={styles.clubMeta}>
                 <View style={styles.clubIcon}>
-                  <Text style={styles.clubEmoji}>{meeting.clubEmoji}</Text>
+                  <Ionicons name="calendar-outline" size={20} color={palette.scarlet} />
                 </View>
                 <View style={styles.feedText}>
                   <Text style={styles.cardTitle}>{meeting.title}</Text>
@@ -560,8 +560,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFF1DE',
-  },
-  clubEmoji: {
-    fontSize: 20,
   },
 });

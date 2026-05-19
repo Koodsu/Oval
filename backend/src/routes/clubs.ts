@@ -215,6 +215,10 @@ function canDeleteMessages(membership: { role: string; club?: { officerPermissio
   return hasClubPermission(membership, PERMISSION_DELETE_MESSAGES);
 }
 
+function canDeleteClubContent(membership: { role: string } | null | undefined): boolean {
+  return roleRank(membership?.role) >= roleRank(ROLE_ADMIN);
+}
+
 function canAccessTargetRoles(
   targetRoleIds: string | null | undefined,
   myRoleIds: Set<string>,
@@ -286,7 +290,7 @@ function audienceLabel(audience: OutreachAudience): string {
   if (audience.type === 'ALL') return 'All members';
   if (audience.type === 'NON_RSVP') return 'Members who have not RSVP’d';
   if (audience.type === 'PRIMARY_ROLE') return `${audience.role.toLowerCase()} members`;
-  if (audience.type === 'CUSTOM_ROLE') return 'Selected ping role';
+  if (audience.type === 'CUSTOM_ROLE') return 'Selected member tag';
   return 'Manual selection';
 }
 
@@ -436,12 +440,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   try {
     const where: {
       isPublic: boolean;
-      OR?: Array<{ isPrivate: boolean } | { members: { some: { userId: string } } }>;
       category?: string;
       name?: { contains: string; mode: 'insensitive' };
     } = {
       isPublic: true,
-      OR: [{ isPrivate: false }, { members: { some: { userId } } }],
     };
 
     if (category && typeof category === 'string' && category.trim()) {
@@ -483,7 +485,6 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
         emoji: c.emoji,
         isVerified: c.isVerified,
         isPublic: c.isPublic,
-        isPrivate: c.isPrivate,
         university: c.university,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -817,14 +818,14 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
   try {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { id: true, isPublic: true, isPrivate: true, members: { where: { userId }, select: { userId: true } } },
+      select: { id: true, isPublic: true, members: { where: { userId }, select: { userId: true } } },
     });
 
     if (!club) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
-    if ((!club.isPublic || club.isPrivate) && club.members.length === 0) {
+    if (!club.isPublic && club.members.length === 0) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
@@ -922,6 +923,37 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
       ...announcement,
       targetRoleIds: parseStringList(announcement.targetRoleIds),
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/announcements/:announcementId — OWNER/ADMIN only
+router.delete('/:id/announcements/:announcementId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, announcementId } = req.params;
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!canDeleteClubContent(membership)) {
+      res.status(403).json({ error: 'Only club admins can delete announcements' });
+      return;
+    }
+
+    const announcement = await prisma.clubAnnouncement.findFirst({
+      where: { id: announcementId, clubId },
+      select: { id: true },
+    });
+    if (!announcement) {
+      res.status(404).json({ error: 'Announcement not found' });
+      return;
+    }
+
+    await prisma.clubAnnouncement.delete({ where: { id: announcementId } });
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -1320,7 +1352,6 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
       select: {
         id: true,
         isPublic: true,
-        isPrivate: true,
         members: {
           where: { userId },
           select: {
@@ -1341,7 +1372,7 @@ router.get('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response)
     const myMembership = club.members[0] ?? null;
     const myRole = myMembership?.role ?? null;
     const myRoleIds = new Set(myMembership?.customRoles.map((role) => role.roleId) ?? []);
-    if ((!club.isPublic || club.isPrivate) && !isMember) {
+    if (!club.isPublic && !isMember) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
@@ -1549,6 +1580,37 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
       myRsvp: null,
       attendeeCount: 0,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/meetings/:meetingId — OWNER/ADMIN only
+router.delete('/:id/meetings/:meetingId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, meetingId } = req.params;
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!canDeleteClubContent(membership)) {
+      res.status(403).json({ error: 'Only club admins can delete meetings' });
+      return;
+    }
+
+    const meeting = await prisma.clubMeeting.findFirst({
+      where: { id: meetingId, clubId },
+      select: { id: true },
+    });
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    await prisma.clubMeeting.delete({ where: { id: meetingId } });
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -1802,7 +1864,7 @@ router.post('/:id/officer-typing', requireAuth, async (req: AuthRequest, res: Re
   }
 });
 
-// GET /clubs/:id/roles — members can list ping roles
+// GET /clubs/:id/roles — members can list member tags
 router.get('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
@@ -1835,7 +1897,7 @@ router.get('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): P
   }
 });
 
-// POST /clubs/:id/roles — create a named ping role
+// POST /clubs/:id/roles — create a named member tag
 router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
@@ -1880,7 +1942,7 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
   }
 });
 
-// PATCH /clubs/:id/roles/:roleId — rename a ping role
+// PATCH /clubs/:id/roles/:roleId — rename a member tag
 router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId, roleId } = req.params;
@@ -1932,7 +1994,7 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
   }
 });
 
-// DELETE /clubs/:id/roles/:roleId — delete a ping role and its assignments
+// DELETE /clubs/:id/roles/:roleId — delete a member tag and its assignments
 router.delete('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId, roleId } = req.params;
@@ -1961,7 +2023,7 @@ router.delete('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: R
   }
 });
 
-// POST /clubs/:id/roles/:roleId/members/:memberUserId — assign ping role
+// POST /clubs/:id/roles/:roleId/members/:memberUserId — assign member tag
 router.post(
   '/:id/roles/:roleId/members/:memberUserId',
   requireAuth,
@@ -2025,7 +2087,7 @@ router.post(
   }
 );
 
-// DELETE /clubs/:id/roles/:roleId/members/:memberUserId — remove ping role
+// DELETE /clubs/:id/roles/:roleId/members/:memberUserId — remove member tag
 router.delete(
   '/:id/roles/:roleId/members/:memberUserId',
   requireAuth,
