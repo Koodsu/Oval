@@ -4,7 +4,6 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 
 const router = Router();
-const resend = new Resend(process.env.RESEND_API_KEY);
 const WAITLIST_SEGMENT_ID = process.env.RESEND_WAITLIST_SEGMENT_ID?.trim() || undefined;
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL?.trim() || 'contactus@joinbridgeapp.com';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || 'noreply@joinbridgeapp.com';
@@ -31,7 +30,17 @@ function requestIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
+function getResendClient(): Resend | null {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  return apiKey ? new Resend(apiKey) : null;
+}
+
 async function getWaitlistCount(): Promise<number> {
+  const resend = getResendClient();
+  if (!resend) {
+    throw new Error('Waitlist counter is unavailable');
+  }
+
   let total = 0;
   let after: string | undefined;
 
@@ -72,7 +81,8 @@ router.get('/count', asyncHandler(async (_req: Request, res: Response) => {
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body as { email?: unknown };
 
-  if (!process.env.RESEND_API_KEY) {
+  const resend = getResendClient();
+  if (!resend) {
     res.status(503).json({ error: 'Waitlist signup is temporarily unavailable' });
     return;
   }
@@ -110,7 +120,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 router.post('/club-registration', asyncHandler(async (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
 
-  if (!process.env.RESEND_API_KEY) {
+  const resend = getResendClient();
+  if (!resend) {
     res.status(503).json({ error: 'Club registration is temporarily unavailable' });
     return;
   }
