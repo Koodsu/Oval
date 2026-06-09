@@ -155,7 +155,11 @@ export function SectionHeader({
     <View style={styles.sectionRow}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {actionLabel && onActionPress ? (
-        <TouchableOpacity onPress={onActionPress}>
+        <TouchableOpacity
+          onPress={onActionPress}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+        >
           <Text style={styles.sectionAction}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -199,7 +203,16 @@ export function Chip({
   );
 
   if (!onPress) return content;
-  return <TouchableOpacity onPress={onPress}>{content}</TouchableOpacity>;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+    >
+      {content}
+    </TouchableOpacity>
+  );
 }
 
 export function SegmentedControl<T extends string>({
@@ -220,6 +233,9 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             style={[styles.segment, active && styles.segmentActive]}
             onPress={() => onChange(option.value)}
+            accessibilityRole="tab"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected: active }}
           >
             <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
               {option.label}
@@ -249,6 +265,9 @@ export function SearchField({
         placeholder={placeholder}
         placeholderTextColor={palette.slate}
         style={styles.searchInput}
+        accessibilityLabel={placeholder}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
       />
     </View>
   );

@@ -1,28 +1,63 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
+import fs from 'fs';
 import multer from 'multer';
+import path from 'path';
 import prisma from '../prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
 import { MEMBER_USER_SELECT, parseMemberTags } from '../lib/joinExistingPod';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 import { NotificationService } from '../lib/NotificationService';
-import { supabaseStorage } from '../lib/supabaseStorage';
-import { findObjectionableContent } from '../lib/contentModeration';
+import { isSupabaseStorageConfigured, supabaseStorage } from '../lib/supabaseStorage';
+import { moderateImageContent, moderateTextContent } from '../lib/contentModeration';
+import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
 const CLUB_AVATAR_BUCKET = 'club-avatars';
+const CLUB_AVATAR_UPLOAD_DIR = path.join(__dirname, '../../uploads/club-avatars');
 
 const clubAvatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      cb(new Error('Only image files are allowed'));
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
       return;
     }
     cb(null, true);
   },
 });
+
+function clubAvatarExtension(mimetype: string): string {
+  const subtype = mimetype.split('/')[1]?.toLowerCase();
+  if (subtype === 'png') return 'png';
+  if (subtype === 'webp') return 'webp';
+  return 'jpg';
+}
+
+function clubSupabaseObjectNameFromPublicUrl(url: string): string | null {
+  const marker = `/${CLUB_AVATAR_BUCKET}/`;
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex === -1) return null;
+  return decodeURIComponent(url.slice(markerIndex + marker.length));
+}
+
+async function cleanupClubAvatarUrl(avatarUrl: string | null | undefined): Promise<void> {
+  if (!avatarUrl) return;
+
+  if (avatarUrl.startsWith('/uploads/club-avatars/')) {
+    const filename = path.basename(avatarUrl);
+    await fs.promises.unlink(path.join(CLUB_AVATAR_UPLOAD_DIR, filename)).catch(() => {});
+    return;
+  }
+
+  if (!isSupabaseStorageConfigured()) return;
+  const oldObjectName = clubSupabaseObjectNameFromPublicUrl(avatarUrl);
+  if (oldObjectName) {
+    await supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).remove([oldObjectName]).catch(() => {});
+  }
+}
 
 const router = Router();
 
@@ -63,7 +98,11 @@ function isInsideOsuCampus(lat: number, lng: number): boolean {
 }
 
 function generateAttendanceCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  return Array.from(
+    { length: 6 },
+    () => alphabet[crypto.randomInt(0, alphabet.length)]
+  ).join('');
 }
 
 // ── Role constants ──────────────────────────────────────────────────────────────
@@ -202,6 +241,10 @@ function canCreateMeetings(membership: { role: string; club?: { officerPermissio
     return membership === ROLE_OWNER || membership === ROLE_ADMIN;
   }
   return hasClubPermission(membership, PERMISSION_CREATE_MEETINGS);
+}
+
+function canManageAttendance(membership: { role: string; club?: { officerPermissions?: string | null } } | null | undefined): boolean {
+  return roleRank(membership?.role) >= roleRank(ROLE_OFFICER);
 }
 
 function canPostAnnouncements(membership: { role: string; club?: { officerPermissions?: string | null } } | string | null | undefined): boolean {
@@ -483,6 +526,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
         description: c.description,
         category: c.category,
         emoji: c.emoji,
+        avatarUrl: c.avatarUrl,
         isVerified: c.isVerified,
         isPublic: c.isPublic,
         university: c.university,
@@ -637,9 +681,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     res.status(400).json({ error: 'emoji is required' });
     return;
   }
-  const clubModerationMessage = findObjectionableContent([name, description]);
-  if (clubModerationMessage) {
-    res.status(400).json({ error: clubModerationMessage });
+  const clubModeration = await moderateTextContent([name, description]);
+  if (clubModeration) {
+    res.status(clubModeration.status).json({ error: clubModeration.message });
     return;
   }
   let publicFlag = true;
@@ -873,9 +917,9 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
     res.status(400).json({ error: 'content is required' });
     return;
   }
-  const announcementModerationMessage = findObjectionableContent([content]);
-  if (announcementModerationMessage) {
-    res.status(400).json({ error: announcementModerationMessage });
+  const announcementModeration = await moderateTextContent([content]);
+  if (announcementModeration) {
+    res.status(announcementModeration.status).json({ error: announcementModeration.message });
     return;
   }
 
@@ -1014,9 +1058,9 @@ router.post('/:id/outreach/send', requireAuth, async (req: AuthRequest, res: Res
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_OUTREACH_LENGTH} characters` });
     return;
   }
-  const outreachModerationMessage = findObjectionableContent([trimmed]);
-  if (outreachModerationMessage) {
-    res.status(400).json({ error: outreachModerationMessage });
+  const outreachModeration = await moderateTextContent([trimmed]);
+  if (outreachModeration) {
+    res.status(outreachModeration.status).json({ error: outreachModeration.message });
     return;
   }
 
@@ -1175,7 +1219,7 @@ router.post(
         where: { clubId_userId: { clubId, userId } },
         include: { club: { select: { officerPermissions: true } } },
       });
-      if (!membership || !canCreateMeetings(membership)) {
+      if (!membership || !canManageAttendance(membership)) {
         res.status(403).json({ error: 'Only officers and admins can open attendance' });
         return;
       }
@@ -1215,7 +1259,7 @@ router.post(
         where: { clubId_userId: { clubId, userId } },
         include: { club: { select: { officerPermissions: true } } },
       });
-      if (!membership || !canCreateMeetings(membership)) {
+      if (!membership || !canManageAttendance(membership)) {
         res.status(403).json({ error: 'Only officers and admins can close attendance' });
         return;
       }
@@ -1254,6 +1298,17 @@ router.post(
     }
 
     try {
+      const allowed = await consumeDurableRateLimit({
+        action: 'club_attendance_checkin',
+        identifiers: [`${meetingId}:${userId}`, req.ip || req.socket.remoteAddress || 'unknown'],
+        limit: 20,
+        windowMs: 15 * 60 * 1000,
+      });
+      if (!allowed) {
+        res.status(429).json({ error: 'Too many attendance-code attempts. Try again later.' });
+        return;
+      }
+
       const membership = await prisma.clubMember.findUnique({
         where: { clubId_userId: { clubId, userId } },
       });
@@ -1309,7 +1364,7 @@ router.get(
         include: { club: { select: { officerPermissions: true } } },
       });
 
-      if (!membership || !canCreateMeetings(membership)) {
+      if (!membership || !canManageAttendance(membership)) {
         res.status(403).json({ error: 'Only officers and admins can view attendance' });
         return;
       }
@@ -1506,9 +1561,9 @@ router.post('/:id/meetings', requireAuth, async (req: AuthRequest, res: Response
     res.status(400).json({ error: 'description must be a string' });
     return;
   }
-  const meetingModerationMessage = findObjectionableContent([title, location, typeof description === 'string' ? description : null]);
-  if (meetingModerationMessage) {
-    res.status(400).json({ error: meetingModerationMessage });
+  const meetingModeration = await moderateTextContent([title, location, typeof description === 'string' ? description : null]);
+  if (meetingModeration) {
+    res.status(meetingModeration.status).json({ error: meetingModeration.message });
     return;
   }
 
@@ -1660,9 +1715,9 @@ router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
     return;
   }
-  const clubMessageModerationMessage = findObjectionableContent([trimmed]);
-  if (clubMessageModerationMessage) {
-    res.status(400).json({ error: clubMessageModerationMessage });
+  const clubMessageModeration = await moderateTextContent([trimmed]);
+  if (clubMessageModeration) {
+    res.status(clubMessageModeration.status).json({ error: clubMessageModeration.message });
     return;
   }
 
@@ -1782,9 +1837,9 @@ router.post('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: 
     res.status(400).json({ error: `Message too long (max ${MAX_CLUB_MESSAGE_LENGTH} characters)` });
     return;
   }
-  const officerMessageModerationMessage = findObjectionableContent([content]);
-  if (officerMessageModerationMessage) {
-    res.status(400).json({ error: officerMessageModerationMessage });
+  const officerMessageModeration = await moderateTextContent([content]);
+  if (officerMessageModeration) {
+    res.status(officerMessageModeration.status).json({ error: officerMessageModeration.message });
     return;
   }
 
@@ -1912,9 +1967,9 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
     res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
     return;
   }
-  const roleModerationMessage = findObjectionableContent([trimmedName]);
-  if (roleModerationMessage) {
-    res.status(400).json({ error: roleModerationMessage });
+  const roleModeration = await moderateTextContent([trimmedName]);
+  if (roleModeration) {
+    res.status(roleModeration.status).json({ error: roleModeration.message });
     return;
   }
 
@@ -1957,9 +2012,9 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
     res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
     return;
   }
-  const roleModerationMessage = findObjectionableContent([trimmedName]);
-  if (roleModerationMessage) {
-    res.status(400).json({ error: roleModerationMessage });
+  const roleModeration = await moderateTextContent([trimmedName]);
+  if (roleModeration) {
+    res.status(roleModeration.status).json({ error: roleModeration.message });
     return;
   }
 
@@ -2398,34 +2453,45 @@ router.patch(
         res.status(403).json({ error: 'You do not have permission to update the club avatar' });
         return;
       }
-
-      const filename = `${clubId}-${Date.now()}.jpg`;
-
-      const { error: uploadError } = await supabaseStorage.storage
-        .from(CLUB_AVATAR_BUCKET)
-        .upload(filename, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        res.status(500).json({ error: 'Failed to upload avatar' });
+      if (!isSupabaseStorageConfigured() && process.env.NODE_ENV === 'production') {
+        res.status(500).json({ error: 'Avatar storage is not configured' });
         return;
       }
 
-      const { data: publicUrlData } = supabaseStorage.storage
-        .from(CLUB_AVATAR_BUCKET)
-        .getPublicUrl(filename);
-
-      const avatarUrl = publicUrlData.publicUrl;
-
-      // Best-effort cleanup of old avatar from Supabase Storage
-      if (club.avatarUrl) {
-        const oldFilename = club.avatarUrl.split('/').pop();
-        if (oldFilename) {
-          supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).remove([oldFilename]);
-        }
+      const moderation = await moderateImageContent(req.file.buffer, req.file.mimetype);
+      if (moderation) {
+        res.status(moderation.status).json({ error: moderation.message });
+        return;
       }
+
+      let avatarUrl: string;
+      const filename = `${clubId}-${Date.now()}.${clubAvatarExtension(req.file.mimetype)}`;
+
+      if (isSupabaseStorageConfigured()) {
+        const { error: uploadError } = await supabaseStorage.storage
+          .from(CLUB_AVATAR_BUCKET)
+          .upload(filename, req.file.buffer, {
+            contentType: req.file.mimetype,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          res.status(500).json({ error: 'Failed to upload avatar' });
+          return;
+        }
+
+        const { data: publicUrlData } = supabaseStorage.storage
+          .from(CLUB_AVATAR_BUCKET)
+          .getPublicUrl(filename);
+
+        avatarUrl = publicUrlData.publicUrl;
+      } else {
+        await fs.promises.mkdir(CLUB_AVATAR_UPLOAD_DIR, { recursive: true });
+        await fs.promises.writeFile(path.join(CLUB_AVATAR_UPLOAD_DIR, filename), req.file.buffer);
+        avatarUrl = `/uploads/club-avatars/${filename}`;
+      }
+
+      await cleanupClubAvatarUrl(club.avatarUrl);
 
       await prisma.club.update({ where: { id: clubId }, data: { avatarUrl } });
       res.json({ avatarUrl });

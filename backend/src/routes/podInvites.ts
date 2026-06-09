@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { AuthRequest, requireAuth } from '../middleware/auth';
+import { AuthRequest, requireVerifiedAuth as requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { hasBlockingRelationship } from '../lib/blocks';
 import { areFriends } from '../lib/friendUtils';
@@ -7,7 +7,6 @@ import { joinExistingPodMember, parsePodMembers } from '../lib/joinExistingPod';
 import { withDisplayName } from '../lib/userNames';
 
 const router = Router();
-router.use(requireAuth);
 
 const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
@@ -15,7 +14,7 @@ const EXPIRED = 'EXPIRED';
 const COMPLETED = 'COMPLETED';
 
 // POST /pods/:id/invite — invite a friend to a pod
-router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/:id/invite', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const senderId = req.user!.userId;
   const podId = req.params.id;
   const { receiverId } = req.body as { receiverId?: string };
@@ -106,7 +105,7 @@ router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void
 });
 
 // GET /pods/invites — incoming PENDING pod invites for the current user
-router.get('/invites', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/invites', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   try {
     const now = new Date();
@@ -155,7 +154,7 @@ router.get('/invites', async (req: AuthRequest, res: Response): Promise<void> =>
 });
 
 // POST /pods/invites/:id/accept — accept a pod invite
-router.post('/invites/:id/accept', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/invites/:id/accept', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: inviteId } = req.params;
 
@@ -256,7 +255,7 @@ router.post('/invites/:id/accept', async (req: AuthRequest, res: Response): Prom
 });
 
 // POST /pods/invites/:id/decline — decline a pod invite
-router.post('/invites/:id/decline', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/invites/:id/decline', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: inviteId } = req.params;
 

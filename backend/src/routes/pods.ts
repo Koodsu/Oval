@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
@@ -9,6 +9,7 @@ import { expireOldPods } from '../lib/expireOldPods';
 import { getActivityEmoji } from '../lib/activityEmoji';
 import { joinExistingPodMember, parsePodMembers, MEMBER_USER_SELECT } from '../lib/joinExistingPod';
 import { withDisplayName } from '../lib/userNames';
+import { moderateTextContent } from '../lib/contentModeration';
 
 const router = Router();
 
@@ -420,6 +421,12 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
 
     if (!locationInput) {
       res.status(400).json({ error: 'Location is required. Please select a location before creating a pod.' });
+      return;
+    }
+
+    const moderation = await moderateTextContent([locationInput]);
+    if (moderation) {
+      res.status(moderation.status).json({ error: moderation.message });
       return;
     }
 

@@ -4,33 +4,36 @@
     "slug": "bridge",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/brand/oval-app-icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "scheme": "bridge",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "plugins": [
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
-          "color": "#6d28d9",
+          "icon": "./assets/brand/oval-app-icon.png",
+          "color": "#C73B22",
           "sounds": []
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-status-bar",
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/oval-app-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#C73B22"
+        }
+      ]
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.bradyvb.bridgeapp",
-      "buildNumber": "1",
       "associatedDomains": [
-        "applinks:joinbridgeapp.com"
+        "applinks:www.joinbridgeapp.com"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -41,10 +44,9 @@
     "android": {
       "package": "com.bradyvb.bridgeapp",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/brand/oval-app-icon.png",
+        "backgroundColor": "#C73B22"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
         {
@@ -53,17 +55,17 @@
           "data": [
             {
               "scheme": "https",
-              "host": "joinbridgeapp.com",
+              "host": "www.joinbridgeapp.com",
               "pathPrefix": "/pod"
             },
             {
               "scheme": "https",
-              "host": "joinbridgeapp.com",
+              "host": "www.joinbridgeapp.com",
               "pathPrefix": "/clubs"
             },
             {
               "scheme": "https",
-              "host": "joinbridgeapp.com",
+              "host": "www.joinbridgeapp.com",
               "pathPrefix": "/users"
             }
           ],
@@ -75,7 +77,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/brand/oval-app-icon.png"
     },
     "extra": {
       "eas": {

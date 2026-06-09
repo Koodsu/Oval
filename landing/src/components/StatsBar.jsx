@@ -1,5 +1,5 @@
-import { STATS } from '../data/stats'
 import { useEffect, useRef, useState } from 'react'
+import { STATS } from '../data/stats'
 
 function parseNumber(str) {
   return parseInt(str.replace(/[^0-9]/g, ''), 10) || 0
@@ -36,26 +36,17 @@ function useCountUp(target, duration = 1500, active) {
   return count
 }
 
-function StatItem({ number, label, index, active }) {
+function StatItem({ number, label, active, delay }) {
   const raw = parseNumber(number)
   const suffix = getSuffix(number)
   const count = useCountUp(raw, 1400, active)
 
-  const isEvenCol = index % 2 === 0
-  const isFirstTwo = index < 2
-
   return (
-    <div
-      className={[
-        'px-6 md:px-12 py-10',
-        isEvenCol ? 'border-r border-white/8' : 'md:border-r border-white/8 md:last:border-r-0',
-        isFirstTwo ? 'border-b border-white/8 md:border-b-0' : '',
-      ].join(' ')}
-    >
-      <div className="font-display text-[clamp(36px,5vw,68px)] leading-none tracking-wider bg-gradient-to-br from-scarlet via-scarlet-bright to-amber bg-clip-text text-transparent">
-        {count}{suffix}
+    <div className="reveal px-6 py-10 text-center md:px-10" style={{ transitionDelay: `${delay}ms` }}>
+      <div className="text-gradient-fire font-display text-[clamp(40px,5vw,72px)] font-bold leading-none tracking-tight">
+        {raw === 0 ? number : `${count}${suffix}`}
       </div>
-      <div className="text-[10px] md:text-[11px] font-medium text-white/35 mt-2 tracking-[0.1em] md:tracking-[0.12em] uppercase leading-snug">
+      <div className="mx-auto mt-3 max-w-[12rem] text-[11px] font-medium uppercase leading-snug tracking-[0.14em] text-white/35">
         {label}
       </div>
     </div>
@@ -78,13 +69,11 @@ export default function StatsBar() {
   }, [])
 
   return (
-    <div ref={ref} className="section-divider relative bg-ink px-5 pb-6 md:px-16">
-      <div className="mx-auto max-w-[1400px] border border-white/8 bg-white/[0.03] backdrop-blur-sm">
-        <div className="grid grid-cols-2 md:grid-cols-4">
+    <div ref={ref} className="section-divider relative bg-void px-5 py-10 md:px-10">
+      <div className="mx-auto grid max-w-[1280px] grid-cols-2 divide-x divide-white/[0.06] rounded-3xl border border-white/8 bg-white/[0.02] md:grid-cols-4">
         {STATS.map(({ number, label }, i) => (
-          <StatItem key={label} number={number} label={label} index={i} active={active} />
+          <StatItem key={label} number={number} label={label} active={active} delay={i * 90} />
         ))}
-        </div>
       </div>
     </div>
   )

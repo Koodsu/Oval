@@ -3,11 +3,12 @@ import { parsePreferences, DEFAULT_PREFS } from './NotificationService';
 
 // ── Expo mock ────────────────────────────────────────────────────────────────
 // vi.hoisted ensures these are available when the hoisted vi.mock() factory runs
-const { mockSend, mockChunk, mockPodFindUnique, mockPodFindMany } = vi.hoisted(() => ({
+const { mockSend, mockChunk, mockPodFindUnique, mockPodFindMany, mockPodUpdateMany } = vi.hoisted(() => ({
   mockSend: vi.fn().mockResolvedValue([]),
   mockChunk: vi.fn((msgs: unknown[]) => [msgs]),
   mockPodFindUnique: vi.fn(),
   mockPodFindMany: vi.fn(),
+  mockPodUpdateMany: vi.fn().mockResolvedValue({ count: 1 }),
 }));
 
 vi.mock('expo-server-sdk', () => {
@@ -25,6 +26,7 @@ vi.mock('../prisma', () => ({
     pod: {
       findUnique: (...args: unknown[]) => mockPodFindUnique(...args),
       findMany: (...args: unknown[]) => mockPodFindMany(...args),
+      updateMany: (...args: unknown[]) => mockPodUpdateMany(...args),
     },
   },
 }));
@@ -45,7 +47,7 @@ describe('parsePreferences', () => {
 
   it('parses valid JSON preferences', () => {
     const raw = JSON.stringify({ podJoin: false, newMessage: true, meetupReminder: false });
-    expect(parsePreferences(raw)).toEqual({ podJoin: false, newMessage: true, meetupReminder: false });
+    expect(parsePreferences(raw)).toEqual({ ...DEFAULT_PREFS, podJoin: false, newMessage: true, meetupReminder: false });
   });
 
   it('treats missing keys as true (default on)', () => {
@@ -58,7 +60,7 @@ describe('parsePreferences', () => {
 
   it('handles all-true preferences', () => {
     const raw = JSON.stringify({ podJoin: true, newMessage: true, meetupReminder: true });
-    expect(parsePreferences(raw)).toEqual({ podJoin: true, newMessage: true, meetupReminder: true });
+    expect(parsePreferences(raw)).toEqual({ ...DEFAULT_PREFS, podJoin: true, newMessage: true, meetupReminder: true });
   });
 });
 
@@ -68,6 +70,7 @@ describe('NotificationService.notifyPodJoin', () => {
     vi.clearAllMocks();
     mockSend.mockResolvedValue([]);
     mockChunk.mockImplementation((msgs: unknown[]) => [msgs]);
+    mockPodUpdateMany.mockResolvedValue({ count: 1 });
   });
 
   it('does not throw when pod is not found', async () => {
@@ -282,6 +285,10 @@ describe('NotificationService.sendMeetupReminders', () => {
     ]);
     const { NotificationService } = await import('./NotificationService');
     await NotificationService.sendMeetupReminders();
+    expect(mockPodUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'pod1', meetupReminderSentAt: null },
+      data: { meetupReminderSentAt: expect.any(Date) },
+    });
     expect(mockChunk).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ to: token, title: 'Meetup in 1 hour!' }),

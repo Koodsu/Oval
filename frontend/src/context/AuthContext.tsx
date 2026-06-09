@@ -2,9 +2,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import { setToken as setApiToken, setOnUnauthorized, registerPushToken } from '../api';
+import {
+  acceptCurrentTerms,
+  setToken as setApiToken,
+  setOnUnauthorized,
+} from '../api';
 import { User } from '../types';
+import { CURRENT_TERMS_VERSION } from '../constants/legal';
 
 const TOKEN_KEY = 'auth_token';
 const LEGACY_TOKEN_KEY = 'token'; // old AsyncStorage key — migrated on first launch
@@ -26,26 +30,25 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
 
-/** Request permission and send the Expo push token to the backend. Best-effort: never throws. */
-async function registerForPushNotifications(): Promise<void> {
-  try {
-    if (Platform.OS === 'web') return;
+async function getStoredToken(): Promise<string | null> {
+  if (Platform.OS === 'web') return AsyncStorage.getItem(TOKEN_KEY);
+  return SecureStore.getItemAsync(TOKEN_KEY);
+}
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') return;
-
-    const tokenData = await Notifications.getExpoPushTokenAsync();
-    await registerPushToken(tokenData.data);
-  } catch {
-    // Best-effort — never block sign-in on notification errors
+async function setStoredToken(token: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+    return;
   }
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+async function deleteStoredToken(): Promise<void> {
+  if (Platform.OS === 'web') {
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    return;
+  }
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
 
 /**
@@ -63,12 +66,12 @@ async function registerForPushNotifications(): Promise<void> {
  * token stays in AsyncStorage and we return it directly so the user stays
  * logged in. The migration retries on the next launch.
  */
-async function migrateTokenToSecureStore(): Promise<string | null> {
+async function migrateLegacyTokenStorage(): Promise<string | null> {
   try {
     const legacy = await AsyncStorage.getItem(LEGACY_TOKEN_KEY);
     if (legacy) {
       try {
-        await SecureStore.setItemAsync(TOKEN_KEY, legacy);
+        await setStoredToken(legacy);
         await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
         return legacy;
       } catch {
@@ -91,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
+      deleteStoredToken(),
       AsyncStorage.removeItem(LEGACY_TOKEN_KEY),
       AsyncStorage.removeItem('user'),
     ]);
@@ -120,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Migrate token from old plaintext AsyncStorage to SecureStore.
       // migratedToken is non-null when the legacy key existed but SecureStore
       // write failed — use it as a fallback so the user stays logged in.
-      const migratedToken = await migrateTokenToSecureStore();
+      const migratedToken = await migrateLegacyTokenStorage();
 
       const STORAGE_TIMEOUT_MS = 5000;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -135,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         [secureToken, userEntry, podTermsEntry, legacyGuidelinesEntry] = await Promise.race([
           Promise.all([
-            SecureStore.getItemAsync(TOKEN_KEY),
+            getStoredToken(),
             AsyncStorage.getItem('user'),
             AsyncStorage.getItem(HAS_ACCEPTED_POD_TERMS_KEY),
             AsyncStorage.getItem(LEGACY_GUIDELINES_ACCEPTED_KEY),
@@ -166,11 +169,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setTokenState(storedToken);
             setApiToken(storedToken);
             setUser(parsed);
+            if (
+              parsed.termsVersion === CURRENT_TERMS_VERSION &&
+              typeof parsed.ageAttestedAt === 'string'
+            ) {
+              setHasAcceptedGuidelines(true);
+            }
           }
         } catch {
           // Corrupted user data — clear and require re-login
           await Promise.all([
-            SecureStore.deleteItemAsync(TOKEN_KEY),
+            deleteStoredToken(),
             AsyncStorage.removeItem('user'),
           ]);
         }
@@ -195,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (newToken: string, newUser: User) => {
     try {
       await Promise.all([
-        SecureStore.setItemAsync(TOKEN_KEY, newToken),
+        setStoredToken(newToken),
         AsyncStorage.setItem('user', JSON.stringify(newUser)),
       ]);
     } catch (err) {
@@ -207,11 +216,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setApiToken(newToken);
     setTokenState(newToken);
     setUser(newUser);
-    // Register for push notifications after token is set (best-effort)
-    registerForPushNotifications();
   };
 
   const acceptGuidelines = async () => {
+    if (token && user) {
+      const response = await acceptCurrentTerms();
+      await AsyncStorage.setItem('user', JSON.stringify(response.user));
+      setUser(response.user);
+    }
     await AsyncStorage.setItem(HAS_ACCEPTED_POD_TERMS_KEY, 'true');
     setHasAcceptedGuidelines(true);
   };

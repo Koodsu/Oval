@@ -9,7 +9,7 @@ export function useScrollReveal() {
       { threshold: 0.05, rootMargin: '0px 0px -40px 0px' }
     )
 
-    const els = document.querySelectorAll('.reveal')
+    const els = document.querySelectorAll('.reveal, .reveal-scale, .reveal-left')
     els.forEach((el) => observer.observe(el))
 
     return () => observer.disconnect()

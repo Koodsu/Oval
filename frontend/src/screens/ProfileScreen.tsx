@@ -1,11 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { deleteMyAccount, getApiErrorMessage, getFriends, getMyClubs, getNotificationPreferences, updateNotificationPreferences } from '../api';
+import { getApiErrorMessage, getFriends, getMyClubs } from '../api';
 import { RootStackParamList } from '../../App';
-import { NotificationPreferences } from '../api';
 import { FriendUser, MyClubMembershipRow } from '../types';
 import { Chip, CompactHeader, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, UserAvatar } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -14,32 +13,21 @@ import { palette, spacing, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const DEFAULT_PREFS: NotificationPreferences = {
-  podJoin: true,
-  newMessage: true,
-  meetupReminder: true,
-  recapPrompt: true,
-  waitlistSpot: true,
-};
-
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
-  const { user, signOut, clearSession } = useAuth();
+  const { user, signOut } = useAuth();
 	  const [friends, setFriends] = useState<FriendUser[]>([]);
 	  const [myClubs, setMyClubs] = useState<MyClubMembershipRow[]>([]);
-	  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
 	  const [showAllClubs, setShowAllClubs] = useState(false);
 	  const [showAllFriends, setShowAllFriends] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [friendList, prefResponse, clubRows] = await Promise.all([
+      const [friendList, clubRows] = await Promise.all([
         getFriends(),
-        getNotificationPreferences(),
         getMyClubs(),
       ]);
       setFriends(friendList);
-      setPrefs(prefResponse.preferences);
       setMyClubs(clubRows);
 	    } catch (error) {
 	      Alert.alert('Could not load profile', getApiErrorMessage(error));
@@ -51,40 +39,6 @@ export default function ProfileScreen() {
       void load();
     }, [load])
   );
-
-  const updatePref = async (key: keyof NotificationPreferences, value: boolean) => {
-    if (!prefs) return;
-    const next = { ...prefs, [key]: value };
-    setPrefs(next);
-    try {
-      await updateNotificationPreferences({ [key]: value });
-	    } catch (error) {
-	      setPrefs(prefs);
-	      Alert.alert('Could not update settings', getApiErrorMessage(error));
-    }
-  };
-
-  const confirmDeleteAccount = () => {
-    Alert.alert(
-      'Delete account?',
-      'This permanently removes your profile details, photo, university verification, notification token, and sign-in access.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete account',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMyAccount();
-              await clearSession();
-            } catch (error) {
-              Alert.alert('Could not delete account', getApiErrorMessage(error));
-            }
-          },
-        },
-      ]
-    );
-  };
 
   return (
     <Screen>
@@ -112,13 +66,13 @@ export default function ProfileScreen() {
               <Text style={styles.body}>Class of {user?.classYear ?? 'TBD'} • {user?.email}</Text>
             </View>
           </View>
-          <View style={styles.buttonStack}>
-            <PrimaryButton label="Edit profile" onPress={() => navigation.navigate('EditProfile')} />
-            <PrimaryButton label="Find people" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
-            <PrimaryButton label="Sign out" onPress={() => void signOut()} kind="ghost" />
-            <PrimaryButton label="Delete account" onPress={confirmDeleteAccount} kind="ghost" />
-          </View>
-        </Panel>
+	          <View style={styles.buttonStack}>
+	            <PrimaryButton label="Edit profile" onPress={() => navigation.navigate('EditProfile')} />
+	            <PrimaryButton label="Find people" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
+	            <PrimaryButton label="Settings" onPress={() => navigation.navigate('Settings')} kind="ghost" />
+	            <PrimaryButton label="Sign out" onPress={() => void signOut()} kind="ghost" />
+	          </View>
+	        </Panel>
 
         <View style={styles.section}>
           <SectionHeader title="My clubs" />
@@ -132,7 +86,7 @@ export default function ProfileScreen() {
                   <View style={styles.profileCopy}>
                     <Text style={styles.title}>{membership.club.name}</Text>
                     <Text style={styles.body}>
-                      {membership.club.memberCount} members
+                      {membership.club.memberCount} {membership.club.memberCount === 1 ? 'member' : 'members'}
                       {membership.nextMeeting ? ` • Next: ${membership.nextMeeting.title}` : ' • No upcoming meeting'}
                     </Text>
                   </View>
@@ -162,50 +116,9 @@ export default function ProfileScreen() {
 	          ) : null}
         </View>
 
-        {prefs ? (
-          <View style={styles.section}>
-            <SectionHeader title="Notifications" />
-            {Object.entries(prefs).map(([key, value]) => (
-              <Panel key={key}>
-                <View style={styles.prefRow}>
-                  <View style={styles.profileCopy}>
-	                    <Text style={styles.title}>{labelForPref(key as keyof NotificationPreferences)}</Text>
-	                    <Text style={styles.body}>{descriptionForPref(key as keyof NotificationPreferences)}</Text>
-                  </View>
-                  <Switch
-                    value={value}
-                    onValueChange={(next) => void updatePref(key as keyof NotificationPreferences, next)}
-                    trackColor={{ false: '#D8D7D2', true: '#E29A7A' }}
-                    thumbColor={value ? palette.scarlet : '#F8F7F3'}
-                  />
-                </View>
-              </Panel>
-            ))}
-          </View>
-        ) : null}
-      </ScrollView>
-    </Screen>
+	      </ScrollView>
+	    </Screen>
   );
-}
-
-function labelForPref(key: keyof NotificationPreferences): string {
-  return {
-    podJoin: 'Pod joins',
-    newMessage: 'New messages',
-    meetupReminder: 'Meetup reminders',
-    recapPrompt: 'Recap prompts',
-    waitlistSpot: 'Waitlist openings',
-  }[key];
-}
-
-function descriptionForPref(key: keyof NotificationPreferences): string {
-  return {
-    podJoin: 'Alerts when someone joins a pod you created or are coordinating.',
-    newMessage: 'Alerts for new pod, club, officer, and direct messages.',
-    meetupReminder: 'Reminders before pods and club meetings you plan to attend.',
-    recapPrompt: 'Post-meetup nudges to rate a pod and connect with people you met.',
-    waitlistSpot: 'Alerts when a full pod opens a spot for you.',
-  }[key];
 }
 
 const styles = StyleSheet.create({
@@ -253,10 +166,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(199, 59, 34, 0.10)',
-  },
-  prefRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
   },
 });

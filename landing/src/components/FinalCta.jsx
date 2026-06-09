@@ -1,5 +1,10 @@
-import { useRef, useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import WaitlistForm from './WaitlistForm'
+
+const CATEGORY_PILLS = [
+  '🏈 Sports & Fitness', '🍕 Food & Drink', '📚 Academic', '🎨 Arts & Creative',
+  '🎉 Social', '🌳 Outdoors', '🎵 Music', '🧘 Wellness', '🎮 Gaming', '🤝 Volunteering',
+]
 
 export default function FinalCta() {
   const sectionRef = useRef(null)
@@ -10,7 +15,8 @@ export default function FinalCta() {
     const rect = sectionRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    spotlightRef.current.style.background = `radial-gradient(700px circle at ${x}px ${y}px, rgba(187,0,0,0.07), transparent 60%)`
+    spotlightRef.current.style.background =
+      `radial-gradient(640px circle at ${x}px ${y}px, rgba(255,75,38,0.08), transparent 60%)`
   }, [])
 
   const handleMouseLeave = useCallback(() => {
@@ -21,106 +27,62 @@ export default function FinalCta() {
     <section
       id="waitlist"
       ref={sectionRef}
-      className="section-divider relative overflow-hidden px-5 py-28 md:px-16"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      className="section-divider relative overflow-hidden bg-void px-5 py-32 text-white md:px-10"
     >
-      {/* Animated gradient background */}
-      <div
-        aria-hidden
-        className="absolute inset-0 animate-gradient-shift"
-        style={{
-          background: 'linear-gradient(135deg, #0D0D0B 0%, #1a0303 25%, #0D0D0B 50%, #0a0010 75%, #0D0D0B 100%)',
-          backgroundSize: '300% 300%',
-        }}
-      />
+      {/* glow core */}
+      <div aria-hidden className="absolute left-1/2 top-1/2 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-scarlet/15 blur-[180px]" />
+      <div aria-hidden className="absolute left-1/2 top-1/2 hidden h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-flame/15 md:block animate-spin-slow" />
+      <div aria-hidden className="absolute left-1/2 top-1/2 hidden h-[44rem] w-[44rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.05] md:block" />
+      <div ref={spotlightRef} aria-hidden className="pointer-events-none absolute inset-0" />
 
-      {/* Blob accents */}
-      <div
-        aria-hidden
-        className="absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full bg-scarlet/[0.06] blur-[140px] animate-blob pointer-events-none"
-      />
-      <div
-        aria-hidden
-        className="absolute -bottom-24 left-1/4 w-[400px] h-[400px] rounded-full bg-amber/[0.12] blur-[120px] animate-blob-delay-2 pointer-events-none"
-      />
-
-      {/* Mouse-tracking spotlight */}
-      <div
-        ref={spotlightRef}
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-      />
-
-      {/* Left scarlet edge */}
-      <div className="absolute left-0 top-0 w-1 h-full bg-scarlet" />
-
-      {/* Faint background type */}
-      <div
-        aria-hidden
-        className="absolute bottom-0 right-0 font-display text-[clamp(160px,22vw,360px)] text-white/[0.025] leading-none select-none pointer-events-none tracking-wider"
-        style={{ lineHeight: 0.85 }}
-      >
-        OSU
-      </div>
-
-      <div className="relative max-w-[1400px] mx-auto">
-        <div className="grid gap-8 lg:grid-cols-[0.94fr_1.06fr] lg:items-center">
-          <div>
-            <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet mb-8">
-              Limited Spots
-            </span>
-
-            <h2 className="reveal font-display text-[clamp(36px,9vw,130px)] tracking-wider leading-[0.92] text-white mb-8">
-              DON'T LET YOUR BEST COLLEGE MEMORIES STAY{' '}
-              <span className="text-shimmer">IN THE GROUP CHAT.</span>
-            </h2>
-
-            <p className="reveal text-base text-white/74 leading-relaxed max-w-xl mb-8 font-light">
-              Bridge launches at Ohio State this fall. Early access members get in first, get founding-member
-              status, and help shape the app from day one.
-            </p>
-
-            <div className="reveal flex flex-wrap gap-3 text-[11px] font-bold uppercase tracking-[0.16em]">
-              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">OSU-verified access</span>
-              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">Founding-member badge</span>
-              <span className="border border-white/20 bg-white/[0.08] px-3 py-2 text-white">Launch-day priority</span>
-            </div>
-          </div>
-
-          <div className="reveal relative self-start border border-white/10 bg-white/[0.06] p-6 md:p-10 backdrop-blur-sm shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full border border-scarlet/20 bg-scarlet/10 blur-[2px]" />
-            <div className="relative">
-              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-scarlet">Join the first wave</div>
-                  <div className="mt-2 max-w-md text-sm text-white/55">
-                    Claim your spot before the campus feed opens and we start letting founding members in.
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white">
-                  <span className="h-2 w-2 rounded-full bg-scarlet animate-pulse-dot" />
-                  Launch queue active
-                </div>
-              </div>
-              <div className="mb-6 grid gap-3 sm:grid-cols-3">
-                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Access</div>
-                  <div className="mt-2 text-sm text-white">OSU-only onboarding</div>
-                </div>
-                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Signal</div>
-                  <div className="mt-2 text-sm text-white">Founding-member badge</div>
-                </div>
-                <div className="border border-white/14 bg-white/[0.08] px-4 py-4">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">Timing</div>
-                  <div className="mt-2 text-sm text-white">Launch-day priority</div>
-                </div>
-              </div>
-              <WaitlistForm dark />
-            </div>
-          </div>
+      <div className="relative mx-auto flex max-w-[880px] flex-col items-center text-center">
+        <div className="reveal mb-8 inline-flex items-center gap-2.5 rounded-full border border-white/12 bg-white/[0.05] py-2 pl-3 pr-4 backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flame opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-flame" />
+          </span>
+          <span className="text-[12px] font-semibold tracking-wide text-white/75">Launch queue is open</span>
         </div>
+
+        <h2 className="reveal font-display text-[clamp(40px,7vw,88px)] font-bold leading-[1.0] tracking-[-0.03em]">
+          Your best college
+          <br />
+          memories are
+          <span className="text-gradient-fire font-serif font-normal italic"> out there.</span>
+        </h2>
+
+        <p className="reveal mt-7 max-w-[32rem] text-[16px] leading-relaxed text-white/50">
+          Not in the group chat. Not in your camera roll of screenshots. Out there —
+          and Bridge is how you find them. Join the waitlist and be first in when we launch at OSU.
+        </p>
+
+        <div className="reveal mt-10 w-full max-w-[480px]">
+          <WaitlistForm dark centered />
+        </div>
+
+        <div className="reveal mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-white/35">
+          <span>Early access</span>
+          <span className="h-1 w-1 rounded-full bg-white/20" />
+          <span>Launch updates</span>
+          <span className="h-1 w-1 rounded-full bg-white/20" />
+          <span>Shape the app with feedback</span>
+        </div>
+
+        <div className="reveal mt-14 flex max-w-[720px] flex-wrap items-center justify-center gap-2.5">
+          {CATEGORY_PILLS.map((pill) => (
+            <span
+              key={pill}
+              className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-[12px] font-medium text-white/55 transition-colors duration-200 hover:border-flame/40 hover:text-white"
+            >
+              {pill}
+            </span>
+          ))}
+        </div>
+        <p className="reveal mt-6 text-[12px] font-medium uppercase tracking-[0.18em] text-white/25">
+          50 activities · 10 categories · 1 campus
+        </p>
       </div>
     </section>
   )

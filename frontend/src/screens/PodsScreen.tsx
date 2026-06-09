@@ -209,6 +209,9 @@ export default function PodsScreen() {
                 style={styles.modeTab}
                 activeOpacity={0.85}
                 onPress={() => setMode(item.value)}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{item.label}</Text>
                 <View style={[styles.modeUnderline, active && styles.modeUnderlineActive]} />
@@ -347,6 +350,7 @@ export default function PodsScreen() {
               )) : null}
             </View>
 
+            {!loaded || startingSoonPods.length ? (
             <View style={styles.section}>
               <SectionHeader
                 title="Starting soon"
@@ -392,14 +396,11 @@ export default function PodsScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-              ) : (
-                <View style={styles.inlineEmptyState}>
-                  <Text style={styles.inlineEmptyTitle}>Nothing else is starting soon.</Text>
-                  <Text style={styles.inlineEmptyBody}>Check Explore to catch the next pod before it fills up.</Text>
-                </View>
-              )}
+              ) : null}
             </View>
+            ) : null}
 
+            {!loaded || friendActivity.length ? (
             <View style={styles.section}>
               <SectionHeader title="Friends in pods" />
               {!loaded ? (
@@ -421,14 +422,11 @@ export default function PodsScreen() {
                     </View>
                   ))}
                 </ScrollView>
-              ) : (
-                <View style={styles.inlineEmptyState}>
-                  <Text style={styles.inlineEmptyTitle}>No friend activity yet.</Text>
-                  <Text style={styles.inlineEmptyBody}>When friends are members of pods, they will show up here.</Text>
-                </View>
-              )}
+              ) : null}
             </View>
+            ) : null}
 
+            {!loaded || moreOpenPods.length ? (
             <View style={styles.section}>
               <SectionHeader title="More open pods" />
               {!loaded ? (
@@ -461,13 +459,9 @@ export default function PodsScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-              ) : (
-                <View style={styles.inlineEmptyState}>
-                  <Text style={styles.inlineEmptyTitle}>No more open pods right now.</Text>
-                  <Text style={styles.inlineEmptyBody}>Explore will show new pods as they are created.</Text>
-                </View>
-              )}
+              ) : null}
             </View>
+            ) : null}
           </>
         ) : (
           <View style={styles.section}>

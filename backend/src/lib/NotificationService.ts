@@ -43,7 +43,6 @@ export function parsePreferences(raw: string | null | undefined): NotificationPr
   }
 }
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const WINDOW_EARLY_MS = 55 * 60 * 1000;
 const WINDOW_LATE_MS = 65 * 60 * 1000;
 
@@ -185,6 +184,7 @@ export const NotificationService = {
         where: {
           status: 'LOCKED',
           meetupTime: { gte: windowStart, lte: windowEnd },
+          meetupReminderSentAt: null,
         },
         include: {
           activity: { select: { title: true } },
@@ -200,6 +200,12 @@ export const NotificationService = {
 
       const messages: ExpoPushMessage[] = [];
       for (const pod of pods) {
+        const claimed = await prisma.pod.updateMany({
+          where: { id: pod.id, meetupReminderSentAt: null },
+          data: { meetupReminderSentAt: now },
+        });
+        if (claimed.count === 0) continue;
+
         for (const member of pod.members) {
           if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
           const prefs = parsePreferences(member.user.notificationPreferences);
@@ -612,19 +618,4 @@ export const NotificationService = {
     }
   },
 
-  /** Start a cron-like interval that checks every 5 minutes for upcoming meetups. */
-  startReminderScheduler(): void {
-    setInterval(() => {
-      NotificationService.sendMeetupReminders().catch((err) =>
-        console.error('[NotificationService] scheduler error:', err)
-      );
-      NotificationService.sendRecapPrompts().catch((err) =>
-        console.error('[NotificationService] recap scheduler error:', err)
-      );
-      NotificationService.expireStaleWaitlistEntries().catch((err) =>
-        console.error('[NotificationService] waitlist expiry error:', err)
-      );
-    }, CHECK_INTERVAL_MS);
-    console.log('[NotificationService] Reminder scheduler started — checking every 5 minutes');
-  },
 };

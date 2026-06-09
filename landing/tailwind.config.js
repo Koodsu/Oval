@@ -4,13 +4,16 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Bebas Neue', 'Impact', 'sans-serif'],
-        sans: ['DM Sans', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        display: ['"Space Grotesk"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       colors: {
         scarlet: '#BB0000',
-        'scarlet-bright': '#D90000',
+        'scarlet-bright': '#E81010',
+        flame: '#FF4B26',
         ink: '#0D0D0B',
+        void: '#080606',
         cream: '#F5EFE4',
         'cream-dark': '#EDE6D8',
         'warm-gray': '#7A7166',
@@ -50,9 +53,22 @@ export default {
           '0%, 100%': { opacity: '1', transform: 'scale(1)' },
           '50%': { opacity: '0.4', transform: 'scale(1.4)' },
         },
+        feedLoop: {
+          '0%': { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(-50%)' },
+        },
+        spinSlow: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+        ringPulse: {
+          '0%': { transform: 'scale(0.9)', opacity: '0.5' },
+          '100%': { transform: 'scale(1.6)', opacity: '0' },
+        },
       },
       animation: {
         ticker: 'ticker 30s linear infinite',
+        'ticker-fast': 'ticker 22s linear infinite',
         ticker2: 'ticker2 28s linear infinite',
         'pulse-dot': 'pulseDot 2s infinite',
         blob: 'blob 10s ease-in-out infinite',
@@ -64,6 +80,9 @@ export default {
         shimmer: 'shimmer 3s linear infinite',
         'gradient-shift': 'gradientShift 8s ease infinite',
         'live-pulse': 'livePulse 1.5s ease-in-out infinite',
+        'feed-loop': 'feedLoop 26s linear infinite',
+        'spin-slow': 'spinSlow 30s linear infinite',
+        'ring-pulse': 'ringPulse 2.4s ease-out infinite',
       },
     },
   },

@@ -4,9 +4,10 @@
  *
  * NOTE: Vitest's globalSetup runs before .env loading, so we load it manually.
  */
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 function loadEnvFile(backendDir: string) {
   const envPath = path.join(backendDir, '.env');
@@ -29,27 +30,84 @@ function loadEnvFile(backendDir: string) {
   }
 }
 
+function isDatabaseReachable(databaseUrl: string, backendDir: string): boolean {
+  try {
+    execFileSync(
+      'npx',
+      ['prisma', 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
+      {
+        cwd: backendDir,
+        env: { ...process.env, DATABASE_URL: databaseUrl, DIRECT_URL: databaseUrl },
+        input: 'SELECT 1;',
+        stdio: ['pipe', 'ignore', 'ignore'],
+      }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function startEphemeralPostgres(): { url: string; teardown: () => void } {
+  const port = String(55432 + (process.pid % 1000));
+  const dataDir = path.join(os.tmpdir(), `bridge-postgres-test-${process.pid}`);
+  const logPath = path.join(dataDir, 'postgres.log');
+  const dbName = 'bridge_test';
+
+  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  execFileSync('initdb', ['-D', dataDir, '-A', 'trust', '-U', 'postgres'], { stdio: 'ignore' });
+  execFileSync('pg_ctl', ['-D', dataDir, '-l', logPath, '-o', `-p ${port}`, '-w', 'start'], { stdio: 'ignore' });
+  execFileSync('createdb', ['-h', 'localhost', '-p', port, '-U', 'postgres', dbName], { stdio: 'ignore' });
+
+  return {
+    url: `postgresql://postgres@localhost:${port}/${dbName}`,
+    teardown: () => {
+      try {
+        execFileSync('pg_ctl', ['-D', dataDir, '-m', 'fast', '-w', 'stop'], { stdio: 'ignore' });
+      } catch {
+        // best-effort cleanup
+      }
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    },
+  };
+}
+
 export default function setup() {
   const backendDir = path.resolve(__dirname, '../..');
 
   loadEnvFile(backendDir);
 
-  const testDbUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
-  if (!testDbUrl) {
-    throw new Error('TEST_DATABASE_URL or DATABASE_URL must be set to run tests');
+  let teardown: (() => void) | undefined;
+  let testDbUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (!testDbUrl || !isDatabaseReachable(testDbUrl, backendDir)) {
+    const ephemeral = startEphemeralPostgres();
+    testDbUrl = ephemeral.url;
+    teardown = ephemeral.teardown;
   }
+  process.env.TEST_DATABASE_URL = testDbUrl;
 
   const env = { ...process.env, DATABASE_URL: testDbUrl, DIRECT_URL: testDbUrl };
 
-  execSync('npx prisma migrate reset --force', {
-    cwd: backendDir,
-    env,
-    stdio: 'inherit',
-  });
+  try {
+    execSync('npx prisma db push --force-reset --skip-generate', {
+      cwd: backendDir,
+      env,
+      stdio: 'inherit',
+    });
 
-  execSync('npx prisma db seed', {
-    cwd: backendDir,
-    env,
-    stdio: 'inherit',
-  });
+    execSync('npx prisma db seed', {
+      cwd: backendDir,
+      env,
+      stdio: 'inherit',
+    });
+  } catch (err) {
+    teardown?.();
+    throw err;
+  }
+
+  return () => {
+    teardown?.();
+  };
 }

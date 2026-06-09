@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { createReport, listMyReports, adminListReports, adminUpdateReport } from '../services/reportService';
 import { isValidReason, isValidStatus } from '../lib/reportReasons';
+import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 
 const router = Router();
 
@@ -46,8 +47,19 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   };
 
   try {
+    const withinLimit = await consumeDurableRateLimit({
+      action: 'reports.create',
+      identifiers: [`user:${reporterId}`, `ip:${req.ip || 'unknown'}`],
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!withinLimit) {
+      res.status(429).json({ error: 'Too many reports submitted. Contact support for urgent help.' });
+      return;
+    }
+
     const result = await createReport(reporterId, payload);
-    res.status(201).json({ reportId: result.id, status: result.status });
+    res.status(201).json({ reportId: result.id, status: result.status, severity: result.severity });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to create report';
     const lower = msg.toLowerCase();

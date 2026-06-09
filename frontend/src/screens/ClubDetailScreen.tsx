@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -70,6 +70,8 @@ import {
 } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { formatDateTime, formatShortDate, formatTime } from '../utils/format';
+import { buildClubCalendarIcs } from '../utils/calendar';
+import { exportTextFile } from '../utils/fileExport';
 import { palette, radii, shadows, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
@@ -151,6 +153,10 @@ function visibilityLabel(visibility: ClubVisibility): string {
   }[visibility] ?? 'Public';
 }
 
+function goingLabel(count: number) {
+  return `${count} ${count === 1 ? 'member' : 'members'} going`;
+}
+
 function roleRank(role: string | null | undefined) {
   if (role === 'OWNER') return 4;
   if (role === 'ADMIN') return 3;
@@ -220,6 +226,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [outreachPreview, setOutreachPreview] = useState<ClubOutreachPreview | null>(null);
   const [outreachBusy, setOutreachBusy] = useState(false);
   const [outreachResult, setOutreachResult] = useState<string | null>(null);
+  const [calendarExportBusy, setCalendarExportBusy] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const officerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -245,6 +252,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const canViewOfficerChat = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER';
   const canConfigureOfficerPermissions = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const canChangePrimaryRoles = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
+  const isSoleOwner =
+    club?.myRole === 'OWNER' &&
+    club.members.filter((member) => member.role === 'OWNER').length === 1;
   const isMember = !!club?.isMember;
   const clubRoles = club?.roles ?? [];
 
@@ -393,6 +403,25 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       Alert.alert('Could not share club', API_USER_MESSAGE);
     }
   }, [club]);
+
+  const handleExportCalendar = useCallback(async () => {
+    if (!club || meetings.length === 0) return;
+    setCalendarExportBusy(true);
+    try {
+      const safeName = club.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club';
+      await exportTextFile({
+        filename: `${safeName}-bridge-calendar.ics`,
+        contents: buildClubCalendarIcs(club, meetings),
+        mimeType: 'text/calendar',
+        uti: 'com.apple.ical.ics',
+        title: `Add ${club.name} to Apple Calendar`,
+      });
+    } catch (error) {
+      Alert.alert('Could not export calendar', getApiErrorMessage(error));
+    } finally {
+      setCalendarExportBusy(false);
+    }
+  }, [club, meetings]);
 
   const handleDeleteClub = useCallback(() => {
     if (!club) return;
@@ -1217,7 +1246,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
             <View style={styles.heroShell}>
               <LinearGradient colors={['#22160E', '#8C2E1F', '#C85C38']} style={styles.cover}>
                 <View style={styles.coverTopBar}>
-                  <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroCircleButton}>
+                  <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.heroCircleButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go back"
+                  >
                     <Ionicons name="chevron-back" size={20} color={palette.ink} />
                   </TouchableOpacity>
                   <View style={styles.coverActions}>
@@ -1226,22 +1260,41 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         onPress={() => void handleUploadClubAvatar()}
                         style={styles.heroCircleButton}
                         disabled={avatarBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel={club.avatarUrl ? 'Change club photo' : 'Add club photo'}
                       >
                         <Ionicons name="camera-outline" size={18} color={palette.ink} />
                       </TouchableOpacity>
                     ) : null}
-                    <TouchableOpacity style={styles.heroCircleButton} onPress={handleClubActions}>
+                    <TouchableOpacity
+                      style={styles.heroCircleButton}
+                      onPress={handleClubActions}
+                      accessibilityRole="button"
+                      accessibilityLabel="Club actions"
+                    >
                       <Ionicons name="ellipsis-horizontal" size={18} color={palette.ink} />
                     </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.coverArt} />
+                <View style={styles.coverArt}>
+                  <View style={styles.coverIdentity}>
+                    {club.avatarUrl ? (
+                      <Image source={{ uri: club.avatarUrl }} style={styles.coverAvatar} />
+                    ) : (
+                      <Text style={styles.coverEmoji}>{club.emoji}</Text>
+                    )}
+                  </View>
+                </View>
               </LinearGradient>
 
               <View style={styles.heroCard}>
                 <View style={styles.identityRow}>
                   <View style={styles.clubAvatarTile}>
-                    <Ionicons name="people-outline" size={34} color={palette.scarlet} />
+                    {club.avatarUrl ? (
+                      <Image source={{ uri: club.avatarUrl }} style={styles.clubAvatarImage} />
+                    ) : (
+                      <Text style={styles.clubAvatarEmoji}>{club.emoji}</Text>
+                    )}
                   </View>
                   <View style={styles.identityCopy}>
                     <Text style={styles.clubTitle}>{club.name}</Text>
@@ -1265,7 +1318,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     <Ionicons name="people-outline" size={18} color={palette.slate} />
                     <Text style={styles.summaryLabel}>Going</Text>
                     <Text style={styles.summaryValue}>
-                      {nextMeeting ? `${nextMeeting.rsvpCounts.going} members going` : 'No RSVPs yet'}
+                      {nextMeeting ? goingLabel(nextMeeting.rsvpCounts.going) : 'No RSVPs yet'}
                     </Text>
                     <View style={styles.summaryAvatarRail}>
                       {recentMembers.slice(0, 4).map((member, index) => (
@@ -1278,7 +1331,18 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                 </View>
 
                 <View style={styles.membershipRow}>
-                  {club.isMember ? (
+                  {isSoleOwner ? (
+                    <TouchableOpacity
+                      style={styles.leaveClubButton}
+                      onPress={handleClubActions}
+                      activeOpacity={0.72}
+                      accessibilityRole="button"
+                      accessibilityLabel="Manage club"
+                    >
+                      <Ionicons name="settings-outline" size={15} color={palette.slate} />
+                      <Text style={styles.leaveClubButtonText}>Manage club</Text>
+                    </TouchableOpacity>
+                  ) : club.isMember ? (
                     <TouchableOpacity
                       style={styles.leaveClubButton}
                       onPress={() => void handleMembership()}
@@ -1502,7 +1566,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                   ) : (
                     <View style={styles.chatConversation}>
                       <View style={styles.chatConversationHeader}>
-                        <TouchableOpacity onPress={() => setChatView('hub')} style={styles.chatBackButton}>
+                        <TouchableOpacity
+                          onPress={() => setChatView('hub')}
+                          style={styles.chatBackButton}
+                          accessibilityRole="button"
+                          accessibilityLabel="Back to club chats"
+                        >
                           <Ionicons name="chevron-back" size={18} color={palette.ink} />
                         </TouchableOpacity>
                         <View style={styles.chatConversationTitleBlock}>
@@ -1658,7 +1727,14 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               placeholderTextColor={palette.slate}
                               style={styles.chatComposerInput}
                             />
-                            <TouchableOpacity style={styles.sendFab} onPress={() => void handleSend()} disabled={sendBusy}>
+                            <TouchableOpacity
+                              style={[styles.sendFab, (sendBusy || !messageText.trim()) && styles.sendFabDisabled]}
+                              onPress={() => void handleSend()}
+                              disabled={sendBusy || !messageText.trim()}
+                              accessibilityRole="button"
+                              accessibilityLabel="Send club message"
+                              accessibilityState={{ disabled: sendBusy || !messageText.trim() }}
+                            >
                               <Ionicons name="paper-plane-outline" size={18} color={palette.white} />
                             </TouchableOpacity>
                           </View>
@@ -1696,7 +1772,14 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               placeholderTextColor={palette.slate}
                               style={styles.chatComposerInput}
                             />
-                            <TouchableOpacity style={styles.sendFab} onPress={() => void handleOfficerSend()} disabled={officerSendBusy}>
+                            <TouchableOpacity
+                              style={[styles.sendFab, (officerSendBusy || !officerMessageText.trim()) && styles.sendFabDisabled]}
+                              onPress={() => void handleOfficerSend()}
+                              disabled={officerSendBusy || !officerMessageText.trim()}
+                              accessibilityRole="button"
+                              accessibilityLabel="Send officer message"
+                              accessibilityState={{ disabled: officerSendBusy || !officerMessageText.trim() }}
+                            >
                               <Ionicons name="paper-plane-outline" size={18} color={palette.white} />
                             </TouchableOpacity>
                           </View>
@@ -1856,7 +1939,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           {outreachAudienceType === 'NON_RSVP' ? (
                             <Text style={styles.cardMeta}>
                               {nextMeeting
-                                ? `${nonRsvpCountForMeeting(nextMeeting)} members have not RSVP’d to ${nextMeeting.title}.`
+                                ? `${nonRsvpCountForMeeting(nextMeeting)} ${
+                                    nonRsvpCountForMeeting(nextMeeting) === 1 ? 'member has' : 'members have'
+                                  } not RSVP’d to ${nextMeeting.title}.`
                                 : 'Schedule a meeting before targeting non-RSVPs.'}
                             </Text>
                           ) : null}
@@ -2078,6 +2163,21 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         <Text style={styles.linkText}>{meetingComposerOpen ? 'Close' : 'Create meeting'}</Text>
                       </TouchableOpacity>
                     ) : null}
+                  </View>
+
+                  <View style={styles.calendarExportCard}>
+                    <View style={styles.calendarExportCopy}>
+                      <Text style={styles.cardTitle}>Apple Calendar</Text>
+                      <Text style={styles.cardBody}>
+                        Export every visible upcoming club meeting as an .ics calendar file.
+                      </Text>
+                    </View>
+                    <PrimaryButton
+                      label="Export calendar"
+                      onPress={() => void handleExportCalendar()}
+                      loading={calendarExportBusy}
+                      disabled={!meetings.length}
+                    />
                   </View>
 
                   {canCreateMeetings && meetingComposerOpen ? (
@@ -2570,7 +2670,27 @@ const styles = StyleSheet.create({
   coverArt: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 44,
+    paddingBottom: 34,
+  },
+  coverIdentity: {
+    width: 92,
+    height: 92,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+  },
+  coverAvatar: {
+    width: 92,
+    height: 92,
+  },
+  coverEmoji: {
+    color: palette.white,
+    fontSize: 48,
+    lineHeight: 56,
   },
   heroCard: {
     marginTop: -38,
@@ -2595,6 +2715,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(108, 79, 220, 0.10)',
+    overflow: 'hidden',
+  },
+  clubAvatarImage: {
+    width: 76,
+    height: 76,
+  },
+  clubAvatarEmoji: {
+    color: palette.scarlet,
+    fontSize: 38,
+    lineHeight: 46,
   },
   identityCopy: {
     flex: 1,
@@ -3409,6 +3539,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#6A56DA',
   },
+  sendFabDisabled: {
+    opacity: 0.42,
+  },
   memberCard: {
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -3437,6 +3570,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  calendarExportCard: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 33, 43, 0.06)',
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadows.card,
+  },
+  calendarExportCopy: {
+    gap: 4,
   },
   datePickerCard: {
     borderRadius: 18,

@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { AuthRequest, requireAuth } from '../middleware/auth';
+import { AuthRequest, requireVerifiedAuth as requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { normalizeUserPair } from '../lib/friendUtils';

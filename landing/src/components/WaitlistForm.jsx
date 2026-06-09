@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 const API_URL = import.meta.env.VITE_BRIDGE_API_URL ?? 'http://localhost:3000'
 
-export default function WaitlistForm({ dark = false, onSuccess }) {
+export default function WaitlistForm({ dark = false, centered = false, onSuccess }) {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -38,10 +38,10 @@ export default function WaitlistForm({ dark = false, onSuccess }) {
   if (submitted) {
     return (
       <div
-        className={`inline-flex items-center gap-3 px-5 py-4 text-sm font-semibold border-2 ${
+        className={`inline-flex items-center gap-3 rounded-full px-6 py-4 text-sm font-semibold ${
           dark
-            ? 'border-white/20 bg-white/5 text-green-400'
-            : 'border-ink/20 bg-white text-green-700'
+            ? 'border border-green-400/30 bg-green-400/10 text-green-400'
+            : 'border border-green-700/30 bg-green-50 text-green-700'
         }`}
       >
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -53,8 +53,15 @@ export default function WaitlistForm({ dark = false, onSuccess }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row max-w-md">
+    <div className={`flex flex-col gap-2 ${centered ? 'items-center' : ''}`}>
+      <form
+        onSubmit={handleSubmit}
+        className={`flex w-full max-w-md flex-col gap-2 sm:flex-row sm:gap-0 sm:rounded-full sm:border sm:p-1.5 ${
+          dark
+            ? 'sm:border-white/15 sm:bg-white/[0.06] sm:shadow-[0_8px_40px_rgba(0,0,0,0.35)] sm:backdrop-blur-xl'
+            : 'sm:border-ink/15 sm:bg-white'
+        }`}
+      >
         <input
           type="email"
           required
@@ -62,23 +69,27 @@ export default function WaitlistForm({ dark = false, onSuccess }) {
           aria-label="Email address"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={`flex-1 min-w-0 text-sm px-4 py-3.5 outline-none border-2 sm:border-r-0 border-b-0 sm:border-b-2 font-medium transition-colors ${
+          className={`min-w-0 flex-1 rounded-full border px-5 py-3.5 text-sm font-medium outline-none transition-colors sm:border-0 sm:bg-transparent sm:py-3 ${
             dark
-              ? 'bg-white/5 border-white/15 text-white placeholder:text-white/30 focus:border-white/40'
-              : 'bg-white border-ink/25 text-ink placeholder:text-warm-gray focus:border-scarlet'
+              ? 'border-white/15 bg-white/[0.06] text-white placeholder:text-white/30 focus:border-flame/50'
+              : 'border-ink/20 bg-white text-ink placeholder:text-warm-gray focus:border-scarlet'
           }`}
         />
         <button
           type="submit"
           disabled={loading}
-          className="bg-scarlet text-white font-bold text-sm px-6 py-3.5 border-2 border-scarlet tracking-wide whitespace-nowrap transition-all duration-150 hover:bg-scarlet-bright active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="group relative flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-full bg-gradient-to-r from-scarlet to-flame px-7 py-3.5 text-sm font-bold tracking-wide text-white transition-transform duration-150 hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 sm:py-3"
+          style={{ boxShadow: '0 4px 28px rgba(187,0,0,0.45)' }}
         >
-          {loading ? 'Joining…' : 'Get Early Access'}
-          {!loading && (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
+          <span className="relative z-10 flex items-center gap-2">
+            {loading ? 'Joining…' : 'Get early access'}
+            {!loading && (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="transition-transform duration-200 group-hover:translate-x-0.5">
+                <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </span>
+          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-500 group-hover:translate-x-full" />
         </button>
       </form>
       {error && (

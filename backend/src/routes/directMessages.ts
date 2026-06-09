@@ -1,12 +1,12 @@
 import { Router, Response } from 'express';
-import { AuthRequest, requireAuth } from '../middleware/auth';
+import { AuthRequest, requireVerifiedAuth as requireAuth } from '../middleware/auth';
 import prisma from '../prisma';
 import { hasBlockingRelationship, getBlockedUserIds } from '../lib/blocks';
 import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
 import { withDisplayName } from '../lib/userNames';
-import { findObjectionableContent } from '../lib/contentModeration';
+import { moderateTextContent } from '../lib/contentModeration';
 
 const router = Router();
 router.use(requireAuth);
@@ -362,9 +362,9 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
     res.status(400).json({ error: `Message too long (max ${MAX_DM_LENGTH} characters)` });
     return;
   }
-  const moderationMessage = findObjectionableContent([content]);
-  if (moderationMessage) {
-    res.status(400).json({ error: moderationMessage });
+  const moderation = await moderateTextContent([content]);
+  if (moderation) {
+    res.status(moderation.status).json({ error: moderation.message });
     return;
   }
 

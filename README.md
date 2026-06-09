@@ -94,18 +94,20 @@ Clubs are more persistent communities layered on top of pods.
 
 - OSU / Buckeyemail verification
 - Report creation and admin review flows
+- Report severity triage with P0/P1/P2 labels and moderation email notifications
 - No-show reporting
 - Push notifications for relevant events
-- Meetup reminder scheduler
+- Vercel Cron maintenance for meetup reminders, recaps, waitlist expiry, and pod expiry
 - Waitlist signup and promotion notifications
+- First-party product analytics events
 
 ## Known Product Gaps
 
 - Typing indicators are in-memory and reset on backend restart
 - Push notifications are fire-and-forget; failures are logged but not retried
 - The public waitlist route is a lightweight signup capture, not a full onboarding drip system
-- Admin moderation flows are intentionally lightweight and centered on reports + bans/review
-- Product analytics/event instrumentation is not yet built out as a first-class system
+- Admin moderation is report-centered; broader case-management and audit dashboards are not yet built
+- Product analytics are first-party and event-based; there is not yet a dashboard UI
 
 ## Stack
 
@@ -245,7 +247,7 @@ The landing site talks to the backend via `VITE_BRIDGE_API_URL`.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22
 - npm 9+
 - Expo tooling for local mobile development
 - A PostgreSQL database
@@ -327,12 +329,19 @@ See [`backend/.env.example`](./backend/.env.example).
 | `PORT` | No | Backend port, defaults to `3000` |
 | `CORS_ORIGIN` | Prod | Allowed web origins |
 | `ADMIN_USER_IDS` | No | Comma-separated admin user IDs |
+| `CRON_SECRET` | Prod | Authenticates Vercel Cron maintenance requests |
 | `RESEND_API_KEY` | For email | Verification email and waitlist integration |
 | `RESEND_FROM_EMAIL` | For email | Sender address for verification email |
+| `CONTACT_EMAIL` | No | Support and moderation-report inbox, defaults to `contactus@joinbridgeapp.com` |
+| `ADMIN_REPORTS_URL` | Prod moderation | Backend URL for signed report review links |
+| `ADMIN_REVIEW_SECRET` | Prod moderation | Signs expiring report-specific review links |
+| `REPORT_RETENTION_DAYS` | No | Closed safety-report retention, defaults to 730 days |
+| `OPENAI_API_KEY` | Prod moderation | Text and image moderation provider credential |
+| `OPENAI_MODERATION_MODEL` | No | Defaults to `omni-moderation-latest` |
+| `MODERATION_ENFORCEMENT` | No | Production defaults to fail-closed `required` mode |
 | `RESEND_WAITLIST_SEGMENT_ID` | Optional | Segment-scoped public waitlist isolation |
 | `SUPABASE_URL` | For storage | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | For storage | Service role key for storage uploads |
-| `APP_HOST` | Deprecated | Universal links are fixed to `joinbridgeapp.com` |
 | `IOS_APP_ID` | Optional | iOS bundle ID used in `apple-app-site-association` |
 | `ANDROID_PACKAGE` | Optional | Android package used in `assetlinks.json` |
 | `APPLE_TEAM_ID` | Required for iOS review | Apple team ID for fully-qualified universal-link appID |
@@ -384,6 +393,17 @@ npm run db:seed
 
 ## Testing
 
+Run the complete local release gate from the repository root:
+
+```bash
+npm run release:check
+```
+
+This checks repository hygiene, applies the production migration upgrade path to a
+disposable database, runs backend and frontend tests, builds, TypeScript, Expo
+Doctor, an iOS export, and production dependency vulnerabilities. CI runs the same
+command on every push and pull request.
+
 Top-level shortcuts:
 
 ```bash
@@ -426,6 +446,8 @@ More detail lives in [TESTING.md](./TESTING.md).
 
 - Target: Vercel
 - Set all backend environment variables in the deployment platform
+- The five-minute maintenance schedule in `backend/vercel.json` requires Vercel Pro or Enterprise; Hobby only supports daily cron execution
+- Set `CRON_SECRET`, `OPENAI_API_KEY`, `ADMIN_REPORTS_URL`, and `ADMIN_REVIEW_SECRET` before production deploy
 - After deploy:
 
 ```bash
@@ -442,6 +464,7 @@ npx prisma migrate deploy
 
 - Target: Vercel static deployment
 - Set `VITE_BRIDGE_API_URL`
+- Attach `www.joinbridgeapp.com` directly to this project; the checked-in AASA file is served from that no-redirect host
 
 ## Recommended Reading
 

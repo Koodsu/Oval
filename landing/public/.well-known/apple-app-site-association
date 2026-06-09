@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "687FPU46UV.com.bradyvb.bridgeapp",
+        "paths": [
+          "/pod/*",
+          "/clubs/*",
+          "/users/*"
+        ]
+      }
+    ]
+  }
+}

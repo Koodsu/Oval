@@ -8,8 +8,11 @@ This document explains how to run tests and what you need to do on your end for 
 # Run all tests (from project root)
 npm run test
 
+# Run the complete release gate with Node 22
+npm run release:check
+
 # Or run individually:
-npm run test:backend   # 36 integration + unit tests
+npm run test:backend   # API integration + unit tests
 npm run test:frontend  # Component tests
 ```
 
@@ -22,7 +25,7 @@ npm run test:frontend  # Component tests
 
 ### Frontend
 - **Jest 29** + **jest-expo** + **React Native Testing Library**
-- Component tests (e.g. `StatusBadge`)
+- Component, API client, and utility tests
 - Mocks for `expo-haptics` and `expo-linear-gradient`
 
 ## Your Setup (One-Time)

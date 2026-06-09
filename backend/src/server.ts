@@ -4,9 +4,9 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { rateLimit } from 'express-rate-limit';
 import path from 'path';
+import crypto from 'crypto';
 
 import prisma from './prisma';
-import { startReminderScheduler, startPodExpiryScheduler } from './lib/reminderScheduler';
 import authRoutes from './routes/auth';
 import activitiesRoutes from './routes/activities';
 import podsRoutes from './routes/pods';
@@ -14,6 +14,7 @@ import messagesRoutes from './routes/messages';
 import usersRoutes from './routes/users';
 import reportsRoutes from './routes/reports';
 import adminReportsRoutes from './routes/adminReports';
+import adminReviewRoutes from './routes/adminReview';
 import attendanceRoutes from './routes/attendance';
 import webRoutes from './routes/web';
 import friendsRoutes from './routes/friends';
@@ -23,16 +24,39 @@ import recapsRoutes from './routes/recaps';
 import podWaitlistRoutes from './routes/podWaitlist';
 import waitlistRoutes from './routes/waitlist';
 import clubsRoutes from './routes/clubs';
+import analyticsRoutes from './routes/analytics';
+import cronRoutes from './routes/cron';
+import { validateProductionEnvironment } from './config/productionEnv';
 
+validateProductionEnvironment();
 const app = express();
 app.set('trust proxy', 1);
 
+app.use((_req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 app.use(helmet({
-  // CSP is intentionally disabled because the pod invite landing page
-  // (GET /pod/:id) injects a JSON data blob via an inline <script> tag.
-  // TODO: replace the inline script with a fetch() call so CSP can be
-  // re-enabled with a strict policy across all routes.
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      scriptSrc: [
+        "'self'",
+        ((_req: unknown, res: unknown) => {
+          const locals = (res as { locals?: { cspNonce?: string } }).locals;
+          return `'nonce-${locals?.cspNonce ?? ''}'`;
+        }) as never,
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+    },
+  },
   // Allow cross-origin loading of avatar images by the React Native client
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
@@ -107,7 +131,10 @@ app.use('/pods', apiLimiter, attendanceRoutes);
 app.use('/users', apiLimiter, usersRoutes);
 app.use('/clubs', apiLimiter, clubsRoutes);
 app.use('/reports', apiLimiter, reportsRoutes);
+app.use('/admin/reports/review', apiLimiter, adminReviewRoutes);
 app.use('/admin/reports', apiLimiter, adminReportsRoutes);
+app.use('/analytics', apiLimiter, analyticsRoutes);
+app.use('/cron', apiLimiter, cronRoutes);
 app.use('/friends', apiLimiter, friendsRoutes);
 app.use('/messages', apiLimiter, directMessagesRoutes);
 app.use('/pods', apiLimiter, recapsRoutes);
@@ -143,8 +170,6 @@ const PORT = process.env.PORT ?? 3000;
 if (require.main === module) {
   const server = app.listen(PORT, () => {
     console.log(`Bridge backend running on port ${PORT}`);
-    startReminderScheduler();
-    startPodExpiryScheduler();
   });
 
   const gracefulShutdown = () => {

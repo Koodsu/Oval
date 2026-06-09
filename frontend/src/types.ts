@@ -2,6 +2,13 @@ export interface NotificationPreferences {
   podJoin: boolean;
   newMessage: boolean;
   meetupReminder: boolean;
+  recapPrompt: boolean;
+  waitlistSpot: boolean;
+  clubMeetingCreated: boolean;
+  clubAnnouncementCreated: boolean;
+  clubKick: boolean;
+  clubRoleChange: boolean;
+  clubAttendanceOpen: boolean;
 }
 
 export interface User {
@@ -19,6 +26,9 @@ export interface User {
   clubs?: string[];
   instagramHandle?: string | null;
   interestTags?: string[];
+  termsVersion?: string | null;
+  termsAcceptedAt?: string | null;
+  ageAttestedAt?: string | null;
 }
 
 export interface PublicProfile {
@@ -134,6 +144,7 @@ export interface ClubDirectoryEntry {
   description: string;
   category: string;
   emoji: string;
+  avatarUrl?: string | null;
   isVerified: boolean;
   isPublic: boolean;
   university: string;

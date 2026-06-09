@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
-import { resendVerification, verifyEmail } from '../api';
+import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Hero, Panel, PrimaryButton, Screen } from '../components/ui';
 import { palette, radii, spacing, typography } from '../theme';
@@ -10,10 +10,17 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => setResendCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const submit = async () => {
-    if (!code.trim()) {
-      Alert.alert('Verification code needed', 'Enter the code from your school email.');
+    if (!/^\d{6}$/.test(code.trim())) {
+      Alert.alert('Verification code needed', 'Enter the 6-digit code from your school email.');
       return;
     }
     setBusy(true);
@@ -22,19 +29,21 @@ export default function VerifyEmailScreen() {
       await updateUser(response.user);
       Alert.alert('Verified', 'Your account is now cleared for the full Bridge experience.');
     } catch (error) {
-      Alert.alert('Verification failed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert('Verification failed', getApiErrorMessage(error));
     } finally {
       setBusy(false);
     }
   };
 
   const resend = async () => {
+    if (resendCooldown > 0) return;
     setResending(true);
     try {
       await resendVerification();
+      setResendCooldown(30);
       Alert.alert('Email sent', `A fresh code was sent to ${user?.email ?? 'your inbox'}.`);
     } catch (error) {
-      Alert.alert('Could not resend', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert('Could not resend', getApiErrorMessage(error));
     } finally {
       setResending(false);
     }
@@ -52,15 +61,26 @@ export default function VerifyEmailScreen() {
           <Text style={styles.label}>Verification code</Text>
           <TextInput
             value={code}
-            onChangeText={setCode}
+            onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))}
             placeholder="123456"
             keyboardType="number-pad"
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            maxLength={6}
             placeholderTextColor={palette.slate}
             style={styles.input}
+            accessibilityLabel="Verification code"
+            onSubmitEditing={() => void submit()}
           />
           <View style={styles.actions}>
-            <PrimaryButton label="Verify account" onPress={submit} loading={busy} />
-            <PrimaryButton label="Resend email" onPress={resend} loading={resending} kind="ghost" />
+            <PrimaryButton label="Verify account" onPress={submit} loading={busy} disabled={code.length !== 6} />
+            <PrimaryButton
+              label={resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend email'}
+              onPress={resend}
+              loading={resending}
+              disabled={resendCooldown > 0}
+              kind="ghost"
+            />
           </View>
         </Panel>
       </View>
