@@ -1,9 +1,12 @@
 import React from 'react';
 import {
+  ActivityIndicator,
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -11,19 +14,194 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, {
+  Easing,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { resolveAvatarUrl } from '../api';
 import { getInitials } from '../utils/format';
-import { gradients, palette, radii, shadows, spacing, typography } from '../theme';
+import {
+  Theme,
+  createThemedStyles,
+  fonts,
+  motion,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Motion primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tap — the standard Bridge touchable. Spring press-scale + optional haptic.
+ * Use everywhere a card, row, or control is pressable.
+ */
+export function Tap({
+  children,
+  onPress,
+  onLongPress,
+  disabled,
+  haptic = false,
+  scaleTo = 0.97,
+  style,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityRole = 'button',
+  accessibilityState,
+  testID,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  disabled?: boolean;
+  haptic?: boolean;
+  scaleTo?: number;
+  style?: ViewStyle | ViewStyle[];
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: 'button' | 'tab' | 'link';
+  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  testID?: string;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (haptic) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress?.();
+      }}
+      onLongPress={onLongPress}
+      disabled={disabled || !onPress}
+      onPressIn={() => {
+        scale.value = withSpring(scaleTo, motion.spring);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, motion.springBouncy);
+      }}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={accessibilityState}
+      testID={testID}
+    >
+      <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+/**
+ * Entrance — staggered fade-in-up wrapper for list/section reveals.
+ * `index` staggers siblings; keep indexes small (0–8).
+ */
+export function Entrance({
+  children,
+  index = 0,
+  style,
+}: {
+  children: React.ReactNode;
+  index?: number;
+  style?: ViewStyle | ViewStyle[];
+}) {
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 8) * 55)
+        .springify()
+        .damping(18)
+        .stiffness(190)}
+      style={style}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas
+// ─────────────────────────────────────────────────────────────────────────────
+
+function GlowBlob({
+  color,
+  size,
+  position,
+  drift = 14,
+  duration = 7000,
+}: {
+  color: string;
+  size: number;
+  position: ViewStyle;
+  drift?: number;
+  duration?: number;
+}) {
+  const t = useSharedValue(0);
+  React.useEffect(() => {
+    t.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      true,
+    );
+  }, [t, duration]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: t.value * drift },
+      { translateX: t.value * -drift * 0.6 },
+      { scale: 1 + t.value * 0.08 },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: color,
+        },
+        position,
+        style,
+      ]}
+    />
+  );
+}
 
 export function AppBackdrop({ children }: { children: React.ReactNode }) {
+  const { gradients, isDark } = useTheme();
   return (
-    <View style={styles.flex}>
+    <View style={baseStyles.flex}>
       <LinearGradient colors={gradients.app} style={StyleSheet.absoluteFill} />
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
+      <GlowBlob
+        color={isDark ? 'rgba(242,62,22,0.10)' : 'rgba(255,138,61,0.16)'}
+        size={220}
+        position={{ top: 40, right: -60 }}
+      />
+      <GlowBlob
+        color={isDark ? 'rgba(111,85,242,0.10)' : 'rgba(111,85,242,0.10)'}
+        size={260}
+        position={{ bottom: 60, left: -80 }}
+        duration={9000}
+      />
       {children}
     </View>
   );
@@ -37,18 +215,22 @@ export function Screen({
   padded?: boolean;
 }) {
   return (
-    <SafeAreaView style={styles.flex} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={baseStyles.flex} edges={['top', 'left', 'right']}>
       <AppBackdrop>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.flex}
+          style={baseStyles.flex}
         >
-          <View style={[styles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
+          <View style={[baseStyles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
         </KeyboardAvoidingView>
       </AppBackdrop>
     </SafeAreaView>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Headers & heroes
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function Hero({
   eyebrow,
@@ -61,13 +243,24 @@ export function Hero({
   subtitle?: string;
   children?: React.ReactNode;
 }) {
+  const styles = useUiStyles();
+  const { gradients } = useTheme();
   return (
-    <LinearGradient colors={gradients.heroSoft} style={styles.hero}>
-      {eyebrow ? <Text style={styles.heroEyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.heroTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.heroSubtitle}>{subtitle}</Text> : null}
-      {children}
-    </LinearGradient>
+    <View style={styles.heroWrap}>
+      <LinearGradient
+        colors={gradients.hero}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1.1, y: 1.2 }}
+        style={styles.hero}
+      >
+        <View pointerEvents="none" style={styles.heroEmber} />
+        <View pointerEvents="none" style={styles.heroEmberSmall} />
+        {eyebrow ? <Text style={styles.heroEyebrow}>{eyebrow}</Text> : null}
+        <Text style={styles.heroTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.heroSubtitle}>{subtitle}</Text> : null}
+        {children}
+      </LinearGradient>
+    </View>
   );
 }
 
@@ -82,6 +275,7 @@ export function CompactHeader({
   subtitle?: string;
   children?: React.ReactNode;
 }) {
+  const styles = useUiStyles();
   return (
     <View style={styles.compactHeader}>
       {eyebrow ? <Text style={styles.compactEyebrow}>{eyebrow}</Text> : null}
@@ -101,6 +295,8 @@ export function ScreenHeader({
   onBack?: () => void;
   right?: React.ReactNode;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.screenHeader}>
       <View style={styles.screenHeaderSide}>
@@ -116,7 +312,7 @@ export function ScreenHeader({
               accessibilityLabel="Go back"
               accessibilityHint="Returns to the previous screen"
             >
-            <Ionicons name="chevron-back" size={20} color={palette.ink} />
+              <Ionicons name="chevron-back" size={20} color={colors.ink} />
             </TouchableOpacity>
           </Tooltip>
         ) : null}
@@ -129,13 +325,27 @@ export function ScreenHeader({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Surfaces
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function Panel({
   children,
   style,
+  onPress,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
+  onPress?: () => void;
 }) {
+  const styles = useUiStyles();
+  if (onPress) {
+    return (
+      <Tap onPress={onPress} style={[styles.panel, style as ViewStyle]}>
+        {children}
+      </Tap>
+    );
+  }
   return <View style={[styles.panel, style]}>{children}</View>;
 }
 
@@ -146,11 +356,8 @@ type SectionHeaderProps = {
   | { actionLabel: string | undefined; onActionPress: () => void }
 );
 
-export function SectionHeader({
-  title,
-  actionLabel,
-  onActionPress,
-}: SectionHeaderProps) {
+export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
+  const styles = useUiStyles();
   return (
     <View style={styles.sectionRow}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -159,6 +366,7 @@ export function SectionHeader({
           onPress={onActionPress}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.sectionAction}>{actionLabel}</Text>
         </TouchableOpacity>
@@ -176,10 +384,12 @@ export function StatTile({
   value: string;
   icon: keyof typeof Ionicons.glyphMap;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
   return (
     <Panel style={styles.statTile}>
       <View style={styles.statIcon}>
-        <Ionicons name={icon} size={16} color={palette.scarlet} />
+        <Ionicons name={icon} size={16} color={colors.primary} />
       </View>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
@@ -187,31 +397,44 @@ export function StatTile({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function Chip({
   label,
   active = false,
   onPress,
+  icon,
 }: {
   label: string;
   active?: boolean;
   onPress?: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
   const content = (
     <View style={[styles.chip, active && styles.chipActive]}>
+      {icon ? (
+        <Ionicons name={icon} size={14} color={active ? colors.onPrimary : colors.sub} />
+      ) : null}
       <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
     </View>
   );
 
   if (!onPress) return content;
   return (
-    <TouchableOpacity
+    <Tap
       onPress={onPress}
+      haptic
+      scaleTo={0.94}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
     >
       {content}
-    </TouchableOpacity>
+    </Tap>
   );
 }
 
@@ -224,15 +447,48 @@ export function SegmentedControl<T extends string>({
   options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
 }) {
+  const styles = useUiStyles();
+  const [width, setWidth] = React.useState(0);
+  const index = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+  const pad = 4;
+  const gap = 6;
+  const segWidth =
+    width > 0 ? (width - pad * 2 - gap * (options.length - 1)) / options.length : 0;
+  const x = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (segWidth > 0) {
+      x.value = withSpring(index * (segWidth + gap), motion.spring);
+    }
+  }, [index, segWidth, x]);
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
+
+  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+
   return (
-    <View style={styles.segmented}>
+    <View style={styles.segmented} onLayout={onLayout}>
+      {segWidth > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.segmentThumb, { width: segWidth }, thumbStyle]}
+        />
+      ) : null}
       {options.map((option) => {
         const active = option.value === value;
         return (
           <TouchableOpacity
             key={option.value}
-            style={[styles.segment, active && styles.segmentActive]}
-            onPress={() => onChange(option.value)}
+            style={styles.segment}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onChange(option.value);
+            }}
             accessibilityRole="tab"
             accessibilityLabel={option.label}
             accessibilityState={{ selected: active }}
@@ -256,18 +512,23 @@ export function SearchField({
   onChangeText: (value: string) => void;
   placeholder: string;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
+  const [focused, setFocused] = React.useState(false);
   return (
-    <View style={styles.search}>
-      <Ionicons name="search" size={18} color={palette.slate} />
+    <View style={[styles.search, focused && styles.searchFocused]}>
+      <Ionicons name="search" size={18} color={focused ? colors.primary : colors.faint} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={palette.slate}
+        placeholderTextColor={colors.faint}
         style={styles.searchInput}
         accessibilityLabel={placeholder}
         returnKeyType="search"
         clearButtonMode="while-editing"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
       />
     </View>
   );
@@ -279,40 +540,75 @@ export function PrimaryButton({
   disabled,
   loading,
   kind = 'solid',
+  icon,
   tooltip,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  kind?: 'solid' | 'ghost';
+  kind?: 'solid' | 'ghost' | 'soft' | 'danger';
+  icon?: keyof typeof Ionicons.glyphMap;
   tooltip?: string;
 }) {
-  const isGhost = kind === 'ghost';
+  const styles = useUiStyles();
+  const { colors, gradients } = useTheme();
+
+  const labelColor =
+    kind === 'solid'
+      ? colors.onPrimary
+      : kind === 'soft'
+        ? colors.primarySoftText
+        : kind === 'danger'
+          ? colors.dangerText
+          : colors.ink;
+
+  const inner = (
+    <View style={styles.buttonInner}>
+      {loading ? (
+        <ActivityIndicator size="small" color={labelColor} />
+      ) : (
+        <>
+          {icon ? <Ionicons name={icon} size={17} color={labelColor} /> : null}
+          <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
+        </>
+      )}
+    </View>
+  );
+
   const button = (
-    <TouchableOpacity
+    <Tap
       onPress={onPress}
       disabled={disabled || loading}
-      style={[
-        styles.button,
-        isGhost ? styles.buttonGhost : styles.buttonSolid,
-        (disabled || loading) && styles.buttonDisabled,
-      ]}
-      accessibilityRole="button"
+      haptic
+      scaleTo={0.96}
       accessibilityLabel={label}
       accessibilityHint={tooltip}
+      accessibilityState={{ disabled: disabled || loading }}
+      style={(disabled || loading ? [styles.buttonDim] : []) as ViewStyle[]}
     >
-      {loading ? (
-        <SkeletonBlock
-          width={Math.max(44, Math.min(120, label.length * 8))}
-          height={16}
-          radius={8}
-          color={isGhost ? 'rgba(16,33,43,0.16)' : 'rgba(255,255,255,0.36)'}
-        />
+      {kind === 'solid' ? (
+        <LinearGradient
+          colors={gradients.brand}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.button, styles.buttonSolid]}
+        >
+          {inner}
+        </LinearGradient>
       ) : (
-        <Text style={[styles.buttonLabel, isGhost && styles.buttonGhostLabel]}>{label}</Text>
+        <View
+          style={[
+            styles.button,
+            kind === 'ghost' && styles.buttonGhost,
+            kind === 'soft' && styles.buttonSoft,
+            kind === 'danger' && styles.buttonDanger,
+          ]}
+        >
+          {inner}
+        </View>
       )}
-    </TouchableOpacity>
+    </Tap>
   );
 
   return tooltip ? <Tooltip label={tooltip}>{button}</Tooltip> : button;
@@ -333,17 +629,22 @@ export function IconButton({
   iconSize?: number;
   style?: ViewStyle;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
   return (
     <Tooltip label={tooltip}>
       <TouchableOpacity
         style={[styles.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}
-        activeOpacity={0.85}
-        onPress={onPress}
+        activeOpacity={0.8}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPress();
+        }}
         accessibilityRole="button"
         accessibilityLabel={tooltip}
         accessibilityHint={tooltip}
       >
-        <Ionicons name={icon} size={iconSize} color={palette.ink} />
+        <Ionicons name={icon} size={iconSize} color={colors.ink} />
       </TouchableOpacity>
     </Tooltip>
   );
@@ -356,6 +657,7 @@ export function Tooltip({
   label: string;
   children: React.ReactElement<Record<string, unknown>>;
 }) {
+  const styles = useUiStyles();
   const [visible, setVisible] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -365,9 +667,12 @@ export function Tooltip({
     timer.current = setTimeout(() => setVisible(false), 1600);
   }, []);
 
-  React.useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
+  React.useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const childProps = children.props as {
     onLongPress?: (...args: unknown[]) => void;
@@ -404,11 +709,15 @@ export function Tooltip({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeletons (shimmer pulse)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function SkeletonBlock({
   width = '100%',
   height,
   radius = radii.md,
-  color = 'rgba(16, 33, 43, 0.09)',
+  color,
   style,
 }: {
   width?: ViewStyle['width'];
@@ -417,11 +726,30 @@ export function SkeletonBlock({
   color?: string;
   style?: ViewStyle;
 }) {
+  const { colors } = useTheme();
+  const opacity = useSharedValue(0.6);
+  React.useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      true,
+    );
+  }, [opacity]);
+  const pulse = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
-    <View
+    <Animated.View
       style={[
-        styles.skeletonBlock,
-        { width, height, borderRadius: radius, backgroundColor: color },
+        {
+          width,
+          height,
+          borderRadius: radius,
+          backgroundColor: color ?? colors.skeleton,
+          overflow: 'hidden',
+        },
+        pulse,
         style,
       ]}
     />
@@ -433,6 +761,7 @@ export function SkeletonLine({ width = '100%' }: { width?: ViewStyle['width'] })
 }
 
 export function SkeletonCard({ compact = false }: { compact?: boolean }) {
+  const styles = useUiStyles();
   return (
     <Panel style={styles.skeletonCard}>
       <SkeletonBlock width={compact ? 72 : 120} height={14} radius={7} />
@@ -449,22 +778,37 @@ export function SkeletonCard({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Content
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function EmptyState({
   icon,
   title,
   body,
+  actionLabel,
+  onActionPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   body: string;
+  actionLabel?: string;
+  onActionPress?: () => void;
 }) {
+  const styles = useUiStyles();
+  const { colors } = useTheme();
   return (
     <Panel style={styles.empty}>
       <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={20} color={palette.scarlet} />
+        <Ionicons name={icon} size={22} color={colors.primary} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
+      {actionLabel && onActionPress ? (
+        <View style={styles.emptyAction}>
+          <PrimaryButton label={actionLabel} onPress={onActionPress} kind="soft" />
+        </View>
+      ) : null}
     </Panel>
   );
 }
@@ -473,188 +817,243 @@ export function UserAvatar({
   name,
   avatarUrl,
   size = 42,
+  ring = false,
 }: {
   name: string;
   avatarUrl?: string | null;
   size?: number;
+  ring?: boolean;
 }) {
+  const { colors, gradients } = useTheme();
   const uri = resolveAvatarUrl(avatarUrl);
-  return uri ? (
+
+  const core = uri ? (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
         overflow: 'hidden',
-        backgroundColor: palette.mist,
+        backgroundColor: colors.surfaceAlt,
       }}
     >
       <Image source={{ uri }} style={{ width: size, height: size }} />
     </View>
   ) : (
-    <View
-      style={[
-        styles.avatarFallback,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
+    <LinearGradient
+      colors={gradients.brand}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
     >
-      <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>{getInitials(name)}</Text>
-    </View>
+      <Text
+        style={{
+          color: '#FFFFFF',
+          fontFamily: fonts.bold,
+          fontSize: size * 0.34,
+        }}
+      >
+        {getInitials(name)}
+      </Text>
+    </LinearGradient>
+  );
+
+  if (!ring) return core;
+
+  return (
+    <LinearGradient
+      colors={gradients.brand}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{
+        width: size + 6,
+        height: size + 6,
+        borderRadius: (size + 6) / 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View
+        style={{
+          width: size + 2,
+          height: size + 2,
+          borderRadius: (size + 2) / 2,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.bg,
+        }}
+      >
+        {core}
+      </View>
+    </LinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+
+const baseStyles = StyleSheet.create({
   flex: { flex: 1 },
   screen: {
     flex: 1,
     paddingHorizontal: spacing.md,
   },
+});
+
+const useUiStyles = createThemedStyles((t: Theme) => ({
   iconButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   tooltipAnchor: {
-    position: 'relative',
+    position: 'relative' as const,
   },
   tooltipBubble: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 0,
-    bottom: '100%',
+    bottom: '100%' as const,
     marginBottom: 8,
     maxWidth: 220,
     borderRadius: radii.sm,
-    backgroundColor: palette.ink,
+    backgroundColor: t.isDark ? t.colors.surfaceAlt : t.colors.ink,
     paddingHorizontal: 10,
     paddingVertical: 7,
     zIndex: 50,
   },
   tooltipText: {
-    color: palette.white,
+    color: t.isDark ? t.colors.ink : '#FFFFFF',
+    fontFamily: fonts.semibold,
     fontSize: 12,
-    fontWeight: '700',
-  },
-  skeletonBlock: {
-    overflow: 'hidden',
   },
   skeletonCard: {
     gap: spacing.sm,
   },
   skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   skeletonTextStack: {
     flex: 1,
     gap: 8,
   },
-  glowTop: {
-    position: 'absolute',
-    top: 60,
-    right: -30,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(242, 122, 84, 0.15)',
-  },
-  glowBottom: {
-    position: 'absolute',
-    bottom: 80,
-    left: -20,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(94, 143, 203, 0.14)',
+  heroWrap: {
+    borderRadius: radii.lg,
+    ...t.shadows.raised,
   },
   hero: {
     borderRadius: radii.lg,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
     gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
-    ...shadows.card,
+    overflow: 'hidden' as const,
+  },
+  heroEmber: {
+    position: 'absolute' as const,
+    top: -70,
+    right: -50,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(242,62,22,0.32)',
+  },
+  heroEmberSmall: {
+    position: 'absolute' as const,
+    bottom: -60,
+    left: -30,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(111,85,242,0.22)',
   },
   heroEyebrow: {
-    ...typography.label,
-    color: palette.slate,
+    ...t.typography.label,
+    color: 'rgba(255,255,255,0.62)',
   },
   heroTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
+    color: t.colors.onHero,
   },
   heroSubtitle: {
-    ...typography.body,
-    color: palette.slate,
+    ...t.typography.body,
+    color: t.colors.heroSub,
   },
   compactHeader: {
     gap: spacing.xs,
     paddingHorizontal: 2,
   },
   compactEyebrow: {
-    ...typography.label,
-    color: palette.slate,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   compactTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
   },
   compactSubtitle: {
-    ...typography.body,
-    maxWidth: '92%',
+    ...t.typography.body,
+    maxWidth: '92%' as const,
   },
   screenHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     minHeight: 46,
     marginBottom: spacing.md,
   },
   screenHeaderSide: {
     width: 52,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    alignItems: 'flex-start' as const,
+    justifyContent: 'center' as const,
   },
   screenHeaderRight: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   screenHeaderTitle: {
     flex: 1,
-    textAlign: 'center',
-    ...typography.title,
+    textAlign: 'center' as const,
+    ...t.typography.title,
   },
   panel: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: t.colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: spacing.sm,
   },
   sectionTitle: {
-    ...typography.h2,
-    fontSize: 20,
+    ...t.typography.h2,
   },
   sectionAction: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.primary,
   },
   statTile: {
     minWidth: 110,
@@ -664,129 +1063,155 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.dangerBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.primarySoft,
   },
   statValue: {
-    ...typography.h2,
+    ...t.typography.h2,
     fontSize: 22,
   },
   statLabel: {
-    ...typography.body,
-    fontSize: 13,
+    ...t.typography.caption,
   },
   chip: {
-    paddingHorizontal: 14,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 15,
     paddingVertical: 10,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     marginRight: spacing.sm,
+    ...t.shadows.subtle,
   },
   chipActive: {
-    backgroundColor: palette.ink,
-    borderColor: palette.ink,
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   chipLabel: {
-    ...typography.bodyStrong,
+    fontFamily: fonts.semibold,
     fontSize: 13,
+    color: t.colors.ink,
   },
   chipLabelActive: {
-    color: palette.white,
+    color: t.isDark ? '#0C0D11' : '#FFFFFF',
   },
   segmented: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    flexDirection: 'row' as const,
+    backgroundColor: t.colors.inputBg,
     borderRadius: radii.pill,
     padding: 4,
     gap: 6,
+    position: 'relative' as const,
+  },
+  segmentThumb: {
+    position: 'absolute' as const,
+    top: 4,
+    left: 4,
+    bottom: 4,
+    borderRadius: radii.pill,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    ...t.shadows.subtle,
   },
   segment: {
     flex: 1,
     paddingVertical: 11,
     borderRadius: radii.pill,
-    alignItems: 'center',
-  },
-  segmentActive: {
-    backgroundColor: palette.ink,
+    alignItems: 'center' as const,
   },
   segmentLabel: {
-    ...typography.bodyStrong,
+    fontFamily: fonts.semibold,
     fontSize: 13,
+    color: t.colors.faint,
   },
   segmentLabelActive: {
-    color: palette.white,
+    color: t.colors.ink,
   },
   search: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: t.colors.surface,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.border,
+    borderWidth: 1.5,
+    borderColor: t.colors.border,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    ...t.shadows.subtle,
+  },
+  searchFocused: {
+    borderColor: t.colors.primary,
   },
   searchInput: {
     flex: 1,
-    ...typography.bodyStrong,
-    color: palette.ink,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: t.colors.ink,
+    padding: 0,
   },
   button: {
     borderRadius: radii.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  buttonInner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+    minHeight: 20,
   },
   buttonSolid: {
-    backgroundColor: palette.scarlet,
+    ...t.shadows.glow,
   },
   buttonGhost: {
-    backgroundColor: palette.white,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.borderStrong,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonSoft: {
+    backgroundColor: t.colors.primarySoft,
+  },
+  buttonDanger: {
+    backgroundColor: t.colors.dangerBg,
+  },
+  buttonDim: {
+    opacity: 0.55,
   },
   buttonLabel: {
-    ...typography.bodyStrong,
-    color: palette.white,
-  },
-  buttonGhostLabel: {
-    color: palette.ink,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    letterSpacing: 0.1,
   },
   empty: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     gap: spacing.sm,
     paddingVertical: spacing.xl,
   },
   emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.dangerBg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.primarySoft,
   },
   emptyTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   emptyBody: {
-    ...typography.body,
-    textAlign: 'center',
+    ...t.typography.body,
+    textAlign: 'center' as const,
+    maxWidth: 280,
   },
-  avatarFallback: {
-    backgroundColor: palette.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+  emptyAction: {
+    marginTop: spacing.xs,
   },
-  avatarText: {
-    color: palette.white,
-    fontWeight: '700',
-  },
-});
+}));

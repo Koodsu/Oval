@@ -8,7 +8,7 @@ import type { RootStackParamList } from '../../App';
 import { ClubMeetingToday } from '../types';
 import { EmptyState, Screen, ScreenHeader } from '../components/ui';
 import { formatTime } from '../utils/format';
-import { palette, radii, shadows, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMeetingsTonight'>;
 
@@ -19,6 +19,8 @@ function sortMeetings(items: ClubMeetingToday[]) {
 }
 
 export default function ClubMeetingsTonightScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [meetings, setMeetings] = useState<ClubMeetingToday[]>([]);
 
   const load = useCallback(async () => {
@@ -53,7 +55,7 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
           >
             <View style={styles.iconTile}>
-              <Ionicons name="calendar-outline" size={23} color={palette.scarlet} />
+              <Ionicons name="calendar-outline" size={23} color={colors.primary} />
             </View>
 
             <View style={styles.copy}>
@@ -76,7 +78,7 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -86,12 +88,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderRadius: 22,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
-    ...shadows.card,
+    borderColor: t.colors.border,
+    ...t.shadows.card,
   },
   iconTile: {
     width: 50,
@@ -99,23 +101,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(16, 33, 43, 0.05)',
+    backgroundColor: t.colors.inputBg,
   },
   copy: {
     flex: 1,
     gap: 2,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
     fontSize: 19,
     lineHeight: 23,
   },
   meta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   going: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    ...t.typography.bodyStrong,
+    color: t.colors.primary,
   },
-});
+}));

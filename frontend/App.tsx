@@ -1,12 +1,37 @@
 import React from 'react';
 import { LinkingOptions } from '@react-navigation/native';
-import { Platform, StyleSheet, View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import {
+  BottomTabBarProps,
+  createBottomTabNavigator,
+} from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import {
+  Sora_600SemiBold,
+  Sora_700Bold,
+  Sora_800ExtraBold,
+} from '@expo-google-fonts/sora';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
@@ -29,9 +54,11 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
 import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
 import { Activity } from './src/types';
-import { palette } from './src/theme';
+import { ThemeProvider, fonts, motion, useTheme } from './src/theme';
 import { AppBackdrop, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export type MainTabParamList = {
   Home: undefined;
@@ -60,18 +87,6 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const navTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: 'transparent',
-    card: palette.paper,
-    text: palette.ink,
-    border: 'transparent',
-    primary: palette.scarlet,
-  },
-};
-
 const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['bridge://', 'https://www.joinbridgeapp.com'],
   config: {
@@ -83,23 +98,152 @@ const linking: LinkingOptions<RootStackParamList> = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+function tabIcon(
+  routeName: keyof MainTabParamList,
+  focused: boolean,
+): keyof typeof Ionicons.glyphMap {
+  switch (routeName) {
+    case 'Home':
+      return focused ? 'home' : 'home-outline';
+    case 'Explore':
+      return focused ? 'compass' : 'compass-outline';
+    case 'Pods':
+      return focused ? 'flash' : 'flash-outline';
+    case 'Clubs':
+      return focused ? 'people' : 'people-outline';
+    case 'Inbox':
+      return focused ? 'mail' : 'mail-outline';
+  }
+}
+
+function TabItem({
+  routeName,
+  label,
+  focused,
+  onPress,
+  onLongPress,
+}: {
+  routeName: keyof MainTabParamList;
+  label: string;
+  focused: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const lift = useSharedValue(focused ? 1 : 0);
+
+  React.useEffect(() => {
+    lift.value = withSpring(focused ? 1 : 0, motion.springBouncy);
+  }, [focused, lift]);
+
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: lift.value * -2 }, { scale: 1 + lift.value * 0.12 }],
+  }));
+
+  const dotStyle = useAnimatedStyle(() => ({
+    opacity: lift.value,
+    transform: [{ scale: lift.value }],
+  }));
+
+  return (
+    <Pressable
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+      onLongPress={onLongPress}
+      style={styles.tabItem}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: focused }}
+    >
+      <Animated.View style={iconStyle}>
+        <Ionicons
+          name={tabIcon(routeName, focused)}
+          size={24}
+          color={focused ? colors.primary : colors.faint}
+        />
+      </Animated.View>
+      <Text
+        style={[
+          styles.tabLabel,
+          { color: focused ? colors.ink : colors.faint },
+        ]}
+      >
+        {label}
+      </Text>
+      <Animated.View style={[styles.tabDot, { backgroundColor: colors.primary }, dotStyle]} />
+    </Pressable>
+  );
+}
+
+function BridgeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.tabBarWrap,
+        {
+          paddingBottom: Math.max(insets.bottom, 10),
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
+        },
+      ]}
+    >
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={36}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View style={styles.tabRow}>
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const label =
+            typeof options.tabBarLabel === 'string'
+              ? options.tabBarLabel
+              : options.title ?? route.name;
+          const focused = state.index === index;
+
+          return (
+            <TabItem
+              key={route.key}
+              routeName={route.name as keyof MainTabParamList}
+              label={label}
+              focused={focused}
+              onPress={() => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (!focused && !event.defaultPrevented) {
+                  navigation.navigate(route.name);
+                }
+              }}
+              onLongPress={() =>
+                navigation.emit({ type: 'tabLongPress', target: route.key })
+              }
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: palette.scarlet,
-        tabBarInactiveTintColor: '#6F818C',
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ color, size, focused }) => (
-          <Ionicons
-            name={tabIcon(route.name, focused)}
-            size={size}
-            color={color}
-          />
-        ),
-      })}
+      tabBar={(props) => <BridgeTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
@@ -112,7 +256,13 @@ function MainTabs() {
 
 function AuthedApp() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: Platform.OS === 'ios' ? 'default' : 'slide_from_right',
+        animationDuration: 280,
+      }}
+    >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
       <Stack.Screen name="PodDetail" component={PodDetailScreen} />
@@ -161,46 +311,93 @@ function AppGate() {
   return <AuthedApp />;
 }
 
-export default function App() {
+function ThemedApp() {
+  const { colors, isDark } = useTheme();
+
+  const navTheme = React.useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.bg,
+        card: colors.bg,
+        text: colors.ink,
+        border: 'transparent',
+        primary: colors.primary,
+      },
+    };
+  }, [colors, isDark]);
+
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <NavigationContainer theme={navTheme} linking={linking}>
-          <StatusBar style="dark" />
-          <AppGate />
-        </NavigationContainer>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <NavigationContainer theme={navTheme} linking={linking}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <AppGate />
+    </NavigationContainer>
   );
 }
 
-function tabIcon(routeName: keyof MainTabParamList, focused: boolean): keyof typeof Ionicons.glyphMap {
-  switch (routeName) {
-    case 'Home':
-      return focused ? 'home' : 'home-outline';
-    case 'Explore':
-      return focused ? 'compass' : 'compass-outline';
-    case 'Pods':
-      return focused ? 'flash' : 'flash-outline';
-    case 'Clubs':
-      return focused ? 'people' : 'people-outline';
-    case 'Inbox':
-      return focused ? 'mail' : 'mail-outline';
+export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    [fonts.displayMedium]: Sora_600SemiBold,
+    [fonts.display]: Sora_700Bold,
+    [fonts.displayHeavy]: Sora_800ExtraBold,
+    [fonts.body]: Inter_400Regular,
+    [fonts.medium]: Inter_500Medium,
+    [fonts.semibold]: Inter_600SemiBold,
+    [fonts.bold]: Inter_700Bold,
+  });
+
+  const onReady = React.useCallback(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
   }
+
+  return (
+    <GestureHandlerRootView style={styles.flex} onLayout={onReady}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ThemedApp />
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: 'rgba(251, 249, 244, 0.96)',
-    borderTopWidth: 0,
-    height: Platform.select({ ios: 86, default: 68 }),
+  flex: { flex: 1 },
+  tabBarWrap: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  tabRow: {
+    flexDirection: 'row',
     paddingTop: 8,
-    paddingBottom: Platform.select({ ios: 20, default: 10 }),
-    elevation: 0,
+    paddingHorizontal: 6,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 4,
   },
   tabLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    letterSpacing: 0.1,
+  },
+  tabDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
   loading: {
     flex: 1,

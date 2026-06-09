@@ -22,12 +22,14 @@ import { RootStackParamList } from '../../App';
 import { PublicProfile } from '../types';
 import { Chip, CompactHeader, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SkeletonCard, StatTile, UserAvatar } from '../components/ui';
 import { INTEREST_TAG_META } from '../constants/interestTags';
-import { palette, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function UserProfileScreen({ route, navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { userId } = route.params;
   const nav = useNavigation<Nav>();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -247,7 +249,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
                 value={reportDetails}
                 onChangeText={setReportDetails}
                 placeholder="Optional details that would help a review..."
-                placeholderTextColor={palette.slate}
+                placeholderTextColor={colors.faint}
                 style={styles.input}
                 multiline
               />
@@ -271,7 +273,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -304,21 +306,21 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
   },
   input: {
     minHeight: 96,
     marginTop: spacing.sm,
     borderRadius: 18,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     textAlignVertical: 'top',
   },
-});
+}));

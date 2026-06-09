@@ -33,7 +33,7 @@ import {
 import { RootStackParamList } from '../../App';
 import { FriendUser, Message, PeopleYouMetUser, Pod } from '../types';
 import { Chip, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard, UserAvatar } from '../components/ui';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
@@ -50,6 +50,8 @@ const POD_STATUS_LABELS: Record<Pod['status'], string> = {
 };
 
 export default function PodDetailScreen({ route, navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { podId } = route.params;
   const { user } = useAuth();
   const [pod, setPod] = useState<Pod | null>(null);
@@ -374,7 +376,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Share pod"
                 >
-                  <Ionicons name="share-outline" size={18} color={palette.ink} />
+                  <Ionicons name="share-outline" size={18} color={colors.ink} />
                 </TouchableOpacity>
               )}
             />
@@ -385,17 +387,17 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.podTitle}>{pod.activity?.title ?? 'Pod detail'}</Text>
                 </View>
                 <View style={styles.memberCountPill}>
-                  <Ionicons name="people-outline" size={15} color={palette.ink} />
+                  <Ionicons name="people-outline" size={15} color={colors.ink} />
                   <Text style={styles.memberCountText}>{pod.members.length}/{pod.maxMembers}</Text>
                 </View>
               </View>
               <View style={styles.quickMetaGrid}>
                 <View style={styles.quickMetaItem}>
-                  <Ionicons name="calendar-outline" size={16} color={palette.slate} />
+                  <Ionicons name="calendar-outline" size={16} color={colors.sub} />
                   <Text style={styles.quickMetaText} numberOfLines={1}>{formatDateTime(pod.meetupTime)}</Text>
                 </View>
                 <View style={styles.quickMetaItem}>
-                  <Ionicons name="location-outline" size={16} color={palette.slate} />
+                  <Ionicons name="location-outline" size={16} color={colors.sub} />
                   <Text style={styles.quickMetaText} numberOfLines={1}>{pod.location}</Text>
                 </View>
               </View>
@@ -414,7 +416,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Share pod link"
                 >
-                  <Ionicons name="link-outline" size={18} color={palette.ink} />
+                  <Ionicons name="link-outline" size={18} color={colors.ink} />
                 </TouchableOpacity>
                 {isCreator ? (
                   <TouchableOpacity
@@ -425,9 +427,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     accessibilityLabel={pod.status === 'LOCKED' ? 'Unlock pod' : 'Lock pod'}
                   >
                     {actionBusy === 'lock' ? (
-                      <ActivityIndicator size="small" color={palette.ink} />
+                      <ActivityIndicator size="small" color={colors.ink} />
                     ) : (
-                      <Ionicons name={pod.status === 'LOCKED' ? 'lock-open-outline' : 'lock-closed-outline'} size={18} color={palette.ink} />
+                      <Ionicons name={pod.status === 'LOCKED' ? 'lock-open-outline' : 'lock-closed-outline'} size={18} color={colors.ink} />
                     )}
                   </TouchableOpacity>
                 ) : null}
@@ -455,14 +457,14 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             {meInPod && pod.status === 'LOCKED' ? (
               <View style={styles.actionNotice}>
                 <View style={styles.actionNoticeCopy}>
-                  <Ionicons name={myMember?.confirmedAt ? 'checkmark-circle' : 'alert-circle-outline'} size={18} color={myMember?.confirmedAt ? palette.successText : palette.warnText} />
+                  <Ionicons name={myMember?.confirmedAt ? 'checkmark-circle' : 'alert-circle-outline'} size={18} color={myMember?.confirmedAt ? colors.successText : colors.warnText} />
                   <Text style={styles.actionNoticeText}>
                     {myMember?.confirmedAt ? 'Attendance confirmed' : 'Confirm you are showing up'}
                   </Text>
                 </View>
                 {!myMember?.confirmedAt ? (
                   <TouchableOpacity onPress={() => void handleConfirmAttendance()} style={styles.noticeButton} disabled={actionBusy === 'confirm'}>
-                    {actionBusy === 'confirm' ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.noticeButtonText}>Confirm</Text>}
+                    {actionBusy === 'confirm' ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.noticeButtonText}>Confirm</Text>}
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -537,7 +539,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             <Ionicons
                               name={hasHeart ? 'heart' : 'heart-outline'}
                               size={16}
-                              color={hasHeart ? palette.coral : 'rgba(16, 33, 43, 0.32)'}
+                              color={hasHeart ? colors.pink : colors.faint}
                             />
                             {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
                           </TouchableOpacity>
@@ -550,7 +552,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             accessibilityRole="button"
                             accessibilityLabel={`Safety actions for ${message.user.name}'s message`}
                           >
-                            <Ionicons name="ellipsis-horizontal-circle-outline" size={21} color="rgba(16, 33, 43, 0.30)" />
+                            <Ionicons name="ellipsis-horizontal-circle-outline" size={21} color={colors.faint} />
                           </TouchableOpacity>
                         ) : null}
                       </View>
@@ -558,7 +560,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   }) : (
                     <View style={styles.emptyChat}>
                       <View style={styles.emptyChatIcon}>
-                        <Ionicons name="chatbubble-outline" size={20} color={palette.scarlet} />
+                        <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
                       </View>
                       <Text style={styles.emptyChatTitle}>No messages yet</Text>
                       <Text style={styles.emptyChatBody}>Start with an ETA, meetup note, or quick check-in.</Text>
@@ -581,7 +583,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       accessibilityRole="button"
                       accessibilityLabel="Cancel reply"
                     >
-                      <Ionicons name="close" size={16} color={palette.ink} />
+                      <Ionicons name="close" size={16} color={colors.ink} />
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -593,7 +595,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       pingTyping(value);
                     }}
                     placeholder="Message the pod"
-                    placeholderTextColor={palette.slate}
+                    placeholderTextColor={colors.faint}
                     style={styles.input}
                     returnKeyType="send"
                     onSubmitEditing={() => void handleSend()}
@@ -607,9 +609,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     accessibilityState={{ disabled: sending || !messageText.trim() }}
                   >
                     {sending ? (
-                      <ActivityIndicator size="small" color={palette.white} />
+                      <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <Ionicons name="arrow-up" size={18} color={palette.white} />
+                      <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -631,7 +633,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.detailsTitle}>Pod details</Text>
                   <Text style={styles.detailsSubtitle}>Members, privacy, invites, and meetup point</Text>
                 </View>
-                <Ionicons name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={20} color={palette.ink} />
+                <Ionicons name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.ink} />
               </TouchableOpacity>
 
               {detailsOpen ? (
@@ -675,7 +677,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                               accessibilityLabel={`${item.label} pod`}
                               accessibilityState={{ selected: active, disabled: actionBusy === 'privacy' }}
                             >
-                              <Ionicons name={item.icon} size={17} color={active ? palette.scarlet : palette.slate} />
+                              <Ionicons name={item.icon} size={17} color={active ? colors.primary : colors.sub} />
                               <Text style={[styles.privacyLabel, active && styles.privacyLabelActive]}>{item.label}</Text>
                             </TouchableOpacity>
                           );
@@ -689,7 +691,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       <SectionHeader title="Invite friends" actionLabel="Share link" onActionPress={() => void handleShare()} />
                       <View style={styles.shareCard}>
                         <View style={styles.shareIcon}>
-                          <Ionicons name="link-outline" size={18} color={palette.scarlet} />
+                          <Ionicons name="link-outline" size={18} color={colors.primary} />
                         </View>
                         <View style={styles.copy}>
                           <Text style={styles.memberName}>Invite link</Text>
@@ -720,7 +722,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                           ))
                         ) : (
                           <View style={styles.emptyInline}>
-                            <Ionicons name="people-outline" size={18} color={palette.slate} />
+                            <Ionicons name="people-outline" size={18} color={colors.sub} />
                             <Text style={styles.body}>
                               Add friends from profiles or after completed pods, then invite them here.
                             </Text>
@@ -856,7 +858,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.md,
@@ -868,9 +870,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   podHeaderPanel: {
     gap: spacing.md,
@@ -887,11 +889,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   statusLabel: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   podTitle: {
-    ...typography.h2,
+    ...t.typography.h2,
     letterSpacing: 0,
   },
   memberCountPill: {
@@ -899,12 +901,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+    backgroundColor: t.colors.inputBg,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   memberCountText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     lineHeight: 16,
   },
@@ -917,7 +919,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   quickMetaText: {
-    ...typography.body,
+    ...t.typography.body,
     flex: 1,
     fontSize: 14,
     lineHeight: 19,
@@ -936,9 +938,9 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   squareActionDisabled: {
     opacity: 0.6,
@@ -950,7 +952,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radii.md,
     padding: spacing.sm,
-    backgroundColor: palette.warnBg,
+    backgroundColor: t.colors.warnBg,
     borderWidth: 1,
     borderColor: 'rgba(154, 94, 23, 0.16)',
   },
@@ -961,9 +963,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   actionNoticeText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     flex: 1,
-    color: palette.ink,
+    color: t.colors.ink,
   },
   noticeButton: {
     minWidth: 78,
@@ -971,21 +973,21 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.ink,
+    backgroundColor: t.colors.ink,
     paddingHorizontal: spacing.sm,
   },
   noticeButtonText: {
-    ...typography.bodyStrong,
-    color: palette.white,
+    ...t.typography.bodyStrong,
+    color: '#FFFFFF',
     fontSize: 13,
     lineHeight: 16,
   },
   sectionTitle: {
-    ...typography.title,
+    ...t.typography.title,
     marginBottom: spacing.sm,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
   },
   privacyToggle: {
     flexDirection: 'row',
@@ -998,14 +1000,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.cream,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.inputBg,
     paddingVertical: 12,
     paddingHorizontal: spacing.sm,
     gap: spacing.xs,
   },
   privacyOptionActive: {
-    borderColor: 'rgba(199, 59, 34, 0.34)',
+    borderColor: t.colors.primary,
     backgroundColor: 'rgba(252, 232, 228, 0.56)',
   },
   privacyOptionTop: {
@@ -1014,22 +1016,22 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   privacyLabel: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
     fontSize: 14,
     lineHeight: 18,
   },
   privacyLabelActive: {
-    color: palette.ink,
+    color: t.colors.ink,
   },
   privacyBody: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
   errorText: {
-    ...typography.bodyStrong,
-    color: palette.dangerText,
+    ...t.typography.bodyStrong,
+    color: t.colors.dangerText,
   },
   member: {
     marginRight: spacing.md,
@@ -1038,10 +1040,10 @@ const styles = StyleSheet.create({
     width: 76,
   },
   memberName: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
   },
   memberMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
     textAlign: 'center',
   },
@@ -1055,8 +1057,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.cream,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.inputBg,
     padding: spacing.sm,
     marginTop: spacing.sm,
   },
@@ -1066,7 +1068,7 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.dangerBg,
+    backgroundColor: t.colors.dangerBg,
   },
   inviteRow: {
     flexDirection: 'row',
@@ -1086,8 +1088,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: 'rgba(255,255,255,0.56)',
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.glass,
     padding: spacing.md,
   },
   copy: {
@@ -1105,7 +1107,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   map: {
     flex: 1,
@@ -1122,9 +1124,9 @@ const styles = StyleSheet.create({
   },
   metCard: {
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
   },
   chipWrap: {
@@ -1147,13 +1149,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16, 33, 43, 0.06)',
+    borderBottomColor: t.colors.border,
   },
   conversationTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   conversationMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -1162,7 +1164,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: radii.pill,
-    backgroundColor: palette.successBg,
+    backgroundColor: t.colors.successBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1170,11 +1172,11 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: palette.successText,
+    backgroundColor: t.colors.successText,
   },
   liveText: {
-    ...typography.bodyStrong,
-    color: palette.successText,
+    ...t.typography.bodyStrong,
+    color: t.colors.successText,
     fontSize: 12,
     lineHeight: 15,
   },
@@ -1212,46 +1214,46 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   messageName: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 12,
     lineHeight: 15,
-    color: 'rgba(16, 33, 43, 0.5)',
+    color: t.colors.sub,
   },
   messageTime: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
     lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.32)',
+    color: t.colors.faint,
   },
   messageContent: {
     gap: 4,
     borderRadius: 18,
     borderBottomLeftRadius: 6,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: 13,
     paddingVertical: 10,
   },
   messageContentMine: {
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 6,
-    backgroundColor: palette.ink,
-    borderColor: palette.ink,
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   messageBody: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     fontSize: 15,
     lineHeight: 21,
     letterSpacing: 0,
   },
   messageBodyMine: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   replyPreview: {
     borderLeftWidth: 2,
-    borderLeftColor: 'rgba(16, 33, 43, 0.12)',
+    borderLeftColor: t.colors.borderStrong,
     paddingLeft: 10,
     marginBottom: 2,
   },
@@ -1259,16 +1261,16 @@ const styles = StyleSheet.create({
     borderLeftColor: 'rgba(255, 255, 255, 0.36)',
   },
   replyMeta: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 12,
     lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.46)',
+    color: t.colors.faint,
   },
   replyBody: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(16, 33, 43, 0.42)',
+    color: t.colors.faint,
   },
   replyMetaMine: {
     color: 'rgba(255, 255, 255, 0.68)',
@@ -1289,10 +1291,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
 	  heartCount: {
-	    ...typography.bodyStrong,
+	    ...t.typography.bodyStrong,
 	    fontSize: 12,
 	    lineHeight: 16,
-	    color: 'rgba(16, 33, 43, 0.42)',
+	    color: t.colors.faint,
 	  },
 	  messageSafetyButton: {
 	    width: 26,
@@ -1302,8 +1304,8 @@ const styles = StyleSheet.create({
 	    marginBottom: 24,
 	  },
 	  typingText: {
-    ...typography.body,
-    color: palette.scarlet,
+    ...t.typography.body,
+    color: t.colors.primary,
     marginTop: 2,
   },
   replyComposer: {
@@ -1311,7 +1313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: 'rgba(16, 33, 43, 0.05)',
+    backgroundColor: t.colors.inputBg,
     padding: spacing.sm,
   },
   replyComposerCopy: {
@@ -1322,13 +1324,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: radii.pill,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 0,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     fontSize: 16,
     lineHeight: 20,
   },
@@ -1343,10 +1345,10 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   sendButtonInlineDisabled: {
-    backgroundColor: 'rgba(16, 33, 43, 0.16)',
+    backgroundColor: t.colors.borderStrong,
   },
   clearReplyButton: {
     width: 32,
@@ -1354,9 +1356,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.84)',
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   emptyChat: {
     minHeight: 174,
@@ -1364,9 +1366,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     borderRadius: radii.md,
-    backgroundColor: 'rgba(16, 33, 43, 0.04)',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.05)',
+    borderColor: t.colors.border,
     padding: spacing.lg,
   },
   emptyChatIcon: {
@@ -1375,14 +1377,14 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.dangerBg,
+    backgroundColor: t.colors.dangerBg,
   },
   emptyChatTitle: {
-    ...typography.title,
+    ...t.typography.title,
     marginTop: spacing.xs,
   },
   emptyChatBody: {
-    ...typography.body,
+    ...t.typography.body,
     textAlign: 'center',
   },
   detailsPanel: {
@@ -1401,25 +1403,25 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   detailsTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   detailsSubtitle: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
   detailsBody: {
     gap: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    borderTopColor: t.colors.border,
     padding: spacing.md,
   },
   detailSection: {
     gap: spacing.sm,
   },
   detailLabel: {
-    ...typography.label,
-    color: palette.slate,
+    ...t.typography.label,
+    color: t.colors.sub,
   },
   smallTextButton: {
     minHeight: 38,
@@ -1427,12 +1429,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
-    backgroundColor: palette.white,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   smallTextButtonLabel: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     lineHeight: 16,
   },
@@ -1442,4 +1444,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.xl,
   },
-});
+}));

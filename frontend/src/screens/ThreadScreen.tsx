@@ -17,7 +17,7 @@ import {
 import { RootStackParamList } from '../../App';
 import { DirectMessage } from '../types';
 import { EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { formatTime } from '../utils/format';
 
@@ -26,6 +26,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 const HEART_EMOJI = '❤️';
 
 export default function ThreadScreen({ route, navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { threadId, title } = route.params;
   const { user } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
@@ -185,7 +187,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 style={styles.safetyButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="ellipsis-horizontal-circle-outline" size={22} color="rgba(16, 33, 43, 0.28)" />
+                <Ionicons name="ellipsis-horizontal-circle-outline" size={22} color={colors.faint} />
               </TouchableOpacity>
             ) : null}
 
@@ -197,7 +199,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
               <Ionicons
                 name={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? 'heart' : 'heart-outline'}
                 size={22}
-                color={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? palette.coral : 'rgba(16, 33, 43, 0.16)'}
+                color={message.reactions?.some((reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI) ? colors.pink : colors.faint}
               />
               {message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ? (
                 <Text style={styles.heartCount}>
@@ -209,7 +211,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
         )) : <EmptyState icon="chatbubble-ellipses-outline" title="No messages yet" body="This conversation is ready whenever you are." />}
         {typingUserIds.length ? (
           <View style={styles.typingPill}>
-            <Ionicons name="ellipsis-horizontal" size={16} color={palette.scarlet} />
+            <Ionicons name="ellipsis-horizontal" size={16} color={colors.primary} />
             <Text style={styles.typingText}>Someone is typing...</Text>
           </View>
         ) : null}
@@ -230,7 +232,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
               pingTyping(value);
             }}
 	            placeholder="Write a message... tap a message to reply"
-            placeholderTextColor={palette.slate}
+            placeholderTextColor={colors.faint}
             style={styles.input}
             multiline
           />
@@ -243,14 +245,14 @@ export default function ThreadScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
   header: {
-    ...typography.h1,
+    ...t.typography.h1,
   },
   messageRow: {
     flexDirection: 'row',
@@ -268,20 +270,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   messageMetaName: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 15,
     lineHeight: 18,
-    color: 'rgba(16, 33, 43, 0.5)',
+    color: t.colors.sub,
   },
   messageMetaTime: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
     lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.32)',
+    color: t.colors.faint,
   },
   errorText: {
-    ...typography.bodyStrong,
-    color: palette.dangerText,
+    ...t.typography.bodyStrong,
+    color: t.colors.dangerText,
   },
   messageContentWrap: {
     gap: 4,
@@ -289,25 +291,25 @@ const styles = StyleSheet.create({
   },
   replyPreview: {
     borderLeftWidth: 2,
-    borderLeftColor: 'rgba(16, 33, 43, 0.12)',
+    borderLeftColor: t.colors.borderStrong,
     paddingLeft: 10,
     marginBottom: 2,
   },
   replyMeta: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 12,
     lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.46)',
+    color: t.colors.faint,
   },
   replyBody: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(16, 33, 43, 0.42)',
+    color: t.colors.faint,
   },
   messageBody: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     fontSize: 17,
     lineHeight: 25,
     letterSpacing: -0.2,
@@ -326,28 +328,28 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   heartCount: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 12,
     lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.42)',
+    color: t.colors.faint,
   },
   typingPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   typingText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     lineHeight: 18,
-    color: palette.scarlet,
+    color: t.colors.primary,
   },
   replyComposer: {
     flexDirection: 'row',
@@ -361,20 +363,20 @@ const styles = StyleSheet.create({
   },
   composerPanel: {
     padding: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: t.colors.surface,
   },
   input: {
     minHeight: 80,
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     textAlignVertical: 'top',
   },
   action: {
     marginTop: spacing.sm,
   },
-});
+}));

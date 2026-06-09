@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Coordinate = {
   latitude: number;
@@ -45,6 +45,8 @@ export function Polygon(_props: PolygonProps) {
 }
 
 export default function CampusMap({ style }: MapProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={[styles.map, style]} accessibilityRole="image" accessibilityLabel="Campus meetup map">
       <View style={styles.gridHorizontalOne} />
@@ -52,7 +54,7 @@ export default function CampusMap({ style }: MapProps) {
       <View style={styles.gridVerticalOne} />
       <View style={styles.gridVerticalTwo} />
       <View style={styles.pin}>
-        <Ionicons name="location" size={20} color={palette.white} />
+        <Ionicons name="location" size={20} color="#FFFFFF" />
       </View>
       <View style={styles.copy}>
         <Text style={styles.title}>Campus map</Text>
@@ -62,7 +64,7 @@ export default function CampusMap({ style }: MapProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   map: {
     minHeight: 180,
     overflow: 'hidden',
@@ -70,7 +72,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: '#E8ECE7',
+    backgroundColor: t.colors.surfaceAlt,
   },
   gridHorizontalOne: {
     position: 'absolute',
@@ -78,7 +80,7 @@ const styles = StyleSheet.create({
     left: -20,
     right: -20,
     height: 2,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: t.colors.glass,
     transform: [{ rotate: '-7deg' }],
   },
   gridHorizontalTwo: {
@@ -87,7 +89,7 @@ const styles = StyleSheet.create({
     left: -20,
     right: -20,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: t.colors.glass,
     transform: [{ rotate: '5deg' }],
   },
   gridVerticalOne: {
@@ -96,7 +98,7 @@ const styles = StyleSheet.create({
     bottom: -20,
     left: '25%',
     width: 2,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: t.colors.glass,
     transform: [{ rotate: '9deg' }],
   },
   gridVerticalTwo: {
@@ -105,7 +107,7 @@ const styles = StyleSheet.create({
     bottom: -20,
     right: '22%',
     width: 3,
-    backgroundColor: 'rgba(255,255,255,0.78)',
+    backgroundColor: t.colors.glass,
     transform: [{ rotate: '-11deg' }],
   },
   pin: {
@@ -114,8 +116,8 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.scarlet,
-    shadowColor: palette.shadowStrong,
+    backgroundColor: t.colors.primary,
+    shadowColor: t.colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 1,
     shadowRadius: 14,
@@ -125,11 +127,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     textAlign: 'center',
   },
-});
+}));

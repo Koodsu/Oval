@@ -23,7 +23,7 @@ import {
 import { Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { exportTextFile } from '../utils/fileExport';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyData'>;
 
@@ -45,6 +45,8 @@ const PREFERENCE_ROWS: Array<{
 ];
 
 export default function PrivacyDataScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, updateUser, clearSession } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [instagram, setInstagram] = useState(user?.instagramHandle ?? '');
@@ -187,7 +189,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
                   value={prefs[row.key]}
                   onValueChange={(value) => void updatePreference(row.key, value)}
                   trackColor={{ false: '#D8D7D2', true: '#E29A7A' }}
-                  thumbColor={prefs[row.key] ? palette.scarlet : '#F8F7F3'}
+                  thumbColor={prefs[row.key] ? colors.primary : '#F8F7F3'}
                 />
               </View>
             </Panel>
@@ -209,7 +211,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="@yourhandle"
-              placeholderTextColor={palette.slate}
+              placeholderTextColor={colors.faint}
               style={styles.input}
             />
             <View style={styles.actionStack}>
@@ -243,7 +245,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -253,10 +255,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
   },
   copy: {
     flex: 1,
@@ -270,13 +272,13 @@ const styles = StyleSheet.create({
   input: {
     marginTop: spacing.md,
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   action: {
     marginTop: spacing.md,
@@ -289,7 +291,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(160, 53, 40, 0.22)',
   },
   dangerTitle: {
-    ...typography.title,
-    color: palette.dangerText,
+    ...t.typography.title,
+    color: t.colors.dangerText,
   },
-});
+}));

@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fetchFeed, getActivities, getApiErrorMessage } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, PrimaryButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import {
+  Chip,
+  EmptyState,
+  Entrance,
+  PrimaryButton,
+  Screen,
+  SearchField,
+  SectionHeader,
+  SkeletonCard,
+  Tap,
+} from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
 import { useLocationPermission } from '../hooks/useLocationPermission';
-import { palette, radii, shadows, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -111,6 +121,8 @@ function displayTitle(activity: Activity) {
 
 export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
+  const { colors, isDark } = useTheme();
+  const styles = useStyles();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -201,135 +213,148 @@ export default function ExploreScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
-        <View style={styles.titleRow}>
-          <Text style={styles.pageTitle}>Explore</Text>
-          {!granted && canAskAgain ? (
-            <TouchableOpacity
-              style={styles.locationButton}
-              activeOpacity={0.86}
-              onPress={explainAndRequestLocation}
-              accessibilityRole="button"
-              accessibilityLabel="Use campus location"
-            >
-              <Ionicons name="navigate-outline" size={15} color={palette.scarlet} />
-              <Text style={styles.locationButtonText}>Nearby</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <Entrance index={0}>
+          <View style={styles.titleRow}>
+            <View>
+              <Text style={styles.pageEyebrow}>Find your people</Text>
+              <Text style={styles.pageTitle}>Explore</Text>
+            </View>
+            {!granted && canAskAgain ? (
+              <TouchableOpacity
+                style={styles.locationButton}
+                activeOpacity={0.86}
+                onPress={explainAndRequestLocation}
+                accessibilityRole="button"
+                accessibilityLabel="Use campus location"
+              >
+                <Ionicons name="navigate-outline" size={15} color={colors.primary} />
+                <Text style={styles.locationButtonText}>Nearby</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </Entrance>
 
-        <SearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search activities or places"
-        />
+        <Entrance index={1}>
+          <SearchField
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search activities or places"
+          />
+        </Entrance>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-        >
-          <Chip label="All" active={!category} onPress={() => setCategory(null)} />
-          {CATEGORIES.map((item) => (
-            <Chip
-              key={item}
-              label={categoryShortLabel(item)}
-              active={category === item}
-              onPress={() => setCategory(item)}
-            />
-          ))}
-        </ScrollView>
+        <Entrance index={2}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            <Chip label="All" active={!category} onPress={() => setCategory(null)} />
+            {CATEGORIES.map((item) => (
+              <Chip
+                key={item}
+                label={categoryShortLabel(item)}
+                active={category === item}
+                onPress={() => setCategory(item)}
+              />
+            ))}
+          </ScrollView>
+        </Entrance>
 
         <View style={styles.section}>
-          <SectionHeader title="Browse activities" />
+          <Entrance index={3}>
+            <SectionHeader title="Browse activities" />
+          </Entrance>
           {!loaded ? (
             <>
               <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </>
-          ) : cards.length ? visibleCards.map((item) => {
+          ) : cards.length ? visibleCards.map((item, cardIndex) => {
             const meta = CATEGORY_META[item.activity.category];
+            const accent = meta?.color ?? colors.primary;
             const status = statusMeta(item.liveCount);
             const podLocation = activePodLocation(item.activePods);
             const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
             const hasActivePods = item.liveCount > 0;
             return (
-              <TouchableOpacity
-                key={item.activity.id}
-                activeOpacity={0.92}
-                onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
-                style={styles.activityCard}
-              >
-                <LinearGradient
-                  colors={[`${meta?.color ?? palette.scarlet}1F`, 'rgba(255,255,255,0.9)']}
-                  style={styles.categoryVisual}
+              <Entrance key={item.activity.id} index={Math.min(cardIndex, 6) + 3}>
+                <Tap
+                  onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
+                  style={styles.activityCard}
+                  accessibilityLabel={displayTitle(item.activity)}
                 >
-                  <Ionicons
-                    name={meta?.icon ?? 'sparkles-outline'}
-                    size={24}
-                    color={meta?.color ?? palette.scarlet}
-                  />
-                </LinearGradient>
+                  <LinearGradient
+                    colors={[`${accent}2E`, isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.9)']}
+                    style={styles.categoryVisual}
+                  >
+                    <Ionicons
+                      name={meta?.icon ?? 'sparkles-outline'}
+                      size={24}
+                      color={accent}
+                    />
+                  </LinearGradient>
 
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTopRow}>
-                    <View style={[
-                      styles.statusPill,
-                      status.style === 'live' ? styles.statusPillLive : styles.statusPillQuiet,
-                    ]}>
-                      <Ionicons
-                        name={status.icon}
-                        size={12}
-                        color={status.style === 'live' ? palette.white : palette.slate}
-                      />
-                      <Text style={[
-                        styles.statusText,
-                        status.style === 'live' ? styles.statusTextLive : styles.statusTextQuiet,
+                  <View style={styles.cardBody}>
+                    <View style={styles.cardTopRow}>
+                      <View style={[
+                        styles.statusPill,
+                        status.style === 'live' ? styles.statusPillLive : styles.statusPillQuiet,
                       ]}>
-                        {status.label}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.categoryLabel} numberOfLines={1}>{meta?.label ?? item.activity.category}</Text>
-                  </View>
-
-                  <Text style={styles.activityTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
-                  <Text style={styles.activityDescription} numberOfLines={2}>{item.activity.description}</Text>
-
-                  {hasActivePods ? (
-                    <View style={styles.factRow}>
-                      {podLocation ? (
-                        <View style={styles.factItem}>
-                          <Ionicons name="location-outline" size={13} color={palette.slate} />
-                          <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
-                        </View>
-                      ) : null}
-                      <View style={styles.factItem}>
-                        <Ionicons name="people-outline" size={13} color={palette.slate} />
-                        <Text style={styles.factText}>{formatParticipantCount(item.activePods)}</Text>
+                        <Ionicons
+                          name={status.icon}
+                          size={12}
+                          color={status.style === 'live' ? '#FFFFFF' : colors.sub}
+                        />
+                        <Text style={[
+                          styles.statusText,
+                          status.style === 'live' ? styles.statusTextLive : styles.statusTextQuiet,
+                        ]}>
+                          {status.label}
+                        </Text>
                       </View>
-                      {distanceLabel ? (
-                        <View style={styles.factItem}>
-                          <Ionicons name="navigate-outline" size={13} color={palette.slate} />
-                          <Text style={styles.factText}>{distanceLabel}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  ) : (
-                    <Text style={styles.emptySupport}>Be the first to start one.</Text>
-                  )}
 
-                  <View style={styles.actionRow}>
-                    <Text style={styles.actionHint} numberOfLines={1}>
-                      {hasActivePods ? 'View meetup options' : 'Create the first pod'}
-                    </Text>
-                    <View style={styles.ctaPill}>
-                      <Text style={styles.ctaText}>{ctaLabel(item.liveCount)}</Text>
-                      <Ionicons name="chevron-forward" size={14} color={palette.scarlet} />
+                      <Text style={styles.categoryLabel} numberOfLines={1}>{meta?.label ?? item.activity.category}</Text>
+                    </View>
+
+                    <Text style={styles.activityTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
+                    <Text style={styles.activityDescription} numberOfLines={2}>{item.activity.description}</Text>
+
+                    {hasActivePods ? (
+                      <View style={styles.factRow}>
+                        {podLocation ? (
+                          <View style={styles.factItem}>
+                            <Ionicons name="location-outline" size={13} color={colors.faint} />
+                            <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
+                          </View>
+                        ) : null}
+                        <View style={styles.factItem}>
+                          <Ionicons name="people-outline" size={13} color={colors.faint} />
+                          <Text style={styles.factText}>{formatParticipantCount(item.activePods)}</Text>
+                        </View>
+                        {distanceLabel ? (
+                          <View style={styles.factItem}>
+                            <Ionicons name="navigate-outline" size={13} color={colors.faint} />
+                            <Text style={styles.factText}>{distanceLabel}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptySupport}>Be the first to start one.</Text>
+                    )}
+
+                    <View style={styles.actionRow}>
+                      <Text style={styles.actionHint} numberOfLines={1}>
+                        {hasActivePods ? 'View meetup options' : 'Create the first pod'}
+                      </Text>
+                      <View style={styles.ctaPill}>
+                        <Text style={styles.ctaText}>{ctaLabel(item.liveCount)}</Text>
+                        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                      </View>
                     </View>
                   </View>
-                </View>
-              </TouchableOpacity>
+                </Tap>
+              </Entrance>
             );
           }) : (
             <EmptyState
@@ -353,7 +378,7 @@ export default function ExploreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingTop: spacing.sm,
@@ -361,36 +386,37 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'space-between' as const,
+  },
+  pageEyebrow: {
+    ...t.typography.label,
+    color: t.colors.primary,
+    marginBottom: 2,
   },
   pageTitle: {
-    ...typography.h1,
-    fontSize: 34,
-    lineHeight: 38,
+    ...t.typography.display,
   },
   locationButton: {
     height: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.78)',
-    borderWidth: 1,
-    borderColor: 'rgba(199,59,34,0.16)',
+    backgroundColor: t.colors.primarySoft,
   },
   locationButtonText: {
-    ...typography.bodyStrong,
+    fontFamily: fonts.semibold,
     fontSize: 13,
     lineHeight: 18,
-    color: palette.scarlet,
+    color: t.colors.primarySoftText,
   },
   chipRow: {
     paddingLeft: 1,
     paddingTop: 2,
-    paddingBottom: 4,
+    paddingBottom: 6,
     paddingRight: spacing.xl,
   },
   section: {
@@ -401,129 +427,126 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   activityCard: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 18,
+    backgroundColor: t.colors.surface,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.07)',
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.sm,
     paddingVertical: 12,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   categoryVisual: {
     width: 54,
     minHeight: 108,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
   },
   cardBody: {
     flex: 1,
     gap: 7,
   },
   cardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: 8,
   },
   statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
     borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
   statusPillLive: {
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   statusPillQuiet: {
-    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+    backgroundColor: t.colors.inputBg,
   },
   statusText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
   statusTextLive: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   statusTextQuiet: {
-    color: palette.slate,
+    color: t.colors.sub,
   },
   activityTitle: {
-    ...typography.title,
-    fontSize: 20,
+    ...t.typography.h2,
+    fontSize: 19,
     lineHeight: 24,
-    color: palette.ink,
   },
   activityDescription: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
-    color: palette.slate,
   },
   factRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
     gap: 8,
   },
   factItem: {
-    maxWidth: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
+    maxWidth: '100%' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
   },
   factText: {
-    color: palette.slate,
+    color: t.colors.sub,
+    fontFamily: fonts.semibold,
     fontSize: 12,
-    fontWeight: '700',
     flexShrink: 1,
   },
   emptySupport: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
-    color: palette.slate,
   },
   actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    borderTopColor: t.colors.border,
     paddingTop: 8,
   },
   categoryLabel: {
-    color: palette.slate,
+    color: t.colors.faint,
+    fontFamily: fonts.semibold,
     fontSize: 12,
-    fontWeight: '700',
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'right' as const,
   },
   actionHint: {
-    color: palette.slate,
+    color: t.colors.faint,
+    fontFamily: fonts.medium,
     fontSize: 12,
-    fontWeight: '600',
     flex: 1,
     marginRight: 4,
   },
   ctaPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
     gap: 2,
     minWidth: 76,
     flexShrink: 0,
   },
   ctaText: {
-    color: palette.scarlet,
+    color: t.colors.primary,
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
-});
+}));

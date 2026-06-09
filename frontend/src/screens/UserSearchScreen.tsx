@@ -5,11 +5,13 @@ import { getApiErrorMessage, searchUsers, sendFriendRequest } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser } from '../types';
 import { EmptyState, PrimaryButton, Screen, ScreenHeader, SearchField, UserAvatar } from '../components/ui';
-import { spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserSearch'>;
 
 export default function UserSearchScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FriendUser[]>([]);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export default function UserSearchScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -126,9 +128,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
   },
-});
+}));

@@ -3,7 +3,6 @@ import {
   Alert,
   Image,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -15,25 +14,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fetchFeed, getApiErrorMessage, getFriends, getMyPodHistory, getMyPods, resolveAvatarUrl } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Pod, PodMember } from '../types';
-import { EmptyState, IconButton, Screen, SectionHeader, SkeletonCard } from '../components/ui';
+import { EmptyState, Entrance, IconButton, Screen, SectionHeader, SkeletonCard, Tap } from '../components/ui';
 import { formatShortDate, formatTime, getInitials } from '../utils/format';
 import { sortUpcomingPods } from '../utils/experience';
-import { palette, radii, shadows, spacing, typography } from '../theme';
+import { Theme, ThemeColors, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Mode = 'active' | 'past';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-function podStatusMeta(pod: Pod) {
+function podStatusMeta(pod: Pod, colors: ThemeColors) {
   if (pod.status === 'COMPLETED') {
-    return { label: 'Finished', bg: '#E8EEF9', text: '#4A72A8', icon: 'checkmark-circle-outline' as const };
+    return { label: 'Finished', bg: colors.blueSoft, text: colors.blue, icon: 'checkmark-circle-outline' as const };
   }
   if (pod.status === 'LOCKED') {
-    return { label: 'Locked in', bg: '#E8F6ED', text: '#2C6A45', icon: 'sparkles-outline' as const };
+    return { label: 'Locked in', bg: colors.successBg, text: colors.successText, icon: 'sparkles-outline' as const };
   }
   if (new Date(pod.meetupTime).getTime() <= Date.now()) {
-    return { label: 'Happening now', bg: '#E8F6ED', text: '#2C6A45', icon: 'flame-outline' as const };
+    return { label: 'Happening now', bg: colors.successBg, text: colors.successText, icon: 'flame-outline' as const };
   }
-  return { label: 'Starts soon', bg: '#FFF1DE', text: '#9A5E17', icon: 'time-outline' as const };
+  return { label: 'Starts soon', bg: colors.warnBg, text: colors.warnText, icon: 'time-outline' as const };
 }
 
 function podIcon(pod: Pod): keyof typeof Ionicons.glyphMap {
@@ -100,6 +99,7 @@ function activityFeedForFriends(friends: FriendUser[], pods: Pod[]) {
 }
 
 function Avatar({ member, size = 32 }: { member: PodMember; size?: number }) {
+  const styles = useStyles();
   const uri = resolveAvatarUrl(member.user.avatarUrl);
   const initials = getInitials(member.user.name);
   if (uri) {
@@ -113,6 +113,7 @@ function Avatar({ member, size = 32 }: { member: PodMember; size?: number }) {
 }
 
 function FriendAvatar({ friend, size = 44 }: { friend: FriendUser; size?: number }) {
+  const styles = useStyles();
   const uri = resolveAvatarUrl(friend.avatarUrl);
   const initials = getInitials(friend.name);
   if (uri) {
@@ -127,6 +128,8 @@ function FriendAvatar({ friend, size = 44 }: { friend: FriendUser; size?: number
 
 export default function PodsScreen() {
   const navigation = useNavigation<Nav>();
+  const styles = useStyles();
+  const { colors, isDark } = useTheme();
   const [mode, setMode] = useState<Mode>('active');
   const [activePods, setActivePods] = useState<Pod[]>([]);
   const [historyPods, setHistoryPods] = useState<Pod[]>([]);
@@ -185,7 +188,10 @@ export default function PodsScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
-          <Text style={styles.pageTitle}>Pods</Text>
+          <View>
+            <Text style={styles.pageEyebrow}>Your plans</Text>
+            <Text style={styles.pageTitle}>Pods</Text>
+          </View>
 	          <IconButton
 	            icon="add"
 	            tooltip="Start a pod"
@@ -233,20 +239,20 @@ export default function PodsScreen() {
                 (() => {
                   const primaryFriendLabel = friendCountLabel(primaryPod, friends);
                   return (
-                <TouchableOpacity
-                  activeOpacity={0.93}
+                <Tap
                   onPress={() => navigation.navigate('PodDetail', { podId: primaryPod.id })}
                   style={styles.primaryCard}
+                  accessibilityLabel={displayPodTitle(primaryPod)}
                 >
                   <View style={styles.primaryTopRow}>
-                    <View style={[styles.statusPill, { backgroundColor: podStatusMeta(primaryPod).bg }]}>
+                    <View style={[styles.statusPill, { backgroundColor: podStatusMeta(primaryPod, colors).bg }]}>
                       <Ionicons
-                        name={podStatusMeta(primaryPod).icon}
+                        name={podStatusMeta(primaryPod, colors).icon}
                         size={14}
-                        color={podStatusMeta(primaryPod).text}
+                        color={podStatusMeta(primaryPod, colors).text}
                       />
-                      <Text style={[styles.statusLabel, { color: podStatusMeta(primaryPod).text }]}>
-                        {podStatusMeta(primaryPod).label}
+                      <Text style={[styles.statusLabel, { color: podStatusMeta(primaryPod, colors).text }]}>
+                        {podStatusMeta(primaryPod, colors).label}
                       </Text>
                     </View>
 
@@ -263,12 +269,12 @@ export default function PodsScreen() {
                   <Text style={styles.primaryTitle}>{displayPodTitle(primaryPod)}</Text>
 
                   <View style={styles.detailRow}>
-                    <Ionicons name="location-outline" size={16} color={palette.slate} />
+                    <Ionicons name="location-outline" size={16} color={colors.faint} />
                     <Text style={styles.detailText}>{primaryPod.location}</Text>
                   </View>
 
                   <View style={styles.detailRow}>
-                    <Ionicons name="calendar-outline" size={16} color={palette.slate} />
+                    <Ionicons name="calendar-outline" size={16} color={colors.faint} />
                     <Text style={styles.detailText}>
                       {formatShortDate(primaryPod.meetupTime)} at {formatTime(primaryPod.meetupTime)}
                     </Text>
@@ -307,7 +313,7 @@ export default function PodsScreen() {
                       </React.Fragment>
                     ))}
                   </View>
-                </TouchableOpacity>
+                </Tap>
                   );
                 })()
               ) : (
@@ -330,11 +336,11 @@ export default function PodsScreen() {
                 (() => {
                   const podFriendLabel = friendCountLabel(pod, friends);
                   return (
-                <TouchableOpacity
+                <Tap
                   key={pod.id}
                   style={styles.secondaryActiveCard}
-                  activeOpacity={0.92}
                   onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                  accessibilityLabel={displayPodTitle(pod)}
                 >
                   <View style={styles.secondaryActiveTop}>
                     <Text style={styles.secondaryActiveTitle}>{displayPodTitle(pod)}</Text>
@@ -344,7 +350,7 @@ export default function PodsScreen() {
                   <Text style={styles.secondaryActiveSubline}>
                     {[`${pod.members.length} going`, podFriendLabel].filter(Boolean).join(' • ')}
                   </Text>
-                </TouchableOpacity>
+                </Tap>
                   );
                 })()
               )) : null}
@@ -364,15 +370,15 @@ export default function PodsScreen() {
               ) : startingSoonPods.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
                   {startingSoonPods.map((pod) => (
-                    <TouchableOpacity
+                    <Tap
                       key={pod.id}
                       style={styles.miniCard}
-                      activeOpacity={0.92}
                       onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                      accessibilityLabel={displayPodTitle(pod)}
                     >
-                      <LinearGradient colors={['#F7F4EE', '#E9EEF6']} style={styles.miniCardMedia}>
-                        <Ionicons name={podIcon(pod)} size={30} color={palette.scarlet} />
-                        <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(16,33,43,0.12)']} style={styles.miniOverlay}>
+                      <LinearGradient colors={isDark ? ['#1E2129', '#181B22'] : ['#FBF7F0', '#EDEFF6']} style={styles.miniCardMedia}>
+                        <Ionicons name={podIcon(pod)} size={30} color={colors.primary} />
+                        <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(10,12,16,0.14)']} style={styles.miniOverlay}>
                           <View style={styles.miniBadge}>
                             <Text style={styles.miniBadgeText}>Starts in {minutesUntil(pod.meetupTime)}</Text>
                           </View>
@@ -393,7 +399,7 @@ export default function PodsScreen() {
                           <Text style={styles.miniCardGoing}>{pod.members.length} going</Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </Tap>
                   ))}
                 </ScrollView>
               ) : null}
@@ -436,17 +442,17 @@ export default function PodsScreen() {
               ) : moreOpenPods.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
                   {moreOpenPods.map((pod) => (
-                    <TouchableOpacity
+                    <Tap
                       key={pod.id}
                       style={styles.recommendedCard}
-                      activeOpacity={0.92}
                       onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                      accessibilityLabel={displayPodTitle(pod)}
                     >
-                      <LinearGradient colors={['#F7F4EE', '#E9EEF6']} style={styles.recommendedMedia}>
-                        <Ionicons name={podIcon(pod)} size={28} color={palette.scarlet} />
-                        <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(16,33,43,0.12)']} style={styles.recommendedOverlay}>
+                      <LinearGradient colors={isDark ? ['#1E2129', '#181B22'] : ['#FBF7F0', '#EDEFF6']} style={styles.recommendedMedia}>
+                        <Ionicons name={podIcon(pod)} size={28} color={colors.primary} />
+                        <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(10,12,16,0.14)']} style={styles.recommendedOverlay}>
                           <View style={styles.recommendedCountPill}>
-                            <Ionicons name="people-outline" size={13} color={palette.white} />
+                            <Ionicons name="people-outline" size={13} color="#FFFFFF" />
                             <Text style={styles.recommendedCountText}>{pod.members.length}</Text>
                           </View>
                         </LinearGradient>
@@ -456,7 +462,7 @@ export default function PodsScreen() {
                         <Text style={styles.recommendedLocation} numberOfLines={1}>{pod.location}</Text>
                         <Text style={styles.recommendedTime}>Starts in {minutesUntil(pod.meetupTime)}</Text>
                       </View>
-                    </TouchableOpacity>
+                    </Tap>
                   ))}
                 </ScrollView>
               ) : null}
@@ -467,11 +473,11 @@ export default function PodsScreen() {
           <View style={styles.section}>
             <SectionHeader title="Past pods" />
             {pastItems.length ? pastItems.map((pod) => (
-              <TouchableOpacity
+              <Tap
                 key={pod.id}
                 style={styles.pastCard}
-                activeOpacity={0.92}
                 onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                accessibilityLabel={displayPodTitle(pod)}
               >
                 <View style={styles.pastTopRow}>
                   <Text style={styles.pastTitle}>{displayPodTitle(pod)}</Text>
@@ -480,7 +486,7 @@ export default function PodsScreen() {
                 <Text style={styles.pastMeta}>{pod.location}</Text>
                 <Text style={styles.pastMeta}>{formatShortDate(pod.meetupTime)} at {formatTime(pod.meetupTime)}</Text>
                 <Text style={styles.pastMeta}>{pod.members.length} went</Text>
-              </TouchableOpacity>
+              </Tap>
             )) : (
               <EmptyState
                 icon="time-outline"
@@ -495,242 +501,236 @@ export default function PodsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  pageEyebrow: {
+    ...t.typography.label,
+    color: t.colors.primary,
+    marginBottom: 2,
   },
   pageTitle: {
-    ...typography.h1,
-    fontSize: 48,
-    lineHeight: 52,
-  },
-  iconButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1,
-    borderColor: palette.border,
+    ...t.typography.display,
   },
   modeTabs: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     marginHorizontal: -spacing.md,
     paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16, 33, 43, 0.08)',
+    borderBottomColor: t.colors.border,
   },
   modeTab: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     gap: 10,
     paddingTop: 6,
   },
   modeLabel: {
-    ...typography.bodyStrong,
-    fontSize: 18,
-    color: palette.slate,
+    fontFamily: fonts.semibold,
+    fontSize: 17,
+    color: t.colors.faint,
   },
   modeLabelActive: {
-    color: palette.ink,
+    color: t.colors.ink,
   },
   modeUnderline: {
     height: 3,
-    width: '100%',
+    width: '100%' as const,
     borderRadius: radii.pill,
     backgroundColor: 'transparent',
   },
   modeUnderlineActive: {
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   section: {
     gap: spacing.sm,
   },
   primaryCard: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderRadius: 26,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     gap: 12,
-    ...shadows.card,
+    ...t.shadows.raised,
   },
   primaryTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   statusLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
   },
   progressMeta: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
     gap: 8,
     flex: 1,
     maxWidth: 110,
   },
   goingLabel: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 15,
   },
   progressTrack: {
-    width: '100%',
+    width: '100%' as const,
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(16, 33, 43, 0.08)',
-    overflow: 'hidden',
+    backgroundColor: t.colors.inputBg,
+    overflow: 'hidden' as const,
   },
   progressFill: {
-    height: '100%',
+    height: '100%' as const,
     borderRadius: radii.pill,
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   primaryTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 24,
     lineHeight: 30,
   },
   detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   detailText: {
-    ...typography.body,
+    ...t.typography.body,
     flex: 1,
-    color: palette.slate,
   },
   primaryFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
   },
   peopleMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
     flex: 1,
   },
   avatarRail: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   peopleTextBlock: {
     gap: 2,
     flex: 1,
   },
   peopleLine: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
   },
   peopleSubline: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   openButton: {
-    backgroundColor: palette.scarlet,
-    borderRadius: 16,
+    backgroundColor: t.colors.primary,
+    borderRadius: radii.pill,
     paddingHorizontal: 18,
     paddingVertical: 13,
+    ...t.shadows.glow,
   },
   openButtonText: {
-    color: palette.white,
-    fontSize: 18,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 16,
   },
   descriptorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 33, 43, 0.07)',
+    borderTopColor: t.colors.border,
     paddingTop: 12,
   },
   dotDivider: {
-    color: '#A4B2BA',
+    color: t.colors.faint,
     fontSize: 14,
   },
   descriptorText: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
-    color: palette.slate,
   },
   secondaryActiveCard: {
-    backgroundColor: 'rgba(255,255,255,0.84)',
+    backgroundColor: t.colors.surface,
     borderRadius: 20,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.05)',
+    borderColor: t.colors.border,
     gap: 4,
+    ...t.shadows.subtle,
   },
   secondaryActiveTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
   },
   secondaryActiveTitle: {
-    ...typography.title,
+    ...t.typography.title,
     flex: 1,
   },
   secondaryActiveMeta: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: t.colors.primary,
   },
   secondaryActiveLocation: {
-    ...typography.body,
+    ...t.typography.body,
   },
   secondaryActiveSubline: {
-    ...typography.bodyStrong,
+    fontFamily: fonts.semibold,
     fontSize: 14,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   emptyMomentumCard: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: t.colors.surface,
     borderRadius: 24,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   emptyMomentumTitle: {
-    ...typography.h2,
+    ...t.typography.h2,
   },
   emptyMomentumBody: {
-    ...typography.body,
+    ...t.typography.body,
   },
   findButton: {
     marginTop: 4,
-    backgroundColor: palette.scarlet,
-    borderRadius: 16,
+    backgroundColor: t.colors.primary,
+    borderRadius: radii.pill,
     paddingHorizontal: 18,
     paddingVertical: 14,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start' as const,
+    ...t.shadows.glow,
   },
   findButtonText: {
-    color: palette.white,
-    fontSize: 16,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 15,
   },
   horizontalRow: {
     paddingRight: spacing.md,
@@ -738,57 +738,55 @@ const styles = StyleSheet.create({
   },
   miniCard: {
     width: 286,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
+    ...t.shadows.subtle,
   },
   miniCardMedia: {
     height: 108,
   },
-  miniCardImage: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
   miniOverlay: {
     flex: 1,
     padding: 10,
-    justifyContent: 'space-between',
+    justifyContent: 'space-between' as const,
   },
   miniBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(230, 140, 34, 0.96)',
+    alignSelf: 'flex-start' as const,
+    backgroundColor: t.colors.amber,
     borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   miniBadgeText: {
-    color: palette.white,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
   miniCardBody: {
     padding: 12,
     gap: 6,
   },
   miniCardTitle: {
-    ...typography.title,
-    fontSize: 20,
-    lineHeight: 24,
+    ...t.typography.title,
+    fontSize: 18,
+    lineHeight: 23,
   },
   miniCardLocation: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   miniCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   miniCardGoing: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.sub,
   },
   friendActivityRow: {
     paddingRight: spacing.md,
@@ -796,142 +794,126 @@ const styles = StyleSheet.create({
   },
   friendActivityCard: {
     width: 232,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: t.colors.surface,
     borderRadius: 20,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
+    ...t.shadows.subtle,
   },
   friendActivityCopy: {
     flex: 1,
     gap: 1,
   },
   friendActivityTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   friendName: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
   },
   friendJoined: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
   },
   friendPodName: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
-  },
-  inlineEmptyState: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
-    padding: spacing.md,
-    gap: 4,
-  },
-  inlineEmptyTitle: {
-    ...typography.bodyStrong,
-    color: palette.ink,
-  },
-  inlineEmptyBody: {
-    ...typography.body,
+    fontFamily: fonts.semibold,
     fontSize: 14,
+    color: t.colors.primary,
   },
   recommendedCard: {
     width: 214,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
+    ...t.shadows.subtle,
   },
   recommendedMedia: {
     height: 116,
   },
-  recommendedImage: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
   recommendedOverlay: {
     flex: 1,
     padding: 10,
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
   },
   recommendedCountPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
-    backgroundColor: 'rgba(16, 33, 43, 0.52)',
+    backgroundColor: 'rgba(12,13,17,0.55)',
     borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
   recommendedCountText: {
-    color: palette.white,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   recommendedBody: {
     padding: 12,
     gap: 4,
   },
   recommendedTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   recommendedLocation: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   recommendedTime: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    fontFamily: fonts.semibold,
     fontSize: 14,
+    color: t.colors.primary,
   },
   pastCard: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: t.colors.surface,
     borderRadius: 22,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     gap: 4,
+    ...t.shadows.subtle,
   },
   pastTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
   },
   pastTitle: {
-    ...typography.title,
+    ...t.typography.title,
     flex: 1,
   },
   pastStatus: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.faint,
   },
   pastMeta: {
-    ...typography.body,
+    ...t.typography.body,
   },
   realAvatar: {
     borderWidth: 2,
-    borderColor: palette.white,
-    backgroundColor: '#D7DEE2',
+    borderColor: t.colors.surface,
+    backgroundColor: t.colors.surfaceAlt,
   },
   initialAvatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DDE7ED',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.surfaceAlt,
     borderWidth: 2,
-    borderColor: palette.white,
+    borderColor: t.colors.surface,
   },
   initialAvatarText: {
-    color: palette.ink,
+    color: t.colors.ink,
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
-});
+}));

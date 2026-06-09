@@ -11,10 +11,12 @@ import {
 import { API_USER_MESSAGE, getApiErrorMessage } from '../api';
 import { Panel, PrimaryButton, Screen } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 const SITE_URL = 'https://www.joinbridgeapp.com';
 
 export default function TermsAcceptanceScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { acceptGuidelines, signOut } = useAuth();
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -80,6 +82,8 @@ export default function TermsAcceptanceScreen() {
 }
 
 function PolicyLink({ label, url }: { label: string; url: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       onPress={() => void Linking.openURL(url)}
@@ -101,6 +105,8 @@ function CheckRow({
   label: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       style={styles.checkRow}
@@ -117,33 +123,33 @@ function CheckRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingVertical: spacing.xl,
   },
   eyebrow: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
     marginBottom: spacing.sm,
   },
   title: {
-    ...typography.h1,
+    ...t.typography.h1,
     marginBottom: spacing.md,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
     marginBottom: spacing.md,
   },
   link: {
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: palette.border,
+    borderBottomColor: t.colors.border,
   },
   linkText: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    ...t.typography.bodyStrong,
+    color: t.colors.primary,
   },
   checkRow: {
     flexDirection: 'row',
@@ -156,21 +162,21 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: palette.slate,
+    borderColor: t.colors.sub,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxActive: {
-    backgroundColor: palette.scarlet,
-    borderColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
   checkmark: {
-    color: palette.white,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
   },
   checkText: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     flex: 1,
   },
   signOut: {
@@ -178,7 +184,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   signOutText: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
   },
-});
+}));

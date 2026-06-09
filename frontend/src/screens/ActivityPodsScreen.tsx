@@ -12,7 +12,7 @@ import { Pod } from '../types';
 import { Chip, EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { formatDateTime } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'>;
 
@@ -31,6 +31,8 @@ function dedupeLocations(locations: string[]) {
 }
 
 export default function ActivityPodsScreen({ route, navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { activity, startCreate } = route.params;
   const [pods, setPods] = useState<Pod[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -208,7 +210,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                     if (locationMessage) setLocationMessage(null);
                   }}
 	                  placeholder="Choose below, or drop a map pin first..."
-                  placeholderTextColor={palette.slate}
+                  placeholderTextColor={colors.faint}
                   style={styles.locationInput}
                   multiline
                 />
@@ -289,7 +291,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                   void handleMapPress(event);
                 }}
               >
-                <Polygon coordinates={OSU_CAMPUS_POLYGON} fillColor="rgba(199,59,34,0.06)" strokeColor="rgba(199,59,34,0.25)" />
+                <Polygon coordinates={OSU_CAMPUS_POLYGON} fillColor="rgba(239,62,27,0.06)" strokeColor="rgba(239,62,27,0.25)" />
                 {mappablePods.map((pod) => (
                   <Marker
                     key={pod.id}
@@ -303,7 +305,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                     coordinate={selectedPin}
                     title="New pod"
                     description={location.trim() || 'Pinned meetup spot'}
-                    pinColor={palette.scarlet}
+                    pinColor={colors.primary}
                   />
                 ) : null}
               </MapView>
@@ -355,7 +357,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -365,10 +367,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   panelTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   panelBody: {
-    ...typography.body,
+    ...t.typography.body,
   },
   map: {
     height: 240,
@@ -378,10 +380,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   creatorCard: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: t.colors.glass,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
   },
   composerToggle: {
@@ -392,23 +394,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   chevron: {
-    ...typography.title,
-    color: palette.scarlet,
+    ...t.typography.title,
+    color: t.colors.primary,
   },
   sectionTitleStatic: {
-    ...typography.h2,
+    ...t.typography.h2,
     fontSize: 20,
-    color: palette.ink,
+    color: t.colors.ink,
   },
   composerWrap: {},
   section: {
     gap: spacing.sm,
   },
   row: {
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: t.colors.glass,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.md,
   },
@@ -419,34 +421,34 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
   },
   inputWrap: {
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     gap: 6,
   },
   inputLabel: {
-    ...typography.label,
+    ...t.typography.label,
   },
   locationInput: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     minHeight: 46,
     padding: 0,
     textAlignVertical: 'top',
   },
 	  locationHint: {
-	    ...typography.body,
+	    ...t.typography.body,
 	    fontSize: 13,
-	    color: palette.slate,
+	    color: t.colors.sub,
 	  },
 	  locationSuggestionBlock: {
 	    gap: spacing.xs,
@@ -458,7 +460,7 @@ const styles = StyleSheet.create({
 	  },
 	  dateWrap: {
     borderRadius: radii.md,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: t.colors.glass,
     padding: spacing.sm,
   },
   memberRow: {
@@ -479,18 +481,18 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: palette.ink,
+    backgroundColor: t.colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperText: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 22,
     lineHeight: 22,
   },
   stepperValue: {
-    ...typography.title,
+    ...t.typography.title,
     minWidth: 24,
     textAlign: 'center',
   },
-});
+}));

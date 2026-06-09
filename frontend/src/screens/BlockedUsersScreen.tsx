@@ -4,7 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage, getBlockedUsers, unblockUser } from '../api';
 import { RootStackParamList } from '../../App';
 import { EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
-import { palette, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BlockedUsers'>;
@@ -12,6 +12,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'BlockedUsers'>;
 type BlockedUser = Awaited<ReturnType<typeof getBlockedUsers>>[number];
 
 export default function BlockedUsersScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [users, setUsers] = useState<BlockedUser[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -85,7 +87,7 @@ export default function BlockedUsersScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -101,10 +103,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
-    color: palette.slate,
+    ...t.typography.body,
+    color: t.colors.sub,
   },
-});
+}));

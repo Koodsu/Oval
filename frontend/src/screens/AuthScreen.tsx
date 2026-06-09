@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   login,
   register,
@@ -12,8 +13,8 @@ import {
   updateProfile,
 } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Chip, Hero, Panel, PrimaryButton, Screen, SegmentedControl } from '../components/ui';
-import { palette, radii, spacing, typography } from '../theme';
+import { Chip, Entrance, Hero, Panel, PrimaryButton, Screen, SegmentedControl } from '../components/ui';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 import { INTEREST_TAGS } from '../constants/interestTags';
 
@@ -26,6 +27,8 @@ const SITE_URL = 'https://www.joinbridgeapp.com';
 
 export default function AuthScreen() {
   const { signIn, acceptGuidelines } = useAuth();
+  const styles = useStyles();
+  const { gradients } = useTheme();
   const [mode, setMode] = useState<Mode>('login');
   const [registerStep, setRegisterStep] = useState<1 | 2 | 3>(1);
   const [busy, setBusy] = useState(false);
@@ -214,8 +217,23 @@ export default function AuthScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
+        <Entrance index={0}>
+          <View style={styles.brandRow}>
+            <LinearGradient
+              colors={gradients.brand}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.brandMark}
+            >
+              <Text style={styles.brandMarkText}>B</Text>
+            </LinearGradient>
+            <Text style={styles.brandName}>Bridge</Text>
+          </View>
+        </Entrance>
+
+        <Entrance index={1}>
         <Hero
-          eyebrow="Bridge"
+          eyebrow="Welcome"
           title={
             mode === 'login'
               ? 'Turn campus into plans.'
@@ -239,7 +257,9 @@ export default function AuthScreen() {
             </View>
           ) : null}
         </Hero>
+        </Entrance>
 
+        <Entrance index={2}>
         <Panel>
           <SegmentedControl
             value={mode}
@@ -489,6 +509,7 @@ export default function AuthScreen() {
                 : 'For students 18+. Bridge is independent and not affiliated with Ohio State.'}
           </Text>
         </Panel>
+        </Entrance>
       </ScrollView>
     </Screen>
   );
@@ -509,20 +530,26 @@ function Field({
   autoComplete?: 'email' | 'given-name' | 'family-name' | 'current-password' | 'new-password' | 'one-time-code';
   maxLength?: number;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [focused, setFocused] = React.useState(false);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         {...props}
-        style={styles.input}
-        placeholderTextColor={palette.slate}
+        style={[styles.input, focused && styles.inputFocused]}
+        placeholderTextColor={colors.faint}
         accessibilityLabel={label}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
       />
     </View>
   );
 }
 
 function PolicyLink({ label, url }: { label: string; url: string }) {
+  const styles = useStyles();
   return (
     <TouchableOpacity
       accessibilityRole="link"
@@ -535,16 +562,43 @@ function PolicyLink({ label, url }: { label: string; url: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
-    gap: spacing.lg,
+    gap: spacing.md,
+  },
+  brandRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    paddingHorizontal: 2,
+    marginTop: spacing.sm,
+  },
+  brandMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    ...t.shadows.glow,
+  },
+  brandMarkText: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
+  brandName: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: 26,
+    letterSpacing: -0.8,
+    color: t.colors.ink,
   },
   heroChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     marginTop: spacing.sm,
+    rowGap: spacing.xs,
   },
   form: {
     marginTop: spacing.md,
@@ -555,115 +609,123 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   progressCopy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   progressLabel: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   progressStep: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
   },
   progressTrack: {
     height: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderRadius: radii.pill,
-    backgroundColor: palette.mist,
+    backgroundColor: t.colors.inputBg,
   },
   progressFill: {
-    height: '100%',
+    height: '100%' as const,
     borderRadius: radii.pill,
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   checkbox: {
     width: 22,
     height: 22,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: palette.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.cream,
+    borderWidth: 1.5,
+    borderColor: t.colors.borderStrong,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.surface,
   },
   checkboxActive: {
-    backgroundColor: palette.scarlet,
-    borderColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
   checkboxMark: {
-    ...typography.bodyStrong,
-    color: palette.white,
-    lineHeight: 18,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    lineHeight: 16,
   },
-	  checkText: {
-	    ...typography.body,
-	    flex: 1,
-	  },
-	  linkText: {
-	    ...typography.bodyStrong,
-	    color: palette.scarlet,
-	  },
-    policyLinks: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
-    policyLink: {
-      paddingVertical: spacing.xs,
-      paddingHorizontal: spacing.sm,
-      borderRadius: radii.pill,
-      backgroundColor: palette.dangerBg,
-    },
-	  chipWrap: {
-	    flexDirection: 'row',
-	    flexWrap: 'wrap',
-	    rowGap: spacing.sm,
-	  },
-	  forgotButton: {
-	    alignSelf: 'flex-start',
-	    paddingVertical: 2,
-	  },
-	  forgotText: {
-	    ...typography.bodyStrong,
-	    color: palette.scarlet,
-	  },
-	  field: {
+  checkText: {
+    ...t.typography.body,
+    flex: 1,
+  },
+  linkText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.primarySoftText,
+  },
+  policyLinks: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+  },
+  policyLink: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: t.colors.primarySoft,
+  },
+  chipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    rowGap: spacing.sm,
+  },
+  forgotButton: {
+    alignSelf: 'flex-start' as const,
+    paddingVertical: 2,
+  },
+  forgotText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.primary,
+  },
+  field: {
     gap: spacing.xs,
   },
   fieldHelp: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
   fieldLabel: {
-    ...typography.label,
+    ...t.typography.label,
   },
   input: {
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
-    borderWidth: 1,
-    borderColor: palette.border,
+    backgroundColor: t.colors.inputBg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    ...typography.bodyStrong,
-    color: palette.ink,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: t.colors.ink,
+  },
+  inputFocused: {
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.surface,
   },
   footnote: {
     marginTop: spacing.md,
-    ...typography.body,
+    ...t.typography.caption,
   },
   registerActions: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: spacing.sm,
   },
   registerAction: {
     flex: 1,
   },
-});
+}));
