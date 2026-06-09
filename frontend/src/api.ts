@@ -173,15 +173,16 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     let data: unknown;
     try {
       res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
-      data =
-        res.status === 204
-          ? {}
-          : await res.json().catch((parseErr) => {
-              if (__DEV__) {
-                console.warn(`[api] JSON parse failed for ${path} (${res.status}):`, parseErr);
-              }
-              return {};
-            });
+      if (res.status === 204) {
+        data = {};
+      } else {
+        const body = await res.text();
+        try {
+          data = body ? JSON.parse(body) : {};
+        } catch {
+          data = body ? { error: body } : {};
+        }
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') throw err;
       throw new ApiError(

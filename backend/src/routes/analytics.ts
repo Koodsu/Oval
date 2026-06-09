@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { Prisma } from '../generated/prisma';
+import { Prisma } from '@prisma/client';
 import { AuthRequest, optionalAuth } from '../middleware/auth';
 import prisma from '../prisma';
 

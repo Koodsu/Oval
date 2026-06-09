@@ -25,12 +25,22 @@ describe('production environment validation', () => {
     expect(() => validateProductionEnvironment(validEnv)).not.toThrow();
   });
 
-  it('rejects missing, placeholder, and short secret values', () => {
+  it('allows optional integrations to be absent', () => {
+    expect(() => validateProductionEnvironment({
+      NODE_ENV: 'production',
+      DATABASE_URL: validEnv.DATABASE_URL,
+      JWT_SECRET: validEnv.JWT_SECRET,
+      CORS_ORIGIN: validEnv.CORS_ORIGIN,
+    })).not.toThrow();
+  });
+
+  it('rejects missing core values and invalid configured secrets', () => {
     expect(() => validateProductionEnvironment({
       ...validEnv,
+      DATABASE_URL: undefined,
       JWT_SECRET: 'change_me',
       OPENAI_API_KEY: undefined,
-    })).toThrow(/JWT_SECRET still contains a placeholder|OPENAI_API_KEY is missing/);
+    })).toThrow(/DATABASE_URL is missing|JWT_SECRET still contains a placeholder/);
   });
 
   it('does nothing outside production', () => {

@@ -1,4 +1,10 @@
-import { setToken, setOnUnauthorized, getToken, getMessages } from '../api';
+import {
+  getApiErrorMessage,
+  getMessages,
+  getToken,
+  setOnUnauthorized,
+  setToken,
+} from '../api';
 
 beforeEach(() => {
   setToken(null);
@@ -43,7 +49,7 @@ describe('request — 401 handling', () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Invalid or expired token' }),
+      text: async () => JSON.stringify({ error: 'Invalid or expired token' }),
     });
 
     await expect(getMessages('pod-1')).rejects.toThrow('Invalid or expired token');
@@ -58,7 +64,7 @@ describe('request — 401 handling', () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Missing or invalid authorization header' }),
+      text: async () => JSON.stringify({ error: 'Missing or invalid authorization header' }),
     });
 
     await expect(getMessages('pod-1')).rejects.toThrow('Missing or invalid authorization header');
@@ -72,10 +78,26 @@ describe('request — 401 handling', () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 500,
-      json: async () => ({ error: 'Internal server error' }),
+      text: async () => JSON.stringify({ error: 'Internal server error' }),
     });
 
     await expect(getMessages('pod-1')).rejects.toThrow('Internal server error');
     expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('handles a plain-text Vercel function error without a JSON parse failure', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => 'A server error has occurred\n\nFUNCTION_INVOCATION_FAILED',
+    });
+
+    const error = await getMessages('pod-1').catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('FUNCTION_INVOCATION_FAILED');
+    expect(getApiErrorMessage(error)).toBe(
+      'Bridge hit a server error while trying that. Please try again in a minute.'
+    );
   });
 });

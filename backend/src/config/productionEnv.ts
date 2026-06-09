@@ -1,19 +1,7 @@
 const REQUIRED_PRODUCTION_ENV = [
   'DATABASE_URL',
-  'DIRECT_URL',
   'JWT_SECRET',
   'CORS_ORIGIN',
-  'CRON_SECRET',
-  'RESEND_API_KEY',
-  'RESEND_FROM_EMAIL',
-  'CONTACT_EMAIL',
-  'ADMIN_REPORTS_URL',
-  'ADMIN_REVIEW_SECRET',
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'OPENAI_API_KEY',
-  'APPLE_TEAM_ID',
-  'IOS_APP_ID',
 ] as const;
 
 const SECRET_ENV = new Set([
@@ -40,10 +28,15 @@ export function validateProductionEnvironment(
       errors.push(`${key} is missing`);
       continue;
     }
+  }
+
+  for (const key of SECRET_ENV) {
+    const value = env[key]?.trim() ?? '';
+    if (!value) continue;
     if (looksLikePlaceholder(value)) {
       errors.push(`${key} still contains a placeholder value`);
     }
-    if (SECRET_ENV.has(key) && value.length < 32) {
+    if (value.length < 32) {
       errors.push(`${key} must be at least 32 characters`);
     }
   }
