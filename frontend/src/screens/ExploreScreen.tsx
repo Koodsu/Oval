@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fetchFeed, getActivities, getApiErrorMessage } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import { Chip, EmptyState, PrimaryButton, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { palette, radii, shadows, spacing, typography } from '../theme';
@@ -117,6 +117,7 @@ export default function ExploreScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [feed, setFeed] = useState<Pod[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(12);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
@@ -160,6 +161,10 @@ export default function ExploreScreen() {
     }, [load])
   );
 
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [category, deferredQuery]);
+
   const cards = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     return activities
@@ -189,6 +194,7 @@ export default function ExploreScreen() {
         return a.activity.title.localeCompare(b.activity.title);
       });
   }, [activities, category, deferredQuery, feed]);
+  const visibleCards = cards.slice(0, visibleCount);
 
   return (
     <Screen>
@@ -241,7 +247,7 @@ export default function ExploreScreen() {
               <SkeletonCard />
               <SkeletonCard />
             </>
-          ) : cards.length ? cards.map((item) => {
+          ) : cards.length ? visibleCards.map((item) => {
             const meta = CATEGORY_META[item.activity.category];
             const status = statusMeta(item.liveCount);
             const podLocation = activePodLocation(item.activePods);
@@ -332,6 +338,15 @@ export default function ExploreScreen() {
               body="Try another category or search for a different place."
             />
           )}
+          {visibleCount < cards.length ? (
+            <View style={styles.loadMore}>
+              <PrimaryButton
+                label={`Show ${Math.min(12, cards.length - visibleCount)} more activities`}
+                onPress={() => setVisibleCount((count) => count + 12)}
+                kind="ghost"
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </Screen>
@@ -381,6 +396,9 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
     paddingTop: 2,
+  },
+  loadMore: {
+    marginTop: spacing.xs,
   },
   activityCard: {
     flexDirection: 'row',

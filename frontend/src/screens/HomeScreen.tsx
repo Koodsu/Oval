@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { spacing, typography, palette, radii } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
 import { getFeaturedActivities, sortUpcomingPods } from '../utils/experience';
 import { useLocationPermission } from '../hooks/useLocationPermission';
+import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -21,6 +22,12 @@ export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { user, token } = useAuth();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
+  const {
+    granted: notificationsGranted,
+    canAskAgain: canAskForNotifications,
+    loaded: notificationPermissionLoaded,
+    requestNotifications,
+  } = useNotificationPermission();
   const [pods, setPods] = useState<Pod[]>([]);
   const [myPods, setMyPods] = useState<Pod[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -79,6 +86,33 @@ export default function HomeScreen() {
     );
   }, [requestLocation]);
 
+  const explainAndRequestNotifications = useCallback(() => {
+    const needsSettings = !canAskForNotifications;
+    Alert.alert(
+      needsSettings ? 'Turn on Bridge alerts' : 'Stay ahead of plans?',
+      needsSettings
+        ? 'Notifications are off for Bridge. Open Settings to turn on meetup reminders, messages, and waitlist updates.'
+        : 'Bridge can alert you about meetup reminders, new messages, and waitlist openings. You can change each category later in Privacy & Data.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: needsSettings ? 'Open Settings' : 'Continue',
+          onPress: () => {
+            if (needsSettings) {
+              void Linking.openSettings();
+              return;
+            }
+            void requestNotifications().then((allowed) => {
+              if (!allowed) {
+                Alert.alert('Alerts are off', 'No problem. Bridge still works normally without notifications.');
+              }
+            });
+          },
+        },
+      ]
+    );
+  }, [canAskForNotifications, requestNotifications]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -87,6 +121,10 @@ export default function HomeScreen() {
 
   const featuredActivities = useMemo(() => getFeaturedActivities(activities, pods), [activities, pods]);
   const activePods = useMemo(() => sortUpcomingPods(pods).filter((pod) => pod.status === 'FORMING').slice(0, 4), [pods]);
+  const mappablePods = useMemo(
+    () => pods.filter((pod) => pod.latitude != null && pod.longitude != null).slice(0, 10),
+    [pods]
+  );
   const yourNextPod = useMemo(() => sortUpcomingPods(myPods).find((pod) => pod.status === 'FORMING' || pod.status === 'LOCKED') ?? null, [myPods]);
   const agendaItems = useMemo(() => {
     const podItems = sortUpcomingPods(myPods)
@@ -152,6 +190,19 @@ export default function HomeScreen() {
               <Text style={styles.locationChipLabel}>Nearby</Text>
             </TouchableOpacity>
           ) : null}
+          {notificationPermissionLoaded && !notificationsGranted ? (
+            <TouchableOpacity
+              style={styles.locationChip}
+              activeOpacity={0.86}
+              onPress={explainAndRequestNotifications}
+              accessibilityRole="button"
+              accessibilityLabel="Turn on Bridge alerts"
+              accessibilityHint="Explains notification benefits before asking for permission"
+            >
+              <Ionicons name="notifications-outline" size={15} color={palette.scarlet} />
+              <Text style={styles.locationChipLabel}>Alerts</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         <Hero
           eyebrow="Today on campus"
@@ -213,27 +264,25 @@ export default function HomeScreen() {
           </View>
         </Hero>
 
-        <Panel style={styles.mapPanel}>
-          <View style={styles.mapHeader}>
-            <View>
-              <Text style={styles.mapTitle}>Campus activity map</Text>
-              <Text style={styles.mapBody}>Tap a pod marker to navigate to its detail.</Text>
+        {mappablePods.length ? (
+          <Panel style={styles.mapPanel}>
+            <View style={styles.mapHeader}>
+              <View>
+                <Text style={styles.mapTitle}>Campus activity map</Text>
+                <Text style={styles.mapBody}>Tap a pod marker to navigate to its detail.</Text>
+              </View>
+              <Ionicons name="navigate-outline" size={20} color={palette.scarlet} />
             </View>
-            <Ionicons name="navigate-outline" size={20} color={palette.scarlet} />
-          </View>
-          <MapView
-            provider={PROVIDER_DEFAULT}
-            style={styles.map}
-            initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
-            scrollEnabled={false}
-            rotateEnabled={false}
-            pitchEnabled={false}
-          >
-            <Polygon coordinates={OSU_CAMPUS_POLYGON} fillColor="rgba(199,59,34,0.06)" strokeColor="rgba(199,59,34,0.25)" />
-            {pods
-              .filter((pod) => pod.latitude != null && pod.longitude != null)
-              .slice(0, 10)
-              .map((pod) => (
+            <MapView
+              provider={PROVIDER_DEFAULT}
+              style={styles.map}
+              initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+              scrollEnabled={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+            >
+              <Polygon coordinates={OSU_CAMPUS_POLYGON} fillColor="rgba(199,59,34,0.06)" strokeColor="rgba(199,59,34,0.25)" />
+              {mappablePods.map((pod) => (
                 <Marker
                   key={pod.id}
                   coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
@@ -242,8 +291,24 @@ export default function HomeScreen() {
                   onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
                 />
               ))}
-          </MapView>
-        </Panel>
+            </MapView>
+          </Panel>
+        ) : (
+          <Panel style={styles.mapEmptyPanel}>
+            <View style={styles.mapEmptyIcon}>
+              <Ionicons name="map-outline" size={20} color={palette.scarlet} />
+            </View>
+            <View style={styles.mapEmptyCopy}>
+              <Text style={styles.mapTitle}>No live campus pins yet</Text>
+              <Text style={styles.mapBody}>Start or join a pod and the activity map will come alive here.</Text>
+            </View>
+            <PrimaryButton
+              label="Explore activities"
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
+              kind="ghost"
+            />
+          </Panel>
+        )}
 
         <View style={styles.section}>
           <SectionHeader
@@ -473,6 +538,20 @@ const styles = StyleSheet.create({
   },
   mapPanel: {
     gap: spacing.md,
+  },
+  mapEmptyPanel: {
+    gap: spacing.sm,
+  },
+  mapEmptyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.dangerBg,
+  },
+  mapEmptyCopy: {
+    gap: 2,
   },
   mapHeader: {
     flexDirection: 'row',

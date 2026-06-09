@@ -1,86 +1,103 @@
 const STEPS = [
   {
-    step: '01',
-    title: 'PICK WHAT\nYOU\'RE INTO',
-    desc: 'Browse 50+ activities across 10 categories — from pickup basketball to study sessions to movie nights. Filter by today, this week, or right now.',
+    step: '1',
+    word: 'see',
+    title: 'See what’s forming',
+    desc: 'Open Bridge and the feed is alive — pickup games, food runs, study pods, club nights. Filter by right now, today, or this week.',
+    visual: (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5">
+          <span className="text-sm">🏐</span>
+          <span className="flex-1 truncate text-[12px] font-semibold text-white/85">Spikeball · Oval</span>
+          <span className="rounded-full bg-scarlet/20 px-2 py-0.5 text-[9px] font-bold uppercase text-[#ff6b6b]">live</span>
+        </div>
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 opacity-70">
+          <span className="text-sm">📚</span>
+          <span className="flex-1 truncate text-[12px] font-semibold text-white/85">Study pod · Thompson</span>
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase text-white/50">today</span>
+        </div>
+      </div>
+    ),
   },
   {
-    step: '02',
-    title: 'JOIN\nA POD',
-    desc: 'Pods are small groups of 2–8 people forming around a single activity. See who\'s in, when it\'s happening, and claim your spot in one tap.',
+    step: '2',
+    word: 'tap',
+    title: 'Tap in',
+    desc: 'Pods are 2–10 people around one plan. See who’s in and claim your spot in one tap — no group-chat archaeology required.',
+    visual: (
+      <div className="flex items-center justify-between rounded-xl border border-flame/25 bg-flame/[0.07] px-3.5 py-3">
+        <div className="flex -space-x-2.5">
+          {['from-scarlet to-flame', 'from-amber to-flame', 'from-purple-500 to-pink-500', 'from-cyan-500 to-blue-500'].map((g, i) => (
+            <div key={i} className={`h-8 w-8 rounded-full border-2 border-[#100c0c] bg-gradient-to-br ${g}`} />
+          ))}
+        </div>
+        <span className="rounded-full bg-gradient-to-r from-scarlet to-flame px-4 py-1.5 text-[11px] font-bold text-white shadow-[0_4px_16px_rgba(187,0,0,0.4)]">
+          Join · 2 spots left
+        </span>
+      </div>
+    ),
   },
   {
-    step: '03',
-    title: 'SHOW UP\n& CONNECT',
-    desc: 'Chat with your pod, lock in a time, and go. Your reliability score builds over time so people know you\'re the real deal.',
+    step: '3',
+    word: 'go',
+    title: 'Show up',
+    desc: 'Pod chat locks the details, you go, and your reliability score grows — so the people worth meeting know you actually show.',
+    visual: (
+      <div className="flex flex-col gap-2">
+        <div className="max-w-[80%] self-start rounded-2xl rounded-bl-md bg-white/[0.07] px-3.5 py-2 text-[12px] text-white/75">
+          we're by the south goal 🏐
+        </div>
+        <div className="max-w-[80%] self-end rounded-2xl rounded-br-md bg-gradient-to-r from-scarlet to-flame px-3.5 py-2 text-[12px] font-medium text-white">
+          omw, 2 min
+        </div>
+      </div>
+    ),
   },
 ]
 
-function handleTilt(e) {
-  const rect = e.currentTarget.getBoundingClientRect()
-  const x = ((e.clientX - rect.left) / rect.width - 0.5) * 12
-  const y = ((e.clientY - rect.top) / rect.height - 0.5) * -12
-  e.currentTarget.style.transform = `perspective(800px) rotateX(${y}deg) rotateY(${x}deg) scale(1.02)`
-}
-
-function resetTilt(e) {
-  e.currentTarget.style.transform = ''
-}
-
 export default function HowItWorks() {
   return (
-    <section className="section-divider relative overflow-hidden bg-ink px-5 py-24 text-white md:px-16">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(187,0,0,0.14),transparent_24%),radial-gradient(circle_at_82%_26%,rgba(245,158,11,0.1),transparent_20%)]" />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-      <div aria-hidden className="absolute left-[8%] top-24 hidden h-48 w-48 rounded-full bg-scarlet/[0.08] blur-[90px] lg:block" />
-      <div aria-hidden className="absolute bottom-16 right-[10%] hidden h-40 w-40 rounded-full bg-amber/[0.10] blur-[90px] lg:block" />
-      <div className="max-w-[1400px] mx-auto">
-        <div className="mb-16 max-w-[980px]">
-          <span className="reveal mb-5 block text-[11px] font-bold tracking-[0.2em] uppercase text-scarlet">
-            How it works
-          </span>
-          <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] leading-[0.92] tracking-wider text-white">
-            THREE STEPS.<br />
-            <span className="text-white/24">ZERO EXCUSES.</span>
+    <section className="section-divider relative overflow-hidden bg-void px-5 py-28 text-white md:px-10">
+      <div aria-hidden className="absolute left-[15%] top-[-6rem] h-[24rem] w-[24rem] rounded-full bg-scarlet/10 blur-[140px]" />
+
+      <div className="relative mx-auto max-w-[1280px]">
+        <div className="mb-16 text-center">
+          <p className="reveal mb-5 text-[12px] font-bold uppercase tracking-[0.24em] text-flame">How it works</p>
+          <h2 className="reveal font-display text-[clamp(38px,6vw,72px)] font-bold leading-[1.02] tracking-[-0.03em]">
+            From <span className="font-serif font-normal italic text-white/45">"we should hang"</span>
+            <br />
+            to <span className="text-gradient-fire">actually hanging.</span>
           </h2>
-          <p className="reveal mt-5 max-w-2xl text-[15px] leading-relaxed text-white/55">
-            Every part of Bridge is meant to remove friction. You see what is real, claim a spot fast,
-            and arrive with enough context that meeting people feels easy instead of awkward.
-          </p>
         </div>
 
-        <div className="relative grid grid-cols-1 gap-4 md:grid-cols-3">
-          {STEPS.map(({ step, title, desc }, i) => (
+        <div className="relative grid gap-5 md:grid-cols-3">
+          {/* connector line */}
+          <div aria-hidden className="absolute left-[12%] right-[12%] top-9 hidden h-px bg-gradient-to-r from-scarlet/50 via-flame/40 to-amber/50 md:block" />
+
+          {STEPS.map(({ step, word, title, desc, visual }, i) => (
             <div
               key={step}
-              className="reveal tilt-card relative overflow-hidden border border-white/8 bg-white/[0.04] px-6 py-10 backdrop-blur-sm md:px-8"
-              style={{ transitionDelay: `${i * 100}ms` }}
-              onMouseMove={handleTilt}
-              onMouseLeave={resetTilt}
+              className="reveal glow-card relative flex flex-col rounded-3xl p-7"
+              style={{ transitionDelay: `${i * 130}ms` }}
+              onMouseMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+                e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+              }}
             >
-              <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-scarlet/80 to-transparent" />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute -top-3 -right-1 select-none font-display text-[160px] leading-none text-white/[0.04]"
-              >
-                {step}
+              <div className="mb-7 flex items-center justify-between">
+                <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border border-flame/30 bg-flame/[0.06]" />
+                  <span className="font-serif text-4xl italic text-gradient-fire">{step}</span>
+                </div>
+                <span className="font-serif text-[64px] italic leading-none text-white/[0.07]">{word}</span>
               </div>
 
-              <div className="relative">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center border border-scarlet/24 bg-scarlet/10 font-display text-2xl tracking-[0.08em] text-scarlet">
-                    {step}
-                  </div>
-                  <div className="h-px flex-1 bg-white/10" />
-                </div>
-                <div className="mb-5 text-[11px] font-bold tracking-[0.22em] uppercase text-scarlet">
-                  Step {step}
-                </div>
-                <div className="mb-6 h-0.5 w-8 bg-scarlet" />
-                <h3 className="mb-5 whitespace-pre-line font-display text-[clamp(22px,3vw,42px)] leading-[0.92] tracking-wider text-white">
-                  {title}
-                </h3>
-                <p className="text-sm leading-relaxed text-white/52">{desc}</p>
+              <h3 className="font-display text-[22px] font-bold tracking-tight text-white">{title}</h3>
+              <p className="mt-3 flex-1 text-[14px] leading-relaxed text-white/45">{desc}</p>
+
+              <div className="mt-7 rounded-2xl border border-white/8 bg-[#0c0909]/80 p-3">
+                {visual}
               </div>
             </div>
           ))}

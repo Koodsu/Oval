@@ -5,7 +5,7 @@ import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
 
 describe('GET /users/:id', () => {
-  it('returns public profile with podsAttended=0 and verifiedUniversity=false for new user', async () => {
+  it('returns public profile with podsAttended=0 for a verified user', async () => {
     const { token, user } = await registerAndGetToken(
       'Profile User',
       `profile-get-${Date.now()}@example.com`,
@@ -20,7 +20,7 @@ describe('GET /users/:id', () => {
     expect(res.body).toMatchObject({
       id: user.id,
       name: user.name,
-      verifiedUniversity: false,
+      verifiedUniversity: true,
       podsAttended: 0,
       joinedAt: expect.any(String),
     });
@@ -260,7 +260,7 @@ describe('GET /users/me', () => {
       id: user.id,
       name: user.name,
       email: user.email,
-      verifiedUniversity: false,
+      verifiedUniversity: true,
       avatarUrl: null,
       joinedAt: expect.any(String),
     });
@@ -343,6 +343,124 @@ describe('DELETE /users/me/avatar', () => {
 
   it('requires auth', async () => {
     await request(app).delete('/users/me/avatar').expect(401);
+  });
+});
+
+describe('Privacy and account data APIs', () => {
+  it('exports account data without authentication secrets', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Data Export User',
+      `data-export-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        bio: 'Export this profile',
+        instagramHandle: 'bridgeexport',
+        notificationPreferences: JSON.stringify({ newMessage: false }),
+      },
+    });
+
+    const res = await request(app)
+      .get('/users/me/export')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      formatVersion: 1,
+      exportedAt: expect.any(String),
+      account: {
+        id: user.id,
+        email: user.email,
+      },
+      profile: {
+        bio: 'Export this profile',
+        instagramHandle: 'bridgeexport',
+      },
+      notificationPreferences: {
+        newMessage: false,
+        podJoin: true,
+      },
+    });
+    expect(JSON.stringify(res.body)).not.toContain('password123');
+    expect(res.body.account.password).toBeUndefined();
+    expect(res.body.account.pushToken).toBeUndefined();
+  });
+
+  it('deletes the user, their posts, and memberships while transferring club ownership', async () => {
+    const owner = await registerAndGetToken(
+      'Delete Owner',
+      `delete-owner-${Date.now()}@example.com`,
+      'password123'
+    );
+    const successor = await registerAndGetToken(
+      'Delete Successor',
+      `delete-successor-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    const club = await prisma.club.create({
+      data: {
+        name: `Deletion Club ${Date.now()}`,
+        description: 'Club used to verify account deletion',
+        category: 'Academic',
+        createdById: owner.user.id,
+        members: {
+          create: [
+            { userId: owner.user.id, role: 'OWNER' },
+            { userId: successor.user.id, role: 'ADMIN' },
+          ],
+        },
+      },
+    });
+    await prisma.clubAnnouncement.create({
+      data: { clubId: club.id, userId: owner.user.id, content: 'Delete this announcement' },
+    });
+    const clubMessage = await prisma.clubMessage.create({
+      data: { clubId: club.id, userId: owner.user.id, content: 'Delete this message' },
+    });
+    const retainedReport = await prisma.report.create({
+      data: {
+        reporterId: successor.user.id,
+        targetUserId: owner.user.id,
+        clubId: club.id,
+        clubMessageId: clubMessage.id,
+        targetType: 'CLUB_MESSAGE',
+        reason: 'HARASSMENT',
+        severity: 'P1',
+        reportedContent: clubMessage.content,
+      },
+    });
+
+    await request(app)
+      .delete('/users/me')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(204);
+
+    expect(await prisma.user.findUnique({ where: { id: owner.user.id } })).toBeNull();
+    expect(await prisma.clubMember.count({ where: { userId: owner.user.id } })).toBe(0);
+    expect(await prisma.clubAnnouncement.count({ where: { userId: owner.user.id } })).toBe(0);
+    expect(await prisma.clubMessage.count({ where: { userId: owner.user.id } })).toBe(0);
+    expect(await prisma.report.findUnique({ where: { id: retainedReport.id } })).toMatchObject({
+      reporterId: successor.user.id,
+      targetUserId: null,
+      clubMessageId: null,
+      reportedContent: 'Delete this message',
+    });
+
+    const transferredClub = await prisma.club.findUnique({
+      where: { id: club.id },
+      include: { members: true },
+    });
+    expect(transferredClub?.createdById).toBe(successor.user.id);
+    expect(transferredClub?.members.find((member) => member.userId === successor.user.id)?.role).toBe('OWNER');
+  });
+
+  it('requires auth for export and deletion', async () => {
+    await request(app).get('/users/me/export').expect(401);
+    await request(app).delete('/users/me').expect(401);
   });
 });
 

@@ -20,6 +20,15 @@ model User {
   verifiedUniversity      Boolean   @default(false)
   emailVerifyCode         String?
   emailVerifyExpiry       DateTime?
+  passwordResetCode       String?
+  passwordResetExpiry     DateTime?
+  tokenVersion            Int       @default(0)
+  accountStatus           String    @default("ACTIVE")
+  accountStatusChangedAt  DateTime?
+  moderationReason        String?
+  termsVersion            String?
+  termsAcceptedAt         DateTime?
+  ageAttestedAt           DateTime?
   pushToken               String?
   notificationPreferences String?
   avatarUrl               String?
@@ -61,6 +70,7 @@ model User {
   clubAnnouncements        ClubAnnouncement[]
   clubMessages             ClubMessage[]
   clubOfficerMessages      ClubOfficerMessage[]
+  analyticsEvents          AnalyticsEvent[]
 }
 
 model Block {
@@ -101,6 +111,7 @@ model Pod {
   status           String    @default("FORMING")
   creatorId        String?
   createdAt        DateTime  @default(now())
+  meetupReminderSentAt DateTime?
   recapNotifiedAt  DateTime?
   latitude         Float?
   longitude        Float?
@@ -168,7 +179,7 @@ model MessageReaction {
 
 model Report {
   id           String    @id @default(uuid())
-  reporterId   String
+  reporterId   String?
   targetUserId String?
   podId        String?
   messageId    String?
@@ -179,19 +190,26 @@ model Report {
   clubAnnouncementId String?
   targetType   String?
   reason       String
+  severity     String    @default("P2")
   details      String?
+  reportedContent String?
   status       String    @default("OPEN")
   adminNotes   String?
+  moderationEmailSentAt DateTime?
+  contentRemovedAt DateTime?
+  accountAction String?
+  accountActionAt DateTime?
   createdAt    DateTime  @default(now())
   resolvedAt   DateTime?
 
-  reporter User     @relation("ReportReporter", fields: [reporterId], references: [id])
-  target   User?    @relation("ReportTarget", fields: [targetUserId], references: [id])
-  pod      Pod?     @relation(fields: [podId], references: [id])
-  message  Message? @relation(fields: [messageId], references: [id])
+  reporter User?    @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  target   User?    @relation("ReportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  pod      Pod?     @relation(fields: [podId], references: [id], onDelete: SetNull)
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([reporterId, createdAt])
   @@index([status, createdAt])
+  @@index([severity, createdAt])
   @@index([podId])
   @@index([messageId])
   @@index([directMessageId])
@@ -200,6 +218,40 @@ model Report {
   @@index([clubOfficerMessageId])
   @@index([clubAnnouncementId])
   @@index([targetUserId])
+}
+
+model BannedIdentity {
+  id        String   @id @default(uuid())
+  emailHash String   @unique
+  reason    String?
+  reportId  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AbuseEvent {
+  id         String   @id @default(uuid())
+  action     String
+  identifier String
+  createdAt  DateTime @default(now())
+
+  @@index([action, identifier, createdAt])
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(uuid())
+  userId     String?
+  name       String
+  properties Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model NoShowReport {

@@ -909,7 +909,7 @@ describe('Pods API (integration)', () => {
         .expect(409);
     });
 
-    it('GET /pods/mine still returns EXPIRED pods for history', async () => {
+    it('GET /pods/mine/history returns EXPIRED pods for history', async () => {
       const { token } = await registerAndGetToken(
         'Mine Expired',
         `mine-exp-${Date.now()}@example.com`,
@@ -936,7 +936,7 @@ describe('Pods API (integration)', () => {
 
       await request(app).get('/pods/feed').set('Authorization', `Bearer ${token}`).expect(200);
 
-      const mine = await request(app).get('/pods/mine').set('Authorization', `Bearer ${token}`).expect(200);
+      const mine = await request(app).get('/pods/mine/history').set('Authorization', `Bearer ${token}`).expect(200);
 
       const minePod = mine.body.find((p: { id: string }) => p.id === podId);
       expect(minePod).toBeDefined();

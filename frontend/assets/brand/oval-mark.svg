@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Oval logo mark</title>
+  <desc id="desc">An oval orbit with two points joining the same circle.</desc>
+  <g fill="none" stroke="#C73B22" stroke-width="112" stroke-linecap="round">
+    <path d="M787 494 A276 210 0 0 1 395 702"/>
+    <path d="M237 530 A276 210 0 0 1 629 322"/>
+    <circle cx="286" cy="633" r="41" fill="#C73B22" stroke="none"/>
+    <circle cx="738" cy="392" r="41" fill="#C73B22" stroke="none"/>
+  </g>
+</svg>

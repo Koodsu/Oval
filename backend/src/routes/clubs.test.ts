@@ -881,7 +881,7 @@ describe('Clubs API (integration)', () => {
   });
 
   describe('GET /clubs/:id/meetings (RSVP metadata)', () => {
-    it('includes rsvpCounts, myRsvp, and attendeeCount as going count', async () => {
+    it('includes rsvpCounts, myRsvp, and attendeeCount', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
@@ -925,7 +925,7 @@ describe('Clubs API (integration)', () => {
       const row = list.body.find((m: { id: string }) => m.id === meetingId);
       expect(row.rsvpCounts).toEqual({ going: 1, maybe: 1, notGoing: 0 });
       expect(row.myRsvp).toBe('GOING');
-      expect(row.attendeeCount).toBe(1);
+      expect(row.attendeeCount).toBe(0);
     });
   });
 

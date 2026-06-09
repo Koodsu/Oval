@@ -83,7 +83,7 @@ function CategorySelect({ value, onChange }) {
                 setOpen(false)
               }}
               className={`cursor-pointer px-4 py-3 text-[15px] transition-colors ${
-                value === cat ? 'bg-scarlet text-white' : 'text-white/82 hover:bg-white/[0.06]'
+                value === cat ? 'bg-scarlet text-white' : 'text-white/80 hover:bg-white/[0.06]'
               }`}
             >
               {cat}
@@ -106,18 +106,18 @@ function DirectoryMock() {
         ].map(({ name, meta, badge }) => (
           <div key={name} className="rounded-[1.2rem] border border-white/10 bg-white/[0.05] px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-white/88">{name}</div>
+              <div className="text-sm font-semibold text-white/90">{name}</div>
               <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber">
                 {badge}
               </span>
             </div>
-            <div className="mt-1 text-[12px] text-white/42">{meta}</div>
+            <div className="mt-1 text-[12px] text-white/40">{meta}</div>
           </div>
         ))}
       </div>
       <div className="rounded-[1.2rem] border border-white/10 bg-white/[0.04] p-4">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/34">Why discovery matters</div>
-        <div className="mt-3 text-sm leading-relaxed text-white/68">
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Why discovery matters</div>
+        <div className="mt-3 text-sm leading-relaxed text-white/70">
           Students do not need to remember your table from week one. They can find the club later,
           see that it still has momentum, and join when the timing is actually right.
         </div>
@@ -130,14 +130,14 @@ function TurnoutMock() {
   return (
     <div className="grid gap-3">
       <div className="rounded-[1.2rem] border border-white/10 bg-white/[0.05] px-4 py-4">
-        <div className="text-sm font-semibold text-white/88">Weekly General Meeting</div>
-        <div className="mt-1 text-[12px] text-white/42">Hopkins Hall · Thursday at 7:00 PM</div>
+        <div className="text-sm font-semibold text-white/90">Weekly General Meeting</div>
+        <div className="mt-1 text-[12px] text-white/40">Hopkins Hall · Thursday at 7:00 PM</div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {[
           ['Going', '28', 'text-green-400'],
           ['Maybe', '9', 'text-amber'],
-          ['Not going', '4', 'text-white/44'],
+          ['Not going', '4', 'text-white/45'],
         ].map(([label, count, tone]) => (
           <div key={label} className="rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-3 text-center">
             <div className={`font-display text-3xl tracking-[0.08em] ${tone}`}>{count}</div>
@@ -158,18 +158,18 @@ function OpsMock() {
       <div className="grid gap-3">
         <div className="rounded-[1.2rem] border border-scarlet/18 bg-scarlet/[0.08] px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-scarlet">Officer channel</div>
-          <div className="mt-2 text-sm text-white/72">“Budget is approved. Let’s publish the trip details after tonight’s meeting.”</div>
+          <div className="mt-2 text-sm text-white/70">“Budget is approved. Let’s publish the trip details after tonight’s meeting.”</div>
         </div>
         <div className="rounded-[1.2rem] border border-white/10 bg-white/[0.05] px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Member announcement</div>
-          <div className="mt-2 text-sm text-white/72">Practice moved to Tuesday this week. Same room, same time.</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Member announcement</div>
+          <div className="mt-2 text-sm text-white/70">Practice moved to Tuesday this week. Same room, same time.</div>
         </div>
       </div>
       <div className="rounded-[1.2rem] border border-white/10 bg-white/[0.04] p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Meeting control</div>
-            <div className="mt-2 text-sm text-white/72">Open attendance when the meeting starts, share the code, then close it when everyone is in.</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Meeting control</div>
+            <div className="mt-2 text-sm text-white/70">Open attendance when the meeting starts, share the code, then close it when everyone is in.</div>
           </div>
           <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber">
             18 checked in
@@ -178,7 +178,7 @@ function OpsMock() {
         <div className="mt-4 rounded-[1rem] border border-amber/16 bg-amber/[0.08] px-4 py-4">
           <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">Attendance code</div>
           <div className="mt-2 font-display text-4xl tracking-[0.28em] text-amber">XK4T9R</div>
-          <div className="mt-2 text-[12px] text-white/48">One quick code instead of a clipboard and name-crossing routine.</div>
+          <div className="mt-2 text-[12px] text-white/50">One quick code instead of a clipboard and name-crossing routine.</div>
         </div>
       </div>
     </div>
@@ -194,7 +194,7 @@ function SystemCard({ block }) {
           <h3 className="mt-4 font-display text-[clamp(28px,3.3vw,48px)] leading-[0.94] tracking-[0.04em] text-white">
             {block.title}
           </h3>
-          <p className="mt-4 max-w-[32rem] text-sm leading-relaxed text-white/46">{block.body}</p>
+          <p className="mt-4 max-w-[32rem] text-sm leading-relaxed text-white/45">{block.body}</p>
         </div>
         <div>
           {block.mock === 'directory' ? <DirectoryMock /> : null}
@@ -255,7 +255,7 @@ function ClubRegistrationForm() {
           </svg>
         </div>
         <p className="font-display text-3xl tracking-[0.08em] text-white">YOUR CLUB IS IN.</p>
-        <p className="mt-2 text-[15px] text-white/56">We&apos;ll reach out before launch with next steps.</p>
+        <p className="mt-2 text-[15px] text-white/55">We&apos;ll reach out before launch with next steps.</p>
       </div>
     )
   }
@@ -339,13 +339,13 @@ export default function ClubsPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-display text-2xl leading-none tracking-[0.12em] text-white">BRIDGE</span>
-              <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-white/36 md:block">
+              <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-white/35 md:block">
                 Club launch console
               </span>
             </div>
           </Link>
           <div className="flex items-center gap-3 md:gap-5">
-            <Link to="/" className="hidden text-xs font-semibold uppercase tracking-[0.08em] text-white/62 no-underline transition-colors hover:text-white md:block">
+            <Link to="/" className="hidden text-xs font-semibold uppercase tracking-[0.08em] text-white/60 no-underline transition-colors hover:text-white md:block">
               For Students
             </Link>
             <a href="#club-registration" className="bg-scarlet px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-white no-underline transition-colors hover:bg-scarlet-bright md:px-5">
@@ -397,7 +397,7 @@ export default function ClubsPage() {
 
             <h1 className="font-display leading-[0.84] tracking-[0.03em] text-white">
               <span
-                className="block text-[clamp(56px,10vw,150px)]"
+                className="block text-[clamp(44px,14vw,72px)] sm:text-[clamp(56px,10vw,150px)]"
                 style={{
                   opacity: heroReady ? 1 : 0,
                   transform: heroReady ? 'translateY(0px)' : 'translateY(42px)',
@@ -408,7 +408,7 @@ export default function ClubsPage() {
                 GET YOUR CLUB
               </span>
               <span
-                className="block text-[clamp(56px,10vw,150px)] text-shimmer"
+                className="block text-[clamp(44px,14vw,72px)] text-shimmer sm:text-[clamp(56px,10vw,150px)]"
                 style={{
                   opacity: heroReady ? 1 : 0,
                   transform: heroReady ? 'translateY(0px)' : 'translateY(42px)',
@@ -419,7 +419,7 @@ export default function ClubsPage() {
                 FOUND.
               </span>
               <span
-                className="block text-[clamp(56px,10vw,150px)] text-white/26"
+                className="block text-[clamp(44px,14vw,72px)] text-white/25 sm:text-[clamp(56px,10vw,150px)]"
                 style={{
                   opacity: heroReady ? 1 : 0,
                   transform: heroReady ? 'translateY(0px)' : 'translateY(42px)',
@@ -432,7 +432,7 @@ export default function ClubsPage() {
             </h1>
 
             <p
-              className="mt-7 max-w-[38rem] text-[clamp(16px,1.8vw,20px)] font-light leading-relaxed text-white/62"
+              className="mt-7 max-w-[38rem] text-[clamp(16px,1.8vw,20px)] font-light leading-relaxed text-white/60"
               style={{
                 opacity: heroReady ? 1 : 0,
                 transform: heroReady ? 'translateY(0px)' : 'translateY(24px)',
@@ -471,7 +471,7 @@ export default function ClubsPage() {
               <a href="#club-registration" className="inline-flex items-center gap-2 bg-scarlet px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white no-underline transition-colors hover:bg-scarlet-bright">
                 Register your club
               </a>
-              <span className="text-sm text-white/46">Free at launch. OSU-only. We help founding clubs get set up personally.</span>
+              <span className="text-sm text-white/45">Free at launch. OSU-only. We help founding clubs get set up personally.</span>
             </div>
           </div>
 
@@ -492,8 +492,8 @@ export default function ClubsPage() {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.18),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),transparent_38%)]" />
                 <div className="absolute left-0 top-0 right-0 flex items-center justify-between border-b border-white/10 px-4 py-3">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/36">Club command view</div>
-                    <div className="mt-1 text-sm font-semibold text-white/88">Bridge makes club momentum legible</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Club command view</div>
+                    <div className="mt-1 text-sm font-semibold text-white/90">Bridge makes club momentum legible</div>
                   </div>
                   <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5">
                     <span className="h-2 w-2 rounded-full bg-amber animate-live-pulse" />
@@ -505,8 +505,8 @@ export default function ClubsPage() {
                   <div className="rounded-[1.3rem] border border-white/10 bg-white/[0.05] px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/36">Directory status</div>
-                        <div className="mt-1 text-sm font-semibold text-white/88">Buckeye Film Society</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Directory status</div>
+                        <div className="mt-1 text-sm font-semibold text-white/90">Buckeye Film Society</div>
                       </div>
                       <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber">
                         Discoverable
@@ -520,7 +520,7 @@ export default function ClubsPage() {
                       ].map(([label, stat]) => (
                         <div key={label} className="rounded-[0.9rem] border border-white/10 bg-ink/38 px-3 py-3">
                           <div className="text-[10px] uppercase tracking-[0.14em] text-white/30">{label}</div>
-                          <div className="mt-1 text-sm font-semibold text-white/84">{stat}</div>
+                          <div className="mt-1 text-sm font-semibold text-white/85">{stat}</div>
                         </div>
                       ))}
                     </div>
@@ -528,7 +528,7 @@ export default function ClubsPage() {
 
                   <div className="grid gap-4 md:grid-cols-[0.96fr_1.04fr]">
                     <div className="rounded-[1.3rem] border border-white/10 bg-white/[0.05] px-4 py-4">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/36">Tonight&apos;s turnout</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Tonight&apos;s turnout</div>
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         {[
                           ['Going', '28', 'text-green-400'],
@@ -546,12 +546,12 @@ export default function ClubsPage() {
                     <div className="grid gap-2">
                       <div className="rounded-[1rem] border border-scarlet/18 bg-scarlet/[0.08] px-3 py-3">
                         <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-scarlet">Officer note</div>
-                        <div className="mt-2 text-sm text-white/72">Post the volunteer form after tonight’s meeting recap.</div>
+                        <div className="mt-2 text-sm text-white/70">Post the volunteer form after tonight’s meeting recap.</div>
                       </div>
                       <div className="rounded-[1rem] border border-white/10 bg-white/[0.05] px-3 py-3">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/34">Attendance control</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Attendance control</div>
                         <div className="mt-2 font-display text-2xl tracking-[0.18em] text-amber">XK4T9R</div>
-                        <div className="mt-2 text-[12px] text-white/48">Open the code, have members check in, then close attendance when the room is set.</div>
+                        <div className="mt-2 text-[12px] text-white/50">Open the code, have members check in, then close attendance when the room is set.</div>
                       </div>
                     </div>
                   </div>
@@ -567,15 +567,15 @@ export default function ClubsPage() {
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
         <div className="mx-auto max-w-[1400px]">
           <div className="mb-14 max-w-[900px]">
-            <div className="reveal text-[11px] font-bold uppercase tracking-[0.2em] text-white/44">What Bridge actually does for clubs</div>
+            <div className="reveal text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">What Bridge actually does for clubs</div>
             <h2 className="reveal mt-5 font-display text-[clamp(36px,8vw,102px)] leading-[0.9] tracking-[0.05em] text-white">
               DAILY DISCOVERY.
               <br />
               <span className="text-scarlet">CLEARER TURNOUT.</span>
               <br />
-              <span className="text-white/24">LESS OPERATING FRICTION.</span>
+              <span className="text-white/25">LESS OPERATING FRICTION.</span>
             </h2>
-            <p className="reveal mt-5 max-w-2xl text-[15px] leading-relaxed text-white/52">
+            <p className="reveal mt-5 max-w-2xl text-[15px] leading-relaxed text-white/50">
               The point is not to give clubs another place to post. The point is to help more students find
               the right club and help more clubs convert interest into actual attendance.
             </p>
@@ -601,18 +601,18 @@ export default function ClubsPage() {
               <br />
               THE RIGHT WAY.
             </h2>
-            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-white/56">
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-white/55">
               Early clubs are not getting dropped into a dashboard and left alone. We&apos;ll onboard founding clubs
               directly, make sure your profile and structure are right, and use your feedback to shape the product.
             </p>
             <div className="mt-8 grid gap-3">
               {[
                 'Free at launch for clubs',
-                'OSU-verified membership',
+                'Eligible OSU email required',
                 'Direct onboarding from the Bridge team',
                 'Input into how club tools evolve',
               ].map((item) => (
-                <div key={item} className="rounded-[1rem] border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/72">
+                <div key={item} className="rounded-[1rem] border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70">
                   {item}
                 </div>
               ))}
@@ -626,7 +626,7 @@ export default function ClubsPage() {
               <br />
               CLUB GROUP.
             </h3>
-            <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/56">
+            <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/55">
               Tell us who you are, what your club does, and how students should find you. We&apos;ll take it from there.
             </p>
             <div className="mt-8">

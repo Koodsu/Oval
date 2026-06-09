@@ -5,6 +5,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/cron/maintenance",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",

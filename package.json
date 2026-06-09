@@ -1,9 +1,20 @@
 {
   "name": "bridge",
   "private": true,
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10 <12"
+  },
   "scripts": {
     "test": "npm run test --prefix backend && npm run test --prefix frontend",
     "test:backend": "npm run test --prefix backend",
-    "test:frontend": "npm run test --prefix frontend"
+    "test:frontend": "npm run test --prefix frontend",
+    "repo:check": "node scripts/release-check.mjs",
+    "migrations:check": "node scripts/verify-migrations.mjs",
+    "build": "npm run build --prefix backend && npm run typecheck --prefix frontend && npm run build --prefix landing",
+    "doctor": "npm run doctor --prefix frontend",
+    "export:ios": "npm run export:ios --prefix frontend",
+    "audit:production": "npm audit --omit=dev --prefix backend && npm audit --omit=dev --prefix frontend && npm audit --omit=dev --prefix landing",
+    "release:check": "npm run repo:check && npm run migrations:check && npm run test && npm run build && npm run doctor && npm run export:ios && npm run audit:production"
   }
 }

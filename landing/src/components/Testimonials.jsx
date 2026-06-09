@@ -1,33 +1,21 @@
 import { TESTIMONIALS } from '../data/testimonials'
 
-const ROW1 = [...TESTIMONIALS, ...TESTIMONIALS]
-const ROW2 = [...[...TESTIMONIALS].reverse(), ...[...TESTIMONIALS].reverse()]
+const ROW = [...TESTIMONIALS, ...TESTIMONIALS, ...TESTIMONIALS]
 
 function QuoteCard({ quote, name, role, initials, gradient }) {
   return (
-    <div className="flex-shrink-0 w-[320px] md:w-[360px] bg-cream border-2 border-ink/8 px-6 py-8 mx-1.5">
-      <div
-        aria-hidden
-        className="font-display text-[80px] text-scarlet leading-none -mb-2 select-none opacity-20"
-      >
-        "
-      </div>
-      <p className="text-[14px] leading-[1.8] text-ink/75 mb-6">
-        "{quote}"
-      </p>
-      <div className="border-t border-ink/10 pt-4 flex items-center gap-3">
-        <div
-          className={`w-9 h-9 bg-gradient-to-br ${gradient} flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}
-        >
+    <div className="glass mx-2 w-[320px] flex-shrink-0 rounded-3xl px-7 py-8 md:w-[380px]">
+      <div aria-hidden className="font-serif text-5xl italic leading-none text-flame/60">“</div>
+      <p className="mt-2 text-[14px] leading-[1.75] text-white/70">{quote}</p>
+      <div className="mt-6 flex items-center gap-3 border-t border-white/8 pt-5">
+        <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-xs font-bold text-white`}>
           {initials}
         </div>
-        <div>
-          <div className="text-sm font-bold text-ink">{name}</div>
-          <div className="text-xs text-warm-gray mt-0.5">{role}</div>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-white">{name}</div>
+          <div className="truncate text-[11px] text-white/35">{role}</div>
         </div>
-        <div className="ml-auto text-[10px] font-bold text-scarlet tracking-widest flex-shrink-0">
-          ✓ OSU
-        </div>
+        <span className="ml-auto flex-shrink-0 text-[10px] font-bold tracking-widest text-flame">✓ OSU</span>
       </div>
     </div>
   )
@@ -35,35 +23,23 @@ function QuoteCard({ quote, name, role, initials, gradient }) {
 
 export default function Testimonials() {
   return (
-    <section className="py-24 bg-cream overflow-hidden">
-      <div className="max-w-[1400px] mx-auto px-5 md:px-16 mb-14">
-        <span className="reveal block text-[11px] font-bold tracking-[0.2em] uppercase text-warm-gray mb-5">
-          Early Feedback
-        </span>
-        <h2 className="reveal font-display text-[clamp(36px,8vw,110px)] tracking-wider leading-[0.92] text-ink">
-          BUCKEYES<br />
-          <span className="text-scarlet">ARE EXCITED.</span>
+    <section className="section-divider relative overflow-hidden bg-void py-28 text-white">
+      <div aria-hidden className="absolute left-[40%] top-[-8rem] h-[26rem] w-[26rem] rounded-full bg-scarlet/10 blur-[150px]" />
+
+      <div className="relative mx-auto mb-14 max-w-[1280px] px-5 md:px-10">
+        <p className="reveal mb-5 text-[12px] font-bold uppercase tracking-[0.24em] text-flame">Early feedback</p>
+        <h2 className="reveal font-display text-[clamp(38px,6vw,72px)] font-bold leading-[1.02] tracking-[-0.03em]">
+          Buckeyes are
+          <span className="text-gradient-fire font-serif font-normal italic"> already talking.</span>
         </h2>
       </div>
 
-      {/* Row 1 — scrolling left */}
-      <div className="relative mb-4">
-        <div className="pointer-events-none absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-cream to-transparent z-10" />
-        <div className="pointer-events-none absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-cream to-transparent z-10" />
-        <div className="flex w-max animate-ticker">
-          {ROW1.map((t, i) => (
-            <QuoteCard key={`r1-${t.name}-${i}`} {...t} />
-          ))}
-        </div>
-      </div>
-
-      {/* Row 2 — scrolling right */}
       <div className="relative">
-        <div className="pointer-events-none absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-cream to-transparent z-10" />
-        <div className="pointer-events-none absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-cream to-transparent z-10" />
-        <div className="flex w-max animate-ticker2">
-          {ROW2.map((t, i) => (
-            <QuoteCard key={`r2-${t.name}-${i}`} {...t} />
+        <div className="pointer-events-none absolute left-0 top-0 z-10 h-full w-24 bg-gradient-to-r from-void to-transparent md:w-40" />
+        <div className="pointer-events-none absolute right-0 top-0 z-10 h-full w-24 bg-gradient-to-l from-void to-transparent md:w-40" />
+        <div className="animate-ticker flex w-max">
+          {ROW.map((t, i) => (
+            <QuoteCard key={`${t.name}-${i}`} {...t} />
           ))}
         </div>
       </div>

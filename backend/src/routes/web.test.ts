@@ -33,6 +33,20 @@ describe('Web / invite-link routes (public)', () => {
       expect(paths.some((p) => p.startsWith('/pod'))).toBe(true);
     });
 
+    it('uses the fully qualified Apple app identifier', async () => {
+      const res = await request(app)
+        .get('/.well-known/apple-app-site-association')
+        .expect(200);
+
+      expect(res.body.applinks.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            appID: '687FPU46UV.com.bradyvb.bridgeapp',
+          }),
+        ])
+      );
+    });
+
     it('requires no auth token', async () => {
       await request(app)
         .get('/.well-known/apple-app-site-association')
@@ -95,12 +109,14 @@ describe('Web / invite-link routes (public)', () => {
       expect(res.text).toContain(`bridge://pod/${podId}`);
     });
 
-    it('includes an app store install link', async () => {
+    it('does not expose placeholder store links before listings exist', async () => {
       const res = await request(app)
         .get(`/pod/${podId}`)
         .expect(200);
 
-      expect(res.text).toMatch(/apps\.apple\.com|play\.google\.com/);
+      expect(res.text).toContain('Bridge is coming soon to the App Store.');
+      expect(res.text).not.toContain('id0000000000');
+      expect(res.text).not.toContain('com.bridge.app');
     });
 
     it('includes a CTA to open the app', async () => {

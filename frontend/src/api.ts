@@ -1,3 +1,5 @@
+import { CURRENT_TERMS_VERSION } from './constants/legal';
+
 // Set EXPO_PUBLIC_API_URL in your .env file (or EAS env vars for production builds).
 // Only local Expo development falls back to localhost.
 // On a physical device, set this to your machine's local IP, e.g. http://192.168.1.100:3000
@@ -11,8 +13,8 @@ export const API_BASE =
     ? configuredApiBase
     : __DEV__
       ? 'http://localhost:3000'
-      : 'https://joinbridgeapp.com';
-export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://joinbridgeapp.com').replace(/\/$/, '');
+      : 'https://bridge-phi-plum.vercel.app';
+export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://www.joinbridgeapp.com').replace(/\/$/, '');
 
 /** Fallback alert copy when an error has no safer or more specific message. */
 export const API_USER_MESSAGE = 'We could not finish that. Please try again.';
@@ -108,7 +110,7 @@ export function getPodShareUrl(podId: string): string {
 }
 
 export function getClubShareUrl(clubId: string): string {
-  return `${PUBLIC_SITE_URL}/club/${encodeURIComponent(clubId)}`;
+  return `${PUBLIC_SITE_URL}/clubs/${encodeURIComponent(clubId)}`;
 }
 
 let authToken: string | null = null;
@@ -234,13 +236,35 @@ export const register = (
 ) =>
   request<{ token: string; user: import('./types').User }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ firstName, lastName, email, password, classYear, major }),
+    body: JSON.stringify({
+      firstName,
+      lastName,
+      email,
+      password,
+      classYear,
+      major,
+      termsAccepted: true,
+      ageConfirmed: true,
+      termsVersion: CURRENT_TERMS_VERSION,
+    }),
   });
 
 export const login = (email: string, password: string) =>
   request<{ token: string; user: import('./types').User }>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  });
+
+export const requestPasswordReset = (email: string) =>
+  request<{ message: string }>('/auth/request-password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+export const resetPassword = (email: string, code: string, password: string) =>
+  request<{ message: string }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, password }),
   });
 
 export const verifyEmail = (code: string) =>
@@ -251,6 +275,16 @@ export const verifyEmail = (code: string) =>
 
 export const resendVerification = () =>
   request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
+
+export const acceptCurrentTerms = () =>
+  request<{ user: import('./types').User }>('/auth/accept-terms', {
+    method: 'POST',
+    body: JSON.stringify({
+      termsAccepted: true,
+      ageConfirmed: true,
+      termsVersion: CURRENT_TERMS_VERSION,
+    }),
+  });
 
 // Activities
 export const getActivities = (category?: string, signal?: AbortSignal) =>
@@ -676,6 +710,20 @@ export const deletePodMessage = (podId: string, msgId: string) =>
 export const kickPodMember = (podId: string, memberId: string) =>
   request<import('./types').Pod>(`/pods/${podId}/kick/${memberId}`, { method: 'POST' });
 
+// Analytics
+export async function trackEvent(name: string, properties?: Record<string, unknown>): Promise<void> {
+  try {
+    await request<void>('/analytics/events', {
+      method: 'POST',
+      body: JSON.stringify({ name, properties }),
+    });
+  } catch (err) {
+    if (__DEV__) {
+      console.warn('[analytics] event dropped', name, err);
+    }
+  }
+}
+
 // Reports
 export const REPORT_REASONS = [
   'HARASSMENT',
@@ -714,15 +762,37 @@ export interface CreateReportPayload {
   details?: string;
 }
 
-export const createReport = (payload: CreateReportPayload) =>
-  request<{ reportId: string; status: string }>('/reports', {
+export const createReport = async (payload: CreateReportPayload) => {
+  const result = await request<{ reportId: string; status: string; severity: string }>('/reports', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  void trackEvent('safety.report_created', {
+    reason: payload.reason,
+    severity: result.severity,
+    targetType: payload.messageId
+      ? 'pod_message'
+      : payload.directMessageId
+        ? 'direct_message'
+        : payload.clubMessageId || payload.clubOfficerMessageId
+          ? 'club_message'
+          : payload.clubAnnouncementId
+            ? 'club_announcement'
+            : payload.clubId
+              ? 'club'
+              : payload.podId
+                ? 'pod'
+                : payload.targetUserId
+                  ? 'user'
+                  : 'unknown',
+  });
+  return result;
+};
 
 export interface MyReport {
   id: string;
   reason: string;
+  severity: string;
   status: string;
   createdAt: string;
   podId?: string | null;
@@ -759,6 +829,11 @@ export interface NotificationPreferences {
   meetupReminder: boolean;
   recapPrompt: boolean;
   waitlistSpot: boolean;
+  clubMeetingCreated: boolean;
+  clubAnnouncementCreated: boolean;
+  clubKick: boolean;
+  clubRoleChange: boolean;
+  clubAttendanceOpen: boolean;
 }
 
 export const getNotificationPreferences = () =>
@@ -839,6 +914,9 @@ export const deleteAvatar = () =>
 
 export const deleteMyAccount = () =>
   request<void>('/users/me', { method: 'DELETE' });
+
+export const downloadMyData = () =>
+  request<Record<string, unknown>>('/users/me/export');
 
 /**
  * Upload a club avatar. ADMIN only.

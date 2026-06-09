@@ -227,6 +227,12 @@ const activities = [
     category: 'Music & Entertainment',
     defaultLocation: 'Used Kids Records – High Street',
   },
+  {
+    title: 'A Cappella Listening Hang',
+    description: 'Share favorite vocal groups, campus covers, and concert clips with people who love harmonies.',
+    category: 'Music & Entertainment',
+    defaultLocation: 'Ohio Union – Performance Hall',
+  },
 
   // Wellness
   {
@@ -253,6 +259,12 @@ const activities = [
     category: 'Wellness',
     defaultLocation: 'RPAC – Studio B',
   },
+  {
+    title: 'Yoga Reset',
+    description: 'A low-pressure yoga flow for resetting after class. Beginners welcome.',
+    category: 'Wellness',
+    defaultLocation: 'RPAC – Mind Body Studio',
+  },
 
   // Gaming
   {
@@ -270,6 +282,12 @@ const activities = [
   {
     title: 'Card Game Night',
     description: 'Play card games from Uno to Magic: The Gathering. Bring your own or borrow.',
+    category: 'Gaming',
+    defaultLocation: 'Ohio Union – Game Room',
+  },
+  {
+    title: 'Tabletop RPG One-Shot',
+    description: 'Jump into a beginner-friendly tabletop adventure with pre-made characters.',
     category: 'Gaming',
     defaultLocation: 'Ohio Union – Game Room',
   },
@@ -298,6 +316,12 @@ const activities = [
     description: 'Sort and pack food donations at the Mid-Ohio Food Collective.',
     category: 'Volunteering',
     defaultLocation: 'Mid-Ohio Food Collective – Parsons Ave',
+  },
+  {
+    title: 'Blood Drive Helpers',
+    description: 'Help greet donors, organize supplies, and keep a campus blood drive moving.',
+    category: 'Volunteering',
+    defaultLocation: 'Ohio Union – Great Hall',
   },
 ];
 

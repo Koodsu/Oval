@@ -5,6 +5,7 @@ import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
 
 async function createCompletedPod(creatorToken: string, activityId: string, secondUserId: string) {
+  const activity = await prisma.activity.findUnique({ where: { id: activityId }, select: { defaultLocation: true } });
   const res = await request(app)
     .post('/pods/join')
     .set('Authorization', `Bearer ${creatorToken}`)
@@ -13,7 +14,7 @@ async function createCompletedPod(creatorToken: string, activityId: string, seco
       minMembers: 2,
       maxMembers: 4,
       meetupTime: new Date(Date.now() + 86400000).toISOString(),
-      location: 'Thompson Library',
+      location: activity?.defaultLocation ?? 'Thompson Library',
     })
     .expect(201);
   const podId: string = res.body.id;
@@ -109,6 +110,7 @@ describe('Recaps API', () => {
     });
 
     it('rejects recap for non-completed pod', async () => {
+      const activity = await prisma.activity.findUnique({ where: { id: activityId }, select: { defaultLocation: true } });
       const res = await request(app)
         .post('/pods/join')
         .set('Authorization', `Bearer ${token1}`)
@@ -117,7 +119,7 @@ describe('Recaps API', () => {
           minMembers: 2,
           maxMembers: 4,
           meetupTime: new Date(Date.now() + 86400000).toISOString(),
-          location: 'Thompson Library',
+          location: activity?.defaultLocation ?? 'Thompson Library',
         })
         .expect(201);
       const podId: string = res.body.id;

@@ -1,13 +1,15 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   addPodMessageReaction,
-	  confirmAttendance,
-	  getApiErrorMessage,
+  blockUser,
+		  confirmAttendance,
+  createReport,
+		  getApiErrorMessage,
   getFriends,
   getMessages,
   getPeopleYouMet,
@@ -39,6 +41,13 @@ import { INTEREST_TAG_META } from '../constants/interestTags';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
 
 const HEART_EMOJI = '❤️';
+
+const POD_STATUS_LABELS: Record<Pod['status'], string> = {
+  FORMING: 'Open',
+  LOCKED: 'Locked',
+  COMPLETED: 'Completed',
+  EXPIRED: 'Expired',
+};
 
 export default function PodDetailScreen({ route, navigation }: Props) {
   const { podId } = route.params;
@@ -229,6 +238,46 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleMessageSafetyAction = (message: Message) => {
+    if (message.user.id === user?.id) {
+      setReplyTo(message);
+      return;
+    }
+
+    Alert.alert('Message safety', undefined, [
+      {
+        text: 'Report message',
+        onPress: async () => {
+          try {
+            await createReport({
+              podId,
+              messageId: message.id,
+              targetUserId: message.user.id,
+              reason: 'HARASSMENT',
+            });
+            Alert.alert('Report sent', 'Thanks. We logged this pod message for review.');
+          } catch (error) {
+            Alert.alert('Could not send report', getApiErrorMessage(error));
+          }
+        },
+      },
+      {
+        text: `Block ${message.user.name}`,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await blockUser(message.user.id);
+            Alert.alert('User blocked', 'They can no longer message you. Shared pods are separated for safety.');
+            navigation.goBack();
+          } catch (error) {
+            Alert.alert('Could not block user', getApiErrorMessage(error));
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const handleRecap = async (rating: 1 | 2 | 3) => {
     if (!pod) return;
     setActionBusy('recap');
@@ -319,7 +368,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               title="Pod"
               onBack={() => navigation.goBack()}
               right={(
-                <TouchableOpacity onPress={() => void handleShare()} style={styles.headerAction}>
+                <TouchableOpacity
+                  onPress={() => void handleShare()}
+                  style={styles.headerAction}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share pod"
+                >
                   <Ionicons name="share-outline" size={18} color={palette.ink} />
                 </TouchableOpacity>
               )}
@@ -327,7 +381,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             <Panel style={styles.podHeaderPanel}>
               <View style={styles.podHeaderTop}>
                 <View style={styles.podTitleBlock}>
-                  <Text style={styles.statusLabel}>{pod.status}</Text>
+                  <Text style={styles.statusLabel}>{POD_STATUS_LABELS[pod.status]}</Text>
                   <Text style={styles.podTitle}>{pod.activity?.title ?? 'Pod detail'}</Text>
                 </View>
                 <View style={styles.memberCountPill}>
@@ -354,7 +408,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 	                    kind={meInPod || !canJoinOrWaitlist ? 'ghost' : 'solid'}
 	                  />
                 </View>
-                <TouchableOpacity onPress={() => void handleShare()} style={styles.squareAction}>
+                <TouchableOpacity
+                  onPress={() => void handleShare()}
+                  style={styles.squareAction}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share pod link"
+                >
                   <Ionicons name="link-outline" size={18} color={palette.ink} />
                 </TouchableOpacity>
                 {isCreator ? (
@@ -362,6 +421,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     onPress={() => void handleLockToggle()}
                     disabled={actionBusy != null}
                     style={[styles.squareAction, actionBusy != null && styles.squareActionDisabled]}
+                    accessibilityRole="button"
+                    accessibilityLabel={pod.status === 'LOCKED' ? 'Unlock pod' : 'Lock pod'}
                   >
                     {actionBusy === 'lock' ? (
                       <ActivityIndicator size="small" color={palette.ink} />
@@ -410,10 +471,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             {meInPod ? (
               <Panel style={styles.conversationPanel}>
                 <View style={styles.conversationHeader}>
-	                  <View>
-	                    <Text style={styles.conversationTitle}>Conversation</Text>
-	                    <Text style={styles.conversationMeta}>{pod.members.length} members coordinating here • tap a message to reply</Text>
-	                  </View>
+                  <View>
+                    <Text style={styles.conversationTitle}>Conversation</Text>
+                    <Text style={styles.conversationMeta}>
+                      {pod.members.length} {pod.members.length === 1 ? 'member' : 'members'} coordinating here • tap a message to reply
+                    </Text>
+                  </View>
                   <View style={styles.livePill}>
                     <View style={styles.liveDot} />
                     <Text style={styles.liveText}>Pod chat</Text>
@@ -425,8 +488,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   contentContainerStyle={styles.messageListContent}
                   nestedScrollEnabled
                   showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
                 >
                   {messages.length ? messages.map((message) => {
                     const mine = message.user.id === user?.id;
@@ -436,7 +499,11 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     return (
                       <View key={message.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
                         {!mine ? (
-                          <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}>
+                          <TouchableOpacity
+                            onPress={() => navigation.navigate('UserProfile', { userId: message.user.id })}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${message.user.name}'s profile`}
+                          >
                             <UserAvatar name={message.user.name} avatarUrl={message.user.avatarUrl} size={34} />
                           </TouchableOpacity>
                         ) : null}
@@ -446,11 +513,11 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
                           </View>
                           <TouchableOpacity
-	                            activeOpacity={0.82}
-	                            onLongPress={() => setReplyTo(message)}
-	                            onPress={() => setReplyTo(message)}
-	                            style={[styles.messageContent, mine && styles.messageContentMine]}
-	                          >
+                            activeOpacity={0.82}
+                            onLongPress={() => setReplyTo(message)}
+                            onPress={() => setReplyTo(message)}
+                            style={[styles.messageContent, mine && styles.messageContentMine]}
+                          >
                             {message.replyTo ? (
                               <View style={[styles.replyPreview, mine && styles.replyPreviewMine]}>
                                 <Text style={[styles.replyMeta, mine && styles.replyMetaMine]}>Replying to {message.replyTo.user.name}</Text>
@@ -463,6 +530,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             onPress={() => void handleHeart(message)}
                             style={[styles.heartButton, mine && styles.heartButtonMine]}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={hasHeart ? 'Remove heart from message' : 'Heart message'}
+                            accessibilityState={{ selected: hasHeart }}
                           >
                             <Ionicons
                               name={hasHeart ? 'heart' : 'heart-outline'}
@@ -472,6 +542,17 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
                           </TouchableOpacity>
                         </View>
+                        {!mine ? (
+                          <TouchableOpacity
+                            onPress={() => handleMessageSafetyAction(message)}
+                            style={styles.messageSafetyButton}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Safety actions for ${message.user.name}'s message`}
+                          >
+                            <Ionicons name="ellipsis-horizontal-circle-outline" size={21} color="rgba(16, 33, 43, 0.30)" />
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     );
                   }) : (
@@ -494,7 +575,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       <Text style={styles.replyMeta}>Replying to {replyTo.user.name}</Text>
                       <Text style={styles.replyBody} numberOfLines={1}>{replyTo.content}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.clearReplyButton}>
+                    <TouchableOpacity
+                      onPress={() => setReplyTo(null)}
+                      style={styles.clearReplyButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel reply"
+                    >
                       <Ionicons name="close" size={16} color={palette.ink} />
                     </TouchableOpacity>
                   </View>
@@ -502,10 +588,10 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 <View style={styles.composerRow}>
                   <TextInput
                     value={messageText}
-	                    onChangeText={(value) => {
-	                      setMessageText(value);
-	                      pingTyping(value);
-	                    }}
+                    onChangeText={(value) => {
+                      setMessageText(value);
+                      pingTyping(value);
+                    }}
                     placeholder="Message the pod"
                     placeholderTextColor={palette.slate}
                     style={styles.input}
@@ -516,6 +602,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     onPress={() => void handleSend()}
                     disabled={sending || !messageText.trim()}
                     style={[styles.sendButtonInline, (!messageText.trim() || sending) && styles.sendButtonInlineDisabled]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send pod message"
+                    accessibilityState={{ disabled: sending || !messageText.trim() }}
                   >
                     {sending ? (
                       <ActivityIndicator size="small" color={palette.white} />
@@ -530,7 +619,14 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             )}
 
             <Panel style={styles.detailsPanel}>
-              <TouchableOpacity activeOpacity={0.84} onPress={() => setDetailsOpen((open) => !open)} style={styles.detailsHeader}>
+              <TouchableOpacity
+                activeOpacity={0.84}
+                onPress={() => setDetailsOpen((open) => !open)}
+                style={styles.detailsHeader}
+                accessibilityRole="button"
+                accessibilityLabel={detailsOpen ? 'Collapse pod details' : 'Expand pod details'}
+                accessibilityState={{ expanded: detailsOpen }}
+              >
                 <View style={styles.detailsHeaderCopy}>
                   <Text style={styles.detailsTitle}>Pod details</Text>
                   <Text style={styles.detailsSubtitle}>Members, privacy, invites, and meetup point</Text>
@@ -548,6 +644,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                           key={member.id}
                           style={styles.member}
                           onPress={() => navigation.navigate('UserProfile', { userId: member.userId })}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${member.user.name}'s profile`}
                         >
                           <UserAvatar name={member.user.name} avatarUrl={member.user.avatarUrl} />
                           <Text style={styles.memberName}>{member.user.name}</Text>
@@ -573,6 +671,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                               disabled={actionBusy === 'privacy'}
                               onPress={() => void handlePrivacyChange(item.value)}
                               style={[styles.privacyOption, active && styles.privacyOptionActive]}
+                              accessibilityRole="radio"
+                              accessibilityLabel={`${item.label} pod`}
+                              accessibilityState={{ selected: active, disabled: actionBusy === 'privacy' }}
                             >
                               <Ionicons name={item.icon} size={17} color={active ? palette.scarlet : palette.slate} />
                               <Text style={[styles.privacyLabel, active && styles.privacyLabelActive]}>{item.label}</Text>
@@ -1094,10 +1195,10 @@ const styles = StyleSheet.create({
   messageRowMine: {
     justifyContent: 'flex-end',
   },
-  messageStack: {
-    maxWidth: '82%',
-    gap: 4,
-  },
+	  messageStack: {
+	    maxWidth: '76%',
+	    gap: 4,
+	  },
   messageStackMine: {
     alignItems: 'flex-end',
   },
@@ -1187,13 +1288,20 @@ const styles = StyleSheet.create({
   heartButtonMine: {
     alignSelf: 'flex-end',
   },
-  heartCount: {
-    ...typography.bodyStrong,
-    fontSize: 12,
-    lineHeight: 16,
-    color: 'rgba(16, 33, 43, 0.42)',
-  },
-  typingText: {
+	  heartCount: {
+	    ...typography.bodyStrong,
+	    fontSize: 12,
+	    lineHeight: 16,
+	    color: 'rgba(16, 33, 43, 0.42)',
+	  },
+	  messageSafetyButton: {
+	    width: 26,
+	    height: 26,
+	    alignItems: 'center',
+	    justifyContent: 'center',
+	    marginBottom: 24,
+	  },
+	  typingText: {
     ...typography.body,
     color: palette.scarlet,
     marginTop: 2,

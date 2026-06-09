@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { adminListReports, adminUpdateReport, AdminReportPatch } from '../services/reportService';
-import { isValidStatus, ReportStatus } from '../lib/reportReasons';
+import { isValidSeverity, isValidStatus, ReportStatus } from '../lib/reportReasons';
 
 const router = Router();
 
@@ -10,9 +10,10 @@ router.use(requireAuth, requireAdmin);
 
 // GET /admin/reports
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { status, limit, cursor } = req.query;
+  const { status, severity, limit, cursor } = req.query;
   const filters = {
     status: typeof status === 'string' && isValidStatus(status) ? status : undefined,
+    severity: typeof severity === 'string' && isValidSeverity(severity) ? severity : undefined,
     limit: typeof limit === 'string' ? parseInt(limit, 10) : 50,
     cursor: typeof cursor === 'string' && cursor ? cursor : undefined,
   };
@@ -29,7 +30,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // PATCH /admin/reports/:id
 router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { status, adminNotes } = req.body;
+  const { status, adminNotes, removeContent, accountAction } = req.body;
 
   const patch: AdminReportPatch = {};
   if (status && isValidStatus(status)) {
@@ -37,6 +38,12 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
   if (adminNotes !== undefined) {
     patch.adminNotes = typeof adminNotes === 'string' ? adminNotes : undefined;
+  }
+  if (removeContent === true) {
+    patch.removeContent = true;
+  }
+  if (typeof accountAction === 'string' && ['SUSPEND', 'BAN', 'RESTORE'].includes(accountAction)) {
+    patch.accountAction = accountAction as 'SUSPEND' | 'BAN' | 'RESTORE';
   }
 
   if (Object.keys(patch).length === 0) {
@@ -50,6 +57,14 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2025') {
       res.status(404).json({ error: 'Report not found' });
+      return;
+    }
+    if (err instanceof Error && (
+      err.message.includes('does not point to removable content') ||
+      err.message.includes('does not have a target user') ||
+      err.message.includes('Target user not found')
+    )) {
+      res.status(400).json({ error: err.message });
       return;
     }
     console.error(err);

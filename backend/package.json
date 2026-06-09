@@ -1,8 +1,12 @@
 {
   "name": "bridge-backend",
   "version": "0.1.0",
-  "description": "Bridge v0.1 backend – Express + Prisma + SQLite",
+  "description": "Bridge backend - Express, Prisma, and PostgreSQL",
   "main": "dist/server.js",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10 <12"
+  },
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "prisma generate && tsc",

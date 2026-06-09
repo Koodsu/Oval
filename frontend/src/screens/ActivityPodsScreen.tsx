@@ -1,20 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import type { MapPressEvent } from 'react-native-maps';
+import type { MapPressEvent } from '../components/CampusMap';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
-import { createPod, getApiErrorMessage, getPodsByActivity, joinPod, joinWaitlist } from '../api';
+import { createPod, getActivityLocations, getApiErrorMessage, getPodsByActivity, joinPod, joinWaitlist } from '../api';
 import { RootStackParamList } from '../../App';
 import { Pod } from '../types';
-import { EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard } from '../components/ui';
+import { Chip, EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { formatDateTime } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'>;
+
+function dedupeLocations(locations: string[]) {
+  const seen = new Set<string>();
+  return locations.filter((location) => {
+    const key = location
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export default function ActivityPodsScreen({ route, navigation }: Props) {
   const { activity, startCreate } = route.params;
@@ -25,6 +39,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   const [meetupTime, setMeetupTime] = useState(() => new Date(Date.now() + 45 * 60 * 1000));
   const [maxMembers, setMaxMembers] = useState(4);
   const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [composerExpanded, setComposerExpanded] = useState(!!startCreate);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
@@ -51,6 +66,20 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       void load();
     }, [load])
   );
+
+  useEffect(() => {
+    let active = true;
+    getActivityLocations(activity.id)
+      .then((locations) => {
+        if (active) setLocationSuggestions(dedupeLocations(locations));
+      })
+      .catch(() => {
+        if (active) setLocationSuggestions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activity.id]);
 
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null),
@@ -79,7 +108,11 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const handleCreate = async () => {
     if (!location.trim()) {
-      Alert.alert('Add a meetup spot', 'Type where people should meet. You can also drop a pin, but it is optional.');
+      Alert.alert('Add a meetup spot', 'Choose a suggested spot or drop a pin for a custom campus location.');
+      return;
+    }
+    if (!selectedPin && locationSuggestions.length > 0 && !locationSuggestions.includes(location.trim())) {
+      Alert.alert('Drop a pin for custom spots', 'Custom meetup notes need a campus map pin. Choose a suggested spot, or tap the map to save coordinates.');
       return;
     }
     if (meetupTime.getTime() < Date.now() || meetupTime.getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000) {
@@ -164,7 +197,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
           <View style={styles.composerWrap}>
             <View style={styles.creatorCard}>
               <View style={styles.creatorPanel}>
-              <Text style={styles.panelBody}>Type a meetup spot, or tap the map to save coordinates and fill in an address when available.</Text>
+              <Text style={styles.panelBody}>Choose a suggested campus spot, or tap the map to save coordinates for a custom meetup note.</Text>
               <View style={styles.inputWrap}>
                 <Text style={styles.inputLabel}>Location</Text>
                 <TextInput
@@ -174,7 +207,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                     setLocation(value);
                     if (locationMessage) setLocationMessage(null);
                   }}
-                  placeholder="Oval lawn, Thompson Library lobby..."
+	                  placeholder="Choose below, or drop a map pin first..."
                   placeholderTextColor={palette.slate}
                   style={styles.locationInput}
                   multiline
@@ -182,9 +215,29 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                 <Text style={styles.locationHint}>
                   {resolvingAddress
                     ? 'Finding an address for the pin...'
-                    : locationMessage ?? (selectedPin ? 'Pin coordinates will be saved with this location.' : 'A map pin is optional.')}
-                </Text>
-              </View>
+	                    : locationMessage ?? (selectedPin ? 'Pin coordinates will be saved with this location.' : 'Custom spots require a map pin.')}
+	                </Text>
+	              </View>
+	              {locationSuggestions.length ? (
+	                <View style={styles.locationSuggestionBlock}>
+	                  <Text style={styles.inputLabel}>Suggested spots</Text>
+	                  <View style={styles.locationChips}>
+	                    {locationSuggestions.slice(0, 8).map((suggestion) => (
+	                      <Chip
+	                        key={suggestion}
+	                        label={suggestion}
+	                        active={location.trim() === suggestion && !selectedPin}
+	                        onPress={() => {
+	                          latestLocationRef.current = suggestion;
+	                          setLocation(suggestion);
+	                          setSelectedPin(null);
+	                          setLocationMessage('Using a suggested campus spot.');
+	                        }}
+	                      />
+	                    ))}
+	                  </View>
+	                </View>
+	              ) : null}
               <View style={styles.dateWrap}>
                 <Text style={styles.body}>Meetup time</Text>
                 <DateTimePicker
@@ -204,11 +257,25 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                   <Text style={styles.body}>Anywhere from 2 to 10 people.</Text>
                 </View>
                 <View style={styles.stepper}>
-                  <TouchableOpacity style={styles.stepperButton} onPress={() => setMaxMembers((current) => Math.max(2, current - 1))}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => setMaxMembers((current) => Math.max(2, current - 1))}
+                    disabled={maxMembers === 2}
+                    accessibilityRole="button"
+                    accessibilityLabel="Decrease maximum members"
+                    accessibilityState={{ disabled: maxMembers === 2 }}
+                  >
                     <Text style={styles.stepperText}>-</Text>
                   </TouchableOpacity>
                   <Text style={styles.stepperValue}>{maxMembers}</Text>
-                  <TouchableOpacity style={styles.stepperButton} onPress={() => setMaxMembers((current) => Math.min(10, current + 1))}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => setMaxMembers((current) => Math.min(10, current + 1))}
+                    disabled={maxMembers === 10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Increase maximum members"
+                    accessibilityState={{ disabled: maxMembers === 10 }}
+                  >
                     <Text style={styles.stepperText}>+</Text>
                   </TouchableOpacity>
                 </View>
@@ -257,11 +324,19 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
             const isOpen = pod.status === 'FORMING';
             const isFull = pod.members.length >= pod.maxMembers;
             return (
-              <TouchableOpacity key={pod.id} style={styles.row} onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}>
+              <TouchableOpacity
+                key={pod.id}
+                style={styles.row}
+                onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open pod at ${pod.location}`}
+              >
                 <View style={styles.rowText}>
                   <Text style={styles.title}>{formatDateTime(pod.meetupTime)}</Text>
                   <Text style={styles.body}>{pod.location}</Text>
-                  <Text style={styles.body}>{pod.members.length}/{pod.maxMembers} joined • {pod.status.toLowerCase()}</Text>
+                  <Text style={styles.body}>
+                    {pod.members.length}/{pod.maxMembers} joined • {isOpen ? 'open' : pod.status.toLowerCase()}
+                  </Text>
                 </View>
                 <View style={styles.rowAction}>
                   <PrimaryButton
@@ -368,12 +443,20 @@ const styles = StyleSheet.create({
     padding: 0,
     textAlignVertical: 'top',
   },
-  locationHint: {
-    ...typography.body,
-    fontSize: 13,
-    color: palette.slate,
-  },
-  dateWrap: {
+	  locationHint: {
+	    ...typography.body,
+	    fontSize: 13,
+	    color: palette.slate,
+	  },
+	  locationSuggestionBlock: {
+	    gap: spacing.xs,
+	  },
+	  locationChips: {
+	    flexDirection: 'row',
+	    flexWrap: 'wrap',
+	    rowGap: spacing.sm,
+	  },
+	  dateWrap: {
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.7)',
     padding: spacing.sm,

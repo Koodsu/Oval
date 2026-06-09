@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
+import { moderateTextContent } from '../lib/contentModeration';
 
 const router = Router();
 
@@ -20,6 +21,11 @@ router.post('/:id/recap', requireAuth, async (req: AuthRequest, res: Response): 
     return;
   }
   const trimmedNote = typeof note === 'string' ? note.trim().slice(0, 200) || null : null;
+  const moderation = await moderateTextContent([trimmedNote]);
+  if (moderation) {
+    res.status(moderation.status).json({ error: moderation.message });
+    return;
+  }
 
   try {
     const pod = await prisma.pod.findUnique({

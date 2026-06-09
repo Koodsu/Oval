@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
@@ -23,9 +24,14 @@ import ThreadScreen from './src/screens/ThreadScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
 import UserSearchScreen from './src/screens/UserSearchScreen';
+import BlockedUsersScreen from './src/screens/BlockedUsersScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
+import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
 import { Activity } from './src/types';
 import { palette } from './src/theme';
 import { AppBackdrop, SkeletonBlock, SkeletonCard } from './src/components/ui';
+import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -46,6 +52,9 @@ export type RootStackParamList = {
   EditProfile: undefined;
   UserProfile: { userId: string };
   UserSearch: undefined;
+  BlockedUsers: undefined;
+  Settings: undefined;
+  PrivacyData: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -64,7 +73,7 @@ const navTheme = {
 };
 
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: ['bridge://', 'https://joinbridgeapp.com'],
+  prefixes: ['bridge://', 'https://www.joinbridgeapp.com'],
   config: {
     screens: {
       PodDetail: 'pod/:podId',
@@ -114,6 +123,9 @@ function AuthedApp() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="UserSearch" component={UserSearchScreen} />
+      <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="PrivacyData" component={PrivacyDataScreen} />
     </Stack.Navigator>
   );
 }
@@ -142,17 +154,23 @@ function AppGate() {
     return <VerifyEmailScreen />;
   }
 
+  if (user.termsVersion !== CURRENT_TERMS_VERSION || !user.ageAttestedAt) {
+    return <TermsAcceptanceScreen />;
+  }
+
   return <AuthedApp />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer theme={navTheme} linking={linking}>
-        <StatusBar style="dark" />
-        <AppGate />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NavigationContainer theme={navTheme} linking={linking}>
+          <StatusBar style="dark" />
+          <AppGate />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 

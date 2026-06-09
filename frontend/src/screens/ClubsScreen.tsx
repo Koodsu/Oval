@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { Alert, type GestureResponderEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, type GestureResponderEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,6 +91,7 @@ export default function ClubsScreen() {
 
   const featuredClubs = filteredClubs.slice(0, 1);
   const otherClubs = filteredClubs.slice(featuredClubs.length);
+  const hasDirectoryFilter = Boolean(filter || deferredQuery.trim());
   const tonightMeetings = useMemo(
     () => [...meetingsToday].sort((a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime()),
     [meetingsToday]
@@ -116,6 +117,14 @@ export default function ClubsScreen() {
     }
   };
 
+  const handleListClub = async () => {
+    try {
+      await Linking.openURL('https://www.joinbridgeapp.com/clubs');
+    } catch {
+      Alert.alert('Could not open club onboarding', 'Visit joinbridgeapp.com/clubs to list your organization.');
+    }
+  };
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
@@ -123,6 +132,15 @@ export default function ClubsScreen() {
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Clubs</Text>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => void handleListClub()}
+            accessibilityRole="link"
+            accessibilityLabel="List your club"
+            accessibilityHint="Opens the Bridge club onboarding form"
+          >
+            <Ionicons name="add" size={24} color={palette.ink} />
+          </TouchableOpacity>
         </View>
 
         <SearchField
@@ -158,10 +176,27 @@ export default function ClubsScreen() {
                 key={club.id}
                 activeOpacity={0.92}
                 onPress={() => navigation.navigate('ClubDetail', { clubId: club.id })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${club.name}`}
               >
                 <View style={styles.featuredCard}>
                   <LinearGradient colors={featuredGradient(index)} style={styles.featuredBanner}>
-                    <Text style={styles.featuredSignal}>{memberLabel(club.memberCount)}</Text>
+                    <View style={styles.featuredBannerTop}>
+                      <Text style={styles.featuredSignal}>{memberLabel(club.memberCount)}</Text>
+                      {club.isVerified ? (
+                        <View style={styles.verifiedBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color={palette.white} />
+                          <Text style={styles.verifiedText}>Verified</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.featuredIdentity}>
+                      {club.avatarUrl ? (
+                        <Image source={{ uri: club.avatarUrl }} style={styles.featuredAvatar} />
+                      ) : (
+                        <Text style={styles.featuredEmoji}>{club.emoji}</Text>
+                      )}
+                    </View>
                   </LinearGradient>
 
                   <View style={styles.featuredBody}>
@@ -202,20 +237,28 @@ export default function ClubsScreen() {
               <View style={styles.emptyIconWrap}>
                 <Ionicons name="people-outline" size={24} color={palette.scarlet} />
               </View>
-              <Text style={styles.emptyTitle}>No clubs match that lens</Text>
-              <Text style={styles.emptyBody}>
-                Try another category, clear the filter, or search across the full directory.
+              <Text style={styles.emptyTitle}>
+                {hasDirectoryFilter ? 'No clubs match that search' : 'Clubs are getting set up'}
               </Text>
-              <TouchableOpacity
-                style={styles.emptyActionSolid}
-                activeOpacity={0.88}
-                onPress={() => {
-                  setFilter(null);
-                  setQuery('');
-                }}
-              >
-                <Text style={styles.emptyActionSolidText}>Clear filter</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyBody}>
+                {hasDirectoryFilter
+                  ? 'Try another category, clear the filter, or search across the full directory.'
+                  : 'Student organizations will appear here as leaders finish their Bridge pages.'}
+              </Text>
+              {hasDirectoryFilter ? (
+                <TouchableOpacity
+                  style={styles.emptyActionSolid}
+                  activeOpacity={0.88}
+                  onPress={() => {
+                    setFilter(null);
+                    setQuery('');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear club filters"
+                >
+                  <Text style={styles.emptyActionSolidText}>Clear filter</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
         </View>
@@ -237,10 +280,16 @@ export default function ClubsScreen() {
                   style={styles.popularCard}
                   activeOpacity={0.92}
                   onPress={() => navigation.navigate('ClubDetail', { clubId: club.id })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${club.name}`}
                 >
                   <LinearGradient colors={featuredGradient(index)} style={styles.popularMedia}>
                     <View style={styles.popularIconBadge}>
-                      <Ionicons name="people-outline" size={22} color={palette.ink} />
+                      {club.avatarUrl ? (
+                        <Image source={{ uri: club.avatarUrl }} style={styles.popularAvatar} />
+                      ) : (
+                        <Text style={styles.popularEmoji}>{club.emoji}</Text>
+                      )}
                     </View>
                   </LinearGradient>
 
@@ -274,6 +323,7 @@ export default function ClubsScreen() {
           </View>
         ) : null}
 
+        {!loaded || tonightMeetings.length || clubs.length ? (
         <View style={styles.section}>
           <SectionHeader
             title="Meeting tonight"
@@ -312,6 +362,7 @@ export default function ClubsScreen() {
             />
           )}
         </View>
+        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -363,6 +414,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: 'space-between',
   },
+  featuredBannerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   featuredSignal: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(128, 104, 221, 0.95)',
@@ -372,6 +429,43 @@ const styles = StyleSheet.create({
     color: palette.white,
     fontSize: 12,
     fontWeight: '800',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  verifiedText: {
+    color: palette.white,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  featuredIdentity: {
+    alignSelf: 'center',
+    width: 82,
+    height: 82,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  featuredAvatar: {
+    width: 82,
+    height: 82,
+    borderRadius: 26,
+  },
+  featuredEmoji: {
+    color: palette.white,
+    fontSize: 44,
+    lineHeight: 52,
   },
   featuredBody: {
     padding: spacing.md,
@@ -483,6 +577,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.92)',
+    overflow: 'hidden',
+  },
+  popularAvatar: {
+    width: 44,
+    height: 44,
+  },
+  popularEmoji: {
+    color: palette.ink,
+    fontSize: 24,
+    lineHeight: 30,
   },
   popularBody: {
     padding: 12,

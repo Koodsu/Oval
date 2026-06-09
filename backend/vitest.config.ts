@@ -10,6 +10,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
     testTimeout: 10000,
     pool: 'forks', // Run in forks to avoid DB lock from parallel workers
+    fileParallelism: false, // Integration specs share one test DB; keep files isolated from each other.
   },
   resolve: {
     alias: {

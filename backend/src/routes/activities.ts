@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { getLocationsForCategory } from '../config/locations';
-import { requireAuth } from '../middleware/auth';
+import { requireVerifiedAuth as requireAuth } from '../middleware/auth';
 import { expireOldPods } from '../lib/expireOldPods';
 
 const router = Router();

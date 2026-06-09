@@ -23,9 +23,14 @@ export default function EditProfileScreen({ navigation }: Props) {
   const [avatarBusy, setAvatarBusy] = useState(false);
 
   const toggleTag = (tag: string) => {
-    setInterestTags((current) =>
-      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
-    );
+    setInterestTags((current) => {
+      if (current.includes(tag)) return current.filter((item) => item !== tag);
+      if (current.length >= 5) {
+        Alert.alert('Interest limit', 'You can select up to 5 interest tags.');
+        return current;
+      }
+      return [...current, tag];
+    });
   };
 
   const save = async () => {

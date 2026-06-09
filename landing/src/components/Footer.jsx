@@ -1,33 +1,38 @@
 import { Link } from 'react-router-dom'
 
-const LINK_CLASS = 'text-[11px] font-medium text-white/25 no-underline tracking-[0.12em] uppercase transition-colors duration-150 hover:text-white/60'
+const LINK_CLASS = 'text-[12px] font-medium text-white/30 no-underline transition-colors duration-150 hover:text-white/70'
 
 export default function Footer() {
   return (
-    <footer className="bg-[#0A0A08] border-t border-white/5 px-5 md:px-16 py-10">
-      <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+    <footer className="relative overflow-hidden border-t border-white/[0.06] bg-[#060404] px-5 py-14 md:px-10">
+      <div aria-hidden className="absolute bottom-[-12rem] left-1/2 h-[20rem] w-[44rem] -translate-x-1/2 rounded-full bg-scarlet/10 blur-[120px]" />
+
+      <div className="relative mx-auto flex max-w-[1280px] flex-col items-start justify-between gap-8 md:flex-row md:items-center">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-6 h-6 bg-scarlet flex items-center justify-center flex-shrink-0">
-              <span className="font-display text-white text-sm leading-none">B</span>
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-flame to-scarlet shadow-[0_0_16px_rgba(187,0,0,0.4)]">
+              <span className="font-display text-[15px] font-bold leading-none text-white">B</span>
             </div>
-            <span className="font-display text-white text-xl tracking-[0.12em]">BRIDGE</span>
+            <span className="font-display text-lg font-bold tracking-tight text-white">bridge</span>
           </div>
-          <p className="text-xs text-white/20 tracking-wide">Real groups. Real people. Ohio State.</p>
+          <p className="text-[12px] text-white/30">
+            Campus is happening <span className="font-serif italic text-flame/80">right now.</span> Made for Buckeyes.
+          </p>
         </div>
 
-        <div className="flex flex-wrap gap-6">
-          <a href="#" className={LINK_CLASS}>About</a>
+        <div className="flex flex-wrap gap-x-7 gap-y-3">
           <a href="#waitlist" className={LINK_CLASS}>Waitlist</a>
+          <Link to="/clubs" className={LINK_CLASS}>For Clubs</Link>
+          <Link to="/community-guidelines" className={LINK_CLASS}>Guidelines</Link>
+          <Link to="/support" className={LINK_CLASS}>Support</Link>
           <Link to="/privacy" className={LINK_CLASS}>Privacy</Link>
           <Link to="/terms" className={LINK_CLASS}>Terms</Link>
-          <a href="mailto:contactus@joinbridgeapp.com" className={LINK_CLASS}>Contact</a>
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto mt-8 pt-6 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <p className="text-xs text-white/20 tracking-wide">© 2026 Bridge. Made for Buckeyes.</p>
-        <p className="text-xs text-white/20 tracking-wide">Not affiliated with The Ohio State University.</p>
+      <div className="relative mx-auto mt-10 flex max-w-[1280px] flex-col gap-2 border-t border-white/[0.06] pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[11px] text-white/25">© 2026 Bridge. Made for Buckeyes.</p>
+        <p className="text-[11px] text-white/25">Not affiliated with The Ohio State University.</p>
       </div>
     </footer>
   )

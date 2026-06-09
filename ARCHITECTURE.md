@@ -172,12 +172,12 @@ notifyDMMessage(thread, sender)    // → the other thread participant
 
 ---
 
-#### `backend/src/lib/reminderScheduler.ts`
+#### `backend/src/lib/maintenanceJobs.ts`
 ```typescript
-export function startReminderScheduler(): void
-// Starts a cron job (every 5 minutes) that finds LOCKED pods with meetupTime
-// 55–65 minutes from now and calls NotificationService.sendMeetupReminders().
-// Called once at server startup (in server.ts if require.main === module).
+export async function runMaintenanceJobs()
+// Invoked by GET /cron/maintenance from Vercel Cron every five minutes.
+// Runs pod expiry, one-hour meetup reminders, recap prompts, and stale
+// waitlist promotion outside the request-serving process.
 ```
 
 ---
@@ -654,7 +654,7 @@ All IDs are UUIDs. All tables have `createdAt` / `updatedAt` timestamps unless n
 | Table | Key fields | Notes |
 |-------|------------|-------|
 | **User** | id, name, email, passwordHash, emailVerified, verificationCode, verificationCodeExpiry, pushToken, avatarUrl, notificationPreferences (JSON string) | Email must be `@osu.edu` or `@buckeyemail.osu.edu` |
-| **Activity** | id, title, description, category, defaultLocation | Seeded at startup (~47 activities) |
+| **Activity** | id, title, description, category, defaultLocation | Seeded at startup (50 activities) |
 | **Pod** | id, activityId, creatorId, meetupTime, location, locationType, minMembers, maxMembers, status | status: `FORMING` → `LOCKED` → `COMPLETED` |
 | **PodMember** | podId + userId (composite PK), joinedAt, confirmedAt | One row per user per pod |
 | **Message** | id, podId, userId, content, replyToId?, createdAt | Max 2000 chars |

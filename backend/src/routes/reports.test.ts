@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
-import { registerAndGetToken, getAuthToken } from '../test/helpers';
+import { registerAndGetToken, getAuthToken, createTestUser } from '../test/helpers';
 
 describe('Reports API', () => {
   let token: string;
@@ -97,11 +97,14 @@ describe('Reports API', () => {
 
       expect(res.body.reportId).toBeDefined();
       expect(res.body.status).toBe('OPEN');
+      expect(res.body.severity).toBe('P1');
 
       const report = await prisma.report.findUnique({
         where: { id: res.body.reportId },
       });
       expect(report?.targetUserId).toBe(otherUserId);
+      expect(report?.severity).toBe('P1');
+      expect(report?.moderationEmailSentAt).toBeTruthy();
     });
 
     it('messageId must match podId when both provided', async () => {
@@ -159,6 +162,38 @@ describe('Reports API', () => {
       expect(report?.targetUserId).toBe(otherUserId);
     });
 
+    it('deduplicates the same open report within 24 hours', async () => {
+      const first = await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ targetUserId: otherUserId, reason: 'HARASSMENT' })
+        .expect(201);
+
+      const second = await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ targetUserId: otherUserId, reason: 'HARASSMENT' })
+        .expect(201);
+
+      expect(second.body.reportId).toBe(first.body.reportId);
+      const reports = await prisma.report.findMany({
+        where: { reporterId: userId, targetUserId: otherUserId, reason: 'HARASSMENT' },
+      });
+      expect(reports).toHaveLength(1);
+    });
+
+    it('marks urgent safety reasons as P0', async () => {
+      const res = await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ targetUserId: otherUserId, reason: 'VIOLENCE_THREATS' })
+        .expect(201);
+
+      expect(res.body.severity).toBe('P0');
+      const report = await prisma.report.findUnique({ where: { id: res.body.reportId } });
+      expect(report?.severity).toBe('P0');
+    });
+
     it('requires auth', async () => {
       await request(app)
         .post('/reports')
@@ -190,6 +225,7 @@ describe('Reports API', () => {
 
       expect(res.body).toHaveLength(1);
       expect(res.body[0].reason).toBe('SPAM');
+      expect(res.body[0].severity).toBe('P2');
       expect(res.body[0].status).toBe('OPEN');
       expect(res.body[0].adminNotes).toBeUndefined();
     });
@@ -200,9 +236,13 @@ describe('Reports API', () => {
   });
 
   describe('Admin endpoints', () => {
-    const adminUserId = 'admin-user-id-for-tests';
+    let adminUserId: string;
+    let adminToken: string;
 
-    beforeEach(() => {
+    beforeEach(async () => {
+      const admin = await createTestUser({ email: `admin-${Date.now()}@osu.edu` });
+      adminUserId = admin.id;
+      adminToken = getAuthToken(admin.id, admin.email);
       process.env.ADMIN_USER_IDS = adminUserId;
     });
 
@@ -220,8 +260,6 @@ describe('Reports API', () => {
         .send({ podId, reason: 'SPAM' })
         .expect(201);
 
-      const adminToken = getAuthToken(adminUserId, 'admin@test.com');
-
       const res = await request(app)
         .get('/admin/reports')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -232,6 +270,24 @@ describe('Reports API', () => {
       const report = res.body.reports.find((r: { podId: string }) => r.podId === podId);
       expect(report).toBeDefined();
       expect(report.adminNotes).toBeDefined();
+      expect(report.severity).toBe('P2');
+      expect(report.moderationEmailSentAt).toBeTruthy();
+    });
+
+    it('admin can filter reports by severity', async () => {
+      await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ podId, reason: 'VIOLENCE_THREATS' })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/admin/reports?severity=P0')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(res.body.reports.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.reports.every((r: { severity: string }) => r.severity === 'P0')).toBe(true);
     });
 
     it('non-admin cannot see adminNotes in GET /reports/mine', async () => {
@@ -265,6 +321,71 @@ describe('Reports API', () => {
         .patch(`/admin/reports/${createRes.body.reportId}`)
         .set('Authorization', `Bearer ${token}`)
         .send({ status: 'RESOLVED' })
+        .expect(403);
+    });
+
+    it('admin can remove reported content and suspend its author', async () => {
+      const createRes = await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ messageId, podId, reason: 'HARASSMENT' })
+        .expect(201);
+      const targetBefore = await prisma.user.findUnique({ where: { id: otherUserId } });
+
+      await request(app)
+        .patch(`/admin/reports/${createRes.body.reportId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          status: 'RESOLVED',
+          adminNotes: 'Removed abusive content and suspended the account.',
+          removeContent: true,
+          accountAction: 'SUSPEND',
+        })
+        .expect(200);
+
+      expect(await prisma.message.findUnique({ where: { id: messageId } })).toBeNull();
+      const targetAfter = await prisma.user.findUnique({ where: { id: otherUserId } });
+      expect(targetAfter?.accountStatus).toBe('SUSPENDED');
+      expect(targetAfter?.tokenVersion).toBe((targetBefore?.tokenVersion ?? 0) + 1);
+
+      const report = await prisma.report.findUnique({ where: { id: createRes.body.reportId } });
+      expect(report?.contentRemovedAt).toBeTruthy();
+      expect(report?.accountAction).toBe('SUSPEND');
+    });
+
+    it('admin bans revoke the target session and block re-registration', async () => {
+      const target = await prisma.user.findUniqueOrThrow({ where: { id: otherUserId } });
+      const targetToken = getAuthToken(target.id, target.email);
+      const createRes = await request(app)
+        .post('/reports')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ targetUserId: otherUserId, reason: 'VIOLENCE_THREATS' })
+        .expect(201);
+
+      await request(app)
+        .patch(`/admin/reports/${createRes.body.reportId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'RESOLVED', accountAction: 'BAN', adminNotes: 'Credible threat.' })
+        .expect(200);
+
+      await request(app)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${targetToken}`)
+        .expect(401);
+
+      await prisma.user.delete({ where: { id: otherUserId } });
+      await request(app)
+        .post('/auth/register')
+        .send({
+          name: 'Banned Return',
+          email: target.email,
+          password: 'password123',
+          classYear: 'Freshman',
+          major: 'Computer Science',
+          termsAccepted: true,
+          ageConfirmed: true,
+          termsVersion: '2026-06-08',
+        })
         .expect(403);
     });
   });
