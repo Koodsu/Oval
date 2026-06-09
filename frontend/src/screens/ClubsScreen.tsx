@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { Alert, Image, Linking, type GestureResponderEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, type GestureResponderEvent, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,9 +7,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getApiErrorMessage, getClubs, getClubsToday, joinClub } from '../api';
 import { ClubDirectoryEntry, ClubMeetingToday } from '../types';
 import { RootStackParamList } from '../../App';
-import { Chip, EmptyState, Screen, SearchField, SectionHeader, SkeletonCard } from '../components/ui';
+import { Chip, EmptyState, Entrance, Screen, SearchField, SectionHeader, SkeletonCard, Tap } from '../components/ui';
 import { CLUB_CATEGORIES, clubCategoryMatches } from '../constants/clubCategories';
-import { palette, radii, shadows, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -37,15 +37,18 @@ function meetingLabel(club: ClubDirectoryEntry, todayMeeting?: ClubMeetingToday)
 
 function featuredGradient(index: number) {
   const options = [
-    ['#2B120A', '#8D2018', '#D24A32'],
-    ['#101D28', '#394F7A', '#6C8EC6'],
-    ['#241A0F', '#855327', '#D89647'],
+    ['#1C0E0A', '#7C1F15', '#E04A2C'],
+    ['#0F1524', '#36456E', '#6C8EC6'],
+    ['#1A1026', '#5B3A8C', '#9D6BDE'],
+    ['#0E1F1A', '#1F6A50', '#3DC98A'],
   ] as const;
   return options[index % options.length];
 }
 
 export default function ClubsScreen() {
   const navigation = useNavigation<Nav>();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<string | null>(null);
   const [clubs, setClubs] = useState<ClubDirectoryEntry[]>([]);
@@ -131,7 +134,10 @@ export default function ClubsScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
         <View style={styles.titleRow}>
-          <Text style={styles.pageTitle}>Clubs</Text>
+          <View>
+            <Text style={styles.pageEyebrow}>Campus orgs</Text>
+            <Text style={styles.pageTitle}>Clubs</Text>
+          </View>
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => void handleListClub()}
@@ -139,7 +145,7 @@ export default function ClubsScreen() {
             accessibilityLabel="List your club"
             accessibilityHint="Opens the Bridge club onboarding form"
           >
-            <Ionicons name="add" size={24} color={palette.ink} />
+            <Ionicons name="add" size={24} color={colors.ink} />
           </TouchableOpacity>
         </View>
 
@@ -185,7 +191,7 @@ export default function ClubsScreen() {
                       <Text style={styles.featuredSignal}>{memberLabel(club.memberCount)}</Text>
                       {club.isVerified ? (
                         <View style={styles.verifiedBadge}>
-                          <Ionicons name="checkmark-circle" size={14} color={palette.white} />
+                          <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
                           <Text style={styles.verifiedText}>Verified</Text>
                         </View>
                       ) : null}
@@ -206,7 +212,7 @@ export default function ClubsScreen() {
                     </Text>
                     <Text style={styles.featuredDescription}>{club.description}</Text>
                     <View style={styles.featuredMeetingRow}>
-                      <Ionicons name="calendar-outline" size={16} color={palette.slate} />
+                      <Ionicons name="calendar-outline" size={16} color={colors.faint} />
                       <Text style={styles.featuredMeetingText}>
                         {meetingLabel(club, meeting)}
                       </Text>
@@ -235,7 +241,7 @@ export default function ClubsScreen() {
           }) : (
             <View style={styles.emptyCard}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="people-outline" size={24} color={palette.scarlet} />
+                <Ionicons name="people-outline" size={24} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>
                 {hasDirectoryFilter ? 'No clubs match that search' : 'Clubs are getting set up'}
@@ -336,14 +342,14 @@ export default function ClubsScreen() {
               <SkeletonCard compact />
             </>
           ) : tonightMeetings.length ? tonightMeetings.slice(0, 4).map((meeting) => (
-            <TouchableOpacity
+            <Tap
               key={meeting.id}
               style={styles.tonightCard}
-              activeOpacity={0.92}
               onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
+              accessibilityLabel={meeting.clubName}
             >
               <View style={styles.tonightIcon}>
-                <Ionicons name="calendar-outline" size={21} color={palette.scarlet} />
+                <Ionicons name="calendar-outline" size={21} color={colors.violet} />
               </View>
               <View style={styles.tonightCopy}>
                 <Text style={styles.tonightTitle} numberOfLines={1}>{meeting.clubName}</Text>
@@ -353,7 +359,7 @@ export default function ClubsScreen() {
                 <Text style={styles.tonightMeta} numberOfLines={1}>{meeting.location}</Text>
               </View>
               <Text style={styles.tonightGoing}>{meeting.attendeeCount} going</Text>
-            </TouchableOpacity>
+            </Tap>
           )) : (
             <EmptyState
               icon="calendar-outline"
@@ -368,71 +374,78 @@ export default function ClubsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  pageEyebrow: {
+    ...t.typography.label,
+    color: t.colors.primary,
+    marginBottom: 2,
   },
   pageTitle: {
-    ...typography.h1,
-    fontSize: 48,
-    lineHeight: 52,
+    ...t.typography.display,
   },
   iconButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
   },
   chipRow: {
     paddingRight: spacing.md,
     gap: spacing.xs,
+    paddingBottom: 4,
   },
   section: {
     gap: spacing.sm,
   },
   featuredCard: {
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
-    ...shadows.card,
+    borderColor: t.colors.border,
+    ...t.shadows.raised,
   },
   featuredBanner: {
     minHeight: 168,
     padding: spacing.md,
-    justifyContent: 'space-between',
+    justifyContent: 'space-between' as const,
   },
   featuredBannerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
   },
   featuredSignal: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(128, 104, 221, 0.95)',
+    alignSelf: 'flex-start' as const,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    color: palette.white,
+    overflow: 'hidden' as const,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
   verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
     borderRadius: radii.pill,
     paddingHorizontal: 10,
@@ -442,17 +455,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.22)',
   },
   verifiedText: {
-    color: palette.white,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
   featuredIdentity: {
-    alignSelf: 'center',
+    alignSelf: 'center' as const,
     width: 82,
     height: 82,
     borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.24)',
@@ -463,7 +476,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
   },
   featuredEmoji: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 44,
     lineHeight: 52,
   },
@@ -472,85 +485,89 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   featuredTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 22,
     lineHeight: 28,
   },
   featuredMeta: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.sub,
   },
   featuredDescription: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   featuredMeetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     marginTop: spacing.xs,
   },
   featuredMeetingText: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    fontSize: 14,
   },
   featuredAction: {
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start' as const,
     borderRadius: radii.pill,
-    backgroundColor: palette.scarlet,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: t.colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
     marginTop: spacing.xs,
+    ...t.shadows.glow,
   },
   featuredActionGhost: {
-    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+    backgroundColor: t.colors.inputBg,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   featuredActionText: {
-    color: palette.white,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
   },
   featuredActionTextGhost: {
-    color: palette.ink,
+    color: t.colors.ink,
   },
   emptyCard: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   emptyIconWrap: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.primarySoft,
   },
   emptyTitle: {
-    ...typography.h2,
-    textAlign: 'center',
+    ...t.typography.h2,
+    textAlign: 'center' as const,
   },
   emptyBody: {
-    ...typography.body,
-    textAlign: 'center',
+    ...t.typography.body,
+    textAlign: 'center' as const,
     maxWidth: 320,
   },
   emptyActionSolid: {
     borderRadius: radii.pill,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   emptyActionSolidText: {
-    ...typography.bodyStrong,
+    fontFamily: fonts.bold,
     fontSize: 14,
-    color: palette.white,
+    color: '#FFFFFF',
   },
   popularRow: {
     paddingRight: spacing.md,
@@ -558,33 +575,33 @@ const styles = StyleSheet.create({
   },
   popularCard: {
     width: 184,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderRadius: 22,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
-    ...shadows.card,
+    borderColor: t.colors.border,
+    ...t.shadows.card,
   },
   popularMedia: {
     height: 104,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
     padding: 12,
   },
   popularIconBadge: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: 'rgba(255,255,255,0.92)',
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   popularAvatar: {
     width: 44,
     height: 44,
   },
   popularEmoji: {
-    color: palette.ink,
+    color: '#13151C',
     fontSize: 24,
     lineHeight: 30,
   },
@@ -593,24 +610,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   popularTitle: {
-    ...typography.title,
-    fontSize: 18,
+    ...t.typography.title,
+    fontSize: 17,
     lineHeight: 22,
   },
   popularMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   popularFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: 8,
     marginTop: 2,
   },
   popularSignal: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     flex: 1,
   },
@@ -618,63 +635,64 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#36C275',
+    backgroundColor: t.colors.green,
   },
   popularSignalText: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
   },
   popularAction: {
     borderRadius: radii.pill,
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   popularActionGhost: {
-    backgroundColor: 'rgba(16, 33, 43, 0.06)',
+    backgroundColor: t.colors.inputBg,
   },
   popularActionText: {
-    color: palette.white,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
   popularActionTextGhost: {
-    color: palette.ink,
+    color: t.colors.ink,
   },
   tonightCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...shadows.card,
+    ...t.shadows.subtle,
   },
   tonightIcon: {
     width: 46,
     height: 46,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(16, 33, 43, 0.05)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: t.colors.violetSoft,
   },
   tonightCopy: {
     flex: 1,
     gap: 2,
   },
   tonightTitle: {
-    ...typography.title,
-    fontSize: 19,
-    lineHeight: 23,
+    ...t.typography.title,
+    fontSize: 17,
+    lineHeight: 22,
   },
   tonightMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   tonightGoing: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: t.colors.primary,
   },
-});
+}));

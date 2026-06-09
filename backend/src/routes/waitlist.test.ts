@@ -35,6 +35,13 @@ describe('public waitlist routes', () => {
     resendMocks.sendEmail.mockReset().mockResolvedValue({ data: { id: 'email' }, error: null });
   });
 
+  it('loads the backend and returns 503 when Resend is not configured', async () => {
+    delete process.env.RESEND_API_KEY;
+
+    await request(app).post('/waitlist').send({ email: 'student@osu.edu' }).expect(503);
+    expect(resendMocks.createContact).not.toHaveBeenCalled();
+  });
+
   it('validates waitlist email addresses', async () => {
     await request(app).post('/waitlist').send({ email: 'not-an-email' }).expect(400);
     expect(resendMocks.createContact).not.toHaveBeenCalled();

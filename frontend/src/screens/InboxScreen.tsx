@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -14,17 +14,21 @@ import {
 	  getMessageThreads,
 	  getPodInvites,
 } from '../api';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
-import { CompactHeader, EmptyState, Panel, PrimaryButton, Screen, SegmentedControl, SkeletonCard, UserAvatar } from '../components/ui';
+import { CompactHeader, EmptyState, Entrance, Panel, PrimaryButton, Screen, SegmentedControl, SkeletonCard, Tap, UserAvatar } from '../components/ui';
 import { formatDateTime } from '../utils/format';
-import { radii, spacing, typography, palette } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Mode = 'messages' | 'invites' | 'friends';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function InboxScreen() {
   const navigation = useNavigation<Nav>();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const chevron = colors.faint;
   const [mode, setMode] = useState<Mode>('messages');
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
   const [invites, setInvites] = useState<PodInvite[]>([]);
@@ -149,16 +153,18 @@ export default function InboxScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
-        <CompactHeader
-          eyebrow="Inbox"
-          title="Stay in the loop."
-          subtitle="Your messages, pod invites, and friend requests — all in one place."
-        >
-          <View style={styles.headerAction}>
-            <PrimaryButton label="Find people" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
-            <PrimaryButton label="Profile & settings" onPress={() => navigation.navigate('Profile')} kind="ghost" />
-          </View>
-        </CompactHeader>
+        <Entrance index={0}>
+          <CompactHeader
+            eyebrow="Inbox"
+            title="Stay in the loop."
+            subtitle="Your messages, pod invites, and friend requests — all in one place."
+          >
+            <View style={styles.headerAction}>
+              <PrimaryButton label="Find people" icon="search-outline" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
+              <PrimaryButton label="Settings" icon="settings-outline" onPress={() => navigation.navigate('Profile')} kind="ghost" />
+            </View>
+          </CompactHeader>
+        </Entrance>
 
 	        <SegmentedControl
           value={mode}
@@ -188,18 +194,21 @@ export default function InboxScreen() {
                 <SkeletonCard compact />
                 <SkeletonCard compact />
               </>
-            ) : threads.length ? threads.map((thread) => (
-              <TouchableOpacity
-                key={thread.id}
-                style={styles.row}
-                onPress={() => navigation.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name })}
-              >
-                <UserAvatar name={thread.otherUser.name} avatarUrl={thread.otherUser.avatarUrl} />
-                <View style={styles.copy}>
-                  <Text style={styles.title}>{thread.otherUser.name}</Text>
-                  <Text style={styles.body} numberOfLines={2}>{thread.lastMessage?.content ?? 'No messages yet'}</Text>
-                </View>
-              </TouchableOpacity>
+            ) : threads.length ? threads.map((thread, threadIndex) => (
+              <Entrance key={thread.id} index={Math.min(threadIndex, 6)}>
+                <Tap
+                  style={styles.row}
+                  onPress={() => navigation.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name })}
+                  accessibilityLabel={`Open conversation with ${thread.otherUser.name}`}
+                >
+                  <UserAvatar name={thread.otherUser.name} avatarUrl={thread.otherUser.avatarUrl} size={46} />
+                  <View style={styles.copy}>
+                    <Text style={styles.title}>{thread.otherUser.name}</Text>
+                    <Text style={styles.body} numberOfLines={2}>{thread.lastMessage?.content ?? 'No messages yet'}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={chevron} />
+                </Tap>
+              </Entrance>
             )) : <EmptyState icon="mail-open-outline" title="No messages yet" body="New DMs will land here once you start connecting through pods and profiles." />}
           </View>
         ) : null}
@@ -340,17 +349,19 @@ export default function InboxScreen() {
               <>
                 <Text style={styles.sectionLabel}>Friends</Text>
                 {friends.map((friend) => (
-                  <TouchableOpacity
+                  <Tap
                     key={friend.id}
                     style={styles.row}
                     onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                    accessibilityLabel={`View ${friend.name}'s profile`}
                   >
-                    <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} />
+                    <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} size={46} />
                     <View style={styles.copy}>
                       <Text style={styles.title}>{friend.name}</Text>
                       <Text style={styles.body}>View profile</Text>
                     </View>
-                  </TouchableOpacity>
+                    <Ionicons name="chevron-forward" size={16} color={chevron} />
+                  </Tap>
                 ))}
               </>
             ) : null}
@@ -365,7 +376,7 @@ export default function InboxScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -375,34 +386,35 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   headerAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
     marginTop: spacing.sm,
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: spacing.sm,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    alignItems: 'center' as const,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radii.lg,
+    borderColor: t.colors.border,
+    borderRadius: radii.md,
     padding: spacing.md,
+    ...t.shadows.subtle,
   },
   inviteCard: {
     gap: spacing.sm,
   },
   cardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: spacing.sm,
   },
   identity: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   copy: {
@@ -410,58 +422,58 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
-	  body: {
-	    ...typography.body,
-	  },
-	  warningPanel: {
-	    flexDirection: 'row',
-	    alignItems: 'center',
-	    justifyContent: 'space-between',
-	    gap: spacing.sm,
-	    borderColor: 'rgba(154,94,23,0.22)',
-	    backgroundColor: '#FFF8EA',
-	  },
-	  warningText: {
-	    ...typography.body,
-	    color: palette.warnText,
-	    flex: 1,
-	  },
-	  retryLink: {
-	    paddingVertical: 6,
-	    paddingHorizontal: spacing.sm,
-	  },
-	  retryLinkText: {
-	    ...typography.bodyStrong,
-	    color: palette.scarlet,
-	  },
-	  sectionLabel: {
-    ...typography.label,
-    color: palette.slate,
+  body: {
+    ...t.typography.body,
+  },
+  warningPanel: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+    borderColor: t.colors.warnText,
+    backgroundColor: t.colors.warnBg,
+  },
+  warningText: {
+    ...t.typography.body,
+    color: t.colors.warnText,
+    flex: 1,
+  },
+  retryLink: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+  },
+  retryLinkText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: t.colors.primary,
+  },
+  sectionLabel: {
+    ...t.typography.label,
     marginTop: spacing.sm,
   },
   podPreview: {
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.cream,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.inputBg,
     padding: spacing.md,
     gap: 2,
   },
   previewMeta: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     lineHeight: 18,
   },
   previewBody: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: spacing.sm,
     marginTop: spacing.sm,
   },
-});
+}));

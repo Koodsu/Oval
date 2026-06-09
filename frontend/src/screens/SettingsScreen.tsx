@@ -3,17 +3,41 @@ import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { Panel, Screen, ScreenHeader } from '../components/ui';
-import { palette, spacing, typography } from '../theme';
+import { Panel, Screen, ScreenHeader, SegmentedControl } from '../components/ui';
+import { AppearancePreference, Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 const SITE_URL = 'https://www.joinbridgeapp.com';
 
 export default function SettingsScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors, preference, setPreference } = useTheme();
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
+
+        <Text style={styles.sectionLabel}>Appearance</Text>
+        <Panel>
+          <View style={styles.appearanceRow}>
+            <View style={styles.icon}>
+              <Ionicons name="moon-outline" size={20} color={colors.primary} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={styles.title}>Theme</Text>
+              <Text style={styles.body}>Match your system or pick a side.</Text>
+            </View>
+          </View>
+          <SegmentedControl<AppearancePreference>
+            value={preference}
+            options={[
+              { value: 'system', label: 'Auto' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            onChange={setPreference}
+          />
+        </Panel>
 
         <Text style={styles.sectionLabel}>Account</Text>
         <Panel>
@@ -80,6 +104,8 @@ function SettingsRow({
   body?: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       style={styles.row}
@@ -89,26 +115,32 @@ function SettingsRow({
       accessibilityHint={body}
     >
       <View style={styles.icon}>
-        <Ionicons name={icon} size={20} color={palette.scarlet} />
+        <Ionicons name={icon} size={20} color={colors.primary} />
       </View>
       <View style={styles.copy}>
         <Text style={styles.title}>{title}</Text>
         {body ? <Text style={styles.body}>{body}</Text> : null}
       </View>
-      <Ionicons name="chevron-forward" size={20} color={palette.slate} />
+      <Ionicons name="chevron-forward" size={20} color={colors.sub} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
   sectionLabel: {
-    ...typography.label,
+    ...t.typography.label,
     marginTop: spacing.sm,
+  },
+  appearanceRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -122,23 +154,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    backgroundColor: t.colors.primarySoft,
   },
   copy: {
     flex: 1,
     gap: 2,
   },
   title: {
-    ...typography.title,
+    ...t.typography.title,
   },
   body: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
   divider: {
     height: 1,
-    backgroundColor: palette.border,
+    backgroundColor: t.colors.border,
     marginVertical: spacing.xs,
   },
-});
+}));

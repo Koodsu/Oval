@@ -3,9 +3,11 @@ import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Hero, Panel, PrimaryButton, Screen } from '../components/ui';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 export default function VerifyEmailScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, updateUser } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -67,7 +69,7 @@ export default function VerifyEmailScreen() {
             textContentType="oneTimeCode"
             autoComplete="one-time-code"
             maxLength={6}
-            placeholderTextColor={palette.slate}
+            placeholderTextColor={colors.faint}
             style={styles.input}
             accessibilityLabel="Verification code"
             onSubmitEditing={() => void submit()}
@@ -88,28 +90,28 @@ export default function VerifyEmailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     justifyContent: 'center',
     gap: spacing.lg,
   },
   label: {
-    ...typography.label,
+    ...t.typography.label,
     marginBottom: spacing.xs,
   },
   input: {
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
   },
   actions: {
     marginTop: spacing.md,
     gap: spacing.sm,
   },
-});
+}));

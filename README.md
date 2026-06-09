@@ -446,7 +446,8 @@ More detail lives in [TESTING.md](./TESTING.md).
 
 - Target: Vercel
 - Set all backend environment variables in the deployment platform
-- The five-minute maintenance schedule in `backend/vercel.json` requires Vercel Pro or Enterprise; Hobby only supports daily cron execution
+- `backend/vercel.json` uses a daily maintenance schedule so Hobby deployments succeed
+- For five-minute maintenance, use Vercel Pro/Enterprise or an external scheduler to call `/cron/maintenance`
 - Set `CRON_SECRET`, `OPENAI_API_KEY`, `ADMIN_REPORTS_URL`, and `ADMIN_REVIEW_SECRET` before production deploy
 - After deploy:
 

@@ -72,7 +72,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatDateTime, formatShortDate, formatTime } from '../utils/format';
 import { buildClubCalendarIcs } from '../utils/calendar';
 import { exportTextFile } from '../utils/fileExport';
-import { palette, radii, shadows, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 type Mode = 'overview' | 'chat' | 'members' | 'events' | 'analytics';
@@ -176,6 +176,8 @@ function relativeDayLabel(iso: string) {
 }
 
 export default function ClubDetailScreen({ route, navigation }: Props) {
+  const styles = useStyles();
+  const { colors, isDark } = useTheme();
   const { clubId } = route.params;
   const { user } = useAuth();
   const [mode, setMode] = useState<Mode>('overview');
@@ -1244,7 +1246,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         {club ? (
           <>
             <View style={styles.heroShell}>
-              <LinearGradient colors={['#22160E', '#8C2E1F', '#C85C38']} style={styles.cover}>
+              <LinearGradient colors={['#15161D', '#27182B', '#511F39']} style={styles.cover}>
                 <View style={styles.coverTopBar}>
                   <TouchableOpacity
                     onPress={() => navigation.goBack()}
@@ -1252,7 +1254,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     accessibilityRole="button"
                     accessibilityLabel="Go back"
                   >
-                    <Ionicons name="chevron-back" size={20} color={palette.ink} />
+                    <Ionicons name="chevron-back" size={20} color={colors.ink} />
                   </TouchableOpacity>
                   <View style={styles.coverActions}>
                     {canManageClub ? (
@@ -1263,7 +1265,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         accessibilityRole="button"
                         accessibilityLabel={club.avatarUrl ? 'Change club photo' : 'Add club photo'}
                       >
-                        <Ionicons name="camera-outline" size={18} color={palette.ink} />
+                        <Ionicons name="camera-outline" size={18} color={colors.ink} />
                       </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity
@@ -1272,7 +1274,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                       accessibilityRole="button"
                       accessibilityLabel="Club actions"
                     >
-                      <Ionicons name="ellipsis-horizontal" size={18} color={palette.ink} />
+                      <Ionicons name="ellipsis-horizontal" size={18} color={colors.ink} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1306,7 +1308,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
                 <View style={styles.summaryGrid}>
                   <View style={styles.summaryCard}>
-                    <Ionicons name="calendar-outline" size={18} color={palette.slate} />
+                    <Ionicons name="calendar-outline" size={18} color={colors.sub} />
                     <Text style={styles.summaryLabel}>Next meeting</Text>
                     <Text style={styles.summaryValue}>
                       {nextMeeting ? `${relativeDayLabel(nextMeeting.meetingTime)} at ${formatTime(nextMeeting.meetingTime)}` : 'Nothing scheduled yet'}
@@ -1315,7 +1317,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                   </View>
 
                   <View style={styles.summaryCard}>
-                    <Ionicons name="people-outline" size={18} color={palette.slate} />
+                    <Ionicons name="people-outline" size={18} color={colors.sub} />
                     <Text style={styles.summaryLabel}>Going</Text>
                     <Text style={styles.summaryValue}>
                       {nextMeeting ? goingLabel(nextMeeting.rsvpCounts.going) : 'No RSVPs yet'}
@@ -1339,7 +1341,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                       accessibilityRole="button"
                       accessibilityLabel="Manage club"
                     >
-                      <Ionicons name="settings-outline" size={15} color={palette.slate} />
+                      <Ionicons name="settings-outline" size={15} color={colors.sub} />
                       <Text style={styles.leaveClubButtonText}>Manage club</Text>
                     </TouchableOpacity>
                   ) : club.isMember ? (
@@ -1349,7 +1351,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                       disabled={membershipBusy}
                       activeOpacity={0.72}
                     >
-                      <Ionicons name="log-out-outline" size={15} color={palette.slate} />
+                      <Ionicons name="log-out-outline" size={15} color={colors.sub} />
                       <Text style={styles.leaveClubButtonText}>
                         {membershipBusy ? 'Updating...' : 'Leave club'}
                       </Text>
@@ -1398,8 +1400,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
                   {nextMeeting ? (
                     <View style={styles.upcomingCard}>
-                      <LinearGradient colors={['#E8DCCB', '#F2ECE3']} style={styles.upcomingThumb}>
-                        <Ionicons name="calendar-outline" size={34} color={palette.scarlet} />
+                      <LinearGradient colors={isDark ? ['#252837', '#1B1E29'] : ['#EDE3D2', '#F4EEE5']} style={styles.upcomingThumb}>
+                        <Ionicons name="calendar-outline" size={34} color={colors.primary} />
                       </LinearGradient>
 
                       <View style={styles.upcomingCopy}>
@@ -1494,13 +1496,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               style={styles.reportInlineButton}
                               disabled={deleteContentBusyId === `announcement:${announcement.id}`}
                             >
-                              <Ionicons name="trash-outline" size={15} color={palette.dangerText} />
+                              <Ionicons name="trash-outline" size={15} color={colors.dangerText} />
                               <Text style={[styles.reportInlineText, styles.dangerInlineText]}>Delete</Text>
                             </TouchableOpacity>
                           ) : null}
                           {announcement.user.id !== user?.id ? (
                             <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
-                              <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                              <Ionicons name="flag-outline" size={15} color={colors.sub} />
                               <Text style={styles.reportInlineText}>Report</Text>
                             </TouchableOpacity>
                           ) : null}
@@ -1535,7 +1537,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               setAnnouncementComposerOpen(true);
                             }}
                           >
-                            <Ionicons name="add" size={16} color={palette.white} />
+                            <Ionicons name="add" size={16} color="#FFFFFF" />
                             <Text style={styles.newChatButtonText}>New announcement</Text>
                           </TouchableOpacity>
                         ) : null}
@@ -1549,7 +1551,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           onPress={() => setChatView(item.key)}
                         >
                           <View style={styles.chatHubIcon}>
-                            <Ionicons name={item.icon} size={20} color={palette.scarlet} />
+                            <Ionicons name={item.icon} size={20} color={colors.primary} />
                           </View>
                           <View style={styles.chatHubCopy}>
                             <Text style={styles.chatAudience}>{item.audience}</Text>
@@ -1558,7 +1560,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           </View>
                           <View style={styles.chatHubRight}>
                             {item.badge ? <View style={styles.chatBadge}><Text style={styles.chatBadgeText}>{item.badge}</Text></View> : null}
-                            <Ionicons name="chevron-forward" size={18} color={palette.slate} />
+                            <Ionicons name="chevron-forward" size={18} color={colors.sub} />
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -1572,7 +1574,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           accessibilityRole="button"
                           accessibilityLabel="Back to club chats"
                         >
-                          <Ionicons name="chevron-back" size={18} color={palette.ink} />
+                          <Ionicons name="chevron-back" size={18} color={colors.ink} />
                         </TouchableOpacity>
                         <View style={styles.chatConversationTitleBlock}>
                           <Text style={styles.chatConversationTitle}>
@@ -1602,7 +1604,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                 onPress={() => setAnnouncementComposerOpen((current) => !current)}
                               >
                                 <Text style={styles.cardTitle}>Create announcement</Text>
-                                <Ionicons name={announcementComposerOpen ? 'remove' : 'add'} size={20} color={palette.scarlet} />
+                                <Ionicons name={announcementComposerOpen ? 'remove' : 'add'} size={20} color={colors.primary} />
                               </TouchableOpacity>
                               {announcementComposerOpen ? (
                                 <>
@@ -1632,7 +1634,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                     value={announcementText}
                                     onChangeText={setAnnouncementText}
                                     placeholder="Share details, reminders, links, etc."
-                                    placeholderTextColor={palette.slate}
+                                    placeholderTextColor={colors.faint}
                                     style={[styles.input, styles.inputTall]}
                                     multiline
                                   />
@@ -1674,13 +1676,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                     style={styles.reportInlineButton}
                                     disabled={deleteContentBusyId === `announcement:${announcement.id}`}
                                   >
-                                    <Ionicons name="trash-outline" size={15} color={palette.dangerText} />
+                                    <Ionicons name="trash-outline" size={15} color={colors.dangerText} />
                                     <Text style={[styles.reportInlineText, styles.dangerInlineText]}>Delete</Text>
                                   </TouchableOpacity>
                                 ) : null}
                                 {announcement.user.id !== user?.id ? (
                                   <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
-                                    <Ionicons name="flag-outline" size={15} color={palette.slate} />
+                                    <Ionicons name="flag-outline" size={15} color={colors.sub} />
                                     <Text style={styles.reportInlineText}>Report</Text>
                                   </TouchableOpacity>
                                 ) : null}
@@ -1724,7 +1726,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 	                                pingTyping(value);
 	                              }}
                               placeholder="Message members..."
-                              placeholderTextColor={palette.slate}
+                              placeholderTextColor={colors.faint}
                               style={styles.chatComposerInput}
                             />
                             <TouchableOpacity
@@ -1735,7 +1737,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               accessibilityLabel="Send club message"
                               accessibilityState={{ disabled: sendBusy || !messageText.trim() }}
                             >
-                              <Ionicons name="paper-plane-outline" size={18} color={palette.white} />
+                              <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" />
                             </TouchableOpacity>
                           </View>
                         </>
@@ -1769,7 +1771,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 	                                pingOfficerTyping(value);
 	                              }}
                               placeholder="Coordinate with officers..."
-                              placeholderTextColor={palette.slate}
+                              placeholderTextColor={colors.faint}
                               style={styles.chatComposerInput}
                             />
                             <TouchableOpacity
@@ -1780,7 +1782,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               accessibilityLabel="Send officer message"
                               accessibilityState={{ disabled: officerSendBusy || !officerMessageText.trim() }}
                             >
-                              <Ionicons name="paper-plane-outline" size={18} color={palette.white} />
+                              <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" />
                             </TouchableOpacity>
                           </View>
                         </>
@@ -1805,7 +1807,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         onPress={() => setRolePanelOpen((current) => !current)}
                         activeOpacity={0.82}
                       >
-                        <Ionicons name="pricetags-outline" size={16} color={palette.scarlet} />
+                        <Ionicons name="pricetags-outline" size={16} color={colors.primary} />
                         <Text style={styles.manageRolesButtonText}>Settings</Text>
                       </TouchableOpacity>
                     ) : null}
@@ -1839,7 +1841,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                   <Ionicons
                                     name={enabled ? 'checkmark-circle' : 'ellipse-outline'}
                                     size={22}
-                                    color={enabled ? palette.scarlet : palette.slate}
+                                    color={enabled ? colors.primary : colors.sub}
                                   />
                                 </TouchableOpacity>
                               );
@@ -1862,7 +1864,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               value={roleNameDraft}
                               onChangeText={setRoleNameDraft}
                               placeholder="Hasn't paid dues"
-                              placeholderTextColor={palette.slate}
+                              placeholderTextColor={colors.faint}
                               style={styles.roleNameInput}
                             />
                             <TouchableOpacity
@@ -1870,7 +1872,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               onPress={() => void handleCreateRole()}
                               disabled={roleBusyId === 'create'}
                             >
-                              <Ionicons name="add" size={20} color={palette.white} />
+                              <Ionicons name="add" size={20} color="#FFFFFF" />
                             </TouchableOpacity>
                           </View>
                           {(club.roles ?? []).length ? (
@@ -1878,7 +1880,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               {(club.roles ?? []).map((role) => (
                                 <View key={role.id} style={styles.roleListItem}>
                                   <View style={styles.roleListIcon}>
-                                    <Ionicons name="at-outline" size={15} color={palette.scarlet} />
+                                    <Ionicons name="at-outline" size={15} color={colors.primary} />
                                   </View>
                                   <View style={styles.roleListCopy}>
                                     <Text style={styles.roleListTitle}>{role.name}</Text>
@@ -1889,7 +1891,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                     disabled={roleBusyId === `delete:${role.id}`}
                                     style={styles.roleIconButton}
                                   >
-                                    <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
+                                    <Ionicons name="trash-outline" size={16} color={colors.dangerText} />
                                   </TouchableOpacity>
                                 </View>
                               ))}
@@ -1912,7 +1914,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           <Text style={styles.cardTitle}>Bulk outreach</Text>
                           <Text style={styles.cardMeta}>Preview recipients before sending a notification.</Text>
                         </View>
-                        <Ionicons name={outreachOpen ? 'remove' : 'add'} size={20} color={palette.scarlet} />
+                        <Ionicons name={outreachOpen ? 'remove' : 'add'} size={20} color={colors.primary} />
                       </TouchableOpacity>
                       {outreachOpen ? (
                         <>
@@ -2007,7 +2009,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                             value={outreachText}
                             onChangeText={setOutreachText}
                             placeholder="Write a clear, specific message"
-                            placeholderTextColor={palette.slate}
+                            placeholderTextColor={colors.faint}
                             style={[styles.input, styles.inputTall]}
                             multiline
                           />
@@ -2080,7 +2082,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           }
                           activeOpacity={0.82}
                         >
-                          <Ionicons name="pricetag-outline" size={15} color={palette.scarlet} />
+                          <Ionicons name="pricetag-outline" size={15} color={colors.primary} />
                           <Text style={styles.memberRoleToggleText}>
                             {(member.customRoles ?? []).length ? 'Edit member tags' : 'Assign member tags'}
                           </Text>
@@ -2101,7 +2103,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                 <Ionicons
                                   name={assigned ? 'checkmark-circle' : 'add-circle-outline'}
                                   size={15}
-                                  color={assigned ? palette.white : palette.scarlet}
+                                  color={assigned ? "#FFFFFF" : colors.primary}
                                 />
                                 <Text style={[styles.roleAssignText, assigned ? styles.roleAssignTextActive : null]}>
                                   {role.name}
@@ -2188,21 +2190,21 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         value={meetingTitle}
                         onChangeText={setMeetingTitle}
                         placeholder="Meeting title"
-                        placeholderTextColor={palette.slate}
+                        placeholderTextColor={colors.faint}
                         style={styles.input}
                       />
                       <TextInput
                         value={meetingLocation}
                         onChangeText={setMeetingLocation}
                         placeholder="Location"
-                        placeholderTextColor={palette.slate}
+                        placeholderTextColor={colors.faint}
                         style={styles.input}
                       />
                       <TextInput
                         value={meetingDescription}
                         onChangeText={setMeetingDescription}
                         placeholder="Description"
-                        placeholderTextColor={palette.slate}
+                        placeholderTextColor={colors.faint}
                         style={[styles.input, styles.inputTall]}
                         multiline
                       />
@@ -2252,7 +2254,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                     <View key={meeting.id} style={styles.eventCard}>
                       <View style={styles.eventHead}>
                         <View style={styles.eventThumb}>
-                          <Ionicons name="calendar-outline" size={30} color={palette.scarlet} />
+                          <Ionicons name="calendar-outline" size={30} color={colors.primary} />
                         </View>
                         <View style={styles.eventCopy}>
                           <Text style={styles.eventDateLine}>
@@ -2269,7 +2271,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               onPress={() => void handleDeleteMeeting(meeting)}
                               disabled={deleteContentBusyId === `meeting:${meeting.id}`}
                             >
-                              <Ionicons name="trash-outline" size={16} color={palette.dangerText} />
+                              <Ionicons name="trash-outline" size={16} color={colors.dangerText} />
                             </TouchableOpacity>
                           ) : null}
                         </View>
@@ -2384,7 +2386,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                                 value={attendanceCodeDraft[meeting.id] ?? ''}
                                 onChangeText={(value) => setAttendanceCodeDraft((current) => ({ ...current, [meeting.id]: value.toUpperCase() }))}
                                 placeholder="Enter attendance code"
-                                placeholderTextColor={palette.slate}
+                                placeholderTextColor={colors.faint}
                                 style={styles.input}
                                 autoCapitalize="characters"
                               />
@@ -2471,6 +2473,8 @@ function SectionHeaderRow({
   actionLabel,
   onPress,
 }: SectionHeaderRowProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.sectionHeaderRow}>
       <Text style={styles.sectionHeaderTitle}>{title}</Text>
@@ -2494,10 +2498,12 @@ function QuickActionCard({
   body: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity style={styles.quickActionCard} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.quickActionIcon}>
-        <Ionicons name={icon} size={18} color={palette.scarlet} />
+        <Ionicons name={icon} size={18} color={colors.primary} />
       </View>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardBody}>{body}</Text>
@@ -2506,6 +2512,8 @@ function QuickActionCard({
 }
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>{label}</Text>
@@ -2524,12 +2532,14 @@ function RoleTargetPicker({
   selectedRoleIds: string[];
   onToggle: (roleId: string) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
 
   if (!roles.length) {
     return (
       <View style={styles.targetPickerEmpty}>
-        <Ionicons name="pricetags-outline" size={16} color={palette.slate} />
+        <Ionicons name="pricetags-outline" size={16} color={colors.sub} />
         <Text style={styles.cardMeta}>Add member tags from Members to target specific groups.</Text>
       </View>
     );
@@ -2554,7 +2564,7 @@ function RoleTargetPicker({
               onPress={() => onToggle(role.id)}
               activeOpacity={0.82}
             >
-              <Ionicons name="checkmark-circle" size={15} color={palette.white} />
+              <Ionicons name="checkmark-circle" size={15} color="#FFFFFF" />
               <Text style={[styles.targetRoleChipText, styles.targetRoleChipTextActive]}>
                 {role.name}
               </Text>
@@ -2567,7 +2577,7 @@ function RoleTargetPicker({
           activeOpacity={0.82}
           accessibilityLabel={open ? 'Close member tag picker' : 'Open member tag picker'}
         >
-          <Ionicons name={open ? 'remove' : 'add'} size={18} color={palette.scarlet} />
+          <Ionicons name={open ? 'remove' : 'add'} size={18} color={colors.primary} />
         </TouchableOpacity>
       </View>
       {open ? (
@@ -2585,7 +2595,7 @@ function RoleTargetPicker({
                 <Ionicons
                   name={selected ? 'checkmark-circle' : 'add-circle-outline'}
                   size={18}
-                  color={selected ? palette.scarlet : palette.slate}
+                  color={selected ? colors.primary : colors.sub}
                 />
               </TouchableOpacity>
             );
@@ -2613,6 +2623,8 @@ function MessageBubble({
   audience?: string;
   onReport?: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const isRight = align === 'right';
   return (
     <View style={[styles.bubbleRow, isRight && styles.bubbleRowRight]}>
@@ -2626,7 +2638,7 @@ function MessageBubble({
         <Text style={[styles.bubbleTime, isRight && styles.bubbleTimeRight]}>{time}</Text>
         {onReport ? (
           <TouchableOpacity onPress={onReport} style={[styles.reportInlineButton, isRight && styles.reportInlineRight]}>
-            <Ionicons name="flag-outline" size={15} color={palette.slate} />
+            <Ionicons name="flag-outline" size={15} color={colors.sub} />
             <Text style={styles.reportInlineText}>Report</Text>
           </TouchableOpacity>
         ) : null}
@@ -2635,7 +2647,7 @@ function MessageBubble({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   page: {
     flexGrow: 1,
     paddingBottom: spacing.xxl,
@@ -2665,7 +2677,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.90)',
+    backgroundColor: t.colors.surface,
   },
   coverArt: {
     alignItems: 'center',
@@ -2688,7 +2700,7 @@ const styles = StyleSheet.create({
     height: 92,
   },
   coverEmoji: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 48,
     lineHeight: 56,
   },
@@ -2696,12 +2708,12 @@ const styles = StyleSheet.create({
     marginTop: -38,
     marginHorizontal: spacing.md,
     borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.97)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   identityRow: {
     flexDirection: 'row',
@@ -2722,7 +2734,7 @@ const styles = StyleSheet.create({
     height: 76,
   },
   clubAvatarEmoji: {
-    color: palette.scarlet,
+    color: t.colors.primary,
     fontSize: 38,
     lineHeight: 46,
   },
@@ -2731,17 +2743,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clubTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 24,
     lineHeight: 30,
   },
   clubMeta: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
   },
   clubDescription: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -2752,21 +2764,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: 'rgba(248,248,248,0.95)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: 6,
   },
   summaryLabel: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 14,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   summaryValue: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
   },
   summarySubvalue: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   summaryAvatarRail: {
@@ -2779,15 +2791,15 @@ const styles = StyleSheet.create({
   },
   membershipButton: {
     borderRadius: 18,
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
     paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   membershipButtonText: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
   leaveClubButton: {
     alignSelf: 'flex-end',
@@ -2798,8 +2810,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   leaveClubButtonText: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
     fontSize: 13,
   },
   bodyWrap: {
@@ -2820,23 +2832,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionHeaderTitle: {
-    ...typography.h2,
+    ...t.typography.h2,
   },
   linkText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 14,
-    color: palette.scarlet,
+    color: t.colors.primary,
   },
   upcomingCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   upcomingThumb: {
     width: 92,
@@ -2850,17 +2862,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   upcomingTime: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     color: '#6754D7',
   },
   upcomingTitle: {
-    ...typography.title,
+    ...t.typography.title,
     fontSize: 20,
     lineHeight: 24,
   },
   upcomingLocation: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   upcomingAttendees: {
@@ -2870,20 +2882,20 @@ const styles = StyleSheet.create({
   },
   upcomingAttendeeCount: {
     marginLeft: 8,
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   goingButton: {
     borderRadius: radii.pill,
-    backgroundColor: '#6A56DA',
+    backgroundColor: t.colors.violet,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   goingButtonText: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
   quickActionRow: {
     flexDirection: 'row',
@@ -2892,12 +2904,12 @@ const styles = StyleSheet.create({
   quickActionCard: {
     flex: 1,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.xs,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   quickActionIcon: {
     width: 36,
@@ -2905,16 +2917,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    backgroundColor: t.colors.primarySoft,
   },
   announcementCard: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   announcementHead: {
     flexDirection: 'row',
@@ -2933,39 +2945,39 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cardTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   cardMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
   },
   targetMeta: {
-    ...typography.bodyStrong,
-    color: palette.moss,
+    ...t.typography.bodyStrong,
+    color: t.colors.green,
     fontSize: 12,
   },
   audiencePill: {
     maxWidth: 140,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    backgroundColor: t.colors.primarySoft,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   audiencePillText: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   cardBody: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   screenSectionTitle: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 32,
     lineHeight: 36,
   },
   screenSectionBody: {
-    ...typography.body,
+    ...t.typography.body,
   },
   membersHeader: {
     flexDirection: 'row',
@@ -2974,8 +2986,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   membersCount: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
     paddingBottom: 2,
   },
   manageRolesButton: {
@@ -2985,24 +2997,24 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(199, 59, 34, 0.18)',
-    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.glass,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   manageRolesButtonText: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    ...t.typography.bodyStrong,
+    color: t.colors.primary,
     fontSize: 13,
   },
   roleManagerPanel: {
     gap: spacing.sm,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.08)',
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   roleManagerHeader: {
     flexDirection: 'row',
@@ -3012,9 +3024,9 @@ const styles = StyleSheet.create({
   permissionPanel: {
     gap: spacing.sm,
     borderRadius: 18,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   permissionList: {
@@ -3026,22 +3038,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 16,
-    backgroundColor: palette.white,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   permissionRowActive: {
-    borderColor: 'rgba(199, 59, 34, 0.24)',
-    backgroundColor: 'rgba(199, 59, 34, 0.06)',
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.primarySoft,
   },
   permissionCopy: {
     flex: 1,
     gap: 2,
   },
   permissionTitle: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
   },
   roleCreateRow: {
     flexDirection: 'row',
@@ -3053,10 +3065,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.10)',
-    backgroundColor: '#F8FAF9',
+    borderColor: t.colors.borderStrong,
+    backgroundColor: t.colors.inputBg,
     paddingHorizontal: spacing.md,
-    color: palette.ink,
+    color: t.colors.ink,
     fontSize: 15,
   },
   roleCreateButton: {
@@ -3065,7 +3077,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
   },
   roleList: {
     gap: 8,
@@ -3075,9 +3087,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 16,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   roleListIcon: {
@@ -3086,14 +3098,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(199, 59, 34, 0.10)',
+    backgroundColor: t.colors.primarySoft,
   },
   roleListCopy: {
     flex: 1,
   },
   roleListTitle: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
   },
   roleIconButton: {
     width: 34,
@@ -3101,7 +3113,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.dangerBg,
+    backgroundColor: t.colors.dangerBg,
   },
   roleChipWrap: {
     flexDirection: 'row',
@@ -3110,12 +3122,12 @@ const styles = StyleSheet.create({
   },
   outreachPanel: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   manualPicker: {
     flexDirection: 'row',
@@ -3125,49 +3137,49 @@ const styles = StyleSheet.create({
   manualMemberChip: {
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.08)',
-    backgroundColor: '#F8FAF9',
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.inputBg,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   manualMemberChipActive: {
-    backgroundColor: palette.scarlet,
-    borderColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
   manualMemberText: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
     fontSize: 13,
   },
   manualMemberTextActive: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   previewBox: {
     borderRadius: 18,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: 5,
   },
   previewRecipient: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
     fontSize: 14,
   },
   successText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     color: '#247A4B',
   },
   memberRoleChip: {
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(16, 33, 43, 0.07)',
+    backgroundColor: t.colors.inputBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   memberRoleChipText: {
-    ...typography.label,
-    color: palette.ink,
+    ...t.typography.label,
+    color: t.colors.ink,
   },
   memberRoleToggle: {
     alignSelf: 'flex-start',
@@ -3177,14 +3189,14 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(199, 59, 34, 0.18)',
-    backgroundColor: 'rgba(199, 59, 34, 0.06)',
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.primarySoft,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   memberRoleToggleText: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    ...t.typography.bodyStrong,
+    color: t.colors.primary,
     fontSize: 13,
   },
   roleAssignWrap: {
@@ -3192,9 +3204,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     borderRadius: 16,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   roleAssignButton: {
@@ -3204,21 +3216,21 @@ const styles = StyleSheet.create({
     gap: 5,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(199, 59, 34, 0.22)',
+    borderColor: t.colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: palette.white,
+    backgroundColor: t.colors.surface,
   },
   roleAssignButtonActive: {
-    borderColor: palette.scarlet,
-    backgroundColor: palette.scarlet,
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.primary,
   },
   roleAssignText: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   roleAssignTextActive: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   chatHeader: {
     alignItems: 'flex-start',
@@ -3230,25 +3242,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: radii.pill,
-    backgroundColor: '#6A56DA',
+    backgroundColor: t.colors.violet,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   newChatButtonText: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
   chatHubCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   chatHubIcon: {
     width: 44,
@@ -3256,21 +3268,21 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(199, 59, 34, 0.08)',
+    backgroundColor: t.colors.primarySoft,
   },
   chatHubCopy: {
     flex: 1,
     gap: 2,
   },
   chatAudience: {
-    ...typography.label,
-    color: palette.slate,
+    ...t.typography.label,
+    color: t.colors.sub,
   },
   chatHubTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   chatHubMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
   },
   chatHubRight: {
@@ -3283,13 +3295,13 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.scarlet,
+    backgroundColor: t.colors.primary,
     paddingHorizontal: 6,
   },
   chatBadgeText: {
-    color: palette.white,
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
   chatConversation: {
     gap: spacing.sm,
@@ -3305,29 +3317,29 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
   },
   chatConversationTitleBlock: {
     flex: 1,
     gap: 2,
   },
   chatConversationTitle: {
-    ...typography.title,
+    ...t.typography.title,
   },
   chatConversationMeta: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 13,
   },
   composerCard: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   composerHeader: {
     flexDirection: 'row',
@@ -3343,9 +3355,9 @@ const styles = StyleSheet.create({
   targetPicker: {
     gap: spacing.xs,
     borderRadius: 16,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   targetPickerEmpty: {
@@ -3354,9 +3366,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 16,
-    backgroundColor: '#F8FAF9',
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.sm,
   },
   targetPickerHeader: {
@@ -3365,14 +3377,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   targetPickerTitle: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
-    color: palette.ink,
+    color: t.colors.ink,
   },
   targetPickerCount: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   targetRoleChip: {
     minHeight: 34,
@@ -3381,21 +3393,21 @@ const styles = StyleSheet.create({
     gap: 5,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(199, 59, 34, 0.22)',
-    backgroundColor: palette.white,
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.surface,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   targetRoleChipActive: {
-    borderColor: palette.scarlet,
-    backgroundColor: palette.scarlet,
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.primary,
   },
   targetRoleChipText: {
-    ...typography.label,
-    color: palette.scarlet,
+    ...t.typography.label,
+    color: t.colors.primary,
   },
   targetRoleChipTextActive: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   targetRoleAddButton: {
     width: 34,
@@ -3404,13 +3416,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(199, 59, 34, 0.22)',
-    backgroundColor: palette.white,
+    borderColor: t.colors.primary,
+    backgroundColor: t.colors.surface,
   },
   targetRoleMenu: {
     gap: 6,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 33, 43, 0.06)',
+    borderTopColor: t.colors.border,
     paddingTop: spacing.xs,
   },
   targetRoleMenuItem: {
@@ -3420,16 +3432,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
     borderRadius: 12,
-    backgroundColor: palette.white,
+    backgroundColor: t.colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: 8,
   },
   targetRoleMenuItemActive: {
-    backgroundColor: '#FFF1F0',
+    backgroundColor: t.colors.dangerBg,
   },
   targetRoleMenuText: {
-    ...typography.bodyStrong,
-    color: palette.ink,
+    ...t.typography.bodyStrong,
+    color: t.colors.ink,
   },
   bubbleRow: {
     flexDirection: 'row',
@@ -3447,37 +3459,37 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   bubbleName: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
   },
   bubbleAudience: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   bubble: {
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   bubbleRight: {
-    backgroundColor: '#6A56DA',
+    backgroundColor: t.colors.violet,
     borderColor: '#6A56DA',
   },
   bubbleText: {
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   bubbleTextRight: {
-    color: palette.white,
+    color: '#FFFFFF',
   },
   bubbleTime: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 12,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   bubbleTimeRight: {
     textAlign: 'right',
@@ -3493,10 +3505,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   reportInlineText: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 12,
     lineHeight: 16,
-    color: palette.slate,
+    color: t.colors.sub,
   },
   inlineActionRow: {
     flexDirection: 'row',
@@ -3505,31 +3517,31 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   dangerInlineText: {
-    color: palette.dangerText,
+    color: t.colors.dangerText,
   },
   typingText: {
-    ...typography.body,
-    color: palette.scarlet,
+    ...t.typography.body,
+    color: t.colors.primary,
   },
   chatComposerDock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: 8,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   chatComposerInput: {
     flex: 1,
     borderRadius: radii.pill,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: t.colors.surfaceAlt,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   sendFab: {
     width: 40,
@@ -3537,19 +3549,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6A56DA',
+    backgroundColor: t.colors.violet,
   },
   sendFabDisabled: {
     opacity: 0.42,
   },
   memberCard: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   memberTop: {
     flexDirection: 'row',
@@ -3573,31 +3585,31 @@ const styles = StyleSheet.create({
   },
   calendarExportCard: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.md,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   calendarExportCopy: {
     gap: 4,
   },
   datePickerCard: {
     borderRadius: 18,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: t.colors.surfaceAlt,
     padding: spacing.sm,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
   },
   eventCard: {
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    ...shadows.card,
+    ...t.shadows.card,
   },
   eventHead: {
     flexDirection: 'row',
@@ -3613,7 +3625,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF1F0',
+    backgroundColor: t.colors.dangerBg,
   },
   eventThumb: {
     width: 76,
@@ -3621,29 +3633,29 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EFE7DA',
+    backgroundColor: t.colors.surfaceAlt,
   },
   eventCopy: {
     flex: 1,
     gap: 3,
   },
   eventDateLine: {
-    ...typography.bodyStrong,
+    ...t.typography.bodyStrong,
     fontSize: 13,
     color: '#6754D7',
   },
   eventTitle: {
-    ...typography.title,
+    ...t.typography.title,
     fontSize: 21,
     lineHeight: 25,
   },
   eventLocation: {
-    ...typography.body,
+    ...t.typography.body,
     fontSize: 14,
   },
   eventGoing: {
-    ...typography.bodyStrong,
-    color: palette.scarlet,
+    ...t.typography.bodyStrong,
+    color: t.colors.primary,
     alignSelf: 'center',
   },
   rsvpRow: {
@@ -3658,24 +3670,24 @@ const styles = StyleSheet.create({
   },
   attendanceBox: {
     borderRadius: 18,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: t.colors.surfaceAlt,
     padding: spacing.md,
     gap: spacing.sm,
   },
   attendanceCodeBlock: {
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: t.colors.glass,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.08)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: 6,
   },
   attendanceCodeText: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 36,
     lineHeight: 42,
     letterSpacing: 2,
-    color: palette.ink,
+    color: t.colors.ink,
   },
   eventButtonRow: {
     flexDirection: 'row',
@@ -3691,27 +3703,27 @@ const styles = StyleSheet.create({
     width: '48%',
     minWidth: 150,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: 4,
   },
   metricLabel: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
     fontSize: 13,
   },
   metricValue: {
-    ...typography.h1,
+    ...t.typography.h1,
     fontSize: 25,
     lineHeight: 30,
   },
   analyticsPanel: {
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -3725,8 +3737,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   analyticsCount: {
-    ...typography.bodyStrong,
-    color: palette.slate,
+    ...t.typography.bodyStrong,
+    color: t.colors.sub,
     fontSize: 13,
     textAlign: 'right',
   },
@@ -3741,20 +3753,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   errorText: {
-    ...typography.bodyStrong,
-    color: palette.dangerText,
+    ...t.typography.bodyStrong,
+    color: t.colors.dangerText,
   },
   input: {
     borderRadius: 18,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: t.colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: 'rgba(16, 33, 43, 0.06)',
+    borderColor: t.colors.border,
     padding: spacing.md,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   inputTall: {
     minHeight: 92,
     textAlignVertical: 'top',
   },
-});
+}));

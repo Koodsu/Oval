@@ -1,5 +1,6 @@
 module.exports = {
   preset: 'jest-expo',
+  resolver: 'react-native-worklets/jest/resolver.js',
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo/vector-icons)',
   ],

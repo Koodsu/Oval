@@ -39,19 +39,19 @@ model User {
   instagramHandle         String?
   interestTags            String?
 
-  podMembers           PodMember[]
-  messages             Message[]
-  messageReactions     MessageReaction[]
+  podMembers             PodMember[]
+  messages               Message[]
+  messageReactions       MessageReaction[]
   directMessageReactions DirectMessageReaction[]
-  createdPods          Pod[]
-  blocksGiven       Block[]        @relation("Blocker")
-  blocksReceived    Block[]        @relation("Blocked")
-  reportsGiven      Report[]       @relation("ReportReporter")
-  reportsReceived   Report[]       @relation("ReportTarget")
-  noShowsGiven      NoShowReport[] @relation("NoShowReporter")
-  noShowsReceived   NoShowReport[] @relation("NoShowTarget")
-  recaps            PodRecap[]
-  waitlistEntries   PodWaitlist[]
+  createdPods            Pod[]
+  blocksGiven            Block[]                 @relation("Blocker")
+  blocksReceived         Block[]                 @relation("Blocked")
+  reportsGiven           Report[]                @relation("ReportReporter")
+  reportsReceived        Report[]                @relation("ReportTarget")
+  noShowsGiven           NoShowReport[]          @relation("NoShowReporter")
+  noShowsReceived        NoShowReport[]          @relation("NoShowTarget")
+  recaps                 PodRecap[]
+  waitlistEntries        PodWaitlist[]
 
   sentFriendRequests     FriendRequest[]       @relation("FriendRequestSender")
   receivedFriendRequests FriendRequest[]       @relation("FriendRequestReceiver")
@@ -62,15 +62,15 @@ model User {
   directMessages         DirectMessage[]
   sentPodInvites         PodInvite[]           @relation("PodInviteSender")
   receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
-  clubsCreated             Club[]                     @relation("ClubCreator")
-  clubMemberships          ClubMember[]
-  clubRolesCreated          ClubRole[]                 @relation("ClubRoleCreator")
-  clubMeetingsCreated      ClubMeeting[]              @relation("MeetingCreator")
-  clubMeetingAttendees     ClubMeetingAttendee[]
-  clubAnnouncements        ClubAnnouncement[]
-  clubMessages             ClubMessage[]
-  clubOfficerMessages      ClubOfficerMessage[]
-  analyticsEvents          AnalyticsEvent[]
+  clubsCreated           Club[]                @relation("ClubCreator")
+  clubMemberships        ClubMember[]
+  clubRolesCreated       ClubRole[]            @relation("ClubRoleCreator")
+  clubMeetingsCreated    ClubMeeting[]         @relation("MeetingCreator")
+  clubMeetingAttendees   ClubMeetingAttendee[]
+  clubAnnouncements      ClubAnnouncement[]
+  clubMessages           ClubMessage[]
+  clubOfficerMessages    ClubOfficerMessage[]
+  analyticsEvents        AnalyticsEvent[]
 }
 
 model Block {
@@ -101,20 +101,20 @@ model Activity {
 // PodStatus values: "FORMING" | "LOCKED" | "COMPLETED"
 
 model Pod {
-  id           String   @id @default(uuid())
-  activityId   String
-  meetupTime   DateTime
-  location     String
-  locationType     String    @default("public") // "public" | "private"
-  minMembers       Int       @default(2)
-  maxMembers       Int       @default(4)
-  status           String    @default("FORMING")
-  creatorId        String?
-  createdAt        DateTime  @default(now())
+  id                   String    @id @default(uuid())
+  activityId           String
+  meetupTime           DateTime
+  location             String
+  locationType         String    @default("public") // "public" | "private"
+  minMembers           Int       @default(2)
+  maxMembers           Int       @default(4)
+  status               String    @default("FORMING")
+  creatorId            String?
+  createdAt            DateTime  @default(now())
   meetupReminderSentAt DateTime?
-  recapNotifiedAt  DateTime?
-  latitude         Float?
-  longitude        Float?
+  recapNotifiedAt      DateTime?
+  latitude             Float?
+  longitude            Float?
 
   activity      Activity       @relation(fields: [activityId], references: [id], onDelete: Restrict)
   creator       User?          @relation(fields: [creatorId], references: [id], onDelete: SetNull)
@@ -178,29 +178,29 @@ model MessageReaction {
 }
 
 model Report {
-  id           String    @id @default(uuid())
-  reporterId   String?
-  targetUserId String?
-  podId        String?
-  messageId    String?
-  directMessageId String?
-  clubId       String?
-  clubMessageId String?
-  clubOfficerMessageId String?
-  clubAnnouncementId String?
-  targetType   String?
-  reason       String
-  severity     String    @default("P2")
-  details      String?
-  reportedContent String?
-  status       String    @default("OPEN")
-  adminNotes   String?
+  id                    String    @id @default(uuid())
+  reporterId            String?
+  targetUserId          String?
+  podId                 String?
+  messageId             String?
+  directMessageId       String?
+  clubId                String?
+  clubMessageId         String?
+  clubOfficerMessageId  String?
+  clubAnnouncementId    String?
+  targetType            String?
+  reason                String
+  severity              String    @default("P2")
+  details               String?
+  reportedContent       String?
+  status                String    @default("OPEN")
+  adminNotes            String?
   moderationEmailSentAt DateTime?
-  contentRemovedAt DateTime?
-  accountAction String?
-  accountActionAt DateTime?
-  createdAt    DateTime  @default(now())
-  resolvedAt   DateTime?
+  contentRemovedAt      DateTime?
+  accountAction         String?
+  accountActionAt       DateTime?
+  createdAt             DateTime  @default(now())
+  resolvedAt            DateTime?
 
   reporter User?    @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   target   User?    @relation("ReportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
@@ -303,13 +303,13 @@ model Friendship {
 }
 
 model DirectMessageThread {
-  id               String    @id @default(uuid())
-  userAId          String
-  userBId          String
-  userALastReadAt  DateTime?
-  userBLastReadAt  DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  userAId         String
+  userBId         String
+  userALastReadAt DateTime?
+  userBLastReadAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   userA    User            @relation("DMThreadUserA", fields: [userAId], references: [id], onDelete: Cascade)
   userB    User            @relation("DMThreadUserB", fields: [userBId], references: [id], onDelete: Cascade)
@@ -321,29 +321,29 @@ model DirectMessageThread {
 }
 
 model DirectMessage {
-  id         String   @id @default(uuid())
-  threadId   String
-  senderId   String
-  content    String
-  replyToId  String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  threadId  String
+  senderId  String
+  content   String
+  replyToId String?
+  createdAt DateTime @default(now())
 
-  thread     DirectMessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sender     User                  @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  replyTo    DirectMessage?        @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies    DirectMessage[]       @relation("DMReplies")
-  reactions  DirectMessageReaction[]
+  thread    DirectMessageThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo   DirectMessage?          @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   DirectMessage[]         @relation("DMReplies")
+  reactions DirectMessageReaction[]
 
   @@index([threadId, createdAt])
   @@index([senderId])
 }
 
 model DirectMessageReaction {
-  id               String   @id @default(uuid())
-  directMessageId  String
-  userId           String
-  emoji            String
-  createdAt        DateTime @default(now())
+  id              String   @id @default(uuid())
+  directMessageId String
+  userId          String
+  emoji           String
+  createdAt       DateTime @default(now())
 
   directMessage DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -408,25 +408,25 @@ model PodWaitlist {
 }
 
 model Club {
-  id          String   @id @default(uuid())
-  name        String
-  description String
-  category    String
-  emoji       String   @default("🎓")
-  avatarUrl   String?
-  isVerified  Boolean  @default(false)
-  isPublic    Boolean  @default(true)
-  university  String   @default("OSU")
-  createdById String
-  officerPermissions String @default("[]")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  name               String
+  description        String
+  category           String
+  emoji              String   @default("🎓")
+  avatarUrl          String?
+  isVerified         Boolean  @default(false)
+  isPublic           Boolean  @default(true)
+  university         String   @default("OSU")
+  createdById        String
+  officerPermissions String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  createdBy     User               @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  members       ClubMember[]
-  roles         ClubRole[]
-  meetings      ClubMeeting[]
-  announcements ClubAnnouncement[]
+  createdBy       User                 @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members         ClubMember[]
+  roles           ClubRole[]
+  meetings        ClubMeeting[]
+  announcements   ClubAnnouncement[]
   messages        ClubMessage[]
   officerMessages ClubOfficerMessage[]
 
@@ -440,8 +440,8 @@ model ClubMember {
   role     String   @default("MEMBER")
   joinedAt DateTime @default(now())
 
-  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club        Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   customRoles ClubMemberRole[]
 
   @@unique([clubId, userId])
@@ -467,12 +467,12 @@ model ClubRole {
 }
 
 model ClubMemberRole {
-  id        String   @id @default(uuid())
-  clubId    String
-  memberId  String
-  roleId    String
+  id           String   @id @default(uuid())
+  clubId       String
+  memberId     String
+  roleId       String
   assignedById String
-  createdAt DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   member ClubMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   role   ClubRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -483,28 +483,28 @@ model ClubMemberRole {
 }
 
 model ClubMeeting {
-  id          String   @id @default(uuid())
-  clubId      String
-  title       String
-  description String?
-  location    String
-  meetingTime DateTime
-  isPublic        Boolean  @default(true)
-  visibility      String   @default("PUBLIC")
-  targetRoleIds   String?
-  createdById     String
-  createdAt       DateTime @default(now())
-  latitude        Float?
-  longitude       Float?
-  attendanceOpen  Boolean  @default(false)
-  attendanceCode  String?
+  id                 String    @id @default(uuid())
+  clubId             String
+  title              String
+  description        String?
+  location           String
+  meetingTime        DateTime
+  isPublic           Boolean   @default(true)
+  visibility         String    @default("PUBLIC")
+  targetRoleIds      String?
+  createdById        String
+  createdAt          DateTime  @default(now())
+  latitude           Float?
+  longitude          Float?
+  attendanceOpen     Boolean   @default(false)
+  attendanceCode     String?
   rsvpReminderSentAt DateTime?
   rsvpReminderStatus String?
-  rsvpReminderCount  Int      @default(0)
+  rsvpReminderCount  Int       @default(0)
   rsvpReminderError  String?
 
-  club      Club                    @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  createdBy User                    @relation("MeetingCreator", fields: [createdById], references: [id])
+  club      Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy User                  @relation("MeetingCreator", fields: [createdById], references: [id])
   attendees ClubMeetingAttendee[]
 
   @@index([clubId, meetingTime])
@@ -528,13 +528,13 @@ model ClubMeetingAttendee {
 }
 
 model ClubAnnouncement {
-  id        String   @id @default(uuid())
-  clubId    String
-  userId    String
-  content   String
-  visibility String  @default("PUBLIC")
+  id            String   @id @default(uuid())
+  clubId        String
+  userId        String
+  content       String
+  visibility    String   @default("PUBLIC")
   targetRoleIds String?
-  createdAt DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -5,7 +5,7 @@ import { deleteAvatar, updateProfile, uploadAvatar } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Chip, Hero, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
 import { INTEREST_TAGS } from '../constants/interestTags';
-import { palette, radii, spacing, typography } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
@@ -13,6 +13,8 @@ import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
 export default function EditProfileScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, updateUser } = useAuth();
   const [classYear, setClassYear] = useState(user?.classYear ?? '');
   const [major, setMajor] = useState(user?.major ?? '');
@@ -144,19 +146,21 @@ function Field({
   placeholder: string;
   multiline?: boolean;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         {...props}
-        placeholderTextColor={palette.slate}
+        placeholderTextColor={colors.faint}
         style={[styles.input, props.multiline && styles.inputMultiline]}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingVertical: spacing.lg,
@@ -176,17 +180,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   label: {
-    ...typography.label,
+    ...t.typography.label,
   },
   input: {
     borderRadius: radii.md,
-    backgroundColor: palette.cream,
+    backgroundColor: t.colors.inputBg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: t.colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    ...typography.body,
-    color: palette.ink,
+    ...t.typography.body,
+    color: t.colors.ink,
   },
   inputMultiline: {
     minHeight: 100,
@@ -200,4 +204,4 @@ const styles = StyleSheet.create({
   save: {
     marginTop: spacing.md,
   },
-});
+}));

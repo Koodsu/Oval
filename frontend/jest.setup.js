@@ -41,3 +41,24 @@ jest.mock('@expo/vector-icons', () => {
     Feather: Icon,
   };
 });
+
+// Mock reanimated + gesture-handler + worklets (added with the design overhaul)
+require('react-native-gesture-handler/jestSetup');
+
+// Mock expo-font / google fonts (fonts resolve instantly in tests)
+jest.mock('expo-font', () => ({
+  useFonts: () => [true, null],
+  loadAsync: jest.fn().mockResolvedValue(undefined),
+  isLoaded: jest.fn().mockReturnValue(true),
+}));
+
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn().mockResolvedValue(undefined),
+  hideAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('expo-blur', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return { BlurView: (props) => React.createElement(View, props, props.children) };
+});
