@@ -11,7 +11,9 @@ import { RootStackParamList } from '../../App';
 import {
   Entrance,
   EmptyState,
+  GradientEdgeCard,
   Hero,
+  LiveDot,
   Panel,
   PrimaryButton,
   Screen,
@@ -21,7 +23,8 @@ import {
   UserAvatar,
 } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { CATEGORY_META } from '../constants/categories';
+import { DOCK_CLEARANCE, Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 import { formatDateTime, formatTime } from '../utils/format';
 import { getFeaturedActivities, sortUpcomingPods } from '../utils/experience';
 import { useLocationPermission } from '../hooks/useLocationPermission';
@@ -35,6 +38,14 @@ function greetingForNow(): string {
   if (hour < 12) return 'Morning';
   if (hour < 17) return 'Afternoon';
   return 'Evening';
+}
+
+function datelineForNow(): string {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
 const CATEGORY_TONES = ['violet', 'teal', 'amber', 'pink', 'blue', 'green'] as const;
@@ -70,7 +81,6 @@ export default function HomeScreen() {
   const [clubsToday, setClubsToday] = useState<ClubMeetingToday[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [agendaExpanded, setAgendaExpanded] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -157,6 +167,7 @@ export default function HomeScreen() {
 
   const featuredActivities = useMemo(() => getFeaturedActivities(activities, pods), [activities, pods]);
   const activePods = useMemo(() => sortUpcomingPods(pods).filter((pod) => pod.status === 'FORMING').slice(0, 4), [pods]);
+  const openPodCount = useMemo(() => pods.filter((pod) => pod.status === 'FORMING').length, [pods]);
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null).slice(0, 10),
     [pods]
@@ -209,10 +220,11 @@ export default function HomeScreen() {
           />
         }
       >
+        {/* Masthead */}
         <Entrance index={0}>
-          <View style={styles.greetingRow}>
-            <View style={styles.greetingCopy}>
-              <Text style={styles.greetingEyebrow}>Today on campus</Text>
+          <View style={styles.masthead}>
+            <View style={styles.mastheadCopy}>
+              <Text style={styles.dateline}>{datelineForNow()}</Text>
               <Text style={styles.greeting} numberOfLines={1}>
                 {greetingForNow()}, {firstName}
               </Text>
@@ -223,13 +235,32 @@ export default function HomeScreen() {
               accessibilityLabel="Open profile"
               accessibilityHint="Opens your profile and settings"
             >
-              <UserAvatar name={user?.name ?? 'User'} avatarUrl={user?.avatarUrl} size={42} ring />
+              <UserAvatar name={user?.name ?? 'User'} avatarUrl={user?.avatarUrl} size={44} ring />
             </Tap>
           </View>
         </Entrance>
 
+        {/* Live campus pulse strip */}
+        <Entrance index={1}>
+          <View style={styles.pulseStrip}>
+            <View style={styles.pulseCell}>
+              <LiveDot size={7} />
+              <Text style={styles.pulseText}>
+                {loaded ? `${openPodCount} pod${openPodCount === 1 ? '' : 's'} open now` : 'Reading campus…'}
+              </Text>
+            </View>
+            <View style={styles.pulseDivider} />
+            <View style={styles.pulseCell}>
+              <Ionicons name="calendar-outline" size={13} color={colors.violet} />
+              <Text style={styles.pulseText}>
+                {loaded ? `${clubsToday.length} club meeting${clubsToday.length === 1 ? '' : 's'} today` : '—'}
+              </Text>
+            </View>
+          </View>
+        </Entrance>
+
         {(!granted && canAskAgain) || (notificationPermissionLoaded && !notificationsGranted) ? (
-          <Entrance index={1}>
+          <Entrance index={2}>
             <View style={styles.utilityRow}>
               {!granted && canAskAgain ? (
                 <TouchableOpacity
@@ -261,75 +292,66 @@ export default function HomeScreen() {
           </Entrance>
         ) : null}
 
-        <Entrance index={1}>
+        {/* Tonight, as a timeline */}
+        <Entrance index={2}>
           <Hero
-            eyebrow="Your day"
+            eyebrow="Today's plan"
             title={agendaItems.length ? 'You have plans brewing.' : 'A blank slate kind of day.'}
-            subtitle="A quick read on what you have lined up and what campus is doing around you."
+            subtitle={
+              agendaItems.length
+                ? undefined
+                : 'Nothing on the board yet — campus is full of reasons to leave your room.'
+            }
           >
-            <View style={styles.heroAgenda}>
-              <TouchableOpacity
-                style={styles.agendaToggle}
-                activeOpacity={0.9}
-                onPress={() => setAgendaExpanded((current) => !current)}
-              >
-                <View style={styles.agendaHeading}>
-                  <View style={styles.agendaIcon}>
-                    <Ionicons name="calendar-outline" size={16} color="#FFB38A" />
-                  </View>
-                  <View style={styles.agendaCopy}>
-                    <Text style={styles.agendaTitle}>Today&apos;s plan</Text>
-                    <Text style={styles.agendaBody}>
-                      {agendaItems.length
-                        ? `${agendaItems[0].kind === 'pod' ? 'Next pod' : 'Next meeting'} at ${formatTime(agendaItems[0].time)}`
-                        : 'Nothing scheduled yet'}
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons
-                  name={agendaExpanded ? 'remove-outline' : 'add-outline'}
-                  size={20}
-                  color="rgba(255,255,255,0.9)"
+            {agendaItems.length ? (
+              <View style={styles.timeline}>
+                {agendaItems.map((item, itemIndex) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.timelineRow}
+                    onPress={item.onPress}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title} at ${formatTime(item.time)}`}
+                  >
+                    <Text style={styles.timelineTime}>{formatTime(item.time)}</Text>
+                    <View style={styles.timelineSpine}>
+                      <View style={styles.timelineNode} />
+                      {itemIndex < agendaItems.length - 1 ? (
+                        <View style={styles.timelineTrack} />
+                      ) : null}
+                    </View>
+                    <View style={styles.timelineBody}>
+                      <Text style={styles.timelineTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={styles.timelineDetail} numberOfLines={1}>{item.detail}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.45)" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.heroAction}>
+                <PrimaryButton
+                  label="Find tonight's plan"
+                  icon="sparkles-outline"
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
                 />
-              </TouchableOpacity>
-
-              {agendaExpanded ? (
-                agendaItems.length ? (
-                  <View style={styles.agendaList}>
-                    {agendaItems.map((item) => (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={styles.agendaItem}
-                        onPress={item.onPress}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.agendaTimePill}>
-                          <Text style={styles.agendaTime}>{formatTime(item.time)}</Text>
-                        </View>
-                        <View style={styles.feedText}>
-                          <Text style={styles.agendaItemTitle}>{item.title}</Text>
-                          <Text style={styles.agendaItemBody} numberOfLines={1}>{item.detail}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.agendaEmpty}>
-                    <Text style={styles.agendaItemBody}>No plans on the board yet. Explore to find something worth showing up for.</Text>
-                  </View>
-                )
-              ) : null}
-            </View>
+              </View>
+            )}
           </Hero>
         </Entrance>
 
-        <Entrance index={2}>
+        {/* Campus map */}
+        <Entrance index={3}>
           {mappablePods.length ? (
             <Panel style={styles.mapPanel}>
               <View style={styles.mapHeader}>
-                <View>
-                  <Text style={styles.mapTitle}>Campus activity map</Text>
-                  <Text style={styles.mapBody}>Tap a pod marker to navigate to its detail.</Text>
+                <View style={styles.mapHeading}>
+                  <View style={styles.mapTitleRow}>
+                    <LiveDot size={7} color={colors.primary} />
+                    <Text style={styles.mapTitle}>Live on campus</Text>
+                  </View>
+                  <Text style={styles.mapBody}>Tap a pin to jump into that pod.</Text>
                 </View>
                 <View style={styles.mapIconBadge}>
                   <Ionicons name="navigate-outline" size={18} color={colors.primary} />
@@ -373,7 +395,8 @@ export default function HomeScreen() {
           )}
         </Entrance>
 
-        <Entrance index={3} style={styles.section}>
+        {/* Your next move */}
+        <Entrance index={4} style={styles.section}>
           <SectionHeader
             title="Your next move"
             actionLabel="All pods"
@@ -382,11 +405,20 @@ export default function HomeScreen() {
           {!loaded ? (
             <SkeletonCard />
           ) : yourNextPod ? (
-            <Panel onPress={() => navigation.navigate('PodDetail', { podId: yourNextPod.id })}>
+            <GradientEdgeCard
+              onPress={() => navigation.navigate('PodDetail', { podId: yourNextPod.id })}
+              accessibilityLabel={yourNextPod.activity?.title ?? 'Upcoming pod'}
+            >
               <View style={styles.nextPodTop}>
                 <View style={styles.timeBadge}>
                   <Ionicons name="time-outline" size={13} color={colors.primarySoftText} />
                   <Text style={styles.timeBadgeLabel}>{formatDateTime(yourNextPod.meetupTime)}</Text>
+                </View>
+                <View style={styles.nextPodCount}>
+                  <Ionicons name="people-outline" size={13} color={colors.faint} />
+                  <Text style={styles.nextPodCountText}>
+                    {yourNextPod.members.length}/{yourNextPod.maxMembers}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.nextPodTitle}>{yourNextPod.activity?.title ?? 'Upcoming pod'}</Text>
@@ -397,13 +429,14 @@ export default function HomeScreen() {
               <View style={styles.inlineAction}>
                 <PrimaryButton label="Open pod" icon="arrow-forward" onPress={() => navigation.navigate('PodDetail', { podId: yourNextPod.id })} />
               </View>
-            </Panel>
+            </GradientEdgeCard>
           ) : (
             <EmptyState icon="sparkles-outline" title="No pod lined up yet" body="Use Explore to jump into the live campus flow or start one from an activity page." />
           )}
         </Entrance>
 
-        <Entrance index={4} style={styles.section}>
+        {/* Open pods */}
+        <Entrance index={5} style={styles.section}>
           <SectionHeader title="Open pods" actionLabel="Explore" onActionPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })} />
           {!loaded ? (
             <>
@@ -418,6 +451,9 @@ export default function HomeScreen() {
               accessibilityLabel={pod.activity?.title ?? 'Pod'}
             >
               <View style={styles.feedRow}>
+                <View style={styles.feedTimeRail}>
+                  <Text style={styles.feedTimeText}>{formatTime(pod.meetupTime)}</Text>
+                </View>
                 <View style={styles.feedText}>
                   <Text style={styles.cardTitle}>{pod.activity?.title ?? 'Pod'}</Text>
                   <View style={styles.locationRow}>
@@ -425,15 +461,14 @@ export default function HomeScreen() {
                     <Text style={styles.cardBody} numberOfLines={1}>{pod.location}</Text>
                   </View>
                 </View>
-                <View style={styles.feedTimePill}>
-                  <Text style={styles.feedMeta}>{formatTime(pod.meetupTime)}</Text>
-                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.faint} />
               </View>
             </Tap>
           )) : <EmptyState icon="moon-outline" title="The feed is quiet" body="When new pods spin up, they’ll land here first." />}
         </Entrance>
 
-        <Entrance index={5} style={styles.section}>
+        {/* Activity rail */}
+        <Entrance index={6} style={styles.section}>
           <SectionHeader title="Activities with open pods" />
           {!loaded ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -447,6 +482,7 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activityRail}>
               {featuredActivities.map((activity) => {
                 const tone = categoryTone(theme, activity.category);
+                const meta = CATEGORY_META[activity.category];
                 return (
                   <Tap
                     key={activity.id}
@@ -454,8 +490,13 @@ export default function HomeScreen() {
                     onPress={() => navigation.navigate('ActivityPods', { activity })}
                     accessibilityLabel={activity.title}
                   >
-                    <View style={[styles.categoryPill, { backgroundColor: tone.bg }]}>
-                      <Text style={[styles.categoryPillLabel, { color: tone.text }]}>{activity.category}</Text>
+                    <View style={styles.activityTopRow}>
+                      <View style={[styles.activityIcon, { backgroundColor: tone.bg }]}>
+                        <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={18} color={tone.text} />
+                      </View>
+                      <View style={[styles.categoryPill, { backgroundColor: tone.bg }]}>
+                        <Text style={[styles.categoryPillLabel, { color: tone.text }]}>{activity.category}</Text>
+                      </View>
                     </View>
                     <Text style={styles.cardTitle}>{activity.title}</Text>
                     <Text style={styles.cardBody} numberOfLines={2}>{activity.description}</Text>
@@ -466,7 +507,8 @@ export default function HomeScreen() {
           )}
         </Entrance>
 
-        <Entrance index={6} style={styles.section}>
+        {/* Clubs today */}
+        <Entrance index={7} style={styles.section}>
           <SectionHeader title="Club meetings today" />
           {!loaded ? (
             <>
@@ -504,28 +546,58 @@ const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    paddingBottom: DOCK_CLEARANCE,
     gap: spacing.md,
   },
-  greetingRow: {
+  masthead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: spacing.md,
     paddingHorizontal: 2,
-    minHeight: 50,
+    minHeight: 54,
   },
-  greetingCopy: {
+  mastheadCopy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
-  greetingEyebrow: {
+  dateline: {
     ...t.typography.label,
     color: t.colors.primary,
   },
   greeting: {
-    ...t.typography.h1,
-    fontSize: 25,
+    ...t.typography.display,
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  pulseStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    backgroundColor: t.colors.glass,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    ...t.shadows.subtle,
+  },
+  pulseCell: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    flexShrink: 1,
+  },
+  pulseDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: t.colors.borderStrong,
+  },
+  pulseText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12.5,
+    color: t.colors.sub,
+    flexShrink: 1,
   },
   utilityRow: {
     flexDirection: 'row' as const,
@@ -546,90 +618,61 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontSize: 13,
     color: t.colors.primarySoftText,
   },
-  heroAgenda: {
-    marginTop: spacing.sm,
+  timeline: {
+    marginTop: spacing.md,
+  },
+  timelineRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'stretch' as const,
     gap: spacing.sm,
   },
-  agendaToggle: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    gap: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    padding: spacing.sm,
+  timelineTime: {
+    width: 64,
+    paddingTop: 1,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    letterSpacing: 0.4,
+    color: '#FFB38A',
+    textAlign: 'right' as const,
   },
-  agendaHeading: {
-    flexDirection: 'row' as const,
+  timelineSpine: {
+    width: 12,
     alignItems: 'center' as const,
-    gap: spacing.sm,
+  },
+  timelineNode: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 4,
+    backgroundColor: '#FF8A3D',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  timelineTrack: {
     flex: 1,
+    width: 1.5,
+    marginVertical: 3,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  agendaIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: 'rgba(242,62,22,0.22)',
-  },
-  agendaCopy: {
+  timelineBody: {
     flex: 1,
+    paddingBottom: spacing.md,
     gap: 2,
   },
-  agendaTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: '#FFFFFF',
-  },
-  agendaBody: {
-    fontFamily: fonts.body,
-    fontSize: 13.5,
-    color: 'rgba(255,255,255,0.68)',
-  },
-  agendaList: {
-    gap: spacing.xs,
-  },
-  agendaItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: radii.md,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  agendaTimePill: {
-    minWidth: 62,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,138,61,0.22)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 8,
-    alignItems: 'center' as const,
-  },
-  agendaTime: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 0.6,
-    color: '#FFB38A',
-  },
-  agendaItemTitle: {
+  timelineTitle: {
     fontFamily: fonts.semibold,
     fontSize: 14.5,
     color: '#FFFFFF',
   },
-  agendaItemBody: {
+  timelineDetail: {
     fontFamily: fonts.body,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.66)',
+    color: 'rgba(255,255,255,0.62)',
   },
-  agendaEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: radii.md,
-    padding: spacing.sm,
+  heroAction: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start' as const,
   },
   mapPanel: {
     gap: spacing.md,
@@ -654,6 +697,15 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'flex-start' as const,
     gap: spacing.md,
   },
+  mapHeading: {
+    flex: 1,
+    gap: 2,
+  },
+  mapTitleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
   mapIconBadge: {
     width: 36,
     height: 36,
@@ -670,7 +722,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     maxWidth: '88%' as const,
   },
   map: {
-    height: 220,
+    height: 210,
     borderRadius: radii.md,
     overflow: 'hidden' as const,
   },
@@ -679,6 +731,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   nextPodTop: {
     flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: spacing.sm,
   },
   timeBadge: {
@@ -694,6 +748,16 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: t.colors.primarySoftText,
+  },
+  nextPodCount: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  nextPodCountText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12.5,
+    color: t.colors.sub,
   },
   nextPodTitle: {
     ...t.typography.h2,
@@ -725,8 +789,20 @@ const useStyles = createThemedStyles((t: Theme) => ({
   feedRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
     gap: spacing.md,
+  },
+  feedTimeRail: {
+    minWidth: 64,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    backgroundColor: t.colors.primarySoft,
+    alignItems: 'center' as const,
+  },
+  feedTimeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: t.colors.primarySoftText,
   },
   feedText: {
     flex: 1,
@@ -756,6 +832,19 @@ const useStyles = createThemedStyles((t: Theme) => ({
     padding: spacing.md,
     gap: spacing.sm,
     ...t.shadows.subtle,
+  },
+  activityTopRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+  },
+  activityIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   categoryPill: {
     alignSelf: 'flex-start' as const,

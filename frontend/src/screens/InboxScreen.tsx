@@ -19,7 +19,7 @@ import { RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
 import { CompactHeader, EmptyState, Entrance, Panel, PrimaryButton, Screen, SegmentedControl, SkeletonCard, Tap, UserAvatar } from '../components/ui';
 import { formatDateTime } from '../utils/format';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { Theme, createThemedStyles, fonts, radii, spacing, useTheme, DOCK_CLEARANCE } from '../theme';
 
 type Mode = 'messages' | 'invites' | 'friends';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -379,7 +379,8 @@ export default function InboxScreen() {
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: DOCK_CLEARANCE,
     gap: spacing.md,
   },
   section: {

@@ -17,7 +17,7 @@ import { FriendUser, Pod, PodMember } from '../types';
 import { EmptyState, Entrance, IconButton, Screen, SectionHeader, SkeletonCard, Tap } from '../components/ui';
 import { formatShortDate, formatTime, getInitials } from '../utils/format';
 import { sortUpcomingPods } from '../utils/experience';
-import { Theme, ThemeColors, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { Theme, ThemeColors, createThemedStyles, fonts, radii, spacing, useTheme, DOCK_CLEARANCE } from '../theme';
 
 type Mode = 'active' | 'past';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -504,7 +504,8 @@ export default function PodsScreen() {
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: DOCK_CLEARANCE,
     gap: spacing.md,
   },
   titleRow: {

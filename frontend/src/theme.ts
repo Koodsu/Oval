@@ -199,7 +199,7 @@ export type ThemeGradients = {
 export const lightGradients: ThemeGradients = {
   brand: ['#FF8A3D', '#F23E16', '#D8173F'],
   brandSoft: ['#FFF1E6', '#FEE9E2'],
-  hero: ['#15161D', '#27182B', '#511F39'],
+  hero: ['#121319', '#241735', '#53204A'],
   app: ['#F9F6F1', '#F6F3EE', '#F3F1ED'],
   card: ['#FFFFFF', '#FBFAF7'],
 };
@@ -207,10 +207,16 @@ export const lightGradients: ThemeGradients = {
 export const darkGradients: ThemeGradients = {
   brand: ['#FF8A3D', '#F23E16', '#D8173F'],
   brandSoft: ['rgba(255,138,61,0.14)', 'rgba(216,23,63,0.12)'],
-  hero: ['#15161D', '#27182B', '#511F39'],
+  hero: ['#121319', '#241735', '#53204A'],
   app: ['#0C0D11', '#0E0F14', '#11121A'],
   card: ['#16181F', '#14161C'],
 };
+
+/**
+ * Clearance the floating tab dock needs at the bottom of scrollable tab
+ * screens so the last items can scroll up from underneath it.
+ */
+export const DOCK_CLEARANCE = 118;
 
 export const spacing = {
   xxs: 4,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { LinkingOptions } from '@react-navigation/native';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import {
   BottomTabBarProps,
@@ -24,11 +24,12 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -133,7 +134,7 @@ function TabItem({
   onPress: () => void;
   onLongPress: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, gradients } = useTheme();
   const lift = useSharedValue(focused ? 1 : 0);
 
   React.useEffect(() => {
@@ -141,13 +142,29 @@ function TabItem({
   }, [focused, lift]);
 
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: lift.value * -2 }, { scale: 1 + lift.value * 0.12 }],
+    transform: [{ scale: 1 + lift.value * 0.1 }],
   }));
 
-  const dotStyle = useAnimatedStyle(() => ({
-    opacity: lift.value,
-    transform: [{ scale: lift.value }],
-  }));
+  const inner = (
+    <View style={styles.tabInner}>
+      <Animated.View style={iconStyle}>
+        <Ionicons
+          name={tabIcon(routeName, focused)}
+          size={22}
+          color={focused ? '#FFFFFF' : colors.faint}
+        />
+      </Animated.View>
+      {focused ? (
+        <Animated.Text
+          entering={FadeIn.duration(160)}
+          style={styles.tabLabelActive}
+          numberOfLines={1}
+        >
+          {label}
+        </Animated.Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <Pressable
@@ -156,27 +173,22 @@ function TabItem({
         onPress();
       }}
       onLongPress={onLongPress}
-      style={styles.tabItem}
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
     >
-      <Animated.View style={iconStyle}>
-        <Ionicons
-          name={tabIcon(routeName, focused)}
-          size={24}
-          color={focused ? colors.primary : colors.faint}
-        />
-      </Animated.View>
-      <Text
-        style={[
-          styles.tabLabel,
-          { color: focused ? colors.ink : colors.faint },
-        ]}
-      >
-        {label}
-      </Text>
-      <Animated.View style={[styles.tabDot, { backgroundColor: colors.primary }, dotStyle]} />
+      {focused ? (
+        <LinearGradient
+          colors={gradients.brand}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.tabPill, styles.tabPillActive]}
+        >
+          {inner}
+        </LinearGradient>
+      ) : (
+        <View style={styles.tabPill}>{inner}</View>
+      )}
     </Pressable>
   );
 }
@@ -187,53 +199,59 @@ function BridgeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View
-      style={[
-        styles.tabBarWrap,
-        {
-          paddingBottom: Math.max(insets.bottom, 10),
-          backgroundColor: colors.tabBar,
-          borderTopColor: colors.border,
-        },
-      ]}
+      pointerEvents="box-none"
+      style={[styles.dockWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}
     >
-      {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={36}
-          tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
-      <View style={styles.tabRow}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const label =
-            typeof options.tabBarLabel === 'string'
-              ? options.tabBarLabel
-              : options.title ?? route.name;
-          const focused = state.index === index;
-
-          return (
-            <TabItem
-              key={route.key}
-              routeName={route.name as keyof MainTabParamList}
-              label={label}
-              focused={focused}
-              onPress={() => {
-                const event = navigation.emit({
-                  type: 'tabPress',
-                  target: route.key,
-                  canPreventDefault: true,
-                });
-                if (!focused && !event.defaultPrevented) {
-                  navigation.navigate(route.name);
-                }
-              }}
-              onLongPress={() =>
-                navigation.emit({ type: 'tabLongPress', target: route.key })
-              }
+      <View style={styles.dockShadow}>
+        <View
+          style={[
+            styles.dock,
+            {
+              backgroundColor: colors.tabBar,
+              borderColor: isDark ? colors.borderStrong : colors.border,
+            },
+          ]}
+        >
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={44}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
             />
-          );
-        })}
+          ) : null}
+          <View style={styles.tabRow}>
+            {state.routes.map((route, index) => {
+              const { options } = descriptors[route.key];
+              const label =
+                typeof options.tabBarLabel === 'string'
+                  ? options.tabBarLabel
+                  : options.title ?? route.name;
+              const focused = state.index === index;
+
+              return (
+                <TabItem
+                  key={route.key}
+                  routeName={route.name as keyof MainTabParamList}
+                  label={label}
+                  focused={focused}
+                  onPress={() => {
+                    const event = navigation.emit({
+                      type: 'tabPress',
+                      target: route.key,
+                      canPreventDefault: true,
+                    });
+                    if (!focused && !event.defaultPrevented) {
+                      navigation.navigate(route.name);
+                    }
+                  }}
+                  onLongPress={() =>
+                    navigation.emit({ type: 'tabLongPress', target: route.key })
+                  }
+                />
+              );
+            })}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -373,31 +391,55 @@ export default function App() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  tabBarWrap: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+  dockWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  dockShadow: {
+    borderRadius: 999,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  dock: {
+    borderRadius: 999,
+    borderWidth: 1,
+    padding: 6,
     overflow: 'hidden',
   },
   tabRow: {
     flexDirection: 'row',
-    paddingTop: 8,
-    paddingHorizontal: 6,
+    alignItems: 'center',
+    gap: 2,
   },
-  tabItem: {
-    flex: 1,
+  tabPill: {
+    height: 46,
+    minWidth: 48,
+    borderRadius: 999,
+    paddingHorizontal: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingVertical: 4,
   },
-  tabLabel: {
+  tabPillActive: {
+    paddingHorizontal: 16,
+  },
+  tabInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  tabLabelActive: {
     fontFamily: fonts.semibold,
-    fontSize: 11,
-    letterSpacing: 0.1,
-  },
-  tabDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    fontSize: 12.5,
+    letterSpacing: 0.2,
+    color: '#FFFFFF',
   },
   loading: {
     flex: 1,

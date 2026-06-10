@@ -11,6 +11,7 @@ import {
   Chip,
   EmptyState,
   Entrance,
+  LiveDot,
   PrimaryButton,
   Screen,
   SearchField,
@@ -20,7 +21,7 @@ import {
 } from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
 import { useLocationPermission } from '../hooks/useLocationPermission';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { DOCK_CLEARANCE, Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -81,21 +82,6 @@ function trustworthyDistanceLabel(activePods: Pod[], userLocation: { latitude: n
   return null;
 }
 
-function statusMeta(liveCount: number) {
-  if (liveCount > 0) {
-    return {
-      label: liveCount === 1 ? '1 active pod' : `${liveCount} active pods`,
-      icon: 'flame' as const,
-      style: 'live' as const,
-    };
-  }
-  return {
-    label: 'No pods yet',
-    icon: 'add-circle-outline' as const,
-    style: 'quiet' as const,
-  };
-}
-
 function ctaLabel(liveCount: number) {
   if (liveCount === 1) return 'Join pod';
   if (liveCount > 1) return 'View pods';
@@ -118,6 +104,13 @@ function activePodLocation(activePods: Pod[]) {
 function displayTitle(activity: Activity) {
   return activity.title;
 }
+
+type ExploreCard = {
+  activity: Activity;
+  activePods: Pod[];
+  liveCount: number;
+  totalParticipants: number;
+};
 
 export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
@@ -177,7 +170,7 @@ export default function ExploreScreen() {
     setVisibleCount(12);
   }, [category, deferredQuery]);
 
-  const cards = useMemo(() => {
+  const cards = useMemo<ExploreCard[]>(() => {
     const q = deferredQuery.trim().toLowerCase();
     return activities
       .filter((activity) => {
@@ -206,6 +199,9 @@ export default function ExploreScreen() {
         return a.activity.title.localeCompare(b.activity.title);
       });
   }, [activities, category, deferredQuery, feed]);
+
+  const liveCards = useMemo(() => cards.filter((item) => item.liveCount > 0).slice(0, 6), [cards]);
+  const totalLivePods = useMemo(() => cards.reduce((sum, item) => sum + item.liveCount, 0), [cards]);
   const visibleCards = cards.slice(0, visibleCount);
 
   return (
@@ -213,11 +209,22 @@ export default function ExploreScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
+        {/* Masthead */}
         <Entrance index={0}>
           <View style={styles.titleRow}>
-            <View>
+            <View style={styles.titleCopy}>
               <Text style={styles.pageEyebrow}>Find your people</Text>
               <Text style={styles.pageTitle}>Explore</Text>
+              <View style={styles.liveSummary}>
+                <LiveDot size={7} />
+                <Text style={styles.liveSummaryText}>
+                  {loaded
+                    ? totalLivePods
+                      ? `${totalLivePods} pod${totalLivePods === 1 ? '' : 's'} live across campus`
+                      : 'Quiet right now — start something'
+                    : 'Reading campus…'}
+                </Text>
+              </View>
             </View>
             {!granted && canAskAgain ? (
               <TouchableOpacity
@@ -260,8 +267,72 @@ export default function ExploreScreen() {
           </ScrollView>
         </Entrance>
 
+        {/* Live right now rail */}
+        {loaded && liveCards.length ? (
+          <Entrance index={3} style={styles.section}>
+            <View style={styles.liveHeader}>
+              <LiveDot size={8} color={colors.primary} />
+              <Text style={styles.liveHeaderText}>Live right now</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.liveRail}>
+              {liveCards.map((item) => {
+                const meta = CATEGORY_META[item.activity.category];
+                const accent = meta?.color ?? colors.primary;
+                const podLocation = activePodLocation(item.activePods);
+                const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
+                return (
+                  <Tap
+                    key={item.activity.id}
+                    onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
+                    style={styles.liveCard}
+                    accessibilityLabel={`${displayTitle(item.activity)}, ${item.liveCount} active pod${item.liveCount === 1 ? '' : 's'}`}
+                  >
+                    <LinearGradient
+                      colors={[`${accent}30`, isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.7)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0.9, y: 1 }}
+                      style={styles.liveCardWash}
+                    />
+                    <View style={styles.liveCardTop}>
+                      <View style={[styles.liveCardIcon, { backgroundColor: `${accent}24` }]}>
+                        <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={20} color={accent} />
+                      </View>
+                      <View style={styles.liveBadge}>
+                        <LiveDot size={6} color="#FFFFFF" />
+                        <Text style={styles.liveBadgeText}>
+                          {item.liveCount} pod{item.liveCount === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.liveCardTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
+                    <View style={styles.liveCardFacts}>
+                      <View style={styles.factItem}>
+                        <Ionicons name="people-outline" size={12} color={colors.sub} />
+                        <Text style={styles.factText} numberOfLines={1}>{formatParticipantCount(item.activePods)}</Text>
+                      </View>
+                      {podLocation ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="location-outline" size={12} color={colors.sub} />
+                          <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
+                        </View>
+                      ) : null}
+                      {distanceLabel ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="navigate-outline" size={12} color={colors.sub} />
+                          <Text style={styles.factText}>{distanceLabel}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </Tap>
+                );
+              })}
+            </ScrollView>
+          </Entrance>
+        ) : null}
+
+        {/* Browse grid */}
         <View style={styles.section}>
-          <Entrance index={3}>
+          <Entrance index={4}>
             <SectionHeader title="Browse activities" />
           </Entrance>
           {!loaded ? (
@@ -270,93 +341,55 @@ export default function ExploreScreen() {
               <SkeletonCard />
               <SkeletonCard />
             </>
-          ) : cards.length ? visibleCards.map((item, cardIndex) => {
-            const meta = CATEGORY_META[item.activity.category];
-            const accent = meta?.color ?? colors.primary;
-            const status = statusMeta(item.liveCount);
-            const podLocation = activePodLocation(item.activePods);
-            const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
-            const hasActivePods = item.liveCount > 0;
-            return (
-              <Entrance key={item.activity.id} index={Math.min(cardIndex, 6) + 3}>
-                <Tap
-                  onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
-                  style={styles.activityCard}
-                  accessibilityLabel={displayTitle(item.activity)}
-                >
-                  <LinearGradient
-                    colors={[`${accent}2E`, isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.9)']}
-                    style={styles.categoryVisual}
+          ) : cards.length ? (
+            <View style={styles.grid}>
+              {visibleCards.map((item, cardIndex) => {
+                const meta = CATEGORY_META[item.activity.category];
+                const accent = meta?.color ?? colors.primary;
+                const hasActivePods = item.liveCount > 0;
+                return (
+                  <Entrance
+                    key={item.activity.id}
+                    index={Math.min(cardIndex, 6)}
+                    style={styles.gridSlot}
                   >
-                    <Ionicons
-                      name={meta?.icon ?? 'sparkles-outline'}
-                      size={24}
-                      color={accent}
-                    />
-                  </LinearGradient>
-
-                  <View style={styles.cardBody}>
-                    <View style={styles.cardTopRow}>
-                      <View style={[
-                        styles.statusPill,
-                        status.style === 'live' ? styles.statusPillLive : styles.statusPillQuiet,
-                      ]}>
-                        <Ionicons
-                          name={status.icon}
-                          size={12}
-                          color={status.style === 'live' ? '#FFFFFF' : colors.sub}
-                        />
-                        <Text style={[
-                          styles.statusText,
-                          status.style === 'live' ? styles.statusTextLive : styles.statusTextQuiet,
-                        ]}>
-                          {status.label}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.categoryLabel} numberOfLines={1}>{meta?.label ?? item.activity.category}</Text>
-                    </View>
-
-                    <Text style={styles.activityTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
-                    <Text style={styles.activityDescription} numberOfLines={2}>{item.activity.description}</Text>
-
-                    {hasActivePods ? (
-                      <View style={styles.factRow}>
-                        {podLocation ? (
-                          <View style={styles.factItem}>
-                            <Ionicons name="location-outline" size={13} color={colors.faint} />
-                            <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
-                          </View>
-                        ) : null}
-                        <View style={styles.factItem}>
-                          <Ionicons name="people-outline" size={13} color={colors.faint} />
-                          <Text style={styles.factText}>{formatParticipantCount(item.activePods)}</Text>
+                    <Tap
+                      onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
+                      style={styles.tile}
+                      accessibilityLabel={displayTitle(item.activity)}
+                    >
+                      <View style={styles.tileTop}>
+                        <View style={[styles.tileIcon, { backgroundColor: `${accent}1F` }]}>
+                          <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={20} color={accent} />
                         </View>
-                        {distanceLabel ? (
-                          <View style={styles.factItem}>
-                            <Ionicons name="navigate-outline" size={13} color={colors.faint} />
-                            <Text style={styles.factText}>{distanceLabel}</Text>
+                        {hasActivePods ? (
+                          <View style={styles.tileLivePill}>
+                            <LiveDot size={5} color="#FFFFFF" />
+                            <Text style={styles.tileLiveText}>{item.liveCount}</Text>
                           </View>
                         ) : null}
                       </View>
-                    ) : (
-                      <Text style={styles.emptySupport}>Be the first to start one.</Text>
-                    )}
-
-                    <View style={styles.actionRow}>
-                      <Text style={styles.actionHint} numberOfLines={1}>
-                        {hasActivePods ? 'View meetup options' : 'Create the first pod'}
+                      <Text style={styles.tileCategory} numberOfLines={1}>
+                        {meta?.label ?? item.activity.category}
                       </Text>
-                      <View style={styles.ctaPill}>
-                        <Text style={styles.ctaText}>{ctaLabel(item.liveCount)}</Text>
-                        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                      <Text style={styles.tileTitle} numberOfLines={2}>{displayTitle(item.activity)}</Text>
+                      <Text style={styles.tileDescription} numberOfLines={2}>{item.activity.description}</Text>
+                      <View style={styles.tileFooter}>
+                        <Text style={[styles.tileCta, !hasActivePods && { color: colors.sub }]}>
+                          {ctaLabel(item.liveCount)}
+                        </Text>
+                        <Ionicons
+                          name="arrow-forward"
+                          size={13}
+                          color={hasActivePods ? colors.primary : colors.sub}
+                        />
                       </View>
-                    </View>
-                  </View>
-                </Tap>
-              </Entrance>
-            );
-          }) : (
+                    </Tap>
+                  </Entrance>
+                );
+              })}
+            </View>
+          ) : (
             <EmptyState
               icon="compass-outline"
               title="Nothing matches that view yet"
@@ -382,21 +415,36 @@ const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
     paddingTop: spacing.sm,
-    paddingBottom: 112,
+    paddingBottom: DOCK_CLEARANCE,
     gap: spacing.sm,
   },
   titleRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
     justifyContent: 'space-between' as const,
+    gap: spacing.md,
+  },
+  titleCopy: {
+    flex: 1,
+    gap: 3,
   },
   pageEyebrow: {
     ...t.typography.label,
     color: t.colors.primary,
-    marginBottom: 2,
   },
   pageTitle: {
     ...t.typography.display,
+  },
+  liveSummary: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    marginTop: 2,
+  },
+  liveSummaryText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: t.colors.sub,
   },
   locationButton: {
     height: 38,
@@ -423,84 +471,76 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     paddingTop: 2,
   },
-  loadMore: {
-    marginTop: spacing.xs,
-  },
-  activityCard: {
+  liveHeader: {
     flexDirection: 'row' as const,
-    gap: spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.md,
+    alignItems: 'center' as const,
+    gap: 9,
+    marginBottom: 2,
+  },
+  liveHeaderText: {
+    ...t.typography.h2,
+  },
+  liveRail: {
+    paddingRight: spacing.md,
+    paddingBottom: 4,
+  },
+  liveCard: {
+    width: 218,
+    marginRight: spacing.sm,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: t.colors.border,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 12,
+    backgroundColor: t.colors.surface,
+    padding: spacing.md,
+    gap: spacing.sm,
+    overflow: 'hidden' as const,
     ...t.shadows.card,
   },
-  categoryVisual: {
-    width: 54,
-    minHeight: 108,
-    borderRadius: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 1,
-    borderColor: t.colors.border,
+  liveCardWash: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  cardBody: {
-    flex: 1,
-    gap: 7,
-  },
-  cardTopRow: {
+  liveCardTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: 8,
   },
-  statusPill: {
+  liveCardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  liveBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+    backgroundColor: t.colors.primary,
+  },
+  liveBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: '#FFFFFF',
+  },
+  liveCardTitle: {
+    ...t.typography.h2,
+    fontSize: 18,
+    lineHeight: 23,
+  },
+  liveCardFacts: {
+    gap: 5,
+  },
+  factItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 5,
-    borderRadius: radii.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  statusPillLive: {
-    backgroundColor: t.colors.primary,
-  },
-  statusPillQuiet: {
-    backgroundColor: t.colors.inputBg,
-  },
-  statusText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
-  statusTextLive: {
-    color: '#FFFFFF',
-  },
-  statusTextQuiet: {
-    color: t.colors.sub,
-  },
-  activityTitle: {
-    ...t.typography.h2,
-    fontSize: 19,
-    lineHeight: 24,
-  },
-  activityDescription: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  factRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    flexWrap: 'wrap' as const,
-    gap: 8,
-  },
-  factItem: {
-    maxWidth: '100%' as const,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
   },
   factText: {
     color: t.colors.sub,
@@ -508,45 +548,87 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontSize: 12,
     flexShrink: 1,
   },
-  emptySupport: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+  grid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
   },
-  actionRow: {
+  gridSlot: {
+    flexBasis: '47%' as const,
+    flexGrow: 1,
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: t.colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    padding: spacing.md,
+    gap: 7,
+    minHeight: 168,
+    ...t.shadows.subtle,
+  },
+  tileTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: t.colors.border,
-    paddingTop: 8,
+    marginBottom: 2,
   },
-  categoryLabel: {
-    color: t.colors.faint,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    flex: 1,
-    textAlign: 'right' as const,
+  tileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  actionHint: {
-    color: t.colors.faint,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    flex: 1,
-    marginRight: 4,
-  },
-  ctaPill: {
+  tileLivePill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'flex-end' as const,
-    gap: 2,
-    minWidth: 76,
-    flexShrink: 0,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: t.colors.primary,
   },
-  ctaText: {
+  tileLiveText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  tileCategory: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+    color: t.colors.faint,
+  },
+  tileTitle: {
+    ...t.typography.title,
+    fontSize: 16,
+    lineHeight: 21,
+    minHeight: 42,
+  },
+  tileDescription: {
+    ...t.typography.body,
+    fontSize: 12.5,
+    lineHeight: 17,
+    minHeight: 34,
+  },
+  tileFooter: {
+    marginTop: 'auto' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: t.colors.border,
+  },
+  tileCta: {
     color: t.colors.primary,
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 12.5,
+  },
+  loadMore: {
+    marginTop: spacing.xs,
   },
 }));

@@ -229,6 +229,57 @@ export function Screen({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Signals
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * LiveDot — a small pulsing "live right now" indicator with an expanding
+ * sonar ring. Use next to live counts, active pods, tonight's plans.
+ */
+export function LiveDot({ size = 8, color }: { size?: number; color?: string }) {
+  const { colors } = useTheme();
+  const tint = color ?? colors.green;
+  const pulse = useSharedValue(0);
+
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 1600, easing: Easing.out(Easing.quad) }),
+      -1,
+      false,
+    );
+  }, [pulse]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - pulse.value),
+    transform: [{ scale: 1 + pulse.value * 1.7 }],
+  }));
+
+  return (
+    <View
+      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+      accessibilityElementsHidden
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: tint,
+          },
+          ringStyle,
+        ]}
+      />
+      <View
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint }}
+      />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Headers & heroes
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -255,6 +306,7 @@ export function Hero({
       >
         <View pointerEvents="none" style={styles.heroEmber} />
         <View pointerEvents="none" style={styles.heroEmberSmall} />
+        <View pointerEvents="none" style={styles.heroAurora} />
         {eyebrow ? <Text style={styles.heroEyebrow}>{eyebrow}</Text> : null}
         <Text style={styles.heroTitle}>{title}</Text>
         {subtitle ? <Text style={styles.heroSubtitle}>{subtitle}</Text> : null}
@@ -347,6 +399,48 @@ export function Panel({
     );
   }
   return <View style={[styles.panel, style]}>{children}</View>;
+}
+
+/**
+ * GradientEdgeCard — a surface card wrapped in a hairline brand-gradient ring.
+ * Reserve for the single most important card on a screen.
+ */
+export function GradientEdgeCard({
+  children,
+  style,
+  onPress,
+  accessibilityLabel,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
+  const styles = useUiStyles();
+  const { gradients } = useTheme();
+
+  const card = (
+    <LinearGradient
+      colors={gradients.brand}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradientEdge}
+    >
+      <View style={[styles.gradientEdgeInner, style]}>{children}</View>
+    </LinearGradient>
+  );
+
+  if (!onPress) return <View style={styles.gradientEdgeShadow}>{card}</View>;
+  return (
+    <Tap
+      onPress={onPress}
+      haptic
+      accessibilityLabel={accessibilityLabel}
+      style={styles.gradientEdgeShadow}
+    >
+      {card}
+    </Tap>
+  );
 }
 
 type SectionHeaderProps = {
@@ -957,6 +1051,8 @@ const useUiStyles = createThemedStyles((t: Theme) => ({
     paddingVertical: spacing.lg,
     gap: spacing.xs,
     overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   heroEmber: {
     position: 'absolute' as const,
@@ -975,6 +1071,15 @@ const useUiStyles = createThemedStyles((t: Theme) => ({
     height: 150,
     borderRadius: 75,
     backgroundColor: 'rgba(111,85,242,0.22)',
+  },
+  heroAurora: {
+    position: 'absolute' as const,
+    top: -90,
+    left: '32%' as const,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(61,194,194,0.10)',
   },
   heroEyebrow: {
     ...t.typography.label,
@@ -1040,6 +1145,20 @@ const useUiStyles = createThemedStyles((t: Theme) => ({
     borderColor: t.colors.border,
     padding: spacing.md,
     ...t.shadows.card,
+  },
+  gradientEdgeShadow: {
+    borderRadius: radii.lg + 1.5,
+    ...t.shadows.glow,
+  },
+  gradientEdge: {
+    borderRadius: radii.lg + 1.5,
+    padding: 1.5,
+  },
+  gradientEdgeInner: {
+    backgroundColor: t.colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    overflow: 'hidden' as const,
   },
   sectionRow: {
     flexDirection: 'row' as const,
