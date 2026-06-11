@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   ScrollView,
   Share,
@@ -75,6 +74,7 @@ import {
   Button,
   Card,
   Chip,
+  ClubMark,
   EmptyState,
   IconButton,
   ScreenHeader,
@@ -1485,18 +1485,13 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
             {/* Identity card */}
             <Slab color={accent.soft} radius={radii.lg} accessibilityRole="none" faceStyle={styles.heroFace}>
               <View style={styles.identityRow}>
-                <View
-                  style={[
-                    styles.clubAvatar,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  {club.avatarUrl ? (
-                    <Image source={{ uri: club.avatarUrl }} style={{ width: '100%', height: '100%' }} />
-                  ) : (
-                    <Text style={styles.clubEmoji}>{club.emoji}</Text>
-                  )}
-                </View>
+                <ClubMark
+                  name={club.name}
+                  emoji={club.emoji}
+                  uri={club.avatarUrl}
+                  size={68}
+                  tilt={-3}
+                />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <Text style={styles.clubTitle}>{club.name}</Text>
                   <Text style={typography.caption}>{club.university}</Text>
@@ -3020,7 +3015,9 @@ function QuickAction({
       accessibilityLabel={title}
     >
       <Ionicons name={icon} size={19} color={colors.ink} />
-      <Text style={[helperStylesStatic.quickLabel, { color: colors.ink }]}>{title}</Text>
+      <Text style={[helperStylesStatic.quickLabel, { color: colors.ink }]} numberOfLines={1}>
+        {title}
+      </Text>
     </Slab>
   );
 }
@@ -3220,11 +3217,13 @@ const helperStylesStatic = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.md,
+    paddingHorizontal: 8,
     gap: 6,
   },
   quickLabel: {
     fontFamily: fonts.bold,
-    fontSize: 12.5,
+    fontSize: 12,
+    maxWidth: '100%',
   },
   dateBadge: {
     borderRadius: radii.sm,

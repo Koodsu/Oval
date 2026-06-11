@@ -10,11 +10,11 @@ import type { RootStackParamList } from '../../App';
 import { ClubMeetingToday } from '../types';
 import {
   AppBackdrop,
+  ClubMark,
   EmptyState,
   ScreenHeader,
   Slab,
   Sticker,
-  accentForSeed,
 } from '../components/ui';
 import { formatTime } from '../utils/format';
 import {
@@ -105,7 +105,6 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
           <View style={styles.timeline}>
             {items.map((meeting, index) => {
               const status = meetingStatus(meeting.meetingTime, now);
-              const accent = accentForSeed(colors, meeting.clubId);
               return (
                 <Animated.View
                   key={meeting.id}
@@ -152,14 +151,12 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
                       accessibilityLabel={`${meeting.clubName}, ${meeting.title}, at ${formatTime(meeting.meetingTime)}`}
                     >
                       <View style={styles.meetingTop}>
-                        <View
-                          style={[
-                            styles.emojiTile,
-                            { backgroundColor: accent.soft, borderColor: colors.border },
-                          ]}
-                        >
-                          <Text style={styles.emojiText}>{meeting.clubEmoji}</Text>
-                        </View>
+                        <ClubMark
+                          name={meeting.clubName}
+                          emoji={meeting.clubEmoji}
+                          size={44}
+                          tilt={-2}
+                        />
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={typography.heading} numberOfLines={1}>
                             {meeting.clubName}

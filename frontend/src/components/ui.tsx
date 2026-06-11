@@ -127,9 +127,22 @@ export function Slab({
     ],
   }));
 
-  const body = (
+  // The face is the touchable itself, so the outer wrap stays a plain flex
+  // child — consumer `style` (flex: 1, width, etc.) participates in layout
+  // and grids/rows stretch correctly.
+  const faceStyles = [
+    slabStyles.face,
+    {
+      backgroundColor: color ?? colors.surface,
+      borderColor: borderColor ?? colors.border,
+      borderRadius: radius,
+    },
+    interactive ? faceAnimated : null,
+    faceStyle,
+  ];
+
+  return (
     <View
-      pointerEvents="box-none"
       style={[
         slabStyles.wrap,
         { paddingRight: depth, paddingBottom: depth },
@@ -152,49 +165,35 @@ export function Slab({
           ]}
         />
       ) : null}
-      <Animated.View
-        style={[
-          slabStyles.face,
-          {
-            backgroundColor: color ?? colors.surface,
-            borderColor: borderColor ?? colors.border,
-            borderRadius: radius,
-          },
-          interactive ? faceAnimated : null,
-          faceStyle,
-        ]}
-      >
-        {children}
-      </Animated.View>
+      {interactive ? (
+        <AnimatedPressable
+          onPress={() => {
+            if (haptic) tick();
+            onPress?.();
+          }}
+          onLongPress={onLongPress}
+          onPressIn={() => {
+            press.value = withSpring(1, motion.springPress);
+          }}
+          onPressOut={() => {
+            press.value = withSpring(0, motion.springPress);
+          }}
+          disabled={disabled}
+          accessibilityRole={accessibilityRole}
+          accessibilityLabel={accessibilityLabel}
+          testID={testID}
+          style={faceStyles}
+        >
+          {children}
+        </AnimatedPressable>
+      ) : (
+        <Animated.View style={faceStyles}>{children}</Animated.View>
+      )}
     </View>
   );
-
-  if (!interactive) {
-    return body;
-  }
-
-  return (
-    <Pressable
-      onPress={() => {
-        if (haptic) tick();
-        onPress?.();
-      }}
-      onLongPress={onLongPress}
-      onPressIn={() => {
-        press.value = withSpring(1, motion.springPress);
-      }}
-      onPressOut={() => {
-        press.value = withSpring(0, motion.springPress);
-      }}
-      disabled={disabled}
-      accessibilityRole={accessibilityRole}
-      accessibilityLabel={accessibilityLabel}
-      testID={testID}
-    >
-      {body}
-    </Pressable>
-  );
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const slabStyles = StyleSheet.create({
   wrap: {
@@ -208,6 +207,9 @@ const slabStyles = StyleSheet.create({
   face: {
     borderWidth: BORDER_W,
     overflow: 'hidden',
+    // Fill the wrap when the consumer constrains the slab (flex: 1, fixed
+    // height); hugs content otherwise since flexBasis stays auto.
+    flexGrow: 1,
   },
   disabled: {
     opacity: 0.45,
@@ -650,6 +652,86 @@ const avatarStyles = StyleSheet.create({
   },
   initials: {
     fontFamily: fonts.bold,
+  },
+});
+
+/**
+ * Club identity tile. Falls back gracefully: photo → emoji → initials on the
+ * club's accent color, so a club without assets still looks intentional.
+ */
+export function ClubMark({
+  name,
+  emoji,
+  uri,
+  size = 44,
+  tilt = 0,
+  style,
+}: {
+  name?: string | null;
+  emoji?: string | null;
+  uri?: string | null;
+  size?: number;
+  tilt?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const seed = name?.trim() || '?';
+  const accent = accentForSeed(colors, seed);
+  const cleanEmoji = emoji?.trim();
+  const initials = seed
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
+
+  return (
+    <View
+      style={[
+        clubMarkStyles.base,
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.29,
+          backgroundColor: accent.soft,
+          borderColor: colors.border,
+          transform: tilt ? [{ rotate: `${tilt}deg` }] : undefined,
+        },
+        style,
+      ]}
+    >
+      {uri ? (
+        <Animated.Image
+          source={{ uri }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      ) : cleanEmoji ? (
+        <Text style={{ fontSize: size * 0.44, lineHeight: size * 0.58 }}>{cleanEmoji}</Text>
+      ) : (
+        <Text
+          style={[
+            clubMarkStyles.initials,
+            { color: accent.tint, fontSize: Math.max(11, size * 0.3) },
+          ]}
+        >
+          {initials}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const clubMarkStyles = StyleSheet.create({
+  base: {
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  initials: {
+    fontFamily: fonts.bold,
+    letterSpacing: 0.5,
   },
 });
 

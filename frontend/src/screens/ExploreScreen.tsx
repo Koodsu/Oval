@@ -427,7 +427,7 @@ export default function ExploreScreen() {
                       <Text style={styles.tileCategory} numberOfLines={1}>
                         {(meta?.label ?? item.activity.category ?? '').toUpperCase()}
                       </Text>
-                      <Text style={typography.heading} numberOfLines={2}>
+                      <Text style={[typography.heading, styles.tileTitle]} numberOfLines={2}>
                         {displayTitle(item.activity)}
                       </Text>
                       <Text style={styles.tileDescription} numberOfLines={2}>
@@ -586,10 +586,15 @@ const useStyles = createThemedStyles((t: Theme) => ({
     letterSpacing: 1.2,
     color: t.colors.faint,
   },
+  tileTitle: {
+    // Reserve two lines so neighboring tiles in a row stay the same height.
+    minHeight: 42,
+  },
   tileDescription: {
     fontFamily: fonts.medium,
     fontSize: 12.5,
     lineHeight: 17,
+    minHeight: 34,
     color: t.colors.sub,
   },
   tileFooter: {

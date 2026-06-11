@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { Alert, Image, Linking, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
   AppBackdrop,
   Button,
   Chip,
+  ClubMark,
   EmptyState,
   IconButton,
   SearchBar,
@@ -258,7 +259,7 @@ export default function ClubsScreen() {
                       small
                       tilt={-2}
                     />
-                    <Text style={styles.tonightEmoji}>{meeting.clubEmoji}</Text>
+                    <ClubMark name={meeting.clubName} emoji={meeting.clubEmoji} size={32} tilt={2} />
                   </View>
                   <Text style={typography.heading} numberOfLines={1}>
                     {meeting.clubName}
@@ -309,21 +310,13 @@ export default function ClubsScreen() {
                 </View>
 
                 <View style={styles.spotlightIdentity}>
-                  <View
-                    style={[
-                      styles.spotlightAvatar,
-                      { backgroundColor: colors.surface, borderColor: colors.border },
-                    ]}
-                  >
-                    {featuredClub.avatarUrl ? (
-                      <Image
-                        source={{ uri: featuredClub.avatarUrl }}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    ) : (
-                      <Text style={styles.spotlightEmoji}>{featuredClub.emoji}</Text>
-                    )}
-                  </View>
+                  <ClubMark
+                    name={featuredClub.name}
+                    emoji={featuredClub.emoji}
+                    uri={featuredClub.avatarUrl}
+                    size={62}
+                    tilt={-3}
+                  />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.spotlightTitle} numberOfLines={2}>
                       {featuredClub.name}
@@ -421,21 +414,13 @@ export default function ClubsScreen() {
                       accessibilityLabel={`Open ${club.name}`}
                     >
                       <View style={styles.gridTop}>
-                        <View
-                          style={[
-                            styles.gridAvatar,
-                            { backgroundColor: accent.soft, borderColor: colors.border },
-                          ]}
-                        >
-                          {club.avatarUrl ? (
-                            <Image
-                              source={{ uri: club.avatarUrl }}
-                              style={{ width: '100%', height: '100%' }}
-                            />
-                          ) : (
-                            <Text style={styles.gridEmoji}>{club.emoji}</Text>
-                          )}
-                        </View>
+                        <ClubMark
+                          name={club.name}
+                          emoji={club.emoji}
+                          uri={club.avatarUrl}
+                          size={44}
+                          tilt={-2}
+                        />
                         {club.isVerified ? (
                           <Ionicons name="checkmark-circle" size={18} color={accent.tint} />
                         ) : null}
