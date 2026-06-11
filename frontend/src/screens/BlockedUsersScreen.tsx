@@ -1,10 +1,18 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, getBlockedUsers, unblockUser } from '../api';
 import { RootStackParamList } from '../../App';
-import { EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, UserAvatar } from '../components/ui';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  AppBackdrop,
+  Avatar,
+  Button,
+  Card,
+  EmptyState,
+  ScreenHeader,
+} from '../components/ui';
+import { Theme, createThemedStyles, spacing, useTheme } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BlockedUsers'>;
@@ -13,7 +21,8 @@ type BlockedUser = Awaited<ReturnType<typeof getBlockedUsers>>[number];
 
 export default function BlockedUsersScreen({ navigation }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const [users, setUsers] = useState<BlockedUser[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -32,7 +41,7 @@ export default function BlockedUsersScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   const confirmUnblock = (user: BlockedUser) => {
@@ -56,57 +65,60 @@ export default function BlockedUsersScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Blocked users" onBack={() => navigation.goBack()} />
-        <Text style={styles.body}>
-          People you block cannot message you, appear in search for you, or stay in shared pods with you.
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScreenHeader title="Blocked users" kicker="SAFETY" onBack={() => navigation.goBack()} />
+        <Text style={typography.caption}>
+          People you block cannot message you, appear in search for you, or stay in shared pods with
+          you.
         </Text>
         {loaded && users.length === 0 ? (
-          <EmptyState icon="shield-checkmark-outline" title="No blocked users" body="People you block will show up here." />
+          <EmptyState
+            icon="shield-checkmark"
+            title="No blocked users"
+            body="People you block will show up here."
+          />
         ) : null}
         {users.map((blocked) => (
-          <Panel key={blocked.id}>
+          <Card key={blocked.id} padded>
             <View style={styles.row}>
-              <UserAvatar name={blocked.name} avatarUrl={blocked.avatarUrl} />
-              <View style={styles.copy}>
-                <Text style={styles.title}>{blocked.name}</Text>
-                <Text style={styles.body}>Blocked user</Text>
+              <Avatar name={blocked.name} uri={blocked.avatarUrl} size={44} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <Text style={typography.heading} numberOfLines={1}>
+                  {blocked.name}
+                </Text>
+                <Text style={typography.captionSmall}>Blocked user</Text>
               </View>
-              <PrimaryButton
+              <Button
                 label="Unblock"
-                kind="ghost"
+                size="sm"
+                variant="secondary"
                 loading={busyId === blocked.id}
                 onPress={() => confirmUnblock(blocked)}
               />
             </View>
-          </Panel>
+          </Card>
         ))}
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
-const useStyles = createThemedStyles((t: Theme) => ({
+const useStyles = createThemedStyles((_t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  copy: {
-    flex: 1,
-    gap: 3,
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-    color: t.colors.sub,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
   },
 }));

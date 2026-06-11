@@ -1,38 +1,32 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  LayoutChangeEvent,
-  Platform,
+  Modal,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  TextInputProps,
+  TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   Easing,
-  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
-import { resolveAvatarUrl } from '../api';
-import { getInitials } from '../utils/format';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Theme,
-  createThemedStyles,
+  BORDER_W,
+  SLAB_OFFSET,
+  ThemeColors,
   fonts,
   motion,
   radii,
@@ -40,1297 +34,1336 @@ import {
   useTheme,
 } from '../theme';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Motion primitives
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Tap — the standard Bridge touchable. Spring press-scale + optional haptic.
- * Use everywhere a card, row, or control is pressable.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SCARLET PRESS COMPONENT KIT
+ *
+ * Everything tappable is a "slab": a hard-bordered surface sitting on a flat
+ * offset shadow. Pressing physically pushes the face down into its shadow.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-export function Tap({
-  children,
-  onPress,
-  onLongPress,
-  disabled,
-  haptic = false,
-  scaleTo = 0.97,
-  style,
-  accessibilityLabel,
-  accessibilityHint,
-  accessibilityRole = 'button',
-  accessibilityState,
-  testID,
-}: {
+
+/** Fire a light haptic tick, safely (no-ops in tests/web). */
+function tick() {
+  try {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)?.catch?.(() => {});
+  } catch {
+    // haptics unavailable
+  }
+}
+
+// ── Accent hashing — stable crayon color per entity ─────────────────────────
+
+const ACCENT_KEYS = ['blue', 'green', 'amber', 'pink', 'violet', 'teal'] as const;
+export type AccentKey = (typeof ACCENT_KEYS)[number];
+
+export function accentKeyForSeed(seed: string): AccentKey {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return ACCENT_KEYS[hash % ACCENT_KEYS.length];
+}
+
+export function accentForSeed(colors: ThemeColors, seed: string) {
+  const key = accentKeyForSeed(seed);
+  return {
+    key,
+    tint: colors[key],
+    soft: colors[`${key}Soft` as const],
+  };
+}
+
+// ── Slab — the signature pressable surface ───────────────────────────────────
+
+export type SlabProps = {
   children: React.ReactNode;
   onPress?: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
+  /** Face background. Defaults to surface. */
+  color?: string;
+  /** Border + shadow color. Defaults to theme border. */
+  borderColor?: string;
+  radius?: number;
+  /** Sticker tilt, in degrees. Use sparingly. */
+  tilt?: number;
+  /** Set false to hide the offset shadow (quiet slabs). */
+  raised?: boolean;
   haptic?: boolean;
-  scaleTo?: number;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
+  faceStyle?: StyleProp<ViewStyle>;
+  accessibilityRole?: 'button' | 'link' | 'tab' | 'none';
   accessibilityLabel?: string;
-  accessibilityHint?: string;
-  accessibilityRole?: 'button' | 'tab' | 'link';
-  accessibilityState?: { selected?: boolean; disabled?: boolean };
   testID?: string;
-}) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+};
+
+export function Slab({
+  children,
+  onPress,
+  onLongPress,
+  disabled,
+  color,
+  borderColor,
+  radius = radii.md,
+  tilt = 0,
+  raised = true,
+  haptic = true,
+  style,
+  faceStyle,
+  accessibilityRole = 'button',
+  accessibilityLabel,
+  testID,
+}: SlabProps) {
+  const { colors } = useTheme();
+  const press = useSharedValue(0);
+  const interactive = Boolean(onPress || onLongPress) && !disabled;
+  const depth = raised ? SLAB_OFFSET : 0;
+
+  const faceAnimated = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: press.value * depth * 0.85 },
+      { translateY: press.value * depth * 0.85 },
+    ],
   }));
+
+  const body = (
+    <View
+      pointerEvents="box-none"
+      style={[
+        slabStyles.wrap,
+        { paddingRight: depth, paddingBottom: depth },
+        tilt !== 0 && { transform: [{ rotate: `${tilt}deg` }] },
+        disabled && slabStyles.disabled,
+        style,
+      ]}
+    >
+      {raised ? (
+        <View
+          pointerEvents="none"
+          style={[
+            slabStyles.shadow,
+            {
+              top: depth,
+              left: depth,
+              borderRadius: radius,
+              backgroundColor: borderColor ?? colors.shadow,
+            },
+          ]}
+        />
+      ) : null}
+      <Animated.View
+        style={[
+          slabStyles.face,
+          {
+            backgroundColor: color ?? colors.surface,
+            borderColor: borderColor ?? colors.border,
+            borderRadius: radius,
+          },
+          interactive ? faceAnimated : null,
+          faceStyle,
+        ]}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+
+  if (!interactive) {
+    return body;
+  }
 
   return (
     <Pressable
       onPress={() => {
-        if (haptic) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (haptic) tick();
         onPress?.();
       }}
       onLongPress={onLongPress}
-      disabled={disabled || !onPress}
       onPressIn={() => {
-        scale.value = withSpring(scaleTo, motion.spring);
+        press.value = withSpring(1, motion.springPress);
       }}
       onPressOut={() => {
-        scale.value = withSpring(1, motion.springBouncy);
+        press.value = withSpring(0, motion.springPress);
       }}
+      disabled={disabled}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-      accessibilityState={accessibilityState}
       testID={testID}
     >
-      <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
+      {body}
     </Pressable>
   );
 }
 
-/**
- * Entrance — staggered fade-in-up wrapper for list/section reveals.
- * `index` staggers siblings; keep indexes small (0–8).
- */
-export function Entrance({
+const slabStyles = StyleSheet.create({
+  wrap: {
+    position: 'relative',
+  },
+  shadow: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+  },
+  face: {
+    borderWidth: BORDER_W,
+    overflow: 'hidden',
+  },
+  disabled: {
+    opacity: 0.45,
+  },
+});
+
+/** Non-interactive slab with default padding — a plain card. */
+export function Card({
   children,
-  index = 0,
   style,
-}: {
-  children: React.ReactNode;
-  index?: number;
-  style?: ViewStyle | ViewStyle[];
-}) {
+  faceStyle,
+  padded = true,
+  ...rest
+}: Omit<SlabProps, 'onPress' | 'onLongPress'> & { padded?: boolean }) {
   return (
-    <Animated.View
-      entering={FadeInDown.delay(Math.min(index, 8) * 55)
-        .springify()
-        .damping(18)
-        .stiffness(190)}
+    <Slab
+      {...rest}
+      accessibilityRole="none"
       style={style}
+      faceStyle={[padded && { padding: spacing.lg }, faceStyle]}
     >
       {children}
-    </Animated.View>
+    </Slab>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Canvas
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Buttons ──────────────────────────────────────────────────────────────────
 
-function GlowBlob({
-  color,
-  size,
-  position,
-  drift = 14,
-  duration = 7000,
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
+export type ButtonSize = 'lg' | 'md' | 'sm';
+
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  size = 'md',
+  icon,
+  loading,
+  disabled,
+  tint,
+  style,
+  testID,
 }: {
-  color: string;
-  size: number;
-  position: ViewStyle;
-  drift?: number;
-  duration?: number;
+  label: string;
+  onPress?: () => void;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: keyof typeof Ionicons.glyphMap;
+  loading?: boolean;
+  disabled?: boolean;
+  /** Custom fill for variant="accent" */
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
-  const t = useSharedValue(0);
-  React.useEffect(() => {
-    t.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      true,
-    );
-  }, [t, duration]);
+  const { colors } = useTheme();
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: t.value * drift },
-      { translateX: t.value * -drift * 0.6 },
-      { scale: 1 + t.value * 0.08 },
-    ],
-  }));
+  const fill =
+    variant === 'primary'
+      ? colors.primary
+      : variant === 'danger'
+        ? colors.danger
+        : variant === 'accent'
+          ? (tint ?? colors.amber)
+          : variant === 'ghost'
+            ? 'transparent'
+            : colors.surface;
+  const labelColor =
+    variant === 'primary' || variant === 'danger' ? colors.onPrimary : colors.ink;
+  const height = size === 'lg' ? 56 : size === 'md' ? 48 : 38;
+  const fontSize = size === 'sm' ? 13.5 : 15.5;
+
+  if (variant === 'ghost') {
+    return (
+      <Pressable
+        onPress={() => {
+          tick();
+          onPress?.();
+        }}
+        disabled={disabled || loading}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID={testID}
+        style={({ pressed }) => [
+          buttonStyles.ghost,
+          { height, opacity: disabled ? 0.45 : pressed ? 0.6 : 1 },
+          style,
+        ]}
+      >
+        {icon ? <Ionicons name={icon} size={17} color={colors.ink} /> : null}
+        <Text style={[buttonStyles.label, { color: colors.ink, fontSize }]}>{label}</Text>
+      </Pressable>
+    );
+  }
 
   return (
-    <Animated.View
-      pointerEvents="none"
+    <Slab
+      onPress={onPress}
+      disabled={disabled || loading}
+      color={fill}
+      radius={radii.sm}
+      style={style}
+      faceStyle={[buttonStyles.face, { height: height - SLAB_OFFSET }]}
+      accessibilityLabel={label}
+      testID={testID}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={labelColor} />
+      ) : (
+        <View style={buttonStyles.inner}>
+          {icon ? <Ionicons name={icon} size={size === 'sm' ? 15 : 18} color={labelColor} /> : null}
+          <Text style={[buttonStyles.label, { color: labelColor, fontSize }]} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+      )}
+    </Slab>
+  );
+}
+
+const buttonStyles = StyleSheet.create({
+  face: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    letterSpacing: 0.2,
+  },
+  ghost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+});
+
+/** Small square icon button (back arrows, header actions). */
+export function IconButton({
+  icon,
+  onPress,
+  color,
+  iconColor,
+  size = 42,
+  disabled,
+  accessibilityLabel,
+  style,
+  testID,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  color?: string;
+  iconColor?: string;
+  size?: number;
+  disabled?: boolean;
+  accessibilityLabel: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Slab
+      onPress={onPress}
+      disabled={disabled}
+      color={color ?? colors.surface}
+      radius={radii.sm}
+      style={style}
+      faceStyle={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+    >
+      <Ionicons name={icon} size={Math.round(size * 0.46)} color={iconColor ?? colors.ink} />
+    </Slab>
+  );
+}
+
+// ── Chips & badges ───────────────────────────────────────────────────────────
+
+export function Chip({
+  label,
+  selected,
+  onPress,
+  icon,
+  tint,
+  style,
+  testID,
+}: {
+  label: string;
+  selected?: boolean;
+  onPress?: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Fill when selected; defaults to ink. */
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const { colors, isDark } = useTheme();
+  const fill = selected ? (tint ?? colors.ink) : colors.surface;
+  const fg = selected ? (tint ? colors.ink : isDark ? colors.bg : colors.surface) : colors.ink;
+  // When tinted fills are light pastels, keep ink text; ink fill gets paper text.
+  const labelColor = selected && !tint ? (isDark ? '#181210' : '#FFFCF2') : fg;
+
+  return (
+    <Slab
+      onPress={onPress}
+      color={fill}
+      radius={radii.pill}
+      raised={Boolean(selected)}
+      style={style}
+      faceStyle={chipStyles.face}
+      accessibilityLabel={label}
+      testID={testID}
+    >
+      <View style={chipStyles.inner}>
+        {icon ? <Ionicons name={icon} size={14} color={labelColor} /> : null}
+        <Text style={[chipStyles.label, { color: labelColor }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </Slab>
+  );
+}
+
+const chipStyles = StyleSheet.create({
+  face: {
+    paddingHorizontal: 14,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+  },
+});
+
+/** Tilted sticker badge — category tags, counts, "NEW" flashes. */
+export function Sticker({
+  label,
+  tint,
+  textColor,
+  icon,
+  tilt = -2,
+  small,
+  style,
+}: {
+  label: string;
+  tint?: string;
+  textColor?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  tilt?: number;
+  small?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const fg = textColor ?? colors.ink;
+  return (
+    <View
       style={[
+        stickerStyles.base,
         {
-          position: 'absolute',
+          backgroundColor: tint ?? colors.warningSoft,
+          borderColor: colors.border,
+          transform: [{ rotate: `${tilt}deg` }],
+          paddingHorizontal: small ? 8 : 10,
+          paddingVertical: small ? 3 : 5,
+        },
+        style,
+      ]}
+    >
+      {icon ? <Ionicons name={icon} size={small ? 11 : 13} color={fg} /> : null}
+      <Text
+        style={[stickerStyles.label, { color: fg, fontSize: small ? 10 : 11.5 }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const stickerStyles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: BORDER_W,
+    borderRadius: radii.xs,
+    alignSelf: 'flex-start',
+  },
+  label: {
+    fontFamily: fonts.bold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+});
+
+/** Quiet inline tag (no border drama). */
+export function Tag({ label, tint, style }: { label: string; tint?: string; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[tagStyles.base, { backgroundColor: tint ?? colors.surfaceAlt }, style]}>
+      <Text style={[tagStyles.label, { color: colors.ink }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const tagStyles = StyleSheet.create({
+  base: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radii.xs,
+    alignSelf: 'flex-start',
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 11.5,
+  },
+});
+
+/** Notification count dot. */
+export function CountBubble({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  if (count <= 0) return null;
+  return (
+    <View
+      style={[
+        bubbleStyles.base,
+        { backgroundColor: colors.primary, borderColor: colors.border },
+        style,
+      ]}
+    >
+      <Text style={[bubbleStyles.label, { color: colors.onPrimary }]}>
+        {count > 99 ? '99+' : String(count)}
+      </Text>
+    </View>
+  );
+}
+
+const bubbleStyles = StyleSheet.create({
+  base: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+  },
+});
+
+// ── Avatars ──────────────────────────────────────────────────────────────────
+
+export function Avatar({
+  name,
+  uri,
+  size = 44,
+  tilt = 0,
+  style,
+}: {
+  name?: string | null;
+  uri?: string | null;
+  size?: number;
+  tilt?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const seed = name?.trim() || '?';
+  const accent = accentForSeed(colors, seed);
+  const initials = seed
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
+
+  return (
+    <View
+      style={[
+        avatarStyles.base,
+        {
           width: size,
           height: size,
-          borderRadius: size / 2,
-          backgroundColor: color,
+          borderRadius: size * 0.32,
+          backgroundColor: accent.soft,
+          borderColor: colors.border,
+          transform: tilt ? [{ rotate: `${tilt}deg` }] : undefined,
         },
-        position,
+        style,
+      ]}
+    >
+      {uri ? (
+        <Animated.Image
+          source={{ uri }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          style={[
+            avatarStyles.initials,
+            { color: accent.tint, fontSize: Math.max(11, size * 0.34) },
+          ]}
+        >
+          {initials}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const avatarStyles = StyleSheet.create({
+  base: {
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  initials: {
+    fontFamily: fonts.bold,
+  },
+});
+
+export function AvatarStack({
+  names,
+  size = 30,
+  max = 4,
+  style,
+}: {
+  names: { name?: string | null; uri?: string | null }[];
+  size?: number;
+  max?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const shown = names.slice(0, max);
+  const extra = names.length - shown.length;
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+      {shown.map((member, index) => (
+        <Avatar
+          key={`${member.name ?? 'member'}-${index}`}
+          name={member.name}
+          uri={member.uri}
+          size={size}
+          style={{ marginLeft: index === 0 ? 0 : -size * 0.3 }}
+        />
+      ))}
+      {extra > 0 ? (
+        <View
+          style={[
+            avatarStyles.base,
+            {
+              width: size,
+              height: size,
+              borderRadius: size * 0.32,
+              marginLeft: -size * 0.3,
+              backgroundColor: colors.surfaceAlt,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[avatarStyles.initials, { color: colors.sub, fontSize: size * 0.34 }]}>
+            +{extra}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ── Layout primitives ────────────────────────────────────────────────────────
+
+export function AppBackdrop({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>{children}</View>;
+}
+
+/** Dashed zine rule. */
+export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        {
+          borderBottomWidth: 2,
+          borderStyle: 'dashed',
+          borderColor: colors.borderSoft,
+        },
         style,
       ]}
     />
   );
 }
 
-export function AppBackdrop({ children }: { children: React.ReactNode }) {
-  const { gradients, isDark } = useTheme();
-  return (
-    <View style={baseStyles.flex}>
-      <LinearGradient colors={gradients.app} style={StyleSheet.absoluteFill} />
-      <GlowBlob
-        color={isDark ? 'rgba(242,62,22,0.10)' : 'rgba(255,138,61,0.16)'}
-        size={220}
-        position={{ top: 40, right: -60 }}
-      />
-      <GlowBlob
-        color={isDark ? 'rgba(111,85,242,0.10)' : 'rgba(111,85,242,0.10)'}
-        size={260}
-        position={{ bottom: 60, left: -80 }}
-        duration={9000}
-      />
-      {children}
-    </View>
-  );
-}
-
-export function Screen({
-  children,
-  padded = true,
-}: {
-  children: React.ReactNode;
-  padded?: boolean;
-}) {
-  return (
-    <SafeAreaView style={baseStyles.flex} edges={['top', 'left', 'right']}>
-      <AppBackdrop>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={baseStyles.flex}
-        >
-          <View style={[baseStyles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
-        </KeyboardAvoidingView>
-      </AppBackdrop>
-    </SafeAreaView>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Signals
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * LiveDot — a small pulsing "live right now" indicator with an expanding
- * sonar ring. Use next to live counts, active pods, tonight's plans.
- */
-export function LiveDot({ size = 8, color }: { size?: number; color?: string }) {
-  const { colors } = useTheme();
-  const tint = color ?? colors.green;
-  const pulse = useSharedValue(0);
-
-  React.useEffect(() => {
-    pulse.value = withRepeat(
-      withTiming(1, { duration: 1600, easing: Easing.out(Easing.quad) }),
-      -1,
-      false,
-    );
-  }, [pulse]);
-
-  const ringStyle = useAnimatedStyle(() => ({
-    opacity: 0.5 * (1 - pulse.value),
-    transform: [{ scale: 1 + pulse.value * 1.7 }],
-  }));
-
-  return (
-    <View
-      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
-      accessibilityElementsHidden
-    >
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          {
-            position: 'absolute',
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: tint,
-          },
-          ringStyle,
-        ]}
-      />
-      <View
-        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint }}
-      />
-    </View>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Headers & heroes
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function Hero({
-  eyebrow,
+/** Eyebrow kicker + display title, optional right action. */
+export function SectionHeader({
+  kicker,
   title,
-  subtitle,
-  children,
+  actionLabel,
+  onAction,
+  style,
 }: {
-  eyebrow?: string;
+  kicker?: string;
   title: string;
-  subtitle?: string;
-  children?: React.ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
-  const { gradients } = useTheme();
+  const { colors, typography } = useTheme();
   return (
-    <View style={styles.heroWrap}>
-      <LinearGradient
-        colors={gradients.hero}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1.1, y: 1.2 }}
-        style={styles.hero}
-      >
-        <View pointerEvents="none" style={styles.heroEmber} />
-        <View pointerEvents="none" style={styles.heroEmberSmall} />
-        <View pointerEvents="none" style={styles.heroAurora} />
-        {eyebrow ? <Text style={styles.heroEyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.heroTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.heroSubtitle}>{subtitle}</Text> : null}
-        {children}
-      </LinearGradient>
-    </View>
-  );
-}
-
-export function CompactHeader({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-}: {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
-  children?: React.ReactNode;
-}) {
-  const styles = useUiStyles();
-  return (
-    <View style={styles.compactHeader}>
-      {eyebrow ? <Text style={styles.compactEyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.compactTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.compactSubtitle}>{subtitle}</Text> : null}
-      {children}
-    </View>
-  );
-}
-
-export function ScreenHeader({
-  title,
-  onBack,
-  right,
-}: {
-  title?: string;
-  onBack?: () => void;
-  right?: React.ReactNode;
-}) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  return (
-    <View style={styles.screenHeader}>
-      <View style={styles.screenHeaderSide}>
-        {onBack ? (
-          <Tooltip label="Go back">
-            <TouchableOpacity
-              onPress={() => {
-                Keyboard.dismiss();
-                onBack();
-              }}
-              style={styles.backButton}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-              accessibilityHint="Returns to the previous screen"
-            >
-              <Ionicons name="chevron-back" size={20} color={colors.ink} />
-            </TouchableOpacity>
-          </Tooltip>
-        ) : null}
+    <View style={[sectionStyles.row, style]}>
+      <View style={{ flex: 1 }}>
+        {kicker ? <Text style={[typography.kicker, sectionStyles.kicker]}>{kicker}</Text> : null}
+        <Text style={typography.title}>{title}</Text>
       </View>
-      <Text style={styles.screenHeaderTitle} numberOfLines={1}>
-        {title ?? ''}
-      </Text>
-      <View style={[styles.screenHeaderSide, styles.screenHeaderRight]}>{right}</View>
-    </View>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Surfaces
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function Panel({
-  children,
-  style,
-  onPress,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-  onPress?: () => void;
-}) {
-  const styles = useUiStyles();
-  if (onPress) {
-    return (
-      <Tap onPress={onPress} style={[styles.panel, style as ViewStyle]}>
-        {children}
-      </Tap>
-    );
-  }
-  return <View style={[styles.panel, style]}>{children}</View>;
-}
-
-/**
- * GradientEdgeCard — a surface card wrapped in a hairline brand-gradient ring.
- * Reserve for the single most important card on a screen.
- */
-export function GradientEdgeCard({
-  children,
-  style,
-  onPress,
-  accessibilityLabel,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}) {
-  const styles = useUiStyles();
-  const { gradients } = useTheme();
-
-  const card = (
-    <LinearGradient
-      colors={gradients.brand}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.gradientEdge}
-    >
-      <View style={[styles.gradientEdgeInner, style]}>{children}</View>
-    </LinearGradient>
-  );
-
-  if (!onPress) return <View style={styles.gradientEdgeShadow}>{card}</View>;
-  return (
-    <Tap
-      onPress={onPress}
-      haptic
-      accessibilityLabel={accessibilityLabel}
-      style={styles.gradientEdgeShadow}
-    >
-      {card}
-    </Tap>
-  );
-}
-
-type SectionHeaderProps = {
-  title: string;
-} & (
-  | { actionLabel?: undefined; onActionPress?: undefined }
-  | { actionLabel: string | undefined; onActionPress: () => void }
-);
-
-export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
-  const styles = useUiStyles();
-  return (
-    <View style={styles.sectionRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {actionLabel && onActionPress ? (
-        <TouchableOpacity
-          onPress={onActionPress}
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
         >
-          <Text style={styles.sectionAction}>{actionLabel}</Text>
-        </TouchableOpacity>
+          <Text style={[sectionStyles.action, { color: colors.primary }]}>{actionLabel} →</Text>
+        </Pressable>
       ) : null}
     </View>
   );
 }
 
-export function StatTile({
-  label,
-  value,
-  icon,
+const sectionStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.md,
+  },
+  kicker: {
+    marginBottom: 3,
+  },
+  action: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    paddingBottom: 2,
+  },
+});
+
+/** Stack-screen header: back slab + kicker/title. */
+export function ScreenHeader({
+  title,
+  kicker,
+  onBack,
+  right,
+  style,
 }: {
-  label: string;
-  value: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  kicker?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
+  const { typography } = useTheme();
   return (
-    <Panel style={styles.statTile}>
-      <View style={styles.statIcon}>
-        <Ionicons name={icon} size={16} color={colors.primary} />
+    <View style={[headerStyles.row, style]}>
+      {onBack ? (
+        <IconButton icon="arrow-back" onPress={onBack} accessibilityLabel="Go back" />
+      ) : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
+        <Text style={typography.display} numberOfLines={1}>
+          {title}
+        </Text>
       </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </Panel>
+      {right}
+    </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Controls
-// ─────────────────────────────────────────────────────────────────────────────
+const headerStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+});
 
-export function Chip({
+// ── Inputs ───────────────────────────────────────────────────────────────────
+
+export function Field({
   label,
-  active = false,
-  onPress,
-  icon,
-}: {
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-  icon?: keyof typeof Ionicons.glyphMap;
+  error,
+  hint,
+  style,
+  inputStyle,
+  multiline,
+  ...inputProps
+}: TextInputProps & {
+  label?: string;
+  error?: string | null;
+  hint?: string;
+  style?: StyleProp<ViewStyle>;
+  inputStyle?: StyleProp<TextStyle>;
 }) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  const content = (
-    <View style={[styles.chip, active && styles.chipActive]}>
-      {icon ? (
-        <Ionicons name={icon} size={14} color={active ? colors.onPrimary : colors.sub} />
-      ) : null}
-      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
-    </View>
-  );
-
-  if (!onPress) return content;
-  return (
-    <Tap
-      onPress={onPress}
-      haptic
-      scaleTo={0.94}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-    >
-      {content}
-    </Tap>
-  );
-}
-
-export function SegmentedControl<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-}) {
-  const styles = useUiStyles();
-  const [width, setWidth] = React.useState(0);
-  const index = Math.max(
-    0,
-    options.findIndex((option) => option.value === value),
-  );
-  const pad = 4;
-  const gap = 6;
-  const segWidth =
-    width > 0 ? (width - pad * 2 - gap * (options.length - 1)) / options.length : 0;
-  const x = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (segWidth > 0) {
-      x.value = withSpring(index * (segWidth + gap), motion.spring);
-    }
-  }, [index, segWidth, x]);
-
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }],
-  }));
-
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+  const { colors, typography } = useTheme();
+  const [focused, setFocused] = React.useState(false);
 
   return (
-    <View style={styles.segmented} onLayout={onLayout}>
-      {segWidth > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.segmentThumb, { width: segWidth }, thumbStyle]}
+    <View style={style}>
+      {label ? <Text style={[typography.kicker, { marginBottom: 6 }]}>{label}</Text> : null}
+      <View
+        style={[
+          fieldStyles.well,
+          {
+            backgroundColor: colors.surface,
+            borderColor: error ? colors.danger : focused ? colors.primary : colors.border,
+          },
+          multiline && { minHeight: 96, paddingVertical: 10 },
+        ]}
+      >
+        <TextInput
+          {...inputProps}
+          multiline={multiline}
+          onFocus={(event) => {
+            setFocused(true);
+            inputProps.onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            inputProps.onBlur?.(event);
+          }}
+          placeholderTextColor={colors.faint}
+          style={[
+            fieldStyles.input,
+            { color: colors.ink },
+            multiline && { textAlignVertical: 'top', flex: 1 },
+            inputStyle,
+          ]}
         />
+      </View>
+      {error ? (
+        <Text style={[fieldStyles.meta, { color: colors.danger }]}>{error}</Text>
+      ) : hint ? (
+        <Text style={[fieldStyles.meta, { color: colors.faint }]}>{hint}</Text>
       ) : null}
-      {options.map((option) => {
-        const active = option.value === value;
-        return (
-          <TouchableOpacity
-            key={option.value}
-            style={styles.segment}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onChange(option.value);
-            }}
-            accessibilityRole="tab"
-            accessibilityLabel={option.label}
-            accessibilityState={{ selected: active }}
-          >
-            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
     </View>
   );
 }
 
-export function SearchField({
+const fieldStyles = StyleSheet.create({
+  well: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: 14,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    paddingVertical: 12,
+  },
+  meta: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    marginTop: 6,
+  },
+});
+
+export function SearchBar({
   value,
   onChangeText,
-  placeholder,
+  placeholder = 'Search…',
+  onClear,
+  autoFocus,
+  style,
+  testID,
 }: {
   value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  onClear?: () => void;
+  autoFocus?: boolean;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
-  const styles = useUiStyles();
   const { colors } = useTheme();
   const [focused, setFocused] = React.useState(false);
   return (
-    <View style={[styles.search, focused && styles.searchFocused]}>
-      <Ionicons name="search" size={18} color={focused ? colors.primary : colors.faint} />
+    <View
+      style={[
+        fieldStyles.well,
+        {
+          backgroundColor: colors.surface,
+          borderColor: focused ? colors.primary : colors.border,
+          gap: spacing.sm,
+        },
+        style,
+      ]}
+    >
+      <Ionicons name="search" size={18} color={colors.sub} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.faint}
-        style={styles.searchInput}
-        accessibilityLabel={placeholder}
+        autoFocus={autoFocus}
+        autoCapitalize="none"
+        autoCorrect={false}
         returnKeyType="search"
-        clearButtonMode="while-editing"
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        style={[fieldStyles.input, { color: colors.ink }]}
+        accessibilityLabel={placeholder}
+        testID={testID}
       />
-    </View>
-  );
-}
-
-export function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-  loading,
-  kind = 'solid',
-  icon,
-  tooltip,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  kind?: 'solid' | 'ghost' | 'soft' | 'danger';
-  icon?: keyof typeof Ionicons.glyphMap;
-  tooltip?: string;
-}) {
-  const styles = useUiStyles();
-  const { colors, gradients } = useTheme();
-
-  const labelColor =
-    kind === 'solid'
-      ? colors.onPrimary
-      : kind === 'soft'
-        ? colors.primarySoftText
-        : kind === 'danger'
-          ? colors.dangerText
-          : colors.ink;
-
-  const inner = (
-    <View style={styles.buttonInner}>
-      {loading ? (
-        <ActivityIndicator size="small" color={labelColor} />
-      ) : (
-        <>
-          {icon ? <Ionicons name={icon} size={17} color={labelColor} /> : null}
-          <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
-        </>
-      )}
-    </View>
-  );
-
-  const button = (
-    <Tap
-      onPress={onPress}
-      disabled={disabled || loading}
-      haptic
-      scaleTo={0.96}
-      accessibilityLabel={label}
-      accessibilityHint={tooltip}
-      accessibilityState={{ disabled: disabled || loading }}
-      style={(disabled || loading ? [styles.buttonDim] : []) as ViewStyle[]}
-    >
-      {kind === 'solid' ? (
-        <LinearGradient
-          colors={gradients.brand}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.button, styles.buttonSolid]}
+      {value.length > 0 ? (
+        <Pressable
+          onPress={() => {
+            onChangeText('');
+            onClear?.();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          hitSlop={8}
         >
-          {inner}
-        </LinearGradient>
-      ) : (
-        <View
-          style={[
-            styles.button,
-            kind === 'ghost' && styles.buttonGhost,
-            kind === 'soft' && styles.buttonSoft,
-            kind === 'danger' && styles.buttonDanger,
-          ]}
-        >
-          {inner}
-        </View>
-      )}
-    </Tap>
-  );
-
-  return tooltip ? <Tooltip label={tooltip}>{button}</Tooltip> : button;
-}
-
-export function IconButton({
-  icon,
-  onPress,
-  tooltip,
-  size = 44,
-  iconSize = 22,
-  style,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  tooltip: string;
-  size?: number;
-  iconSize?: number;
-  style?: ViewStyle;
-}) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  return (
-    <Tooltip label={tooltip}>
-      <TouchableOpacity
-        style={[styles.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}
-        activeOpacity={0.8}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onPress();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={tooltip}
-        accessibilityHint={tooltip}
-      >
-        <Ionicons name={icon} size={iconSize} color={colors.ink} />
-      </TouchableOpacity>
-    </Tooltip>
-  );
-}
-
-export function Tooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactElement<Record<string, unknown>>;
-}) {
-  const styles = useUiStyles();
-  const [visible, setVisible] = React.useState(false);
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const show = React.useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    setVisible(true);
-    timer.current = setTimeout(() => setVisible(false), 1600);
-  }, []);
-
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const childProps = children.props as {
-    onLongPress?: (...args: unknown[]) => void;
-    delayLongPress?: number;
-    onHoverIn?: (...args: unknown[]) => void;
-    onHoverOut?: (...args: unknown[]) => void;
-  };
-
-  const child = React.cloneElement(children, {
-    onLongPress: (...args: unknown[]) => {
-      show();
-      childProps.onLongPress?.(...args);
-    },
-    delayLongPress: childProps.delayLongPress ?? 300,
-    onHoverIn: (...args: unknown[]) => {
-      show();
-      childProps.onHoverIn?.(...args);
-    },
-    onHoverOut: (...args: unknown[]) => {
-      setVisible(false);
-      childProps.onHoverOut?.(...args);
-    },
-  });
-
-  return (
-    <View style={styles.tooltipAnchor}>
-      {child}
-      {visible ? (
-        <View style={styles.tooltipBubble} pointerEvents="none">
-          <Text style={styles.tooltipText}>{label}</Text>
-        </View>
+          <Ionicons name="close-circle" size={18} color={colors.faint} />
+        </Pressable>
       ) : null}
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeletons (shimmer pulse)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Feedback ─────────────────────────────────────────────────────────────────
 
-export function SkeletonBlock({
-  width = '100%',
-  height,
-  radius = radii.md,
-  color,
+export function Banner({
+  message,
+  kind = 'error',
   style,
 }: {
-  width?: ViewStyle['width'];
-  height: number;
-  radius?: number;
-  color?: string;
-  style?: ViewStyle;
+  message: string;
+  kind?: 'error' | 'info' | 'success';
+  style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const opacity = useSharedValue(0.6);
+  const tint =
+    kind === 'error' ? colors.dangerSoft : kind === 'success' ? colors.successSoft : colors.blueSoft;
+  const fg = kind === 'error' ? colors.danger : kind === 'success' ? colors.success : colors.blue;
+  const icon =
+    kind === 'error' ? 'alert-circle' : kind === 'success' ? 'checkmark-circle' : 'information-circle';
+  return (
+    <View
+      style={[
+        bannerStyles.base,
+        { backgroundColor: tint, borderColor: colors.border },
+        style,
+      ]}
+      accessibilityRole="alert"
+    >
+      <Ionicons name={icon} size={18} color={fg} />
+      <Text style={[bannerStyles.text, { color: colors.ink }]}>{message}</Text>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+  },
+  text: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+});
+
+export function EmptyState({
+  icon = 'sparkles',
+  title,
+  body,
+  actionLabel,
+  onAction,
+  tint,
+  style,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  body?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors, typography } = useTheme();
+  return (
+    <View style={[emptyStyles.wrap, style]}>
+      <View
+        style={[
+          emptyStyles.badge,
+          {
+            backgroundColor: tint ?? colors.primarySoft,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Ionicons name={icon} size={30} color={colors.ink} />
+      </View>
+      <Text style={[typography.title, emptyStyles.title]}>{title}</Text>
+      {body ? <Text style={[typography.caption, emptyStyles.body]}>{body}</Text> : null}
+      {actionLabel && onAction ? (
+        <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
+      ) : null}
+    </View>
+  );
+}
+
+const emptyStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xxl,
+  },
+  badge: {
+    width: 74,
+    height: 74,
+    borderRadius: radii.lg,
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-4deg' }],
+    marginBottom: spacing.lg,
+  },
+  title: {
+    textAlign: 'center',
+  },
+  body: {
+    textAlign: 'center',
+    marginTop: 6,
+    maxWidth: 280,
+  },
+});
+
+// ── Skeletons ────────────────────────────────────────────────────────────────
+
+function usePulse() {
+  const pulse = useSharedValue(0.45);
   React.useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-      ),
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 760, easing: Easing.inOut(Easing.quad) }),
       -1,
       true,
     );
-  }, [opacity]);
-  const pulse = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  }, [pulse]);
+  return useAnimatedStyle(() => ({ opacity: pulse.value }));
+}
+
+export function SkeletonBlock({
+  width = '100%',
+  height = 16,
+  radius = radii.xs,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const animated = usePulse();
   return (
     <Animated.View
       style={[
-        {
-          width,
-          height,
-          borderRadius: radius,
-          backgroundColor: color ?? colors.skeleton,
-          overflow: 'hidden',
-        },
-        pulse,
+        { width, height, borderRadius: radius, backgroundColor: colors.surfaceAlt },
+        animated,
         style,
       ]}
     />
   );
 }
 
-export function SkeletonLine({ width = '100%' }: { width?: ViewStyle['width'] }) {
-  return <SkeletonBlock width={width} height={12} radius={6} />;
-}
-
-export function SkeletonCard({ compact = false }: { compact?: boolean }) {
-  const styles = useUiStyles();
+export function SkeletonCard({ compact, style }: { compact?: boolean; style?: StyleProp<ViewStyle> }) {
   return (
-    <Panel style={styles.skeletonCard}>
-      <SkeletonBlock width={compact ? 72 : 120} height={14} radius={7} />
-      <SkeletonBlock width="82%" height={compact ? 20 : 28} radius={8} />
-      <SkeletonLine width="64%" />
-      <View style={styles.skeletonRow}>
-        <SkeletonBlock width={34} height={34} radius={17} />
-        <View style={styles.skeletonTextStack}>
-          <SkeletonLine width="78%" />
-          <SkeletonLine width="48%" />
-        </View>
+    <Card padded style={style}>
+      <View style={{ gap: spacing.md }}>
+        <SkeletonBlock width="42%" height={12} />
+        <SkeletonBlock width="78%" height={compact ? 16 : 22} />
+        {!compact ? <SkeletonBlock width="60%" height={13} /> : null}
       </View>
-    </Panel>
+    </Card>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Content
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Sheet modal ──────────────────────────────────────────────────────────────
 
-export function EmptyState({
-  icon,
+export function Sheet({
+  visible,
+  onClose,
   title,
-  body,
-  actionLabel,
-  onActionPress,
+  kicker,
+  children,
+  scrollable,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body: string;
-  actionLabel?: string;
-  onActionPress?: () => void;
+  visible: boolean;
+  onClose: () => void;
+  title?: string;
+  kicker?: string;
+  children: React.ReactNode;
+  scrollable?: boolean;
 }) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <Panel style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={22} color={colors.primary} />
-      </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
-      {actionLabel && onActionPress ? (
-        <View style={styles.emptyAction}>
-          <PrimaryButton label={actionLabel} onPress={onActionPress} kind="soft" />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={[sheetStyles.scrim, { backgroundColor: colors.overlay }]}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+        <View
+          style={[
+            sheetStyles.sheet,
+            {
+              backgroundColor: colors.bg,
+              borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, spacing.xl),
+            },
+          ]}
+        >
+          <View style={[sheetStyles.grabber, { backgroundColor: colors.borderSoft }]} />
+          {(title || kicker) ? (
+            <View style={sheetStyles.header}>
+              <View style={{ flex: 1 }}>
+                {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
+                {title ? <Text style={typography.display}>{title}</Text> : null}
+              </View>
+              <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" size={38} />
+            </View>
+          ) : null}
+          {scrollable ? (
+            <Animated.ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 520 }}
+              contentContainerStyle={{ paddingBottom: spacing.md }}
+            >
+              {children}
+            </Animated.ScrollView>
+          ) : (
+            children
+          )}
         </View>
-      ) : null}
-    </Panel>
-  );
-}
-
-export function UserAvatar({
-  name,
-  avatarUrl,
-  size = 42,
-  ring = false,
-}: {
-  name: string;
-  avatarUrl?: string | null;
-  size?: number;
-  ring?: boolean;
-}) {
-  const { colors, gradients } = useTheme();
-  const uri = resolveAvatarUrl(avatarUrl);
-
-  const core = uri ? (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        overflow: 'hidden',
-        backgroundColor: colors.surfaceAlt,
-      }}
-    >
-      <Image source={{ uri }} style={{ width: size, height: size }} />
-    </View>
-  ) : (
-    <LinearGradient
-      colors={gradients.brand}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text
-        style={{
-          color: '#FFFFFF',
-          fontFamily: fonts.bold,
-          fontSize: size * 0.34,
-        }}
-      >
-        {getInitials(name)}
-      </Text>
-    </LinearGradient>
-  );
-
-  if (!ring) return core;
-
-  return (
-    <LinearGradient
-      colors={gradients.brand}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{
-        width: size + 6,
-        height: size + 6,
-        borderRadius: (size + 6) / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <View
-        style={{
-          width: size + 2,
-          height: size + 2,
-          borderRadius: (size + 2) / 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.bg,
-        }}
-      >
-        {core}
       </View>
-    </LinearGradient>
+    </Modal>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
-
-const baseStyles = StyleSheet.create({
-  flex: { flex: 1 },
-  screen: {
+const sheetStyles = StyleSheet.create({
+  scrim: {
     flex: 1,
-    paddingHorizontal: spacing.md,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    borderWidth: BORDER_W + 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 52,
+    height: 5,
+    borderRadius: 3,
+    marginBottom: spacing.md,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
 });
 
-const useUiStyles = createThemedStyles((t: Theme) => ({
-  iconButton: {
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
+/** Settings-style list row inside a Card: icon well, title, sub, chevron. */
+export function ListRow({
+  icon,
+  title,
+  sub,
+  onPress,
+  tint,
+  right,
+  destructive,
+  last,
+  testID,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  sub?: string;
+  onPress?: () => void;
+  tint?: string;
+  right?: React.ReactNode;
+  destructive?: boolean;
+  last?: boolean;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  const fg = destructive ? colors.danger : colors.ink;
+  return (
+    <Pressable
+      onPress={
+        onPress
+          ? () => {
+              tick();
+              onPress();
+            }
+          : undefined
+      }
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : 'none'}
+      accessibilityLabel={title}
+      testID={testID}
+      style={({ pressed }) => [
+        rowStyles.row,
+        !last && { borderBottomWidth: 2, borderStyle: 'dashed', borderColor: colors.borderSoft },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      {icon ? (
+        <View
+          style={[
+            rowStyles.iconWell,
+            {
+              backgroundColor: destructive ? colors.dangerSoft : (tint ?? colors.surfaceAlt),
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Ionicons name={icon} size={17} color={fg} />
+        </View>
+      ) : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[rowStyles.title, { color: fg }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {sub ? (
+          <Text style={[rowStyles.sub, { color: colors.sub }]} numberOfLines={2}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.faint} /> : null)}
+    </Pressable>
+  );
+}
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 13,
+  },
+  iconWell: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.xs + 2,
+    borderWidth: BORDER_W,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: t.colors.glass,
-    borderWidth: 1,
-    borderColor: t.colors.border,
   },
-  tooltipAnchor: {
-    position: 'relative' as const,
-  },
-  tooltipBubble: {
-    position: 'absolute' as const,
-    right: 0,
-    bottom: '100%' as const,
-    marginBottom: 8,
-    maxWidth: 220,
-    borderRadius: radii.sm,
-    backgroundColor: t.isDark ? t.colors.surfaceAlt : t.colors.ink,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    zIndex: 50,
-  },
-  tooltipText: {
-    color: t.isDark ? t.colors.ink : '#FFFFFF',
+  title: {
     fontFamily: fonts.semibold,
-    fontSize: 12,
+    fontSize: 15,
   },
-  skeletonCard: {
-    gap: spacing.sm,
-  },
-  skeletonRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-  },
-  skeletonTextStack: {
-    flex: 1,
-    gap: 8,
-  },
-  heroWrap: {
-    borderRadius: radii.lg,
-    ...t.shadows.raised,
-  },
-  hero: {
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    gap: spacing.xs,
-    overflow: 'hidden' as const,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  heroEmber: {
-    position: 'absolute' as const,
-    top: -70,
-    right: -50,
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    backgroundColor: 'rgba(242,62,22,0.32)',
-  },
-  heroEmberSmall: {
-    position: 'absolute' as const,
-    bottom: -60,
-    left: -30,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(111,85,242,0.22)',
-  },
-  heroAurora: {
-    position: 'absolute' as const,
-    top: -90,
-    left: '32%' as const,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(61,194,194,0.10)',
-  },
-  heroEyebrow: {
-    ...t.typography.label,
-    color: 'rgba(255,255,255,0.62)',
-  },
-  heroTitle: {
-    ...t.typography.h1,
-    color: t.colors.onHero,
-  },
-  heroSubtitle: {
-    ...t.typography.body,
-    color: t.colors.heroSub,
-  },
-  compactHeader: {
-    gap: spacing.xs,
-    paddingHorizontal: 2,
-  },
-  compactEyebrow: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  compactTitle: {
-    ...t.typography.h1,
-  },
-  compactSubtitle: {
-    ...t.typography.body,
-    maxWidth: '92%' as const,
-  },
-  screenHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    minHeight: 46,
-    marginBottom: spacing.md,
-  },
-  screenHeaderSide: {
-    width: 52,
-    alignItems: 'flex-start' as const,
-    justifyContent: 'center' as const,
-  },
-  screenHeaderRight: {
-    alignItems: 'flex-end' as const,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.glass,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  screenHeaderTitle: {
-    flex: 1,
-    textAlign: 'center' as const,
-    ...t.typography.title,
-  },
-  panel: {
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    ...t.shadows.card,
-  },
-  gradientEdgeShadow: {
-    borderRadius: radii.lg + 1.5,
-    ...t.shadows.glow,
-  },
-  gradientEdge: {
-    borderRadius: radii.lg + 1.5,
-    padding: 1.5,
-  },
-  gradientEdgeInner: {
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    overflow: 'hidden' as const,
-  },
-  sectionRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    ...t.typography.h2,
-  },
-  sectionAction: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: t.colors.primary,
-  },
-  statTile: {
-    minWidth: 110,
-    gap: spacing.xs,
-  },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.primarySoft,
-  },
-  statValue: {
-    ...t.typography.h2,
-    fontSize: 22,
-  },
-  statLabel: {
-    ...t.typography.caption,
-  },
-  chip: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    marginRight: spacing.sm,
-    ...t.shadows.subtle,
-  },
-  chipActive: {
-    backgroundColor: t.colors.ink,
-    borderColor: t.colors.ink,
-  },
-  chipLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: t.colors.ink,
-  },
-  chipLabelActive: {
-    color: t.isDark ? '#0C0D11' : '#FFFFFF',
-  },
-  segmented: {
-    flexDirection: 'row' as const,
-    backgroundColor: t.colors.inputBg,
-    borderRadius: radii.pill,
-    padding: 4,
-    gap: 6,
-    position: 'relative' as const,
-  },
-  segmentThumb: {
-    position: 'absolute' as const,
-    top: 4,
-    left: 4,
-    bottom: 4,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    ...t.shadows.subtle,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: radii.pill,
-    alignItems: 'center' as const,
-  },
-  segmentLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: t.colors.faint,
-  },
-  segmentLabelActive: {
-    color: t.colors.ink,
-  },
-  search: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: t.colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    ...t.shadows.subtle,
-  },
-  searchFocused: {
-    borderColor: t.colors.primary,
-  },
-  searchInput: {
-    flex: 1,
+  sub: {
     fontFamily: fonts.medium,
-    fontSize: 15,
-    color: t.colors.ink,
-    padding: 0,
+    fontSize: 12.5,
+    marginTop: 1,
   },
-  button: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  buttonInner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
-    minHeight: 20,
-  },
-  buttonSolid: {
-    ...t.shadows.glow,
-  },
-  buttonGhost: {
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.borderStrong,
-  },
-  buttonSoft: {
-    backgroundColor: t.colors.primarySoft,
-  },
-  buttonDanger: {
-    backgroundColor: t.colors.dangerBg,
-  },
-  buttonDim: {
-    opacity: 0.55,
-  },
-  buttonLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    letterSpacing: 0.1,
-  },
-  empty: {
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.primarySoft,
-  },
-  emptyTitle: {
-    ...t.typography.title,
-  },
-  emptyBody: {
-    ...t.typography.body,
-    textAlign: 'center' as const,
-    maxWidth: 280,
-  },
-  emptyAction: {
-    marginTop: spacing.xs,
-  },
-}));
+});
+
+// ── Misc ─────────────────────────────────────────────────────────────────────
+
+export function ProgressBar({
+  value,
+  tint,
+  height = 12,
+  style,
+}: {
+  /** 0..1 */
+  value: number;
+  tint?: string;
+  height?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const clamped = Math.max(0, Math.min(1, value));
+  return (
+    <View
+      style={[
+        {
+          height,
+          borderRadius: height / 2,
+          borderWidth: BORDER_W,
+          borderColor: colors.border,
+          backgroundColor: colors.sunken,
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+      accessibilityRole="progressbar"
+    >
+      <View
+        style={{
+          width: `${clamped * 100}%`,
+          flex: 1,
+          backgroundColor: tint ?? colors.primary,
+        }}
+      />
+    </View>
+  );
+}
+
+export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+  const { colors, typography } = useTheme();
+  return (
+    <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }}>
+      <ActivityIndicator color={colors.primary} />
+      <Text style={typography.caption}>{label}</Text>
+    </View>
+  );
+}

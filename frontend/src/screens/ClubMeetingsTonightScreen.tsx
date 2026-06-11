@@ -3,14 +3,30 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, getClubsToday } from '../api';
 import type { RootStackParamList } from '../../App';
 import { ClubMeetingToday } from '../types';
-import { EmptyState, Entrance, LiveDot, Screen, ScreenHeader, Tap } from '../components/ui';
-import { clubGradientForSeed } from '../constants/clubVisuals';
+import {
+  AppBackdrop,
+  EmptyState,
+  ScreenHeader,
+  Slab,
+  Sticker,
+  accentForSeed,
+} from '../components/ui';
 import { formatTime } from '../utils/format';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  motion,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMeetingsTonight'>;
 
@@ -21,7 +37,7 @@ const SOON_WINDOW_MS = 60 * 60 * 1000;
 
 function sortMeetings(items: ClubMeetingToday[]) {
   return [...items].sort(
-    (a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime()
+    (a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime(),
   );
 }
 
@@ -33,12 +49,15 @@ function meetingStatus(iso: string, now: number): MeetingStatus {
 }
 
 function tonightDateLabel() {
-  return new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  return new Date()
+    .toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+    .toUpperCase();
 }
 
 export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const [meetings, setMeetings] = useState<ClubMeetingToday[]>([]);
 
   const load = useCallback(async () => {
@@ -46,14 +65,14 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
       const rows = await getClubsToday();
       setMeetings(sortMeetings(rows));
     } catch (error) {
-      Alert.alert('Could not load tonight\'s meetings', getApiErrorMessage(error));
+      Alert.alert("Could not load tonight's meetings", getApiErrorMessage(error));
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   const items = useMemo(() => sortMeetings(meetings), [meetings]);
@@ -61,18 +80,23 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   const liveCount = items.filter((item) => meetingStatus(item.meetingTime, now) === 'live').length;
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <ScreenHeader title="Tonight" onBack={() => navigation.goBack()} />
+        keyboardDismissMode="on-drag"
+      >
+        <ScreenHeader title="Tonight" kicker={tonightDateLabel()} onBack={() => navigation.goBack()} />
 
         <View style={styles.headerBlock}>
-          <Text style={styles.headerEyebrow}>{tonightDateLabel()}</Text>
-          <Text style={styles.headerTitle}>Tonight on campus</Text>
-          <Text style={styles.headerSub}>
+          <Text style={styles.headerTitle}>TONIGHT{'\n'}ON CAMPUS.</Text>
+          <Text style={[typography.body, { color: colors.sub }]}>
             {items.length
-              ? `${items.length} club meeting${items.length === 1 ? '' : 's'} on the schedule${liveCount ? ` · ${liveCount} live now` : ''}`
+              ? `${items.length} club meeting${items.length === 1 ? '' : 's'} on the schedule${liveCount ? ` • ${liveCount} live now` : ''}`
               : 'Nothing on the schedule yet'}
           </Text>
         </View>
@@ -81,157 +105,168 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
           <View style={styles.timeline}>
             {items.map((meeting, index) => {
               const status = meetingStatus(meeting.meetingTime, now);
+              const accent = accentForSeed(colors, meeting.clubId);
               return (
-                <Entrance key={meeting.id} index={Math.min(index, 6)}>
+                <Animated.View
+                  key={meeting.id}
+                  entering={FadeInDown.delay(Math.min(index, 6) * motion.stagger).duration(
+                    motion.durBase,
+                  )}
+                >
                   <View style={styles.timelineRow}>
                     <View style={styles.timeColumn}>
-                      <Text style={[styles.timeText, status === 'live' && styles.timeTextLive]}>
+                      <Text
+                        style={[
+                          styles.timeText,
+                          status === 'live' && { color: colors.success },
+                        ]}
+                      >
                         {formatTime(meeting.meetingTime)}
                       </Text>
                     </View>
 
                     <View style={styles.railColumn}>
-                      <View style={[
-                        styles.railDot,
-                        status === 'live' && styles.railDotLive,
-                        status === 'soon' && styles.railDotSoon,
-                      ]} />
-                      {index < items.length - 1 ? <View style={styles.railLine} /> : null}
+                      <View
+                        style={[
+                          styles.railDot,
+                          {
+                            backgroundColor:
+                              status === 'live'
+                                ? colors.success
+                                : status === 'soon'
+                                  ? colors.warning
+                                  : colors.borderSoft,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      />
+                      {index < items.length - 1 ? (
+                        <View style={[styles.railLine, { backgroundColor: colors.borderSoft }]} />
+                      ) : null}
                     </View>
 
-                    <Tap
-                      haptic
-                      style={styles.meetingCard}
+                    <Slab
                       onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
+                      style={{ flex: 1 }}
+                      faceStyle={styles.meetingFace}
                       accessibilityLabel={`${meeting.clubName}, ${meeting.title}, at ${formatTime(meeting.meetingTime)}`}
                     >
                       <View style={styles.meetingTop}>
-                        <LinearGradient
-                          colors={clubGradientForSeed(meeting.clubId)}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.emojiTile}
+                        <View
+                          style={[
+                            styles.emojiTile,
+                            { backgroundColor: accent.soft, borderColor: colors.border },
+                          ]}
                         >
                           <Text style={styles.emojiText}>{meeting.clubEmoji}</Text>
-                        </LinearGradient>
-                        <View style={styles.meetingCopy}>
-                          <Text style={styles.meetingClub} numberOfLines={1}>{meeting.clubName}</Text>
-                          <Text style={styles.meetingTitle} numberOfLines={1}>{meeting.title}</Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={typography.heading} numberOfLines={1}>
+                            {meeting.clubName}
+                          </Text>
+                          <Text style={typography.caption} numberOfLines={1}>
+                            {meeting.title}
+                          </Text>
                         </View>
                         {status === 'live' ? (
-                          <View style={styles.liveBadge}>
-                            <LiveDot size={6} color="#FFFFFF" />
-                            <Text style={styles.liveBadgeText}>Live</Text>
-                          </View>
+                          <Sticker
+                            label="Live"
+                            tint={colors.success}
+                            textColor={colors.onPrimary}
+                            icon="radio"
+                            small
+                            tilt={3}
+                          />
                         ) : status === 'soon' ? (
-                          <View style={styles.soonBadge}>
-                            <Text style={styles.soonBadgeText}>Soon</Text>
-                          </View>
+                          <Sticker label="Soon" tint={colors.warningSoft} small tilt={-3} />
                         ) : null}
                       </View>
 
-                      <View style={styles.meetingMetaRow}>
-                        <Ionicons name="location-outline" size={14} color={colors.faint} />
-                        <Text style={styles.meetingMetaText} numberOfLines={1}>{meeting.location}</Text>
+                      <View style={styles.metaRow}>
+                        <Ionicons name="location" size={13} color={colors.faint} />
+                        <Text style={[typography.captionSmall, { flex: 1 }]} numberOfLines={1}>
+                          {meeting.location}
+                        </Text>
                         <View style={styles.goingPill}>
-                          <Ionicons name="people" size={12} color={colors.primary} />
-                          <Text style={styles.goingPillText}>{meeting.attendeeCount}</Text>
+                          <Ionicons name="people" size={11} color={colors.primary} />
+                          <Text style={[styles.goingText, { color: colors.primary }]}>
+                            {meeting.attendeeCount}
+                          </Text>
                         </View>
                       </View>
-                    </Tap>
+                    </Slab>
                   </View>
-                </Entrance>
+                </Animated.View>
               );
             })}
           </View>
         ) : (
           <EmptyState
-            icon="calendar-outline"
+            icon="calendar"
             title="No club meetings tonight"
             body="Tonight's club schedule will show up here once meetings are posted."
           />
         )}
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
   headerBlock: {
-    gap: 4,
-    paddingHorizontal: 2,
-  },
-  headerEyebrow: {
-    ...t.typography.label,
-    color: t.colors.primary,
+    gap: spacing.sm,
   },
   headerTitle: {
-    ...t.typography.h1,
-  },
-  headerSub: {
-    ...t.typography.body,
+    fontFamily: fonts.displayHeavy,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.8,
+    color: t.colors.ink,
   },
   timeline: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   timelineRow: {
     flexDirection: 'row' as const,
     gap: spacing.xs,
   },
   timeColumn: {
-    width: 62,
-    paddingTop: spacing.sm + 2,
+    width: 60,
+    paddingTop: spacing.md,
     alignItems: 'flex-end' as const,
   },
   timeText: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 13,
-    letterSpacing: -0.2,
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
     color: t.colors.sub,
     textAlign: 'right' as const,
   },
-  timeTextLive: {
-    color: t.colors.green,
-  },
   railColumn: {
-    width: 22,
+    width: 24,
     alignItems: 'center' as const,
-    paddingTop: spacing.sm + 6,
+    paddingTop: spacing.md + 2,
   },
   railDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: t.colors.borderStrong,
-  },
-  railDotLive: {
-    backgroundColor: t.colors.green,
-  },
-  railDotSoon: {
-    backgroundColor: t.colors.amber,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
   },
   railLine: {
     flex: 1,
     width: 2,
     borderRadius: 1,
     marginTop: 4,
-    marginBottom: -spacing.sm + 4,
-    backgroundColor: t.colors.border,
+    marginBottom: -spacing.sm,
   },
-  meetingCard: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm + 2,
-    gap: spacing.xs,
-    ...t.shadows.subtle,
+  meetingFace: {
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   meetingTop: {
     flexDirection: 'row' as const,
@@ -241,77 +276,32 @@ const useStyles = createThemedStyles((t: Theme) => ({
   emojiTile: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    transform: [{ rotate: '-2deg' }],
   },
   emojiText: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 21,
+    lineHeight: 27,
   },
-  meetingCopy: {
-    flex: 1,
-    gap: 1,
-  },
-  meetingClub: {
-    ...t.typography.title,
-    fontSize: 16,
-    lineHeight: 21,
-  },
-  meetingTitle: {
-    ...t.typography.body,
-    fontSize: 13.5,
-  },
-  liveBadge: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.green,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  liveBadgeText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
-  soonBadge: {
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.amberSoft,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  soonBadgeText: {
-    color: t.colors.warnText,
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
-  meetingMetaRow: {
+  metaRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 5,
-  },
-  meetingMetaText: {
-    ...t.typography.caption,
-    flex: 1,
   },
   goingPill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 4,
-    borderRadius: radii.pill,
+    borderRadius: radii.xs,
     backgroundColor: t.colors.primarySoft,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  goingPillText: {
+  goingText: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: t.colors.primarySoftText,
+    fontSize: 11.5,
   },
 }));

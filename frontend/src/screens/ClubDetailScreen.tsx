@@ -1,12 +1,21 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   API_USER_MESSAGE,
   checkInToClubMeeting,
@@ -57,34 +66,42 @@ import {
   ClubMemberWithUser,
   ClubMessage,
   ClubOfficerMessage,
+  ClubRole,
 } from '../types';
 import {
+  AppBackdrop,
+  Avatar,
+  Banner,
+  Button,
+  Card,
   Chip,
   EmptyState,
-  Panel,
-  PrimaryButton,
-  Screen,
+  IconButton,
   ScreenHeader,
   SkeletonCard,
-  UserAvatar,
+  Slab,
+  Sticker,
+  Tag,
 } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { clubCategoryVisual } from '../constants/clubVisuals';
+import { clubAccent, clubCategoryVisual } from '../constants/clubVisuals';
 import { formatDateTime, formatShortDate, formatTime } from '../utils/format';
 import { buildClubCalendarIcs } from '../utils/calendar';
 import { exportTextFile } from '../utils/fileExport';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 type Mode = 'overview' | 'chat' | 'members' | 'events' | 'analytics';
 type ChatView = 'hub' | 'announcements' | 'general' | 'officers';
 type OutreachAudienceType = 'ALL' | 'NON_RSVP' | 'PRIMARY_ROLE' | 'CUSTOM_ROLE' | 'MANUAL';
-type SectionHeaderRowProps = {
-  title: string;
-} & (
-  | { actionLabel?: undefined; onPress?: undefined }
-  | { actionLabel: string | undefined; onPress: () => void }
-);
 
 const VISIBILITY_OPTIONS: Array<{ value: ClubVisibility; label: string }> = [
   { value: 'PUBLIC', label: 'Public' },
@@ -99,11 +116,11 @@ const RSVP_OPTIONS: Array<{ value: 'GOING' | 'MAYBE' | 'NOT_GOING'; label: strin
 ];
 
 const MODE_ICONS: Record<Mode, keyof typeof Ionicons.glyphMap> = {
-  overview: 'home-outline',
-  chat: 'chatbubbles-outline',
-  members: 'people-outline',
-  events: 'calendar-outline',
-  analytics: 'pulse-outline',
+  overview: 'home',
+  chat: 'chatbubbles',
+  members: 'people',
+  events: 'calendar',
+  analytics: 'pulse',
 };
 
 const CLUB_PERMISSION_OPTIONS = [
@@ -150,16 +167,18 @@ function latestAllowedMeetingTime() {
 
 function sortMeetings(items: ClubMeetingWithMeta[]) {
   return [...items].sort(
-    (a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime()
+    (a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime(),
   );
 }
 
 function visibilityLabel(visibility: ClubVisibility): string {
-  return {
-    PUBLIC: 'Public',
-    MEMBERS: 'Members',
-    OFFICERS: 'Officers',
-  }[visibility] ?? 'Public';
+  return (
+    {
+      PUBLIC: 'Public',
+      MEMBERS: 'Members',
+      OFFICERS: 'Officers',
+    }[visibility] ?? 'Public'
+  );
 }
 
 function roleRank(role: string | null | undefined) {
@@ -182,8 +201,8 @@ function relativeDayLabel(iso: string) {
 
 export default function ClubDetailScreen({ route, navigation }: Props) {
   const styles = useStyles();
-  const { colors, isDark } = useTheme();
-  const activeTabContent = isDark ? '#0C0D11' : '#FFFFFF';
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const { clubId } = route.params;
   const { user } = useAuth();
   const [mode, setMode] = useState<Mode>('overview');
@@ -223,12 +242,16 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const [leaderToolsMeetingId, setLeaderToolsMeetingId] = useState<string | null>(null);
   const [attendanceCodeDraft, setAttendanceCodeDraft] = useState<Record<string, string>>({});
   const [attendanceBusyId, setAttendanceBusyId] = useState<string | null>(null);
-  const [attendancePanels, setAttendancePanels] = useState<Record<string, ClubMeetingAttendanceResponse | null>>({});
+  const [attendancePanels, setAttendancePanels] = useState<
+    Record<string, ClubMeetingAttendanceResponse | null>
+  >({});
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [outreachOpen, setOutreachOpen] = useState(false);
   const [outreachAudienceType, setOutreachAudienceType] = useState<OutreachAudienceType>('ALL');
-  const [outreachPrimaryRole, setOutreachPrimaryRole] = useState<'OWNER' | 'ADMIN' | 'OFFICER' | 'MEMBER'>('MEMBER');
+  const [outreachPrimaryRole, setOutreachPrimaryRole] = useState<
+    'OWNER' | 'ADMIN' | 'OFFICER' | 'MEMBER'
+  >('MEMBER');
   const [outreachRoleId, setOutreachRoleId] = useState<string | null>(null);
   const [outreachManualIds, setOutreachManualIds] = useState<string[]>([]);
   const [outreachText, setOutreachText] = useState('');
@@ -250,7 +273,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   }, [club?.myRole, club?.officerPermissions]);
   const hasPermission = useCallback(
     (permission: string) => effectivePermissions.has(permission),
-    [effectivePermissions]
+    [effectivePermissions],
   );
   const canCreateMeetings = hasPermission('CREATE_MEETINGS');
   const canPostAnnouncements = hasPermission('POST_ANNOUNCEMENTS');
@@ -258,12 +281,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
   const canManageRoles = hasPermission('MANAGE_ROLES');
   const canManageClub = hasPermission('MANAGE_CLUB');
   const canDeleteClubContent = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
-  const canViewOfficerChat = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER';
+  const canViewOfficerChat =
+    club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || club?.myRole === 'OFFICER';
   const canConfigureOfficerPermissions = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const canChangePrimaryRoles = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN';
   const isSoleOwner =
-    club?.myRole === 'OWNER' &&
-    club.members.filter((member) => member.role === 'OWNER').length === 1;
+    club?.myRole === 'OWNER' && club.members.filter((member) => member.role === 'OWNER').length === 1;
   const isMember = !!club?.isMember;
   const clubRoles = club?.roles ?? [];
 
@@ -276,17 +299,18 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         .filter(Boolean);
       return names.length ? names.join(', ') : `${ids.length} selected`;
     },
-    [clubRoles]
+    [clubRoles],
   );
 
   const nonRsvpCountForMeeting = useCallback(
     (meeting: ClubMeetingWithMeta) => {
       const responded =
         meeting.rsvpCounts.going + meeting.rsvpCounts.maybe + meeting.rsvpCounts.notGoing;
-      const memberCount = (club?.members ?? []).filter((member) => member.userId !== user?.id).length;
+      const memberCount = (club?.members ?? []).filter((member) => member.userId !== user?.id)
+        .length;
       return Math.max(0, memberCount - responded);
     },
-    [club?.members, user?.id]
+    [club?.members, user?.id],
   );
 
   const canManageThisMember = useCallback(
@@ -294,7 +318,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       if (!club?.myRole || memberUserId === user?.id) return false;
       return roleRank(memberRole) < roleRank(club.myRole);
     },
-    [club?.myRole, user?.id]
+    [club?.myRole, user?.id],
   );
 
   const load = useCallback(
@@ -309,7 +333,11 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         if (clubResponse.isMember) {
           requests.push(getClubMessages(clubId));
         }
-        if (clubResponse.myRole === 'OWNER' || clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER') {
+        if (
+          clubResponse.myRole === 'OWNER' ||
+          clubResponse.myRole === 'ADMIN' ||
+          clubResponse.myRole === 'OFFICER'
+        ) {
           requests.push(getClubOfficerMessages(clubId));
         }
 
@@ -320,7 +348,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           ? (results[2] as { messages: ClubMessage[]; typingUserIds: string[] })
           : null;
         const officerMessageResponse =
-          clubResponse.myRole === 'OWNER' || clubResponse.myRole === 'ADMIN' || clubResponse.myRole === 'OFFICER'
+          clubResponse.myRole === 'OWNER' ||
+          clubResponse.myRole === 'ADMIN' ||
+          clubResponse.myRole === 'OFFICER'
             ? (results[clubResponse.isMember ? 3 : 2] as {
                 messages: ClubOfficerMessage[];
                 typingUserIds: string[];
@@ -342,20 +372,22 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           setChatView('hub');
         }
         if (
-          (clubResponse.myRole !== 'OWNER' && clubResponse.myRole !== 'ADMIN' && clubResponse.myRole !== 'OFFICER') &&
+          clubResponse.myRole !== 'OWNER' &&
+          clubResponse.myRole !== 'ADMIN' &&
+          clubResponse.myRole !== 'OFFICER' &&
           chatView === 'officers'
         ) {
           setChatView('hub');
         }
         setLoadError(null);
-	      } catch (error) {
-	        setLoadError(getApiErrorMessage(error));
-	        if (showAlert) {
-	          Alert.alert('Could not load club', getApiErrorMessage(error));
-	        }
+      } catch (error) {
+        setLoadError(getApiErrorMessage(error));
+        if (showAlert) {
+          Alert.alert('Could not load club', getApiErrorMessage(error));
+        }
       }
     },
-    [chatView, clubId, mode]
+    [chatView, clubId, mode],
   );
 
   useFocusEffect(
@@ -370,26 +402,32 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
         if (officerTypingTimerRef.current) clearTimeout(officerTypingTimerRef.current);
       };
-    }, [load])
+    }, [load]),
   );
 
-  const pingTyping = useCallback((draft: string) => {
-    if (!isMember || !draft.trim()) return;
-    if (typingTimerRef.current) return;
-    typingTimerRef.current = setTimeout(() => {
-      typingTimerRef.current = null;
-    }, 2500);
-    void sendClubTyping(clubId).catch(() => {});
-  }, [clubId, isMember]);
+  const pingTyping = useCallback(
+    (draft: string) => {
+      if (!isMember || !draft.trim()) return;
+      if (typingTimerRef.current) return;
+      typingTimerRef.current = setTimeout(() => {
+        typingTimerRef.current = null;
+      }, 2500);
+      void sendClubTyping(clubId).catch(() => {});
+    },
+    [clubId, isMember],
+  );
 
-  const pingOfficerTyping = useCallback((draft: string) => {
-    if (!canViewOfficerChat || !draft.trim()) return;
-    if (officerTypingTimerRef.current) return;
-    officerTypingTimerRef.current = setTimeout(() => {
-      officerTypingTimerRef.current = null;
-    }, 2500);
-    void sendClubOfficerTyping(clubId).catch(() => {});
-  }, [canViewOfficerChat, clubId]);
+  const pingOfficerTyping = useCallback(
+    (draft: string) => {
+      if (!canViewOfficerChat || !draft.trim()) return;
+      if (officerTypingTimerRef.current) return;
+      officerTypingTimerRef.current = setTimeout(() => {
+        officerTypingTimerRef.current = null;
+      }, 2500);
+      void sendClubOfficerTyping(clubId).catch(() => {});
+    },
+    [canViewOfficerChat, clubId],
+  );
 
   const confirmDestructive = useCallback(
     (title: string, message: string, confirmLabel: string, onConfirm: () => void) => {
@@ -398,7 +436,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         { text: confirmLabel, style: 'destructive', onPress: onConfirm },
       ]);
     },
-    []
+    [],
   );
 
   const handleShareClub = useCallback(async () => {
@@ -417,7 +455,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     if (!club || meetings.length === 0) return;
     setCalendarExportBusy(true);
     try {
-      const safeName = club.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club';
+      const safeName =
+        club.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club';
       await exportTextFile({
         filename: `${safeName}-bridge-calendar.ics`,
         contents: buildClubCalendarIcs(club, meetings),
@@ -448,7 +487,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         } finally {
           setMembershipBusy(false);
         }
-      }
+      },
     );
   }, [club, confirmDestructive, navigation]);
 
@@ -469,7 +508,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           } finally {
             setMembershipBusy(false);
           }
-        }
+        },
       );
       return;
     }
@@ -580,7 +619,11 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     buttons.push({ text: 'Share club', onPress: () => void handleShareClub() });
     buttons.push({ text: 'Report club', onPress: () => void reportClub() });
     if (club.isMember) {
-      buttons.push({ text: 'Leave club', style: 'destructive', onPress: () => void handleMembership() });
+      buttons.push({
+        text: 'Leave club',
+        style: 'destructive',
+        onPress: () => void handleMembership(),
+      });
     }
     if (canManageClub) {
       buttons.push({ text: 'Delete club', style: 'destructive', onPress: handleDeleteClub });
@@ -599,13 +642,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     reportClub,
   ]);
 
-  const handleRsvp = async (
-    meetingId: string,
-    status: 'GOING' | 'MAYBE' | 'NOT_GOING'
-  ) => {
+  const handleRsvp = async (meetingId: string, status: 'GOING' | 'MAYBE' | 'NOT_GOING') => {
     const previous = meetings;
     setMeetings((current) =>
-      current.map((meeting) => (meeting.id === meetingId ? { ...meeting, myRsvp: status } : meeting))
+      current.map((meeting) =>
+        meeting.id === meetingId ? { ...meeting, myRsvp: status } : meeting,
+      ),
     );
     try {
       await rsvpClubMeeting(meetingId, status);
@@ -623,8 +665,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const sent = await sendClubMessage(clubId, messageText.trim());
       setMessageText('');
       setMessages((current) => [...current, sent]);
-	    } catch (error) {
-	      Alert.alert('Could not send message', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not send message', getApiErrorMessage(error));
     } finally {
       setSendBusy(false);
     }
@@ -637,8 +679,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const sent = await sendClubOfficerMessage(clubId, officerMessageText.trim());
       setOfficerMessageText('');
       setOfficerMessages((current) => [...current, sent]);
-	    } catch (error) {
-	      Alert.alert('Could not send officer message', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not send officer message', getApiErrorMessage(error));
     } finally {
       setOfficerSendBusy(false);
     }
@@ -683,7 +725,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         } finally {
           setDeleteContentBusyId(null);
         }
-      }
+      },
     );
   };
 
@@ -694,7 +736,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     }
     const latestAllowed = latestAllowedMeetingTime().getTime();
     if (meetingTime.getTime() > latestAllowed || meetingTime.getTime() < Date.now()) {
-      Alert.alert('Choose a valid time', 'Meetings need to be scheduled between now and the next 12 months.');
+      Alert.alert(
+        'Choose a valid time',
+        'Meetings need to be scheduled between now and the next 12 months.',
+      );
       return;
     }
     setMeetingBusy(true);
@@ -715,8 +760,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       setMeetings((current) => sortMeetings([newMeeting, ...current]));
       setMeetingComposerOpen(false);
       setMode('events');
-	    } catch (error) {
-	      Alert.alert('Could not create meeting', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not create meeting', getApiErrorMessage(error));
     } finally {
       setMeetingBusy(false);
     }
@@ -743,7 +788,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         } finally {
           setDeleteContentBusyId(null);
         }
-      }
+      },
     );
   };
 
@@ -757,7 +802,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         'Regenerate code',
         () => {
           void handleOpenAttendanceNow(meetingId);
-        }
+        },
       );
       return;
     }
@@ -770,9 +815,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     try {
       const result = await openClubAttendance(club.id, meetingId);
       setMeetings((current) =>
-        current.map((meeting) => (
-          meeting.id === meetingId ? { ...meeting, attendanceCode: result.attendanceCode } : meeting
-        ))
+        current.map((meeting) =>
+          meeting.id === meetingId ? { ...meeting, attendanceCode: result.attendanceCode } : meeting,
+        ),
       );
     } catch {
       Alert.alert('Could not open attendance', API_USER_MESSAGE);
@@ -792,16 +837,16 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         try {
           await closeClubAttendance(club.id, meetingId);
           setMeetings((current) =>
-            current.map((meeting) => (
-              meeting.id === meetingId ? { ...meeting, attendanceCode: null } : meeting
-            ))
+            current.map((meeting) =>
+              meeting.id === meetingId ? { ...meeting, attendanceCode: null } : meeting,
+            ),
           );
         } catch {
           Alert.alert('Could not close attendance', API_USER_MESSAGE);
         } finally {
           setAttendanceBusyId(null);
         }
-      }
+      },
     );
   };
 
@@ -816,9 +861,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     try {
       const result = await checkInToClubMeeting(club.id, meetingId, code);
       setMeetings((current) =>
-        current.map((meeting) => (
-          meeting.id === meetingId ? { ...meeting, attendeeCount: result.attendedCount } : meeting
-        ))
+        current.map((meeting) =>
+          meeting.id === meetingId ? { ...meeting, attendeeCount: result.attendedCount } : meeting,
+        ),
       );
       setAttendanceCodeDraft((current) => ({ ...current, [meetingId]: '' }));
       Alert.alert('Checked in', 'Your attendance has been recorded.');
@@ -867,7 +912,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     if (!club) return;
     Alert.alert(
       'Send RSVP reminder?',
-      `This will notify members who have not RSVP’d for ${meeting.title}. You’ll see the exact count after the backend checks the audience.`,
+      `This will notify members who have not RSVP'd for ${meeting.title}. You'll see the exact count after the backend checks the audience.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -886,12 +931,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                         rsvpReminderCount: result.count,
                         rsvpReminderError: null,
                       }
-                    : item
-                )
+                    : item,
+                ),
               );
               Alert.alert(
                 'Reminder sent',
-                `${result.count} member${result.count === 1 ? '' : 's'} matched. ${result.sent} push notification${result.sent === 1 ? '' : 's'} queued.`
+                `${result.count} member${result.count === 1 ? '' : 's'} matched. ${result.sent} push notification${result.sent === 1 ? '' : 's'} queued.`,
               );
             } catch {
               Alert.alert('Could not send reminder', API_USER_MESSAGE);
@@ -900,7 +945,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -916,8 +961,8 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       const preview = await previewClubOutreach(club.id, audience);
       setOutreachPreview(preview);
       setOutreachResult(null);
-	    } catch (error) {
-	      Alert.alert('Could not preview audience', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not preview audience', getApiErrorMessage(error));
     } finally {
       setOutreachBusy(false);
     }
@@ -948,7 +993,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               const sent = await sendClubOutreach(club.id, audience, outreachText.trim());
               setOutreachPreview(sent);
               setOutreachResult(
-                `Sent ${sent.sent} push notification${sent.sent === 1 ? '' : 's'} to ${sent.count} matching member${sent.count === 1 ? '' : 's'}.`
+                `Sent ${sent.sent} push notification${sent.sent === 1 ? '' : 's'} to ${sent.count} matching member${sent.count === 1 ? '' : 's'}.`,
               );
               setOutreachText('');
             } catch {
@@ -958,7 +1003,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -971,7 +1016,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       verb,
       async () => {
         await handleRoleChangeNow(memberUserId, role);
-      }
+      },
     );
   };
 
@@ -984,10 +1029,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           ? {
               ...current,
               members: current.members.map((member) =>
-                member.userId === memberUserId ? updated : member
+                member.userId === memberUserId ? updated : member,
               ),
             }
-          : current
+          : current,
       );
     } catch {
       Alert.alert('Could not update role', API_USER_MESSAGE);
@@ -1005,7 +1050,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     try {
       const created = await createClubRole(club.id, roleNameDraft.trim());
       setClub((current) =>
-        current ? { ...current, roles: [...(current.roles ?? []), created] } : current
+        current ? { ...current, roles: [...(current.roles ?? []), created] } : current,
       );
       setRoleNameDraft('');
     } catch {
@@ -1024,7 +1069,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       'Delete tag',
       async () => {
         await handleDeleteRoleNow(roleId);
-      }
+      },
     );
   };
 
@@ -1040,10 +1085,12 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               roles: (current.roles ?? []).filter((role) => role.id !== roleId),
               members: current.members.map((member) => ({
                 ...member,
-                customRoles: (member.customRoles ?? []).filter((assignment) => assignment.roleId !== roleId),
+                customRoles: (member.customRoles ?? []).filter(
+                  (assignment) => assignment.roleId !== roleId,
+                ),
               })),
             }
-          : current
+          : current,
       );
       setAnnouncementTargetRoleIds((current) => current.filter((id) => id !== roleId));
       setMeetingTargetRoleIds((current) => current.filter((id) => id !== roleId));
@@ -1068,12 +1115,14 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                   member.userId === memberUserId
                     ? {
                         ...member,
-                        customRoles: (member.customRoles ?? []).filter((role) => role.roleId !== roleId),
+                        customRoles: (member.customRoles ?? []).filter(
+                          (role) => role.roleId !== roleId,
+                        ),
                       }
-                    : member
+                    : member,
                 ),
               }
-            : current
+            : current,
         );
       } else {
         const updated = await assignClubRole(club.id, roleId, memberUserId);
@@ -1082,10 +1131,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
             ? {
                 ...current,
                 members: current.members.map((member) =>
-                  member.userId === memberUserId ? updated : member
+                  member.userId === memberUserId ? updated : member,
                 ),
               }
-            : current
+            : current,
         );
       }
     } catch {
@@ -1103,7 +1152,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       'Remove',
       async () => {
         await handleRemoveMemberNow(memberUserId);
-      }
+      },
     );
   };
 
@@ -1117,7 +1166,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               ...current,
               members: current.members.filter((member) => member.userId !== memberUserId),
             }
-          : current
+          : current,
       );
     } catch {
       Alert.alert('Could not remove member', API_USER_MESSAGE);
@@ -1136,7 +1185,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     try {
       const updated = await updateOfficerPermissions(club.id, nextPermissions);
       setClub((current) =>
-        current ? { ...current, officerPermissions: updated.officerPermissions } : current
+        current ? { ...current, officerPermissions: updated.officerPermissions } : current,
       );
     } catch {
       Alert.alert('Could not update permissions', API_USER_MESSAGE);
@@ -1158,6 +1207,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   const nextMeeting = useMemo(() => meetings[0] ?? null, [meetings]);
   const categoryVisual = useMemo(() => clubCategoryVisual(club?.category), [club?.category]);
+  const accent = useMemo(() => clubAccent(colors, club?.category), [colors, club?.category]);
   const buildOutreachAudience = useCallback((): ClubOutreachAudience | null => {
     if (outreachAudienceType === 'ALL') return { type: 'ALL' };
     if (outreachAudienceType === 'NON_RSVP') {
@@ -1188,7 +1238,9 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       announcements: announcements.length,
       responseRate:
         memberCount && upcomingCount
-          ? Math.round(((rsvpGoing + rsvpMaybe + rsvpNotGoing) / (memberCount * upcomingCount)) * 100)
+          ? Math.round(
+              ((rsvpGoing + rsvpMaybe + rsvpNotGoing) / (memberCount * upcomingCount)) * 100,
+            )
           : null,
     };
   }, [announcements.length, club?.members.length, meetings]);
@@ -1202,47 +1254,60 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
     return { leadership, general };
   }, [club?.members]);
 
-  const openMemberActions = useCallback((member: ClubMemberWithUser) => {
-    const buttons: Array<{
-      text: string;
-      style?: 'default' | 'cancel' | 'destructive';
-      onPress?: () => void;
-    }> = [];
-    if (canChangePrimaryRoles && club?.myRole === 'OWNER' && member.role !== 'ADMIN') {
-      buttons.push({ text: 'Make admin', onPress: () => void handleRoleChange(member.userId, 'ADMIN') });
-    }
-    if (canChangePrimaryRoles && member.role === 'MEMBER') {
-      buttons.push({ text: 'Promote to officer', onPress: () => void handleRoleChange(member.userId, 'OFFICER') });
-    } else if (canChangePrimaryRoles && (member.role === 'OFFICER' || member.role === 'ADMIN')) {
-      buttons.push({
-        text: member.role === 'ADMIN' ? 'Demote to officer' : 'Demote to member',
-        onPress: () => void handleRoleChange(member.userId, member.role === 'ADMIN' ? 'OFFICER' : 'MEMBER'),
-      });
-    }
-    if (canManageRoles && clubRoles.length) {
-      buttons.push({
-        text: 'Manage member tags',
-        onPress: () => setMemberRoleEditorUserId((current) => (current === member.userId ? null : member.userId)),
-      });
-    }
-    if (canManageMembers) {
-      buttons.push({
-        text: 'Remove from club',
-        style: 'destructive',
-        onPress: () => void handleRemoveMember(member.userId),
-      });
-    }
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert(member.user.name, member.role.toLowerCase(), buttons);
-  }, [
-    canChangePrimaryRoles,
-    canManageMembers,
-    canManageRoles,
-    club?.myRole,
-    clubRoles.length,
-    handleRoleChange,
-    handleRemoveMember,
-  ]);
+  const openMemberActions = useCallback(
+    (member: ClubMemberWithUser) => {
+      const buttons: Array<{
+        text: string;
+        style?: 'default' | 'cancel' | 'destructive';
+        onPress?: () => void;
+      }> = [];
+      if (canChangePrimaryRoles && club?.myRole === 'OWNER' && member.role !== 'ADMIN') {
+        buttons.push({
+          text: 'Make admin',
+          onPress: () => void handleRoleChange(member.userId, 'ADMIN'),
+        });
+      }
+      if (canChangePrimaryRoles && member.role === 'MEMBER') {
+        buttons.push({
+          text: 'Promote to officer',
+          onPress: () => void handleRoleChange(member.userId, 'OFFICER'),
+        });
+      } else if (canChangePrimaryRoles && (member.role === 'OFFICER' || member.role === 'ADMIN')) {
+        buttons.push({
+          text: member.role === 'ADMIN' ? 'Demote to officer' : 'Demote to member',
+          onPress: () =>
+            void handleRoleChange(member.userId, member.role === 'ADMIN' ? 'OFFICER' : 'MEMBER'),
+        });
+      }
+      if (canManageRoles && clubRoles.length) {
+        buttons.push({
+          text: 'Manage member tags',
+          onPress: () =>
+            setMemberRoleEditorUserId((current) =>
+              current === member.userId ? null : member.userId,
+            ),
+        });
+      }
+      if (canManageMembers) {
+        buttons.push({
+          text: 'Remove from club',
+          style: 'destructive',
+          onPress: () => void handleRemoveMember(member.userId),
+        });
+      }
+      buttons.push({ text: 'Cancel', style: 'cancel' });
+      Alert.alert(member.user.name, member.role.toLowerCase(), buttons);
+    },
+    [
+      canChangePrimaryRoles,
+      canManageMembers,
+      canManageRoles,
+      club?.myRole,
+      clubRoles.length,
+      handleRoleChange,
+      handleRemoveMember,
+    ],
+  );
   const chatCards = useMemo(() => {
     const cards: Array<{
       key: ChatView;
@@ -1255,10 +1320,10 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
       {
         key: 'announcements',
         audience: 'PUBLIC',
-        title: 'Club Announcements',
+        title: 'Announcements',
         subtitle: 'Public club updates',
         badge: announcements.length,
-        icon: 'megaphone-outline',
+        icon: 'megaphone',
       },
       {
         key: 'general',
@@ -1266,7 +1331,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         title: 'General Chat',
         subtitle: 'Members-only conversation',
         badge: messages.length,
-        icon: 'chatbubble-ellipses-outline',
+        icon: 'chatbubble-ellipses',
       },
     ];
     if (canViewOfficerChat) {
@@ -1276,7 +1341,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
         title: 'Officers Chat',
         subtitle: 'Leadership coordination',
         badge: officerMessages.length,
-        icon: 'shield-checkmark-outline',
+        icon: 'shield-checkmark',
       });
     }
     return cards;
@@ -1284,33 +1349,50 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   const renderMemberRow = (member: ClubMemberWithUser) => {
     const manageable = canManageThisMember(member.role, member.userId);
-    const hasActions = manageable
-      && (canManageMembers || canChangePrimaryRoles || (canManageRoles && clubRoles.length > 0));
+    const hasActions =
+      manageable &&
+      (canManageMembers || canChangePrimaryRoles || (canManageRoles && clubRoles.length > 0));
     const tags = member.customRoles ?? [];
     return (
       <View style={styles.memberRow}>
         <View style={styles.memberRowMain}>
-          <TouchableOpacity
+          <Pressable
             style={styles.memberRowProfile}
-            activeOpacity={0.85}
             onPress={() => navigation.navigate('UserProfile', { userId: member.userId })}
             accessibilityRole="button"
             accessibilityLabel={`Open ${member.user.name}'s profile`}
           >
-            <UserAvatar name={member.user.name} avatarUrl={member.user.avatarUrl} size={40} />
-            <View style={styles.memberCopy}>
+            <Avatar name={member.user.name} uri={member.user.avatarUrl} size={40} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <View style={styles.memberNameRow}>
-                <Text style={styles.memberName} numberOfLines={1}>{member.user.name}</Text>
-                {member.role !== 'MEMBER' ? <RoleBadge role={member.role} /> : null}
+                <Text style={typography.subheading} numberOfLines={1}>
+                  {member.user.name}
+                </Text>
+                {member.role !== 'MEMBER' ? (
+                  <Sticker
+                    label={member.role}
+                    tint={
+                      member.role === 'OWNER'
+                        ? colors.primarySoft
+                        : member.role === 'ADMIN'
+                          ? colors.violetSoft
+                          : colors.blueSoft
+                    }
+                    small
+                    tilt={-2}
+                  />
+                ) : null}
               </View>
-              <Text style={styles.memberMetaText} numberOfLines={1}>
+              <Text style={typography.captionSmall} numberOfLines={1}>
                 {member.user.major ?? 'Undeclared'}
-                {tags.length ? ` · ${tags.map((assignment) => assignment.role.name).join(', ')}` : ''}
+                {tags.length
+                  ? ` • ${tags.map((assignment) => assignment.role.name).join(', ')}`
+                  : ''}
               </Text>
             </View>
-          </TouchableOpacity>
+          </Pressable>
           {hasActions ? (
-            <TouchableOpacity
+            <Pressable
               style={styles.memberActionButton}
               onPress={() => openMemberActions(member)}
               disabled={memberActionUserId === member.userId}
@@ -1318,7 +1400,7 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               accessibilityLabel={`Actions for ${member.user.name}`}
             >
               <Ionicons name="ellipsis-horizontal" size={18} color={colors.sub} />
-            </TouchableOpacity>
+            </Pressable>
           ) : null}
         </View>
         {memberRoleEditorUserId === member.userId ? (
@@ -1327,21 +1409,15 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
               const assigned = tags.some((assignment) => assignment.roleId === role.id);
               const busy = roleBusyId === `${member.userId}:${role.id}`;
               return (
-                <TouchableOpacity
+                <Chip
                   key={role.id}
-                  style={[styles.roleAssignButton, assigned ? styles.roleAssignButtonActive : null]}
-                  onPress={() => void handleToggleMemberTag(member.userId, role.id, assigned)}
-                  disabled={busy}
-                >
-                  <Ionicons
-                    name={assigned ? 'checkmark-circle' : 'add-circle-outline'}
-                    size={15}
-                    color={assigned ? '#FFFFFF' : colors.primary}
-                  />
-                  <Text style={[styles.roleAssignText, assigned ? styles.roleAssignTextActive : null]}>
-                    {role.name}
-                  </Text>
-                </TouchableOpacity>
+                  label={role.name}
+                  selected={assigned}
+                  icon={assigned ? 'checkmark-circle' : 'add-circle-outline'}
+                  onPress={
+                    busy ? undefined : () => void handleToggleMemberTag(member.userId, role.id, assigned)
+                  }
+                />
               );
             })}
           </View>
@@ -1352,527 +1428,547 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
   if (!club && loadError) {
     return (
-      <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
+      <AppBackdrop>
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <ScreenHeader title="Club" onBack={() => navigation.goBack()} />
-          <EmptyState icon="alert-circle-outline" title="Could not load club" body={loadError} />
-          <PrimaryButton label="Try again" onPress={() => void load(false)} />
+          <EmptyState icon="alert-circle" title="Could not load club" body={loadError} />
+          <Button label="Try again" onPress={() => void load(false)} />
         </ScrollView>
-      </Screen>
+      </AppBackdrop>
     );
   }
 
   return (
-    <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
+        keyboardDismissMode="on-drag"
+      >
         {club ? (
           <>
-            <View style={styles.heroShell}>
-              <LinearGradient
-                colors={categoryVisual.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1.15 }}
-                style={styles.cover}
-              >
-                <Text pointerEvents="none" style={styles.coverWatermark}>{club.emoji}</Text>
-                <View style={styles.coverTopBar}>
-                  <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    style={styles.heroCircleButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Go back"
-                  >
-                    <Ionicons name="chevron-back" size={20} color={colors.ink} />
-                  </TouchableOpacity>
-                  <View style={styles.coverActions}>
-                    {canManageClub ? (
-                      <TouchableOpacity
-                        onPress={() => void handleUploadClubAvatar()}
-                        style={styles.heroCircleButton}
-                        disabled={avatarBusy}
-                        accessibilityRole="button"
-                        accessibilityLabel={club.avatarUrl ? 'Change club photo' : 'Add club photo'}
-                      >
-                        <Ionicons name="camera-outline" size={18} color={colors.ink} />
-                      </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity
-                      style={styles.heroCircleButton}
-                      onPress={handleClubActions}
-                      accessibilityRole="button"
-                      accessibilityLabel="Club actions"
-                    >
-                      <Ionicons name="ellipsis-horizontal" size={18} color={colors.ink} />
-                    </TouchableOpacity>
-                  </View>
+            <ScreenHeader
+              title="Club"
+              kicker={club.category}
+              onBack={() => navigation.goBack()}
+              right={
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  {canManageClub ? (
+                    <IconButton
+                      icon="camera-outline"
+                      onPress={() => void handleUploadClubAvatar()}
+                      disabled={avatarBusy}
+                      accessibilityLabel={club.avatarUrl ? 'Change club photo' : 'Add club photo'}
+                    />
+                  ) : null}
+                  <IconButton
+                    icon="ellipsis-horizontal"
+                    onPress={handleClubActions}
+                    accessibilityLabel="Club actions"
+                  />
                 </View>
-                <View style={styles.coverArt}>
-                  <View style={styles.coverIdentity}>
-                    {club.avatarUrl ? (
-                      <Image source={{ uri: club.avatarUrl }} style={styles.coverAvatar} />
-                    ) : (
-                      <Text style={styles.coverEmoji}>{club.emoji}</Text>
-                    )}
-                  </View>
-                  <View style={styles.coverCategoryPill}>
-                    <Ionicons name={categoryVisual.icon} size={13} color="#FFFFFF" />
-                    <Text style={styles.coverCategoryText}>{club.category}</Text>
-                    {club.isVerified ? (
-                      <>
-                        <View style={styles.coverPillDivider} />
-                        <Ionicons name="checkmark-circle" size={13} color="#FFFFFF" />
-                        <Text style={styles.coverCategoryText}>Verified</Text>
-                      </>
-                    ) : null}
-                  </View>
-                </View>
-              </LinearGradient>
+              }
+            />
 
-              <View style={styles.heroCard}>
-                <View style={styles.identityRow}>
-                  <View style={styles.clubAvatarTile}>
-                    {club.avatarUrl ? (
-                      <Image source={{ uri: club.avatarUrl }} style={styles.clubAvatarImage} />
-                    ) : (
-                      <Text style={styles.clubAvatarEmoji}>{club.emoji}</Text>
-                    )}
-                  </View>
-                  <View style={styles.identityCopy}>
-                    <Text style={styles.clubTitle}>{club.name}</Text>
-                    <Text style={styles.clubMeta}>{club.university}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.clubDescription}>{club.description}</Text>
-
-                <View style={styles.statStrip}>
-                  <View style={styles.statCell}>
-                    <Text style={styles.statCellValue}>{club.members.length}</Text>
-                    <Text style={styles.statCellLabel}>Member{club.members.length === 1 ? '' : 's'}</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statCell}>
-                    <Text style={styles.statCellValue}>{meetings.length}</Text>
-                    <Text style={styles.statCellLabel}>Upcoming</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statCell}>
-                    <Text style={styles.statCellValue}>{nextMeeting ? nextMeeting.rsvpCounts.going : 0}</Text>
-                    <Text style={styles.statCellLabel}>Going next</Text>
-                  </View>
-                </View>
-
-                <View style={styles.membershipRow}>
-                  {isSoleOwner ? (
-                    <TouchableOpacity
-                      style={styles.leaveClubButton}
-                      onPress={handleClubActions}
-                      activeOpacity={0.72}
-                      accessibilityRole="button"
-                      accessibilityLabel="Manage club"
-                    >
-                      <Ionicons name="settings-outline" size={15} color={colors.sub} />
-                      <Text style={styles.leaveClubButtonText}>Manage club</Text>
-                    </TouchableOpacity>
-                  ) : club.isMember ? (
-                    <TouchableOpacity
-                      style={styles.leaveClubButton}
-                      onPress={() => void handleMembership()}
-                      disabled={membershipBusy}
-                      activeOpacity={0.72}
-                    >
-                      <Ionicons name="log-out-outline" size={15} color={colors.sub} />
-                      <Text style={styles.leaveClubButtonText}>
-                        {membershipBusy ? 'Updating...' : 'Leave club'}
-                      </Text>
-                    </TouchableOpacity>
+            {/* Identity card */}
+            <Slab color={accent.soft} radius={radii.lg} accessibilityRole="none" faceStyle={styles.heroFace}>
+              <View style={styles.identityRow}>
+                <View
+                  style={[
+                    styles.clubAvatar,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                >
+                  {club.avatarUrl ? (
+                    <Image source={{ uri: club.avatarUrl }} style={{ width: '100%', height: '100%' }} />
                   ) : (
-                    <TouchableOpacity
-                      style={styles.membershipButton}
-                      onPress={() => void handleMembership()}
-                      disabled={membershipBusy}
-                      activeOpacity={0.88}
-                    >
-                      <Text style={styles.membershipButtonText}>
-                        {membershipBusy ? 'Updating...' : 'Join club'}
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={styles.clubEmoji}>{club.emoji}</Text>
                   )}
                 </View>
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                  <Text style={styles.clubTitle}>{club.name}</Text>
+                  <Text style={typography.caption}>{club.university}</Text>
+                  <View style={styles.stickerRow}>
+                    <Sticker
+                      label={club.category ?? 'Club'}
+                      tint={colors.surface}
+                      icon={categoryVisual.icon}
+                      small
+                      tilt={-2}
+                    />
+                    {club.isVerified ? (
+                      <Sticker
+                        label="Verified"
+                        tint={colors.successSoft}
+                        icon="checkmark-circle"
+                        small
+                        tilt={2}
+                      />
+                    ) : null}
+                  </View>
+                </View>
               </View>
-            </View>
 
-            {loadError ? (
-              <View style={styles.bodyWrap}>
-                <Panel>
-                  <Text style={styles.errorText}>{loadError}</Text>
-                </Panel>
+              {club.description ? (
+                <Text style={[typography.body, { color: colors.sub }]}>{club.description}</Text>
+              ) : null}
+
+              <View style={[styles.statStrip, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <View style={styles.statCell}>
+                  <Text style={styles.statValue}>{club.members.length}</Text>
+                  <Text style={styles.statLabel}>MEMBER{club.members.length === 1 ? '' : 'S'}</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
+                <View style={styles.statCell}>
+                  <Text style={styles.statValue}>{meetings.length}</Text>
+                  <Text style={styles.statLabel}>UPCOMING</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
+                <View style={styles.statCell}>
+                  <Text style={styles.statValue}>
+                    {nextMeeting ? nextMeeting.rsvpCounts.going : 0}
+                  </Text>
+                  <Text style={styles.statLabel}>GOING NEXT</Text>
+                </View>
+              </View>
+
+              {isSoleOwner ? (
+                <Button
+                  label="Manage club"
+                  variant="secondary"
+                  icon="settings"
+                  onPress={handleClubActions}
+                />
+              ) : club.isMember ? (
+                <Button
+                  label={membershipBusy ? 'Updating…' : 'Leave club'}
+                  variant="secondary"
+                  icon="log-out"
+                  onPress={() => void handleMembership()}
+                  disabled={membershipBusy}
+                />
+              ) : (
+                <Button
+                  label={membershipBusy ? 'Updating…' : 'Join club'}
+                  icon="flash"
+                  onPress={() => void handleMembership()}
+                  disabled={membershipBusy}
+                  size="lg"
+                />
+              )}
+            </Slab>
+
+            {loadError ? <Banner message={loadError} kind="error" /> : null}
+
+            {/* Mode tabs */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabRow}
+            >
+              {modeOptions.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  icon={MODE_ICONS[option.value]}
+                  selected={mode === option.value}
+                  onPress={() => {
+                    setMode(option.value);
+                    if (option.value !== 'chat') setChatView('hub');
+                  }}
+                />
+              ))}
+            </ScrollView>
+
+            {/* ── OVERVIEW ── */}
+            {mode === 'overview' ? (
+              <View style={styles.section}>
+                <SectionRow
+                  title="Next meeting"
+                  actionLabel={meetings.length ? 'See all' : undefined}
+                  onPress={() => setMode('events')}
+                />
+
+                {nextMeeting ? (
+                  <Card padded>
+                    <View style={styles.upcomingHead}>
+                      <DateBadge iso={nextMeeting.meetingTime} large />
+                      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                        <Text style={[typography.kicker, { color: colors.primary }]}>
+                          {relativeDayLabel(nextMeeting.meetingTime).toUpperCase()} •{' '}
+                          {formatTime(nextMeeting.meetingTime)}
+                        </Text>
+                        <Text style={typography.heading} numberOfLines={2}>
+                          {nextMeeting.title}
+                        </Text>
+                        <View style={styles.inlineMeta}>
+                          <Ionicons name="location" size={12} color={colors.faint} />
+                          <Text style={typography.captionSmall} numberOfLines={1}>
+                            {nextMeeting.location}
+                          </Text>
+                        </View>
+                        <View style={styles.attendeeRow}>
+                          {recentMembers.slice(0, 4).map((member, index) => (
+                            <Avatar
+                              key={member.id}
+                              name={member.user.name}
+                              uri={member.user.avatarUrl}
+                              size={24}
+                              style={{ marginLeft: index === 0 ? 0 : -8 }}
+                            />
+                          ))}
+                          <Text style={[typography.captionSmall, { marginLeft: 6 }]}>
+                            {nextMeeting.rsvpCounts.going} going
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {isMember ? (
+                      <View style={styles.rsvpRow}>
+                        {RSVP_OPTIONS.map((option) => (
+                          <Chip
+                            key={option.value}
+                            label={option.label}
+                            selected={nextMeeting.myRsvp === option.value}
+                            tint={
+                              option.value === 'GOING'
+                                ? colors.successSoft
+                                : option.value === 'MAYBE'
+                                  ? colors.warningSoft
+                                  : colors.dangerSoft
+                            }
+                            onPress={() => void handleRsvp(nextMeeting.id, option.value)}
+                          />
+                        ))}
+                      </View>
+                    ) : null}
+                  </Card>
+                ) : (
+                  <EmptyState
+                    icon="calendar"
+                    title="No upcoming meetings"
+                    body="Schedule your first event to kick the club dashboard into motion."
+                  />
+                )}
+
+                {canPostAnnouncements || canCreateMeetings ? (
+                  <View style={styles.quickRow}>
+                    {canPostAnnouncements ? (
+                      <QuickAction
+                        icon="megaphone"
+                        title="Announce"
+                        tint={colors.amberSoft}
+                        onPress={() => {
+                          setMode('chat');
+                          setChatView('announcements');
+                          setAnnouncementComposerOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    {canCreateMeetings ? (
+                      <QuickAction
+                        icon="calendar"
+                        title="Schedule"
+                        tint={colors.violetSoft}
+                        onPress={() => {
+                          setMode('events');
+                          setMeetingComposerOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    <QuickAction
+                      icon="share-social"
+                      title="Share"
+                      tint={colors.tealSoft}
+                      onPress={() => void handleShareClub()}
+                    />
+                  </View>
+                ) : null}
+
+                <SectionRow
+                  title="Recent announcements"
+                  actionLabel={announcements.length ? 'View all' : undefined}
+                  onPress={() => {
+                    setMode('chat');
+                    setChatView('announcements');
+                  }}
+                />
+
+                {announcements.length ? (
+                  announcements.slice(0, 3).map((announcement) => (
+                    <Slab
+                      key={announcement.id}
+                      onPress={() => {
+                        setMode('chat');
+                        setChatView('announcements');
+                      }}
+                      faceStyle={styles.announcementPreviewFace}
+                      accessibilityLabel={`Announcement from ${announcement.user.name}`}
+                    >
+                      <View style={styles.announcementHead}>
+                        <Avatar name={announcement.user.name} uri={announcement.user.avatarUrl} size={26} />
+                        <Text style={[typography.subheading, { flex: 1 }]} numberOfLines={1}>
+                          {announcement.user.name}
+                        </Text>
+                        <Text style={typography.captionSmall}>
+                          {relativeDayLabel(announcement.createdAt)}
+                        </Text>
+                      </View>
+                      <Text style={[typography.body, { color: colors.sub }]} numberOfLines={3}>
+                        {announcement.content}
+                      </Text>
+                    </Slab>
+                  ))
+                ) : (
+                  <EmptyState
+                    icon="megaphone"
+                    title="No announcements yet"
+                    body="Club updates will show up here once leaders start posting."
+                  />
+                )}
               </View>
             ) : null}
 
-            <View style={styles.bodyWrap}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tabBar}
-              >
-                {modeOptions.map((option) => {
-                  const active = mode === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.tabPill, active && styles.tabPillActive]}
-                      activeOpacity={0.85}
-                      onPress={() => {
-                        setMode(option.value);
-                        if (option.value !== 'chat') setChatView('hub');
-                      }}
-                      accessibilityRole="tab"
-                      accessibilityLabel={option.label}
-                      accessibilityState={{ selected: active }}
-                    >
-                      <Ionicons
-                        name={MODE_ICONS[option.value]}
-                        size={15}
-                        color={active ? activeTabContent : colors.sub}
-                      />
-                      <Text style={[styles.tabPillLabel, active && styles.tabPillLabelActive]}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {mode === 'overview' ? (
-                <View style={styles.section}>
-                  <SectionHeaderRow
-                    title="Next meeting"
-                    actionLabel={meetings.length ? 'See all' : undefined}
-                    onPress={() => setMode('events')}
-                  />
-
-                  {nextMeeting ? (
-                    <View style={styles.upcomingCard}>
-                      <View style={styles.upcomingHead}>
-                        <DateBadge iso={nextMeeting.meetingTime} size="large" />
-                        <View style={styles.upcomingCopy}>
-                          <Text style={styles.upcomingTime}>
-                            {relativeDayLabel(nextMeeting.meetingTime)} • {formatTime(nextMeeting.meetingTime)}
-                          </Text>
-                          <Text style={styles.upcomingTitle} numberOfLines={2}>{nextMeeting.title}</Text>
-                          <View style={styles.upcomingMetaRow}>
-                            <Ionicons name="location-outline" size={13} color={colors.faint} />
-                            <Text style={styles.upcomingLocation} numberOfLines={1}>{nextMeeting.location}</Text>
-                          </View>
-                          <View style={styles.upcomingAttendees}>
-                            {recentMembers.slice(0, 4).map((member, index) => (
-                              <View key={member.id} style={{ marginLeft: index === 0 ? 0 : -8 }}>
-                                <UserAvatar name={member.user.name} avatarUrl={member.user.avatarUrl} size={24} />
-                              </View>
-                            ))}
-                            <Text style={styles.upcomingAttendeeCount}>
-                              {nextMeeting.rsvpCounts.going} going
-                            </Text>
-                          </View>
-                        </View>
+            {/* ── CHAT ── */}
+            {mode === 'chat' ? (
+              <View style={styles.section}>
+                {chatView === 'hub' ? (
+                  <>
+                    <View style={styles.chatHubHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={typography.title}>Chats</Text>
+                        <Text style={typography.captionSmall}>All conversations in one place.</Text>
                       </View>
-
-                      {isMember ? (
-                        <View style={styles.rsvpRow}>
-                          {RSVP_OPTIONS.map((option) => (
-                            <Chip
-                              key={option.value}
-                              label={option.label}
-                              active={nextMeeting.myRsvp === option.value}
-                              onPress={() => void handleRsvp(nextMeeting.id, option.value)}
-                            />
-                          ))}
-                        </View>
-                      ) : null}
-                    </View>
-                  ) : (
-                    <EmptyState
-                      icon="calendar-outline"
-                      title="No upcoming meetings"
-                      body="Schedule your first event to kick the club dashboard into motion."
-                    />
-                  )}
-
-                  {canPostAnnouncements || canCreateMeetings ? (
-                    <View style={styles.quickActionRow}>
                       {canPostAnnouncements ? (
-                        <QuickActionCard
-                          icon="megaphone-outline"
-                          title="Announce"
+                        <Button
+                          label="New announcement"
+                          size="sm"
+                          icon="add"
                           onPress={() => {
-                            setMode('chat');
                             setChatView('announcements');
                             setAnnouncementComposerOpen(true);
                           }}
                         />
                       ) : null}
-                      {canCreateMeetings ? (
-                        <QuickActionCard
-                          icon="calendar-outline"
-                          title="Schedule"
-                          onPress={() => {
-                            setMode('events');
-                            setMeetingComposerOpen(true);
-                          }}
-                        />
-                      ) : null}
-                      <QuickActionCard
-                        icon="share-outline"
-                        title="Share"
-                        onPress={() => void handleShareClub()}
-                      />
                     </View>
-                  ) : null}
 
-                  <SectionHeaderRow title="Recent announcements" actionLabel={announcements.length ? 'View all' : undefined} onPress={() => {
-                    setMode('chat');
-                    setChatView('announcements');
-                  }} />
-
-                  {announcements.length ? (
-                    announcements.slice(0, 3).map((announcement) => (
-                      <TouchableOpacity
-                        key={announcement.id}
-                        style={styles.announcementPreview}
-                        activeOpacity={0.88}
-                        onPress={() => {
-                          setMode('chat');
-                          setChatView('announcements');
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Announcement from ${announcement.user.name}`}
-                      >
-                        <View style={styles.announcementPreviewBar} />
-                        <View style={styles.announcementPreviewBody}>
-                          <View style={styles.announcementPreviewHead}>
-                            <UserAvatar name={announcement.user.name} avatarUrl={announcement.user.avatarUrl} size={26} />
-                            <Text style={styles.announcementPreviewName} numberOfLines={1}>
-                              {announcement.user.name}
-                            </Text>
-                            <Text style={styles.announcementPreviewTime}>
-                              {relativeDayLabel(announcement.createdAt)}
-                            </Text>
-                          </View>
-                          <Text style={styles.announcementPreviewContent} numberOfLines={3}>
-                            {announcement.content}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <EmptyState
-                      icon="megaphone-outline"
-                      title="No announcements yet"
-                      body="Club updates will show up here once leaders start posting."
-                    />
-                  )}
-                </View>
-              ) : null}
-
-              {mode === 'chat' ? (
-                <View style={styles.section}>
-                  {chatView === 'hub' ? (
-                    <>
-                      <View style={styles.chatHeader}>
-                        <View>
-                          <Text style={styles.screenSectionTitle}>Chats</Text>
-                          <Text style={styles.screenSectionBody}>All conversations in one place.</Text>
-                        </View>
-                        {canPostAnnouncements ? (
-                          <TouchableOpacity
-                            style={styles.newChatButton}
-                            activeOpacity={0.88}
-                            onPress={() => {
-                              setChatView('announcements');
-                              setAnnouncementComposerOpen(true);
-                            }}
-                          >
-                            <Ionicons name="add" size={16} color="#FFFFFF" />
-                            <Text style={styles.newChatButtonText}>New announcement</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-
-                      {chatCards.map((item) => {
-                        const accent = item.key === 'announcements'
+                    {chatCards.map((item) => {
+                      const hubAccent =
+                        item.key === 'announcements'
                           ? { tint: colors.amber, soft: colors.amberSoft }
                           : item.key === 'general'
                             ? { tint: colors.blue, soft: colors.blueSoft }
                             : { tint: colors.violet, soft: colors.violetSoft };
-                        return (
-                          <TouchableOpacity
-                            key={item.key}
-                            style={styles.chatHubCard}
-                            activeOpacity={0.92}
-                            onPress={() => setChatView(item.key)}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Open ${item.title}`}
-                          >
-                            <View style={[styles.chatHubIcon, { backgroundColor: accent.soft }]}>
-                              <Ionicons name={item.icon} size={20} color={accent.tint} />
-                            </View>
-                            <View style={styles.chatHubCopy}>
-                              <Text style={styles.chatHubTitle}>{item.title}</Text>
-                              <Text style={styles.chatHubMeta}>{item.subtitle}</Text>
-                            </View>
-                            <View style={styles.chatHubRight}>
-                              {item.badge ? (
-                                <View style={[styles.chatBadge, { backgroundColor: accent.tint }]}>
-                                  <Text style={styles.chatBadgeText}>{item.badge}</Text>
-                                </View>
-                              ) : null}
-                              <Ionicons name="chevron-forward" size={18} color={colors.faint} />
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </>
-                  ) : (
-                    <View style={styles.chatConversation}>
-                      <View style={styles.chatConversationHeader}>
-                        <TouchableOpacity
-                          onPress={() => setChatView('hub')}
-                          style={styles.chatBackButton}
-                          accessibilityRole="button"
-                          accessibilityLabel="Back to club chats"
+                      return (
+                        <Slab
+                          key={item.key}
+                          onPress={() => setChatView(item.key)}
+                          faceStyle={styles.chatHubFace}
+                          accessibilityLabel={`Open ${item.title}`}
                         >
-                          <Ionicons name="chevron-back" size={18} color={colors.ink} />
-                        </TouchableOpacity>
-                        <View style={styles.chatConversationTitleBlock}>
-                          <Text style={styles.chatConversationTitle}>
-                            {chatView === 'announcements'
-                              ? 'Club Announcements'
-                              : chatView === 'general'
-                                ? 'General Chat'
-                                : 'Officers Chat'}
-                          </Text>
-                          <Text style={styles.chatConversationMeta}>
-                            {chatView === 'announcements'
-                              ? 'Public club updates'
-                              : chatView === 'general'
-                                ? 'Members-only conversation'
-                                : 'Leadership coordination'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {chatView === 'announcements' ? (
-                        <>
-                          {canPostAnnouncements ? (
-                            <View style={styles.composerCard}>
-                              <TouchableOpacity
-                                activeOpacity={0.86}
-                                style={styles.composerHeader}
-                                onPress={() => setAnnouncementComposerOpen((current) => !current)}
-                              >
-                                <Text style={styles.cardTitle}>Create announcement</Text>
-                                <Ionicons name={announcementComposerOpen ? 'remove' : 'add'} size={20} color={colors.primary} />
-                              </TouchableOpacity>
-                              {announcementComposerOpen ? (
-                                <>
-                                  <Text style={styles.cardBody}>Share an update with the club.</Text>
-                                  <View style={styles.visibilityRow}>
-                                    {VISIBILITY_OPTIONS.map((option) => (
-                                      <Chip
-                                        key={option.value}
-                                        label={option.label}
-                                        active={announcementVisibility === option.value}
-                                        onPress={() => setAnnouncementVisibility(option.value)}
-                                      />
-                                    ))}
-                                  </View>
-                                  <RoleTargetPicker
-                                    roles={clubRoles}
-                                    selectedRoleIds={announcementTargetRoleIds}
-                                    onToggle={(roleId) =>
-                                      setAnnouncementTargetRoleIds((current) =>
-                                        current.includes(roleId)
-                                          ? current.filter((id) => id !== roleId)
-                                          : [...current, roleId]
-                                      )
-                                    }
-                                  />
-                                  <TextInput
-                                    value={announcementText}
-                                    onChangeText={setAnnouncementText}
-                                    placeholder="Share details, reminders, links, etc."
-                                    placeholderTextColor={colors.faint}
-                                    style={[styles.input, styles.inputTall]}
-                                    multiline
-                                  />
-                                  <PrimaryButton
-                                    label="Post announcement"
-                                    onPress={() => void handleCreateAnnouncement()}
-                                    loading={announcementBusy}
-                                  />
-                                </>
-                              ) : null}
-                            </View>
+                          <View
+                            style={[
+                              styles.chatHubIcon,
+                              { backgroundColor: hubAccent.soft, borderColor: colors.border },
+                            ]}
+                          >
+                            <Ionicons name={item.icon} size={19} color={hubAccent.tint} />
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={typography.heading}>{item.title}</Text>
+                            <Text style={typography.captionSmall}>{item.subtitle}</Text>
+                          </View>
+                          {item.badge ? (
+                            <Sticker
+                              label={String(item.badge)}
+                              tint={hubAccent.soft}
+                              small
+                              tilt={3}
+                            />
                           ) : null}
+                          <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                        </Slab>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <View style={{ gap: spacing.md }}>
+                    <View style={styles.chatConversationHeader}>
+                      <IconButton
+                        icon="arrow-back"
+                        size={38}
+                        onPress={() => setChatView('hub')}
+                        accessibilityLabel="Back to club chats"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={typography.title}>
+                          {chatView === 'announcements'
+                            ? 'Announcements'
+                            : chatView === 'general'
+                              ? 'General Chat'
+                              : 'Officers Chat'}
+                        </Text>
+                        <Text style={typography.captionSmall}>
+                          {chatView === 'announcements'
+                            ? 'Public club updates'
+                            : chatView === 'general'
+                              ? 'Members-only conversation'
+                              : 'Leadership coordination'}
+                        </Text>
+                      </View>
+                    </View>
 
-                          {announcements.length ? announcements.map((announcement) => (
-                            <View key={announcement.id} style={styles.announcementCard}>
-                              <View style={styles.announcementHead}>
-                                <View style={styles.announcementAuthor}>
-                                  <UserAvatar name={announcement.user.name} avatarUrl={announcement.user.avatarUrl} size={34} />
-                                  <View style={styles.announcementCopy}>
-                                    <Text style={styles.cardTitle}>{announcement.user.name}</Text>
-                                    <Text style={styles.cardMeta}>
-                                      {formatDateTime(announcement.createdAt)}
-                                    </Text>
-                                  </View>
+                    {chatView === 'announcements' ? (
+                      <>
+                        {canPostAnnouncements ? (
+                          <Card padded>
+                            <Pressable
+                              style={styles.composerToggle}
+                              onPress={() => setAnnouncementComposerOpen((current) => !current)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Toggle announcement composer"
+                            >
+                              <Text style={typography.title}>Create announcement</Text>
+                              <Ionicons
+                                name={announcementComposerOpen ? 'remove' : 'add'}
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </Pressable>
+                            {announcementComposerOpen ? (
+                              <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                                <Text style={typography.caption}>Share an update with the club.</Text>
+                                <View style={styles.chipWrap}>
+                                  {VISIBILITY_OPTIONS.map((option) => (
+                                    <Chip
+                                      key={option.value}
+                                      label={option.label}
+                                      selected={announcementVisibility === option.value}
+                                      onPress={() => setAnnouncementVisibility(option.value)}
+                                    />
+                                  ))}
                                 </View>
-                                <View style={styles.audiencePill}>
-                                  <Text style={styles.audiencePillText}>
-                                    {announcement.targetRoleIds?.length
-                                      ? roleAudienceLabel(announcement.targetRoleIds)
-                                      : visibilityLabel(announcement.visibility)}
+                                <RoleTargetPicker
+                                  roles={clubRoles}
+                                  selectedRoleIds={announcementTargetRoleIds}
+                                  onToggle={(roleId) =>
+                                    setAnnouncementTargetRoleIds((current) =>
+                                      current.includes(roleId)
+                                        ? current.filter((id) => id !== roleId)
+                                        : [...current, roleId],
+                                    )
+                                  }
+                                />
+                                <TextInput
+                                  value={announcementText}
+                                  onChangeText={setAnnouncementText}
+                                  placeholder="Share details, reminders, links, etc."
+                                  placeholderTextColor={colors.faint}
+                                  style={[
+                                    styles.input,
+                                    styles.inputTall,
+                                    {
+                                      backgroundColor: colors.surfaceAlt,
+                                      borderColor: colors.border,
+                                      color: colors.ink,
+                                    },
+                                  ]}
+                                  multiline
+                                />
+                                <Button
+                                  label="Post announcement"
+                                  onPress={() => void handleCreateAnnouncement()}
+                                  loading={announcementBusy}
+                                />
+                              </View>
+                            ) : null}
+                          </Card>
+                        ) : null}
+
+                        {announcements.length ? (
+                          announcements.map((announcement) => (
+                            <Card key={announcement.id} padded>
+                              <View style={styles.announcementHead}>
+                                <Avatar
+                                  name={announcement.user.name}
+                                  uri={announcement.user.avatarUrl}
+                                  size={34}
+                                />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={typography.subheading} numberOfLines={1}>
+                                    {announcement.user.name}
+                                  </Text>
+                                  <Text style={typography.captionSmall}>
+                                    {formatDateTime(announcement.createdAt)}
                                   </Text>
                                 </View>
+                                <Tag
+                                  label={
+                                    announcement.targetRoleIds?.length
+                                      ? roleAudienceLabel(announcement.targetRoleIds)
+                                      : visibilityLabel(announcement.visibility)
+                                  }
+                                />
                               </View>
-                              <Text style={styles.cardBody}>{announcement.content}</Text>
+                              <Text style={[typography.body, { marginTop: spacing.sm }]}>
+                                {announcement.content}
+                              </Text>
                               <View style={styles.inlineActionRow}>
                                 {canDeleteClubContent ? (
-                                  <TouchableOpacity
+                                  <Pressable
                                     onPress={() => void handleDeleteAnnouncement(announcement)}
-                                    style={styles.reportInlineButton}
-                                    disabled={deleteContentBusyId === `announcement:${announcement.id}`}
+                                    style={styles.inlineAction}
+                                    disabled={
+                                      deleteContentBusyId === `announcement:${announcement.id}`
+                                    }
                                   >
-                                    <Ionicons name="trash-outline" size={15} color={colors.dangerText} />
-                                    <Text style={[styles.reportInlineText, styles.dangerInlineText]}>Delete</Text>
-                                  </TouchableOpacity>
+                                    <Ionicons name="trash" size={14} color={colors.danger} />
+                                    <Text style={[styles.inlineActionText, { color: colors.danger }]}>
+                                      Delete
+                                    </Text>
+                                  </Pressable>
                                 ) : null}
                                 {announcement.user.id !== user?.id ? (
-                                  <TouchableOpacity onPress={() => void reportAnnouncement(announcement)} style={styles.reportInlineButton}>
-                                    <Ionicons name="flag-outline" size={15} color={colors.sub} />
-                                    <Text style={styles.reportInlineText}>Report</Text>
-                                  </TouchableOpacity>
+                                  <Pressable
+                                    onPress={() => void reportAnnouncement(announcement)}
+                                    style={styles.inlineAction}
+                                  >
+                                    <Ionicons name="flag" size={14} color={colors.sub} />
+                                    <Text style={[styles.inlineActionText, { color: colors.sub }]}>
+                                      Report
+                                    </Text>
+                                  </Pressable>
                                 ) : null}
                               </View>
-                            </View>
-                          )) : (
-                            <EmptyState
-                              icon="megaphone-outline"
-                              title="No announcements yet"
-                              body="This room will hold public updates and club-wide reminders."
-                            />
-                          )}
-                        </>
-                      ) : null}
+                            </Card>
+                          ))
+                        ) : (
+                          <EmptyState
+                            icon="megaphone"
+                            title="No announcements yet"
+                            body="This room will hold public updates and club-wide reminders."
+                          />
+                        )}
+                      </>
+                    ) : null}
 
-                      {chatView === 'general' ? (
-                        <>
-                          {messages.length ? messages.map((message, index) => (
+                    {chatView === 'general' ? (
+                      <>
+                        {messages.length ? (
+                          messages.map((message) => (
                             <MessageBubble
                               key={message.id}
                               align={message.userId === user?.id ? 'right' : 'left'}
@@ -1880,44 +1976,61 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               avatarUrl={message.user.avatarUrl}
                               content={message.content}
                               time={formatTime(message.createdAt)}
-                              onReport={message.userId !== user?.id ? () => void reportClubMessage(message) : undefined}
+                              onReport={
+                                message.userId !== user?.id
+                                  ? () => void reportClubMessage(message)
+                                  : undefined
+                              }
                             />
-                          )) : (
-                            <EmptyState
-                              icon="chatbubbles-outline"
-                              title="No messages yet"
-                              body="Be the first to kick off the conversation."
-                            />
-                          )}
-                          {typingUserIds.length ? <Text style={styles.typingText}>Someone is typing...</Text> : null}
-                          <View style={styles.chatComposerDock}>
-                            <TextInput
-                              value={messageText}
-	                              onChangeText={(value) => {
-	                                setMessageText(value);
-	                                pingTyping(value);
-	                              }}
-                              placeholder="Message members..."
-                              placeholderTextColor={colors.faint}
-                              style={styles.chatComposerInput}
-                            />
-                            <TouchableOpacity
-                              style={[styles.sendFab, (sendBusy || !messageText.trim()) && styles.sendFabDisabled]}
-                              onPress={() => void handleSend()}
-                              disabled={sendBusy || !messageText.trim()}
-                              accessibilityRole="button"
-                              accessibilityLabel="Send club message"
-                              accessibilityState={{ disabled: sendBusy || !messageText.trim() }}
-                            >
-                              <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        </>
-                      ) : null}
+                          ))
+                        ) : (
+                          <EmptyState
+                            icon="chatbubbles"
+                            title="No messages yet"
+                            body="Be the first to kick off the conversation."
+                          />
+                        )}
+                        {typingUserIds.length ? (
+                          <Text style={[typography.caption, { color: colors.primary }]}>
+                            Someone is typing…
+                          </Text>
+                        ) : null}
+                        <View style={styles.composerDock}>
+                          <TextInput
+                            value={messageText}
+                            onChangeText={(value) => {
+                              setMessageText(value);
+                              pingTyping(value);
+                            }}
+                            placeholder="Message members…"
+                            placeholderTextColor={colors.faint}
+                            style={[
+                              styles.input,
+                              {
+                                flex: 1,
+                                backgroundColor: colors.surface,
+                                borderColor: colors.border,
+                                color: colors.ink,
+                              },
+                            ]}
+                          />
+                          <IconButton
+                            icon="arrow-up"
+                            size={48}
+                            color={sendBusy || !messageText.trim() ? colors.faint : colors.primary}
+                            iconColor={colors.onPrimary}
+                            onPress={() => void handleSend()}
+                            disabled={sendBusy || !messageText.trim()}
+                            accessibilityLabel="Send club message"
+                          />
+                        </View>
+                      </>
+                    ) : null}
 
-                      {chatView === 'officers' ? (
-                        <>
-                          {officerMessages.length ? officerMessages.map((message, index) => (
+                    {chatView === 'officers' ? (
+                      <>
+                        {officerMessages.length ? (
+                          officerMessages.map((message) => (
                             <MessageBubble
                               key={message.id}
                               align={message.userId === user?.id ? 'right' : 'left'}
@@ -1925,409 +2038,521 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                               avatarUrl={message.user.avatarUrl}
                               content={message.content}
                               time={formatTime(message.createdAt)}
-                              onReport={message.userId !== user?.id ? () => void reportClubMessage(message, true) : undefined}
+                              onReport={
+                                message.userId !== user?.id
+                                  ? () => void reportClubMessage(message, true)
+                                  : undefined
+                              }
                             />
-                          )) : (
-                            <EmptyState
-                              icon="shield-checkmark-outline"
-                              title="Officer chat is quiet"
-                              body="Use this room for leadership coordination."
-                            />
-                          )}
-                          {officerTypingUserIds.length ? <Text style={styles.typingText}>An officer is typing...</Text> : null}
-                          <View style={styles.chatComposerDock}>
-                            <TextInput
-                              value={officerMessageText}
-	                              onChangeText={(value) => {
-	                                setOfficerMessageText(value);
-	                                pingOfficerTyping(value);
-	                              }}
-                              placeholder="Coordinate with officers..."
-                              placeholderTextColor={colors.faint}
-                              style={styles.chatComposerInput}
-                            />
-                            <TouchableOpacity
-                              style={[styles.sendFab, (officerSendBusy || !officerMessageText.trim()) && styles.sendFabDisabled]}
-                              onPress={() => void handleOfficerSend()}
-                              disabled={officerSendBusy || !officerMessageText.trim()}
-                              accessibilityRole="button"
-                              accessibilityLabel="Send officer message"
-                              accessibilityState={{ disabled: officerSendBusy || !officerMessageText.trim() }}
-                            >
-                              <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        </>
-                      ) : null}
-                    </View>
-                  )}
-                </View>
-              ) : null}
-
-              {mode === 'members' ? (
-                <View style={styles.section}>
-                  <View style={styles.membersHeader}>
-                    <View>
-                      <Text style={styles.screenSectionTitle}>Members</Text>
-                      <Text style={styles.membersCount}>
-                        {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
-                      </Text>
-                    </View>
-                    {canManageRoles || canConfigureOfficerPermissions ? (
-                      <TouchableOpacity
-                        style={styles.manageRolesButton}
-                        onPress={() => setRolePanelOpen((current) => !current)}
-                        activeOpacity={0.82}
-                      >
-                        <Ionicons name="pricetags-outline" size={16} color={colors.primary} />
-                        <Text style={styles.manageRolesButtonText}>Settings</Text>
-                      </TouchableOpacity>
+                          ))
+                        ) : (
+                          <EmptyState
+                            icon="shield-checkmark"
+                            title="Officer chat is quiet"
+                            body="Use this room for leadership coordination."
+                          />
+                        )}
+                        {officerTypingUserIds.length ? (
+                          <Text style={[typography.caption, { color: colors.primary }]}>
+                            An officer is typing…
+                          </Text>
+                        ) : null}
+                        <View style={styles.composerDock}>
+                          <TextInput
+                            value={officerMessageText}
+                            onChangeText={(value) => {
+                              setOfficerMessageText(value);
+                              pingOfficerTyping(value);
+                            }}
+                            placeholder="Coordinate with officers…"
+                            placeholderTextColor={colors.faint}
+                            style={[
+                              styles.input,
+                              {
+                                flex: 1,
+                                backgroundColor: colors.surface,
+                                borderColor: colors.border,
+                                color: colors.ink,
+                              },
+                            ]}
+                          />
+                          <IconButton
+                            icon="arrow-up"
+                            size={48}
+                            color={
+                              officerSendBusy || !officerMessageText.trim()
+                                ? colors.faint
+                                : colors.primary
+                            }
+                            iconColor={colors.onPrimary}
+                            onPress={() => void handleOfficerSend()}
+                            disabled={officerSendBusy || !officerMessageText.trim()}
+                            accessibilityLabel="Send officer message"
+                          />
+                        </View>
+                      </>
                     ) : null}
                   </View>
-                  {(canManageRoles || canConfigureOfficerPermissions) && rolePanelOpen ? (
-                    <View style={styles.roleManagerPanel}>
-                      {canConfigureOfficerPermissions ? (
-                        <View style={styles.permissionPanel}>
-                          <View>
-                            <Text style={styles.cardTitle}>Officer permissions</Text>
-                            <Text style={styles.cardMeta}>
-                              Choose what officers can do beyond posting announcements and moderating messages.
-                            </Text>
-                          </View>
-                          <View style={styles.permissionList}>
-                            {CLUB_PERMISSION_OPTIONS.map((permission) => {
-                              const required = DEFAULT_OFFICER_PERMISSIONS.includes(permission.value);
-                              const enabled = required || (club.officerPermissions ?? []).includes(permission.value);
-                              return (
-                                <TouchableOpacity
-                                  key={permission.value}
-                                  style={[styles.permissionRow, enabled ? styles.permissionRowActive : null]}
-                                  onPress={() => required ? undefined : void handleToggleOfficerPermission(permission.value)}
-                                  disabled={required || permissionBusy}
-                                  activeOpacity={0.82}
-                                >
-                                  <View style={styles.permissionCopy}>
-                                    <Text style={styles.permissionTitle}>{permission.title}</Text>
-                                    <Text style={styles.cardMeta}>{required ? 'Always available to officers.' : permission.body}</Text>
-                                  </View>
-                                  <Ionicons
-                                    name={enabled ? 'checkmark-circle' : 'ellipse-outline'}
-                                    size={22}
-                                    color={enabled ? colors.primary : colors.sub}
-                                  />
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        </View>
-                      ) : null}
-                      {canManageRoles ? (
-                        <>
-                          <View style={styles.roleManagerHeader}>
-                            <View>
-                              <Text style={styles.cardTitle}>Member tags</Text>
-                              <Text style={styles.cardMeta}>
-                                Create labels for dues, levels, committees, or cohorts.
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.roleCreateRow}>
-                            <TextInput
-                              value={roleNameDraft}
-                              onChangeText={setRoleNameDraft}
-                              placeholder="Hasn't paid dues"
-                              placeholderTextColor={colors.faint}
-                              style={styles.roleNameInput}
-                            />
-                            <TouchableOpacity
-                              style={styles.roleCreateButton}
-                              onPress={() => void handleCreateRole()}
-                              disabled={roleBusyId === 'create'}
-                            >
-                              <Ionicons name="add" size={20} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                          {(club.roles ?? []).length ? (
-                            <View style={styles.roleList}>
-                              {(club.roles ?? []).map((role) => (
-                                <View key={role.id} style={styles.roleListItem}>
-                                  <View style={styles.roleListIcon}>
-                                    <Ionicons name="at-outline" size={15} color={colors.primary} />
-                                  </View>
-                                  <View style={styles.roleListCopy}>
-                                    <Text style={styles.roleListTitle}>{role.name}</Text>
-                                    <Text style={styles.cardMeta}>{role.memberCount ?? 0} assigned</Text>
-                                  </View>
-                                  <TouchableOpacity
-                                    onPress={() => void handleDeleteRole(role.id)}
-                                    disabled={roleBusyId === `delete:${role.id}`}
-                                    style={styles.roleIconButton}
-                                  >
-                                    <Ionicons name="trash-outline" size={16} color={colors.dangerText} />
-                                  </TouchableOpacity>
-                                </View>
-                              ))}
-                            </View>
-                          ) : (
-                            <Text style={styles.cardMeta}>No member tags yet. Add one above, then assign one from a member card.</Text>
-                          )}
-                        </>
-                      ) : null}
-                    </View>
+                )}
+              </View>
+            ) : null}
+
+            {/* ── MEMBERS ── */}
+            {mode === 'members' ? (
+              <View style={styles.section}>
+                <View style={styles.chatHubHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={typography.title}>Members</Text>
+                    <Text style={typography.captionSmall}>
+                      {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
+                    </Text>
+                  </View>
+                  {canManageRoles || canConfigureOfficerPermissions ? (
+                    <Button
+                      label="Settings"
+                      size="sm"
+                      variant="secondary"
+                      icon="pricetags"
+                      onPress={() => setRolePanelOpen((current) => !current)}
+                    />
                   ) : null}
-                  {canPostAnnouncements ? (
-                    <View style={styles.outreachPanel}>
-                      <TouchableOpacity
-                        style={styles.composerHeader}
-                        activeOpacity={0.86}
-                        onPress={() => setOutreachOpen((current) => !current)}
-                      >
+                </View>
+
+                {(canManageRoles || canConfigureOfficerPermissions) && rolePanelOpen ? (
+                  <Card padded>
+                    {canConfigureOfficerPermissions ? (
+                      <View style={{ gap: spacing.md }}>
                         <View>
-                          <Text style={styles.cardTitle}>Bulk outreach</Text>
-                          <Text style={styles.cardMeta}>Preview recipients before sending a notification.</Text>
+                          <Text style={typography.title}>Officer permissions</Text>
+                          <Text style={typography.captionSmall}>
+                            Choose what officers can do beyond posting announcements and moderating
+                            messages.
+                          </Text>
                         </View>
-                        <Ionicons name={outreachOpen ? 'remove' : 'add'} size={20} color={colors.primary} />
-                      </TouchableOpacity>
-                      {outreachOpen ? (
-                        <>
-                          <View style={styles.visibilityRow}>
-                            {(['ALL', 'NON_RSVP', 'PRIMARY_ROLE', 'CUSTOM_ROLE', 'MANUAL'] as OutreachAudienceType[]).map((type) => (
-                              <Chip
-                                key={type}
-                                label={{
+                        <View style={{ gap: spacing.sm }}>
+                          {CLUB_PERMISSION_OPTIONS.map((permission) => {
+                            const required = DEFAULT_OFFICER_PERMISSIONS.includes(permission.value);
+                            const enabled =
+                              required ||
+                              (club.officerPermissions ?? []).includes(permission.value);
+                            return (
+                              <Pressable
+                                key={permission.value}
+                                style={[
+                                  styles.permissionRow,
+                                  {
+                                    borderColor: colors.border,
+                                    backgroundColor: enabled
+                                      ? colors.successSoft
+                                      : colors.surfaceAlt,
+                                  },
+                                ]}
+                                onPress={() =>
+                                  required
+                                    ? undefined
+                                    : void handleToggleOfficerPermission(permission.value)
+                                }
+                                disabled={required || permissionBusy}
+                              >
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={typography.subheading}>{permission.title}</Text>
+                                  <Text style={typography.captionSmall}>
+                                    {required ? 'Always available to officers.' : permission.body}
+                                  </Text>
+                                </View>
+                                <Ionicons
+                                  name={enabled ? 'checkmark-circle' : 'ellipse-outline'}
+                                  size={22}
+                                  color={enabled ? colors.success : colors.sub}
+                                />
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ) : null}
+                    {canManageRoles ? (
+                      <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                        <View>
+                          <Text style={typography.title}>Member tags</Text>
+                          <Text style={typography.captionSmall}>
+                            Create labels for dues, levels, committees, or cohorts.
+                          </Text>
+                        </View>
+                        <View style={styles.roleCreateRow}>
+                          <TextInput
+                            value={roleNameDraft}
+                            onChangeText={setRoleNameDraft}
+                            placeholder="Hasn't paid dues"
+                            placeholderTextColor={colors.faint}
+                            style={[
+                              styles.input,
+                              {
+                                flex: 1,
+                                backgroundColor: colors.surfaceAlt,
+                                borderColor: colors.border,
+                                color: colors.ink,
+                              },
+                            ]}
+                          />
+                          <IconButton
+                            icon="add"
+                            size={48}
+                            color={colors.primary}
+                            iconColor={colors.onPrimary}
+                            onPress={() => void handleCreateRole()}
+                            disabled={roleBusyId === 'create'}
+                            accessibilityLabel="Create member tag"
+                          />
+                        </View>
+                        {(club.roles ?? []).length ? (
+                          <View style={{ gap: spacing.sm }}>
+                            {(club.roles ?? []).map((role) => (
+                              <View
+                                key={role.id}
+                                style={[
+                                  styles.roleListItem,
+                                  { borderColor: colors.borderSoft },
+                                ]}
+                              >
+                                <Ionicons name="at" size={15} color={colors.primary} />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={typography.subheading}>{role.name}</Text>
+                                  <Text style={typography.captionSmall}>
+                                    {role.memberCount ?? 0} assigned
+                                  </Text>
+                                </View>
+                                <Pressable
+                                  onPress={() => void handleDeleteRole(role.id)}
+                                  disabled={roleBusyId === `delete:${role.id}`}
+                                  hitSlop={8}
+                                >
+                                  <Ionicons name="trash" size={16} color={colors.danger} />
+                                </Pressable>
+                              </View>
+                            ))}
+                          </View>
+                        ) : (
+                          <Text style={typography.captionSmall}>
+                            No member tags yet. Add one above, then assign one from a member card.
+                          </Text>
+                        )}
+                      </View>
+                    ) : null}
+                  </Card>
+                ) : null}
+
+                {canPostAnnouncements ? (
+                  <Card padded>
+                    <Pressable
+                      style={styles.composerToggle}
+                      onPress={() => setOutreachOpen((current) => !current)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Toggle bulk outreach"
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={typography.title}>Bulk outreach</Text>
+                        <Text style={typography.captionSmall}>
+                          Preview recipients before sending a notification.
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={outreachOpen ? 'remove' : 'add'}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </Pressable>
+                    {outreachOpen ? (
+                      <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                        <View style={styles.chipWrap}>
+                          {(
+                            ['ALL', 'NON_RSVP', 'PRIMARY_ROLE', 'CUSTOM_ROLE', 'MANUAL'] as OutreachAudienceType[]
+                          ).map((type) => (
+                            <Chip
+                              key={type}
+                              label={
+                                {
                                   ALL: 'All',
                                   NON_RSVP: 'Non-RSVPs',
                                   PRIMARY_ROLE: 'Role',
                                   CUSTOM_ROLE: 'Member tag',
                                   MANUAL: 'Manual',
-                                }[type]}
-                                active={outreachAudienceType === type}
+                                }[type]
+                              }
+                              selected={outreachAudienceType === type}
+                              onPress={() => {
+                                setOutreachAudienceType(type);
+                                setOutreachPreview(null);
+                              }}
+                            />
+                          ))}
+                        </View>
+
+                        {outreachAudienceType === 'NON_RSVP' ? (
+                          <Text style={typography.captionSmall}>
+                            {nextMeeting
+                              ? `${nonRsvpCountForMeeting(nextMeeting)} ${
+                                  nonRsvpCountForMeeting(nextMeeting) === 1
+                                    ? 'member has'
+                                    : 'members have'
+                                } not RSVP'd to ${nextMeeting.title}.`
+                              : 'Schedule a meeting before targeting non-RSVPs.'}
+                          </Text>
+                        ) : null}
+                        {outreachAudienceType === 'PRIMARY_ROLE' ? (
+                          <View style={styles.chipWrap}>
+                            {(['OWNER', 'ADMIN', 'OFFICER', 'MEMBER'] as const).map((role) => (
+                              <Chip
+                                key={role}
+                                label={role}
+                                selected={outreachPrimaryRole === role}
                                 onPress={() => {
-                                  setOutreachAudienceType(type);
+                                  setOutreachPrimaryRole(role);
                                   setOutreachPreview(null);
                                 }}
                               />
                             ))}
                           </View>
-
-                          {outreachAudienceType === 'NON_RSVP' ? (
-                            <Text style={styles.cardMeta}>
-                              {nextMeeting
-                                ? `${nonRsvpCountForMeeting(nextMeeting)} ${
-                                    nonRsvpCountForMeeting(nextMeeting) === 1 ? 'member has' : 'members have'
-                                  } not RSVP’d to ${nextMeeting.title}.`
-                                : 'Schedule a meeting before targeting non-RSVPs.'}
-                            </Text>
-                          ) : null}
-                          {outreachAudienceType === 'PRIMARY_ROLE' ? (
-                            <View style={styles.roleChipWrap}>
-                              {(['OWNER', 'ADMIN', 'OFFICER', 'MEMBER'] as const).map((role) => (
-                                <Chip
-                                  key={role}
-                                  label={role}
-                                  active={outreachPrimaryRole === role}
-                                  onPress={() => {
-                                    setOutreachPrimaryRole(role);
-                                    setOutreachPreview(null);
-                                  }}
-                                />
-                              ))}
-                            </View>
-                          ) : null}
-                          {outreachAudienceType === 'CUSTOM_ROLE' ? (
-                            <View style={styles.roleChipWrap}>
-                              {clubRoles.length ? clubRoles.map((role) => (
+                        ) : null}
+                        {outreachAudienceType === 'CUSTOM_ROLE' ? (
+                          <View style={styles.chipWrap}>
+                            {clubRoles.length ? (
+                              clubRoles.map((role) => (
                                 <Chip
                                   key={role.id}
                                   label={role.name}
-                                  active={outreachRoleId === role.id}
+                                  selected={outreachRoleId === role.id}
                                   onPress={() => {
                                     setOutreachRoleId(role.id);
                                     setOutreachPreview(null);
                                   }}
                                 />
-                              )) : (
-                                <Text style={styles.cardMeta}>Create member tags before targeting them.</Text>
-                              )}
-                            </View>
-                          ) : null}
-                          {outreachAudienceType === 'MANUAL' ? (
-                            <View style={styles.manualPicker}>
-                              {club.members.map((member) => {
-                                const selected = outreachManualIds.includes(member.userId);
-                                return (
-                                  <TouchableOpacity
-                                    key={member.id}
-                                    style={[styles.manualMemberChip, selected ? styles.manualMemberChipActive : null]}
-                                    onPress={() => {
-                                      setOutreachManualIds((current) =>
-                                        selected
-                                          ? current.filter((id) => id !== member.userId)
-                                          : [...current, member.userId]
-                                      );
-                                      setOutreachPreview(null);
-                                    }}
-                                  >
-                                    <Text style={[styles.manualMemberText, selected ? styles.manualMemberTextActive : null]}>
-                                      {member.user.name}
-                                    </Text>
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </View>
-                          ) : null}
-
-                          <TextInput
-                            value={outreachText}
-                            onChangeText={setOutreachText}
-                            placeholder="Write a clear, specific message"
-                            placeholderTextColor={colors.faint}
-                            style={[styles.input, styles.inputTall]}
-                            multiline
-                          />
-                          <View style={styles.eventButtonRow}>
-                            <PrimaryButton
-                              label="Preview audience"
-                              onPress={() => void handlePreviewOutreach()}
-                              loading={outreachBusy}
-                              kind="ghost"
-                            />
-                            <PrimaryButton
-                              label="Send outreach"
-                              onPress={() => void handleSendOutreach()}
-                              loading={outreachBusy}
-                              disabled={!outreachPreview || outreachPreview.count === 0}
-                            />
-                          </View>
-                          {outreachPreview ? (
-                            <View style={styles.previewBox}>
-                              <Text style={styles.cardTitle}>
-                                {outreachPreview.count} recipient{outreachPreview.count === 1 ? '' : 's'}
+                              ))
+                            ) : (
+                              <Text style={typography.captionSmall}>
+                                Create member tags before targeting them.
                               </Text>
-                              <Text style={styles.cardMeta}>{outreachPreview.audience}</Text>
-                              {outreachPreview.recipients.slice(0, 12).map((recipient) => (
-                                <Text key={recipient.id} style={styles.previewRecipient}>
-                                  {recipient.name} • {recipient.role}
-                                </Text>
-                              ))}
-                              {outreachPreview.recipients.length > 12 ? (
-                                <Text style={styles.cardMeta}>+{outreachPreview.recipients.length - 12} more</Text>
+                            )}
+                          </View>
+                        ) : null}
+                        {outreachAudienceType === 'MANUAL' ? (
+                          <View style={styles.chipWrap}>
+                            {club.members.map((member) => {
+                              const selected = outreachManualIds.includes(member.userId);
+                              return (
+                                <Chip
+                                  key={member.id}
+                                  label={member.user.name}
+                                  selected={selected}
+                                  onPress={() => {
+                                    setOutreachManualIds((current) =>
+                                      selected
+                                        ? current.filter((id) => id !== member.userId)
+                                        : [...current, member.userId],
+                                    );
+                                    setOutreachPreview(null);
+                                  }}
+                                />
+                              );
+                            })}
+                          </View>
+                        ) : null}
+
+                        <TextInput
+                          value={outreachText}
+                          onChangeText={setOutreachText}
+                          placeholder="Write a clear, specific message"
+                          placeholderTextColor={colors.faint}
+                          style={[
+                            styles.input,
+                            styles.inputTall,
+                            {
+                              backgroundColor: colors.surfaceAlt,
+                              borderColor: colors.border,
+                              color: colors.ink,
+                            },
+                          ]}
+                          multiline
+                        />
+                        <View style={styles.buttonRow}>
+                          <Button
+                            label="Preview audience"
+                            variant="secondary"
+                            size="sm"
+                            onPress={() => void handlePreviewOutreach()}
+                            loading={outreachBusy}
+                          />
+                          <Button
+                            label="Send outreach"
+                            size="sm"
+                            onPress={() => void handleSendOutreach()}
+                            loading={outreachBusy}
+                            disabled={!outreachPreview || outreachPreview.count === 0}
+                          />
+                        </View>
+                        {outreachPreview ? (
+                          <View
+                            style={[
+                              styles.previewBox,
+                              { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                            ]}
+                          >
+                            <Text style={typography.subheading}>
+                              {outreachPreview.count} recipient
+                              {outreachPreview.count === 1 ? '' : 's'}
+                            </Text>
+                            <Text style={typography.captionSmall}>{outreachPreview.audience}</Text>
+                            {outreachPreview.recipients.slice(0, 12).map((recipient) => (
+                              <Text key={recipient.id} style={typography.caption}>
+                                {recipient.name} • {recipient.role}
+                              </Text>
+                            ))}
+                            {outreachPreview.recipients.length > 12 ? (
+                              <Text style={typography.captionSmall}>
+                                +{outreachPreview.recipients.length - 12} more
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+                        {outreachResult ? (
+                          <Banner message={outreachResult} kind="success" />
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </Card>
+                ) : null}
+
+                {club.members.length ? (
+                  <>
+                    {memberGroups.leadership.length ? (
+                      <View style={{ gap: spacing.sm }}>
+                        <Text style={typography.kicker}>LEADERSHIP</Text>
+                        <Card padded>
+                          {memberGroups.leadership.map((member, index) => (
+                            <View key={member.id}>
+                              {index > 0 ? (
+                                <View
+                                  style={[styles.memberSeparator, { borderColor: colors.borderSoft }]}
+                                />
                               ) : null}
+                              {renderMemberRow(member)}
                             </View>
-                          ) : null}
-                          {outreachResult ? <Text style={styles.successText}>{outreachResult}</Text> : null}
-                        </>
-                      ) : null}
-                    </View>
-                  ) : null}
-                  {club.members.length ? (
-                    <>
-                      {memberGroups.leadership.length ? (
-                        <View style={styles.memberGroup}>
-                          <Text style={styles.memberGroupTitle}>Leadership</Text>
-                          <View style={styles.memberGroupCard}>
-                            {memberGroups.leadership.map((member, index) => (
-                              <View key={member.id}>
-                                {index > 0 ? <View style={styles.memberSeparator} /> : null}
-                                {renderMemberRow(member)}
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      ) : null}
-                      {memberGroups.general.length ? (
-                        <View style={styles.memberGroup}>
-                          <Text style={styles.memberGroupTitle}>
-                            Members · {memberGroups.general.length}
-                          </Text>
-                          <View style={styles.memberGroupCard}>
-                            {memberGroups.general.map((member, index) => (
-                              <View key={member.id}>
-                                {index > 0 ? <View style={styles.memberSeparator} /> : null}
-                                {renderMemberRow(member)}
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      ) : null}
-                    </>
-                  ) : (
-                    <EmptyState
-                      icon="people-outline"
-                      title="No members loaded"
-                      body="Member details will show up here once the club roster loads in."
+                          ))}
+                        </Card>
+                      </View>
+                    ) : null}
+                    {memberGroups.general.length ? (
+                      <View style={{ gap: spacing.sm }}>
+                        <Text style={typography.kicker}>
+                          MEMBERS • {memberGroups.general.length}
+                        </Text>
+                        <Card padded>
+                          {memberGroups.general.map((member, index) => (
+                            <View key={member.id}>
+                              {index > 0 ? (
+                                <View
+                                  style={[styles.memberSeparator, { borderColor: colors.borderSoft }]}
+                                />
+                              ) : null}
+                              {renderMemberRow(member)}
+                            </View>
+                          ))}
+                        </Card>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <EmptyState
+                    icon="people"
+                    title="No members loaded"
+                    body="Member details will show up here once the club roster loads in."
+                  />
+                )}
+              </View>
+            ) : null}
+
+            {/* ── EVENTS ── */}
+            {mode === 'events' ? (
+              <View style={styles.section}>
+                <View style={styles.chatHubHeader}>
+                  <Text style={[typography.title, { flex: 1 }]}>Events</Text>
+                  {meetings.length ? (
+                    <Button
+                      label={calendarExportBusy ? 'Exporting…' : 'Export'}
+                      size="sm"
+                      variant="secondary"
+                      icon="download"
+                      onPress={() => void handleExportCalendar()}
+                      disabled={calendarExportBusy}
                     />
-                  )}
+                  ) : null}
+                  {canCreateMeetings ? (
+                    <Button
+                      label={meetingComposerOpen ? 'Close' : 'New'}
+                      size="sm"
+                      icon={meetingComposerOpen ? 'close' : 'add'}
+                      onPress={() => setMeetingComposerOpen((current) => !current)}
+                    />
+                  ) : null}
                 </View>
-              ) : null}
 
-              {mode === 'events' ? (
-                <View style={styles.section}>
-                  <View style={styles.eventsHeader}>
-                    <Text style={styles.screenSectionTitle}>Events</Text>
-                    <View style={styles.eventsHeaderActions}>
-                      {meetings.length ? (
-                        <TouchableOpacity
-                          style={styles.eventsHeaderButton}
-                          onPress={() => void handleExportCalendar()}
-                          disabled={calendarExportBusy}
-                          accessibilityRole="button"
-                          accessibilityLabel="Export meetings as a calendar file"
-                        >
-                          <Ionicons name="download-outline" size={15} color={colors.ink} />
-                          <Text style={styles.eventsHeaderButtonText}>
-                            {calendarExportBusy ? 'Exporting…' : 'Export'}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {canCreateMeetings ? (
-                        <TouchableOpacity
-                          style={[styles.eventsHeaderButton, styles.eventsHeaderButtonPrimary]}
-                          onPress={() => setMeetingComposerOpen((current) => !current)}
-                          accessibilityRole="button"
-                          accessibilityLabel={meetingComposerOpen ? 'Close meeting composer' : 'Create meeting'}
-                        >
-                          <Ionicons name={meetingComposerOpen ? 'close' : 'add'} size={15} color="#FFFFFF" />
-                          <Text style={[styles.eventsHeaderButtonText, styles.eventsHeaderButtonTextPrimary]}>
-                            {meetingComposerOpen ? 'Close' : 'New'}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {canCreateMeetings && meetingComposerOpen ? (
-                    <View style={styles.composerCard}>
-                      <Text style={styles.cardTitle}>Create meeting</Text>
-                      <Text style={styles.cardBody}>Schedule an event for your club.</Text>
+                {canCreateMeetings && meetingComposerOpen ? (
+                  <Card padded>
+                    <View style={{ gap: spacing.md }}>
+                      <View>
+                        <Text style={typography.title}>Create meeting</Text>
+                        <Text style={typography.captionSmall}>Schedule an event for your club.</Text>
+                      </View>
                       <TextInput
                         value={meetingTitle}
                         onChangeText={setMeetingTitle}
                         placeholder="Meeting title"
                         placeholderTextColor={colors.faint}
-                        style={styles.input}
+                        style={[
+                          styles.input,
+                          {
+                            backgroundColor: colors.surfaceAlt,
+                            borderColor: colors.border,
+                            color: colors.ink,
+                          },
+                        ]}
                       />
                       <TextInput
                         value={meetingLocation}
                         onChangeText={setMeetingLocation}
                         placeholder="Location"
                         placeholderTextColor={colors.faint}
-                        style={styles.input}
+                        style={[
+                          styles.input,
+                          {
+                            backgroundColor: colors.surfaceAlt,
+                            borderColor: colors.border,
+                            color: colors.ink,
+                          },
+                        ]}
                       />
                       <TextInput
                         value={meetingDescription}
                         onChangeText={setMeetingDescription}
                         placeholder="Description"
                         placeholderTextColor={colors.faint}
-                        style={[styles.input, styles.inputTall]}
+                        style={[
+                          styles.input,
+                          styles.inputTall,
+                          {
+                            backgroundColor: colors.surfaceAlt,
+                            borderColor: colors.border,
+                            color: colors.ink,
+                          },
+                        ]}
                         multiline
                       />
-                      <View style={styles.visibilityRow}>
+                      <View style={styles.chipWrap}>
                         {VISIBILITY_OPTIONS.map((option) => (
                           <Chip
                             key={option.value}
                             label={option.label}
-                            active={meetingVisibility === option.value}
+                            selected={meetingVisibility === option.value}
                             onPress={() => setMeetingVisibility(option.value)}
                           />
                         ))}
@@ -2339,12 +2564,17 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           setMeetingTargetRoleIds((current) =>
                             current.includes(roleId)
                               ? current.filter((id) => id !== roleId)
-                              : [...current, roleId]
+                              : [...current, roleId],
                           )
                         }
                       />
-                      <View style={styles.datePickerCard}>
-                        <Text style={styles.cardMeta}>Date & time</Text>
+                      <View
+                        style={[
+                          styles.dateWell,
+                          { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                        ]}
+                      >
+                        <Text style={typography.kicker}>Date & time</Text>
                         <DateTimePicker
                           value={meetingTime}
                           mode="datetime"
@@ -2356,60 +2586,78 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
                           display="default"
                         />
                       </View>
-                      <PrimaryButton
+                      <Button
                         label="Create meeting"
                         onPress={() => void handleCreateMeeting()}
                         loading={meetingBusy}
                       />
                     </View>
-                  ) : null}
+                  </Card>
+                ) : null}
 
-                  {meetings.length ? meetings.map((meeting) => (
-                    <View key={meeting.id} style={styles.eventCard}>
+                {meetings.length ? (
+                  meetings.map((meeting) => (
+                    <Card key={meeting.id} padded>
                       <View style={styles.eventHead}>
                         <DateBadge iso={meeting.meetingTime} />
-                        <View style={styles.eventCopy}>
-                          <Text style={styles.eventDateLine}>
-                            {relativeDayLabel(meeting.meetingTime)}, {formatShortDate(meeting.meetingTime)} • {formatTime(meeting.meetingTime)}
+                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                          <Text style={[typography.kicker, { color: colors.primary }]}>
+                            {relativeDayLabel(meeting.meetingTime).toUpperCase()} •{' '}
+                            {formatTime(meeting.meetingTime)}
                           </Text>
-                          <Text style={styles.eventTitle}>{meeting.title}</Text>
-                          <Text style={styles.eventLocation}>{meeting.location}</Text>
+                          <Text style={typography.heading}>{meeting.title}</Text>
+                          <Text style={typography.captionSmall} numberOfLines={1}>
+                            {meeting.location}
+                          </Text>
                         </View>
-                        <View style={styles.eventActions}>
-                          <View style={styles.eventGoingPill}>
-                            <Ionicons name="people" size={12} color={colors.primarySoftText} />
-                            <Text style={styles.eventGoingText}>{meeting.rsvpCounts.going}</Text>
-                          </View>
+                        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                          <Sticker
+                            label={`${meeting.rsvpCounts.going} going`}
+                            tint={colors.successSoft}
+                            small
+                            tilt={2}
+                          />
                           {canDeleteClubContent ? (
-                            <TouchableOpacity
-                              style={styles.eventDeleteButton}
+                            <Pressable
                               onPress={() => void handleDeleteMeeting(meeting)}
                               disabled={deleteContentBusyId === `meeting:${meeting.id}`}
+                              hitSlop={8}
                             >
-                              <Ionicons name="trash-outline" size={16} color={colors.dangerText} />
-                            </TouchableOpacity>
+                              <Ionicons name="trash" size={16} color={colors.danger} />
+                            </Pressable>
                           ) : null}
                         </View>
                       </View>
 
-                      <View style={styles.rsvpRow}>
+                      <View style={[styles.rsvpRow, { marginTop: spacing.md }]}>
                         {RSVP_OPTIONS.map((option) => (
                           <Chip
                             key={option.value}
                             label={option.label}
-                            active={meeting.myRsvp === option.value}
+                            selected={meeting.myRsvp === option.value}
+                            tint={
+                              option.value === 'GOING'
+                                ? colors.successSoft
+                                : option.value === 'MAYBE'
+                                  ? colors.warningSoft
+                                  : colors.dangerSoft
+                            }
                             onPress={() => void handleRsvp(meeting.id, option.value)}
                           />
                         ))}
                       </View>
 
                       {meeting.description ? (
-                        <Text style={styles.cardBody}>{meeting.description}</Text>
+                        <Text style={[typography.body, { marginTop: spacing.sm }]}>
+                          {meeting.description}
+                        </Text>
                       ) : null}
 
                       <View style={styles.eventMetaRow}>
-                        <Text style={styles.cardMeta}>{meeting.attendeeCount} checked in</Text>
-                        <Text style={styles.cardMeta}>
+                        <Text style={typography.captionSmall}>
+                          {meeting.attendeeCount} checked in
+                        </Text>
+                        <Text style={typography.captionSmall}>
                           {meeting.targetRoleIds?.length
                             ? roleAudienceLabel(meeting.targetRoleIds)
                             : visibilityLabel(meeting.visibility)}
@@ -2418,228 +2666,300 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
 
                       {canCreateMeetings ? (
                         <>
-                          <TouchableOpacity
-                            style={styles.leaderToolsToggle}
-                            onPress={() => setLeaderToolsMeetingId((current) => (current === meeting.id ? null : meeting.id))}
-                            activeOpacity={0.85}
+                          <Pressable
+                            style={[styles.leaderToggle, { borderColor: colors.borderSoft }]}
+                            onPress={() =>
+                              setLeaderToolsMeetingId((current) =>
+                                current === meeting.id ? null : meeting.id,
+                              )
+                            }
                             accessibilityRole="button"
                             accessibilityLabel="Toggle leader tools"
                             accessibilityState={{ expanded: leaderToolsMeetingId === meeting.id }}
                           >
-                            <Ionicons name="key-outline" size={15} color={colors.violet} />
-                            <Text style={styles.leaderToolsToggleText}>Leader tools</Text>
+                            <Ionicons name="key" size={14} color={colors.violet} />
+                            <Text style={[styles.inlineActionText, { color: colors.violet }]}>
+                              Leader tools
+                            </Text>
                             {meeting.attendanceCode ? (
-                              <View style={styles.leaderToolsOpenPill}>
-                                <Text style={styles.leaderToolsOpenPillText}>Attendance open</Text>
-                              </View>
+                              <Sticker
+                                label="Attendance open"
+                                tint={colors.successSoft}
+                                small
+                                tilt={-2}
+                              />
                             ) : null}
-                            <View style={styles.leaderToolsSpacer} />
+                            <View style={{ flex: 1 }} />
                             <Ionicons
                               name={leaderToolsMeetingId === meeting.id ? 'chevron-up' : 'chevron-down'}
                               size={16}
                               color={colors.sub}
                             />
-                          </TouchableOpacity>
+                          </Pressable>
                           {leaderToolsMeetingId === meeting.id ? (
-                            <View style={styles.attendanceBox}>
+                            <View
+                              style={[
+                                styles.attendanceBox,
+                                { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                              ]}
+                            >
                               {meeting.attendanceCode ? (
-                                <View style={styles.attendanceCodeBlock}>
-                                  <Text style={styles.cardMeta}>Attendance code</Text>
-                                  <Text style={styles.attendanceCodeText}>{meeting.attendanceCode}</Text>
-                                  <Text style={styles.cardMeta}>Attendance is open. Regenerating this code makes the current one stop working.</Text>
+                                <View style={{ gap: 4 }}>
+                                  <Text style={typography.kicker}>Attendance code</Text>
+                                  <Text style={styles.attendanceCode}>{meeting.attendanceCode}</Text>
+                                  <Text style={typography.captionSmall}>
+                                    Attendance is open. Regenerating this code makes the current one
+                                    stop working.
+                                  </Text>
                                 </View>
                               ) : (
-                                <Text style={styles.cardBody}>Attendance is closed right now.</Text>
+                                <Text style={typography.caption}>
+                                  Attendance is closed right now.
+                                </Text>
                               )}
                               {meeting.rsvpReminderSentAt ? (
-                                <Text style={styles.cardMeta}>
-                                  Last RSVP reminder: {formatDateTime(meeting.rsvpReminderSentAt)} • {meeting.rsvpReminderStatus ?? 'sent'} • {meeting.rsvpReminderCount ?? 0} targeted
+                                <Text style={typography.captionSmall}>
+                                  Last RSVP reminder: {formatDateTime(meeting.rsvpReminderSentAt)} •{' '}
+                                  {meeting.rsvpReminderStatus ?? 'sent'} •{' '}
+                                  {meeting.rsvpReminderCount ?? 0} targeted
                                 </Text>
                               ) : (
-                                <Text style={styles.cardMeta}>
-                                  {nonRsvpCountForMeeting(meeting)} member{nonRsvpCountForMeeting(meeting) === 1 ? '' : 's'} have not RSVP’d.
+                                <Text style={typography.captionSmall}>
+                                  {nonRsvpCountForMeeting(meeting)} member
+                                  {nonRsvpCountForMeeting(meeting) === 1 ? '' : 's'} have not RSVP'd.
                                 </Text>
                               )}
-                              <View style={styles.eventButtonRow}>
-                                <PrimaryButton
-                                  label={meeting.attendanceCode ? 'Regenerate code' : 'Open attendance'}
+                              <View style={styles.buttonRow}>
+                                <Button
+                                  label={meeting.attendanceCode ? 'Regenerate' : 'Open attendance'}
+                                  size="sm"
+                                  variant="secondary"
                                   onPress={() => void handleOpenAttendance(meeting.id)}
                                   loading={attendanceBusyId === `open-${meeting.id}`}
-                                  kind="ghost"
                                 />
                                 {meeting.attendanceCode ? (
                                   <>
-                                    <PrimaryButton
+                                    <Button
                                       label="Copy"
-                                      onPress={() => void handleCopyAttendanceCode(meeting.attendanceCode!)}
-                                      kind="ghost"
+                                      size="sm"
+                                      variant="secondary"
+                                      onPress={() =>
+                                        void handleCopyAttendanceCode(meeting.attendanceCode!)
+                                      }
                                     />
-                                    <PrimaryButton
+                                    <Button
                                       label="Share"
+                                      size="sm"
+                                      variant="secondary"
                                       onPress={() => void handleShareAttendanceCode(meeting)}
-                                      kind="ghost"
+                                    />
+                                    <Button
+                                      label="Close"
+                                      size="sm"
+                                      variant="secondary"
+                                      onPress={() => void handleCloseAttendance(meeting.id)}
+                                      loading={attendanceBusyId === `close-${meeting.id}`}
                                     />
                                   </>
                                 ) : null}
-                                {meeting.attendanceCode ? (
-                                  <PrimaryButton
-                                    label="Close"
-                                    onPress={() => void handleCloseAttendance(meeting.id)}
-                                    loading={attendanceBusyId === `close-${meeting.id}`}
-                                    kind="ghost"
-                                  />
-                                ) : null}
-                                <PrimaryButton
+                                <Button
                                   label="Attendance"
+                                  size="sm"
+                                  variant="secondary"
                                   onPress={() => void handleLoadAttendance(meeting.id)}
                                   loading={attendanceBusyId === `view-${meeting.id}`}
-                                  kind="ghost"
                                 />
-                                <PrimaryButton
+                                <Button
                                   label="Remind non-RSVPs"
+                                  size="sm"
+                                  variant="secondary"
                                   onPress={() => void handleSendRsvpReminder(meeting)}
                                   loading={attendanceBusyId === `rsvp-${meeting.id}`}
-                                  kind="ghost"
                                   disabled={nonRsvpCountForMeeting(meeting) === 0}
                                 />
                               </View>
                               {attendancePanels[meeting.id]?.attendees.length ? (
                                 <View style={styles.attendeeRow}>
-                                  {attendancePanels[meeting.id]!.attendees.slice(0, 6).map((attendee) => (
-                                    <UserAvatar
-                                      key={attendee.id}
-                                      name={attendee.user?.name ?? 'Attendee'}
-                                      avatarUrl={attendee.user?.avatarUrl}
-                                      size={28}
-                                    />
-                                  ))}
+                                  {attendancePanels[meeting.id]!.attendees.slice(0, 6).map(
+                                    (attendee) => (
+                                      <Avatar
+                                        key={attendee.id}
+                                        name={attendee.user?.name ?? 'Attendee'}
+                                        uri={attendee.user?.avatarUrl}
+                                        size={28}
+                                      />
+                                    ),
+                                  )}
                                 </View>
                               ) : null}
                             </View>
                           ) : null}
                         </>
                       ) : isMember ? (
-                        <View style={styles.attendanceBox}>
-                          <Text style={styles.cardBody}>Have the attendance code? Check in here.</Text>
-                              <TextInput
-                                value={attendanceCodeDraft[meeting.id] ?? ''}
-                                onChangeText={(value) => setAttendanceCodeDraft((current) => ({ ...current, [meeting.id]: value.toUpperCase() }))}
-                                placeholder="Enter attendance code"
-                                placeholderTextColor={colors.faint}
-                                style={styles.input}
-                                autoCapitalize="characters"
-                              />
-                          <PrimaryButton
+                        <View
+                          style={[
+                            styles.attendanceBox,
+                            { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                          ]}
+                        >
+                          <Text style={typography.caption}>
+                            Have the attendance code? Check in here.
+                          </Text>
+                          <TextInput
+                            value={attendanceCodeDraft[meeting.id] ?? ''}
+                            onChangeText={(value) =>
+                              setAttendanceCodeDraft((current) => ({
+                                ...current,
+                                [meeting.id]: value.toUpperCase(),
+                              }))
+                            }
+                            placeholder="Enter attendance code"
+                            placeholderTextColor={colors.faint}
+                            style={[
+                              styles.input,
+                              {
+                                backgroundColor: colors.surface,
+                                borderColor: colors.border,
+                                color: colors.ink,
+                              },
+                            ]}
+                            autoCapitalize="characters"
+                          />
+                          <Button
                             label="Check in"
+                            size="sm"
                             onPress={() => void handleCheckIn(meeting.id)}
                             loading={attendanceBusyId === `checkin-${meeting.id}`}
                           />
                         </View>
                       ) : null}
-                    </View>
-                  )) : (
-                    <EmptyState
-                      icon="calendar-outline"
-                      title="No meetings yet"
-                      body="Once club events are scheduled, they’ll appear here."
-                    />
-                  )}
+                    </Card>
+                  ))
+                ) : (
+                  <EmptyState
+                    icon="calendar"
+                    title="No meetings yet"
+                    body="Once club events are scheduled, they'll appear here."
+                  />
+                )}
+              </View>
+            ) : null}
+
+            {/* ── ANALYTICS ── */}
+            {mode === 'analytics' ? (
+              <View style={styles.section}>
+                <View>
+                  <Text style={typography.title}>Club health</Text>
+                  <Text style={typography.captionSmall}>
+                    Snapshot based on current members, upcoming meetings, RSVPs, attendance, and
+                    announcements.
+                  </Text>
                 </View>
-              ) : null}
+                <View style={styles.metricGrid}>
+                  <MetricCard
+                    icon="people"
+                    tint={colors.blue}
+                    soft={colors.blueSoft}
+                    label="Members"
+                    value={String(analytics.memberCount)}
+                    detail="Current roster"
+                  />
+                  <MetricCard
+                    icon="calendar"
+                    tint={colors.violet}
+                    soft={colors.violetSoft}
+                    label="Upcoming"
+                    value={String(analytics.upcomingCount)}
+                    detail="Scheduled meetings"
+                  />
+                  <MetricCard
+                    icon="checkbox"
+                    tint={colors.green}
+                    soft={colors.greenSoft}
+                    label="RSVPs"
+                    value={`${analytics.rsvpGoing}/${analytics.rsvpMaybe}/${analytics.rsvpNotGoing}`}
+                    detail="Going / maybe / can't go"
+                  />
+                  <MetricCard
+                    icon="finger-print"
+                    tint={colors.teal}
+                    soft={colors.tealSoft}
+                    label="Attendance"
+                    value={String(analytics.checkedIn)}
+                    detail="Checked in across meetings"
+                  />
+                  <MetricCard
+                    icon="megaphone"
+                    tint={colors.amber}
+                    soft={colors.amberSoft}
+                    label="Announcements"
+                    value={String(analytics.announcements)}
+                    detail="Visible recent posts"
+                  />
+                </View>
 
-              {mode === 'analytics' ? (
-                <View style={styles.section}>
-                  <View>
-                    <Text style={styles.screenSectionTitle}>Club health</Text>
-                    <Text style={styles.cardMeta}>
-                      Snapshot based on current members, upcoming meetings, RSVPs, attendance, and announcements.
+                <Card padded>
+                  <View style={styles.responseHead}>
+                    <Text style={typography.title}>RSVP response rate</Text>
+                    <Text style={styles.responseValue}>
+                      {analytics.responseRate == null ? '—' : `${analytics.responseRate}%`}
                     </Text>
                   </View>
-                  <View style={styles.analyticsGrid}>
-                    <MetricCard
-                      icon="people-outline"
-                      tint={colors.blue}
-                      soft={colors.blueSoft}
-                      label="Members"
-                      value={String(analytics.memberCount)}
-                      detail="Current roster"
+                  <View
+                    style={[
+                      styles.progressTrack,
+                      { backgroundColor: colors.sunken, borderColor: colors.border },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        flex: Math.min(Math.max(analytics.responseRate ?? 0, 0), 100),
+                        backgroundColor: colors.primary,
+                      }}
                     />
-                    <MetricCard
-                      icon="calendar-outline"
-                      tint={colors.violet}
-                      soft={colors.violetSoft}
-                      label="Upcoming"
-                      value={String(analytics.upcomingCount)}
-                      detail="Scheduled meetings"
-                    />
-                    <MetricCard
-                      icon="checkbox-outline"
-                      tint={colors.green}
-                      soft={colors.greenSoft}
-                      label="RSVPs"
-                      value={`${analytics.rsvpGoing}/${analytics.rsvpMaybe}/${analytics.rsvpNotGoing}`}
-                      detail="Going / maybe / can't go"
-                    />
-                    <MetricCard
-                      icon="finger-print-outline"
-                      tint={colors.teal}
-                      soft={colors.tealSoft}
-                      label="Attendance"
-                      value={String(analytics.checkedIn)}
-                      detail="Checked in across meetings"
-                    />
-                    <MetricCard
-                      icon="megaphone-outline"
-                      tint={colors.amber}
-                      soft={colors.amberSoft}
-                      label="Announcements"
-                      value={String(analytics.announcements)}
-                      detail="Visible recent posts"
+                    <View
+                      style={{ flex: 100 - Math.min(Math.max(analytics.responseRate ?? 0, 0), 100) }}
                     />
                   </View>
-
-                  <View style={styles.analyticsPanel}>
-                    <View style={styles.responseHead}>
-                      <Text style={styles.cardTitle}>RSVP response rate</Text>
-                      <Text style={styles.responseValue}>
-                        {analytics.responseRate == null ? '—' : `${analytics.responseRate}%`}
-                      </Text>
-                    </View>
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressFill, { flex: Math.min(Math.max(analytics.responseRate ?? 0, 0), 100) }]} />
-                      <View style={{ flex: 100 - Math.min(Math.max(analytics.responseRate ?? 0, 0), 100) }} />
-                    </View>
-                    <Text style={styles.cardMeta}>
-                      {analytics.responseRate == null
-                        ? 'Schedule meetings to start building a response signal.'
-                        : 'Share of member RSVPs across upcoming meetings.'}
-                    </Text>
-                  </View>
-                  <View style={styles.analyticsPanel}>
-                    <Text style={styles.cardTitle}>Upcoming meeting breakdown</Text>
-                    {meetings.length ? meetings.slice(0, 5).map((meeting) => (
-                      <View key={meeting.id} style={styles.analyticsMeetingRow}>
-                        <View style={styles.feedText}>
-                          <Text style={styles.cardTitle}>{meeting.title}</Text>
-                          <Text style={styles.cardMeta}>{formatShortDate(meeting.meetingTime)} • {formatTime(meeting.meetingTime)}</Text>
+                  <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
+                    {analytics.responseRate == null
+                      ? 'Schedule meetings to start building a response signal.'
+                      : 'Share of member RSVPs across upcoming meetings.'}
+                  </Text>
+                </Card>
+                <Card padded>
+                  <Text style={typography.title}>Upcoming meeting breakdown</Text>
+                  {meetings.length ? (
+                    meetings.slice(0, 5).map((meeting) => (
+                      <View key={meeting.id} style={[styles.analyticsRow, { borderColor: colors.borderSoft }]}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={typography.subheading} numberOfLines={1}>
+                            {meeting.title}
+                          </Text>
+                          <Text style={typography.captionSmall}>
+                            {formatShortDate(meeting.meetingTime)} • {formatTime(meeting.meetingTime)}
+                          </Text>
                         </View>
-                        <Text style={styles.analyticsCount}>
+                        <Text style={typography.captionSmall}>
                           {meeting.rsvpCounts.going} going • {meeting.attendeeCount} checked in
                         </Text>
                       </View>
-                    )) : (
-                      <Text style={styles.cardMeta}>No upcoming meetings yet, so meeting trends are not available.</Text>
-                    )}
-                  </View>
-                  <View style={styles.analyticsPanel}>
-                    <Text style={styles.cardTitle}>Member count trend</Text>
-                    <Text style={styles.cardMeta}>
-                      Historical member snapshots are not stored yet. Showing the current roster count only.
+                    ))
+                  ) : (
+                    <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
+                      No upcoming meetings yet, so meeting trends are not available.
                     </Text>
-                  </View>
-                </View>
-              ) : null}
-            </View>
+                  )}
+                </Card>
+                <Card padded>
+                  <Text style={typography.title}>Member count trend</Text>
+                  <Text style={[typography.captionSmall, { marginTop: 4 }]}>
+                    Historical member snapshots are not stored yet. Showing the current roster count
+                    only.
+                  </Text>
+                </Card>
+              </View>
+            ) : null}
           </>
         ) : (
           <View style={styles.loadingWrap}>
@@ -2649,80 +2969,88 @@ export default function ClubDetailScreen({ route, navigation }: Props) {
           </View>
         )}
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
-function SectionHeaderRow({
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function SectionRow({
   title,
   actionLabel,
   onPress,
-}: SectionHeaderRowProps) {
-  const styles = useStyles();
-  const { colors } = useTheme();
+}: {
+  title: string;
+  actionLabel?: string;
+  onPress?: () => void;
+}) {
+  const { colors, typography } = useTheme();
   return (
-    <View style={styles.sectionHeaderRow}>
-      <Text style={styles.sectionHeaderTitle}>{title}</Text>
+    <View style={helperStylesStatic.sectionRow}>
+      <Text style={[typography.title, { flex: 1 }]}>{title}</Text>
       {actionLabel && onPress ? (
-        <TouchableOpacity onPress={onPress}>
-          <Text style={styles.linkText}>{actionLabel}</Text>
-        </TouchableOpacity>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={actionLabel}>
+          <Text style={[helperStylesStatic.sectionAction, { color: colors.primary }]}>
+            {actionLabel} →
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );
 }
 
-function QuickActionCard({
+function QuickAction({
   icon,
   title,
+  tint,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
+  tint: string;
   onPress: () => void;
 }) {
-  const styles = useStyles();
   const { colors } = useTheme();
   return (
-    <TouchableOpacity
-      style={styles.quickActionCard}
+    <Slab
       onPress={onPress}
-      activeOpacity={0.88}
-      accessibilityRole="button"
+      color={tint}
+      style={{ flex: 1 }}
+      faceStyle={helperStylesStatic.quickFace}
       accessibilityLabel={title}
     >
-      <View style={styles.quickActionIcon}>
-        <Ionicons name={icon} size={18} color={colors.primary} />
-      </View>
-      <Text style={styles.quickActionTitle}>{title}</Text>
-    </TouchableOpacity>
+      <Ionicons name={icon} size={19} color={colors.ink} />
+      <Text style={[helperStylesStatic.quickLabel, { color: colors.ink }]}>{title}</Text>
+    </Slab>
   );
 }
 
-function RoleBadge({ role }: { role: string }) {
-  const styles = useStyles();
+function DateBadge({ iso, large }: { iso: string; large?: boolean }) {
   const { colors } = useTheme();
-  const tint = role === 'OWNER' ? colors.warnText : role === 'ADMIN' ? colors.primarySoftText : colors.violet;
-  const soft = role === 'OWNER' ? colors.amberSoft : role === 'ADMIN' ? colors.primarySoft : colors.violetSoft;
-  return (
-    <View style={[styles.roleBadge, { backgroundColor: soft }]}>
-      <Text style={[styles.roleBadgeText, { color: tint }]}>{role.toLowerCase()}</Text>
-    </View>
-  );
-}
-
-function DateBadge({ iso, size = 'regular' }: { iso: string; size?: 'regular' | 'large' }) {
-  const styles = useStyles();
   const date = new Date(iso);
-  const large = size === 'large';
+  const month = date.toLocaleDateString([], { month: 'short' }).toUpperCase();
+  const day = date.getDate();
+  const size = large ? 62 : 52;
   return (
-    <View style={[styles.dateBadge, large && styles.dateBadgeLarge]}>
-      <Text style={styles.dateBadgeMonth}>
-        {date.toLocaleDateString([], { month: 'short' }).toUpperCase()}
-      </Text>
-      <Text style={[styles.dateBadgeDay, large && styles.dateBadgeDayLarge]}>{date.getDate()}</Text>
-      <Text style={styles.dateBadgeWeekday}>
-        {date.toLocaleDateString([], { weekday: 'short' })}
+    <View
+      style={[
+        helperStylesStatic.dateBadge,
+        {
+          width: size,
+          height: size,
+          backgroundColor: colors.primarySoft,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[helperStylesStatic.dateBadgeMonth, { color: colors.primary }]}>{month}</Text>
+      <Text
+        style={[
+          helperStylesStatic.dateBadgeDay,
+          { color: colors.ink, fontSize: large ? 22 : 18 },
+        ]}
+      >
+        {day}
       </Text>
     </View>
   );
@@ -2743,16 +3071,23 @@ function MetricCard({
   value: string;
   detail: string;
 }) {
-  const styles = useStyles();
+  const { colors, typography } = useTheme();
   return (
-    <View style={styles.metricCard}>
-      <View style={[styles.metricIcon, { backgroundColor: soft }]}>
-        <Ionicons name={icon} size={15} color={tint} />
-      </View>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.cardMeta}>{detail}</Text>
-    </View>
+    <Slab
+      accessibilityRole="none"
+      color={soft}
+      style={helperStylesStatic.metricSlot}
+      faceStyle={helperStylesStatic.metricFace}
+    >
+      <Ionicons name={icon} size={18} color={tint} />
+      <Text style={[helperStylesStatic.metricValue, { color: colors.ink }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={typography.kicker}>{label}</Text>
+      <Text style={typography.captionSmall} numberOfLines={1}>
+        {detail}
+      </Text>
+    </Slab>
   );
 }
 
@@ -2761,78 +3096,39 @@ function RoleTargetPicker({
   selectedRoleIds,
   onToggle,
 }: {
-  roles: Array<{ id: string; name: string }>;
+  roles: ClubRole[];
   selectedRoleIds: string[];
   onToggle: (roleId: string) => void;
 }) {
-  const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   const [open, setOpen] = useState(false);
-
-  if (!roles.length) {
-    return (
-      <View style={styles.targetPickerEmpty}>
-        <Ionicons name="pricetags-outline" size={16} color={colors.sub} />
-        <Text style={styles.cardMeta}>Add member tags from Members to target specific groups.</Text>
-      </View>
-    );
-  }
-
+  if (!roles.length) return null;
   return (
-    <View style={styles.targetPicker}>
-      <View style={styles.targetPickerHeader}>
-        <Text style={styles.targetPickerTitle}>Target member tags</Text>
-        <Text style={styles.targetPickerCount}>
-          {selectedRoleIds.length ? `${selectedRoleIds.length} selected` : 'Optional'}
+    <View style={{ gap: spacing.sm }}>
+      <Pressable
+        onPress={() => setOpen((current) => !current)}
+        style={helperStylesStatic.rolePickerToggle}
+        accessibilityRole="button"
+        accessibilityLabel="Target member tags"
+      >
+        <Ionicons name="pricetags" size={14} color={colors.primary} />
+        <Text style={[typography.caption, { flex: 1 }]}>
+          {selectedRoleIds.length
+            ? `${selectedRoleIds.length} tag${selectedRoleIds.length === 1 ? '' : 's'} targeted`
+            : 'Target specific member tags (optional)'}
         </Text>
-      </View>
-      <View style={styles.roleChipWrap}>
-        {selectedRoleIds.map((roleId) => {
-          const role = roles.find((item) => item.id === roleId);
-          if (!role) return null;
-          return (
-            <TouchableOpacity
-              key={role.id}
-              style={[styles.targetRoleChip, styles.targetRoleChipActive]}
-              onPress={() => onToggle(role.id)}
-              activeOpacity={0.82}
-            >
-              <Ionicons name="checkmark-circle" size={15} color="#FFFFFF" />
-              <Text style={[styles.targetRoleChipText, styles.targetRoleChipTextActive]}>
-                {role.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        <TouchableOpacity
-          style={styles.targetRoleAddButton}
-          onPress={() => setOpen((current) => !current)}
-          activeOpacity={0.82}
-          accessibilityLabel={open ? 'Close member tag picker' : 'Open member tag picker'}
-        >
-          <Ionicons name={open ? 'remove' : 'add'} size={18} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={colors.sub} />
+      </Pressable>
       {open ? (
-        <View style={styles.targetRoleMenu}>
-          {roles.map((role) => {
-            const selected = selectedRoleIds.includes(role.id);
-            return (
-              <TouchableOpacity
-                key={role.id}
-                style={[styles.targetRoleMenuItem, selected ? styles.targetRoleMenuItemActive : null]}
-                onPress={() => onToggle(role.id)}
-                activeOpacity={0.82}
-              >
-                <Text style={styles.targetRoleMenuText}>{role.name}</Text>
-                <Ionicons
-                  name={selected ? 'checkmark-circle' : 'add-circle-outline'}
-                  size={18}
-                  color={selected ? colors.primary : colors.sub}
-                />
-              </TouchableOpacity>
-            );
-          })}
+        <View style={helperStylesStatic.rolePickerWrap}>
+          {roles.map((role) => (
+            <Chip
+              key={role.id}
+              label={role.name}
+              selected={selectedRoleIds.includes(role.id)}
+              onPress={() => onToggle(role.id)}
+            />
+          ))}
         </View>
       ) : null}
     </View>
@@ -2845,7 +3141,6 @@ function MessageBubble({
   avatarUrl,
   content,
   time,
-  audience,
   onReport,
 }: {
   align: 'left' | 'right';
@@ -2853,1377 +3148,481 @@ function MessageBubble({
   avatarUrl?: string | null;
   content: string;
   time: string;
-  audience?: string;
   onReport?: () => void;
 }) {
-  const styles = useStyles();
   const { colors } = useTheme();
-  const isRight = align === 'right';
+  const mine = align === 'right';
   return (
-    <View style={[styles.bubbleRow, isRight && styles.bubbleRowRight]}>
-      {!isRight ? <UserAvatar name={name} avatarUrl={avatarUrl} size={34} /> : null}
-      <View style={[styles.bubbleWrap, isRight && styles.bubbleWrapRight]}>
-        {!isRight ? <Text style={styles.bubbleName}>{name}</Text> : null}
-        {audience ? <Text style={styles.bubbleAudience}>{audience}</Text> : null}
-        <View style={[styles.bubble, isRight && styles.bubbleRight]}>
-          <Text style={[styles.bubbleText, isRight && styles.bubbleTextRight]}>{content}</Text>
+    <View
+      style={[
+        helperStylesStatic.bubbleRow,
+        mine && { justifyContent: 'flex-end' },
+      ]}
+    >
+      {!mine ? <Avatar name={name} uri={avatarUrl} size={30} /> : null}
+      <View style={[helperStylesStatic.bubbleStack, mine && { alignItems: 'flex-end' }]}>
+        <View style={helperStylesStatic.bubbleMeta}>
+          <Text style={[helperStylesStatic.bubbleName, { color: colors.sub }]}>
+            {mine ? 'You' : name}
+          </Text>
+          <Text style={[helperStylesStatic.bubbleTime, { color: colors.faint }]}>{time}</Text>
         </View>
-        <Text style={[styles.bubbleTime, isRight && styles.bubbleTimeRight]}>{time}</Text>
+        <View
+          style={[
+            helperStylesStatic.bubble,
+            {
+              backgroundColor: mine ? colors.primary : colors.surfaceAlt,
+              borderColor: colors.border,
+            },
+            mine
+              ? { borderBottomRightRadius: 4 }
+              : { borderBottomLeftRadius: 4 },
+          ]}
+        >
+          <Text
+            style={[
+              helperStylesStatic.bubbleBody,
+              { color: mine ? colors.onPrimary : colors.ink },
+            ]}
+          >
+            {content}
+          </Text>
+        </View>
         {onReport ? (
-          <TouchableOpacity onPress={onReport} style={[styles.reportInlineButton, isRight && styles.reportInlineRight]}>
-            <Ionicons name="flag-outline" size={15} color={colors.sub} />
-            <Text style={styles.reportInlineText}>Report</Text>
-          </TouchableOpacity>
+          <Pressable
+            onPress={onReport}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Report message from ${name}`}
+          >
+            <Text style={[helperStylesStatic.bubbleReport, { color: colors.faint }]}>Report</Text>
+          </Pressable>
         ) : null}
       </View>
     </View>
   );
 }
 
-const useStyles = createThemedStyles((t: Theme) => ({
-  page: {
-    flexGrow: 1,
-    paddingBottom: spacing.xxl,
+import { StyleSheet } from 'react-native';
+
+const helperStylesStatic = StyleSheet.create({
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: spacing.md,
   },
-  heroShell: {
-    paddingBottom: spacing.md,
-  },
-  cover: {
-    minHeight: 224,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  coverWatermark: {
-    position: 'absolute',
-    right: -34,
-    top: -26,
-    fontSize: 190,
-    lineHeight: 210,
-    opacity: 0.13,
-    transform: [{ rotate: '-12deg' }],
-  },
-  coverCategoryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.26)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  coverCategoryText: {
-    color: '#FFFFFF',
+  sectionAction: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-  },
-  coverPillDivider: {
-    width: 1,
-    height: 12,
-    marginHorizontal: 4,
-    backgroundColor: 'rgba(255,255,255,0.34)',
-  },
-  coverTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  coverActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  heroCircleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.surface,
-  },
-  coverArt: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 40,
-  },
-  coverIdentity: {
-    width: 92,
-    height: 92,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    overflow: 'hidden',
-  },
-  coverAvatar: {
-    width: 92,
-    height: 92,
-  },
-  coverEmoji: {
-    color: '#FFFFFF',
-    fontSize: 48,
-    lineHeight: 56,
-  },
-  heroCard: {
-    marginTop: -38,
-    marginHorizontal: spacing.md,
-    borderRadius: 30,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
-    ...t.shadows.card,
-  },
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  clubAvatarTile: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(108, 79, 220, 0.10)',
-    overflow: 'hidden',
-  },
-  clubAvatarImage: {
-    width: 76,
-    height: 76,
-  },
-  clubAvatarEmoji: {
-    color: t.colors.primary,
-    fontSize: 38,
-    lineHeight: 46,
-  },
-  identityCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  clubTitle: {
-    ...t.typography.h1,
-    fontSize: 24,
-    lineHeight: 30,
-  },
-  clubMeta: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-  },
-  clubDescription: {
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  statStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 18,
-    backgroundColor: t.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingVertical: spacing.sm + 2,
-  },
-  statCell: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  statCellValue: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 20,
-    lineHeight: 24,
-    letterSpacing: -0.5,
-    color: t.colors.ink,
-  },
-  statCellLabel: {
-    ...t.typography.caption,
-    fontSize: 11.5,
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: t.colors.border,
-  },
-  tabBar: {
-    gap: spacing.xs,
-    paddingRight: spacing.md,
+    fontSize: 13.5,
     paddingBottom: 2,
   },
-  tabPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radii.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    ...t.shadows.subtle,
-  },
-  tabPillActive: {
-    backgroundColor: t.colors.ink,
-    borderColor: t.colors.ink,
-  },
-  tabPillLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: t.colors.sub,
-  },
-  tabPillLabelActive: {
-    color: t.isDark ? '#0C0D11' : '#FFFFFF',
-  },
-  membershipRow: {
-    marginTop: 2,
-  },
-  membershipButton: {
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primary,
-    paddingVertical: 15,
+  quickFace: {
     alignItems: 'center',
     justifyContent: 'center',
-    ...t.shadows.glow,
+    paddingVertical: spacing.md,
+    gap: 6,
   },
-  membershipButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+  quickLabel: {
     fontFamily: fonts.bold,
-  },
-  leaveClubButton: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  leaveClubButtonText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-    fontSize: 13,
-  },
-  bodyWrap: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.md,
-  },
-  loadingWrap: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  sectionHeaderTitle: {
-    ...t.typography.h2,
-  },
-  linkText: {
-    ...t.typography.bodyStrong,
-    fontSize: 14,
-    color: t.colors.primary,
-  },
-  upcomingCard: {
-    gap: spacing.sm,
-    borderRadius: 24,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    ...t.shadows.card,
-  },
-  upcomingHead: {
-    flexDirection: 'row',
-    gap: spacing.sm + 2,
-  },
-  upcomingMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    fontSize: 12.5,
   },
   dateBadge: {
-    width: 64,
-    borderRadius: 18,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: t.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingVertical: 10,
-    gap: 1,
-  },
-  dateBadgeLarge: {
-    width: 80,
-    paddingVertical: 14,
-    backgroundColor: t.colors.violetSoft,
-    borderColor: 'transparent',
+    transform: [{ rotate: '-3deg' }],
   },
   dateBadgeMonth: {
-    ...t.typography.label,
+    fontFamily: fonts.bold,
     fontSize: 10,
-    letterSpacing: 1.2,
-    color: t.colors.violet,
+    letterSpacing: 1,
   },
   dateBadgeDay: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 24,
-    lineHeight: 28,
-    letterSpacing: -0.6,
-    color: t.colors.ink,
+    fontFamily: fonts.displayMedium,
+    lineHeight: 26,
   },
-  dateBadgeDayLarge: {
-    fontSize: 30,
-    lineHeight: 34,
+  metricSlot: {
+    flexBasis: '46%',
+    flexGrow: 1,
   },
-  dateBadgeWeekday: {
-    ...t.typography.caption,
-    fontSize: 11,
-  },
-  upcomingCopy: {
-    flex: 1,
+  metricFace: {
+    padding: spacing.md,
     gap: 4,
   },
-  upcomingTime: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-    color: t.colors.violet,
-  },
-  upcomingTitle: {
-    ...t.typography.title,
+  metricValue: {
+    fontFamily: fonts.displayMedium,
     fontSize: 20,
-    lineHeight: 24,
+    lineHeight: 26,
   },
-  upcomingLocation: {
-    ...t.typography.body,
-    fontSize: 14,
-  },
-  upcomingAttendees: {
+  rolePickerToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 7,
   },
-  upcomingAttendeeCount: {
-    marginLeft: 8,
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-    color: t.colors.sub,
-  },
-  quickActionRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  quickActionCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 18,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingVertical: spacing.sm + 4,
-    ...t.shadows.subtle,
-  },
-  quickActionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primarySoft,
-  },
-  quickActionTitle: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-  },
-  announcementPreview: {
-    flexDirection: 'row',
-    borderRadius: 20,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    overflow: 'hidden',
-    ...t.shadows.subtle,
-  },
-  announcementPreviewBar: {
-    width: 4,
-    backgroundColor: t.colors.amber,
-  },
-  announcementPreviewBody: {
-    flex: 1,
-    padding: spacing.sm + 2,
-    gap: 6,
-  },
-  announcementPreviewHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  announcementPreviewName: {
-    ...t.typography.bodyStrong,
-    fontSize: 13.5,
-    flex: 1,
-  },
-  announcementPreviewTime: {
-    ...t.typography.caption,
-  },
-  announcementPreviewContent: {
-    ...t.typography.body,
-    fontSize: 14,
-    color: t.colors.ink,
-  },
-  announcementCard: {
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-    ...t.shadows.card,
-  },
-  announcementHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
-  announcementAuthor: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'center',
-    flex: 1,
-  },
-  announcementCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  cardTitle: {
-    ...t.typography.title,
-  },
-  cardMeta: {
-    ...t.typography.body,
-    fontSize: 13,
-  },
-  targetMeta: {
-    ...t.typography.bodyStrong,
-    color: t.colors.green,
-    fontSize: 12,
-  },
-  audiencePill: {
-    maxWidth: 140,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primarySoft,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  audiencePillText: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  cardBody: {
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  screenSectionTitle: {
-    ...t.typography.h1,
-    fontSize: 22,
-    lineHeight: 27,
-  },
-  screenSectionBody: {
-    ...t.typography.body,
-  },
-  membersHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  membersCount: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-    paddingBottom: 2,
-  },
-  manageRolesButton: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.glass,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  manageRolesButtonText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.primary,
-    fontSize: 13,
-  },
-  roleManagerPanel: {
-    gap: spacing.sm,
-    borderRadius: 20,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    ...t.shadows.card,
-  },
-  roleManagerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  permissionPanel: {
-    gap: spacing.sm,
-    borderRadius: 18,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  permissionList: {
-    gap: 8,
-  },
-  permissionRow: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: 16,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  permissionRowActive: {
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.primarySoft,
-  },
-  permissionCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  permissionTitle: {
-    ...t.typography.bodyStrong,
-    color: t.colors.ink,
-  },
-  roleCreateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  roleNameInput: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: t.colors.borderStrong,
-    backgroundColor: t.colors.inputBg,
-    paddingHorizontal: spacing.md,
-    color: t.colors.ink,
-    fontSize: 15,
-  },
-  roleCreateButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primary,
-  },
-  roleList: {
-    gap: 8,
-  },
-  roleListItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: 16,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  roleListIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primarySoft,
-  },
-  roleListCopy: {
-    flex: 1,
-  },
-  roleListTitle: {
-    ...t.typography.bodyStrong,
-    color: t.colors.ink,
-  },
-  roleIconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.dangerBg,
-  },
-  roleChipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  outreachPanel: {
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-    ...t.shadows.card,
-  },
-  manualPicker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  manualMemberChip: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    backgroundColor: t.colors.inputBg,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  manualMemberChipActive: {
-    backgroundColor: t.colors.primary,
-    borderColor: t.colors.primary,
-  },
-  manualMemberText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.ink,
-    fontSize: 13,
-  },
-  manualMemberTextActive: {
-    color: '#FFFFFF',
-  },
-  previewBox: {
-    borderRadius: 18,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: 5,
-  },
-  previewRecipient: {
-    ...t.typography.body,
-    color: t.colors.ink,
-    fontSize: 14,
-  },
-  successText: {
-    ...t.typography.bodyStrong,
-    color: '#247A4B',
-  },
-  roleAssignWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    borderRadius: 16,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  roleAssignButton: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: t.colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: t.colors.surface,
-  },
-  roleAssignButtonActive: {
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.primary,
-  },
-  roleAssignText: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  roleAssignTextActive: {
-    color: '#FFFFFF',
-  },
-  chatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  newChatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  newChatButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: fonts.bold,
-  },
-  chatHubCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    ...t.shadows.card,
-  },
-  chatHubIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primarySoft,
-  },
-  chatHubCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  chatHubTitle: {
-    ...t.typography.title,
-  },
-  chatHubMeta: {
-    ...t.typography.body,
-    fontSize: 13,
-  },
-  chatHubRight: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  chatBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primary,
-    paddingHorizontal: 6,
-  },
-  chatBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: fonts.bold,
-  },
-  chatConversation: {
-    gap: spacing.sm,
-  },
-  chatConversationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  chatBackButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  chatConversationTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  chatConversationTitle: {
-    ...t.typography.title,
-  },
-  chatConversationMeta: {
-    ...t.typography.body,
-    fontSize: 13,
-  },
-  composerCard: {
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-    ...t.shadows.card,
-  },
-  composerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  visibilityRow: {
+  rolePickerWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  targetPicker: {
-    gap: spacing.xs,
-    borderRadius: 16,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  targetPickerEmpty: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: 16,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.sm,
-  },
-  targetPickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  targetPickerTitle: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-    color: t.colors.ink,
-  },
-  targetPickerCount: {
-    ...t.typography.body,
-    fontSize: 12,
-    color: t.colors.sub,
-  },
-  targetRoleChip: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  targetRoleChipActive: {
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.primary,
-  },
-  targetRoleChipText: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  targetRoleChipTextActive: {
-    color: '#FFFFFF',
-  },
-  targetRoleAddButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.surface,
-  },
-  targetRoleMenu: {
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: t.colors.border,
-    paddingTop: spacing.xs,
-  },
-  targetRoleMenuItem: {
-    minHeight: 42,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    borderRadius: 12,
-    backgroundColor: t.colors.surface,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 8,
-  },
-  targetRoleMenuItemActive: {
-    backgroundColor: t.colors.dangerBg,
-  },
-  targetRoleMenuText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.ink,
   },
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.sm,
   },
-  bubbleRowRight: {
-    justifyContent: 'flex-end',
-  },
-  bubbleWrap: {
+  bubbleStack: {
     maxWidth: '78%',
-    gap: 4,
+    gap: 3,
   },
-  bubbleWrapRight: {
-    alignItems: 'flex-end',
-  },
-  bubbleName: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-  },
-  bubbleAudience: {
-    ...t.typography.body,
-    fontSize: 12,
-    color: t.colors.sub,
-  },
-  bubble: {
-    borderRadius: 18,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleRight: {
-    backgroundColor: t.colors.violet,
-    borderColor: t.colors.violet,
-  },
-  bubbleText: {
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  bubbleTextRight: {
-    color: '#FFFFFF',
-  },
-  bubbleTime: {
-    ...t.typography.body,
-    fontSize: 12,
-    color: t.colors.sub,
-  },
-  bubbleTimeRight: {
-    textAlign: 'right',
-  },
-  reportInlineButton: {
-    alignSelf: 'flex-start',
+  bubbleMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 8,
-  },
-  reportInlineRight: {
-    alignSelf: 'flex-end',
-  },
-  reportInlineText: {
-    ...t.typography.bodyStrong,
-    fontSize: 12,
-    lineHeight: 16,
-    color: t.colors.sub,
-  },
-  inlineActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  dangerInlineText: {
-    color: t.colors.dangerText,
-  },
-  typingText: {
-    ...t.typography.body,
-    color: t.colors.primary,
-  },
-  chatComposerDock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: 8,
-    ...t.shadows.card,
-  },
-  chatComposerInput: {
-    flex: 1,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  sendFab: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.violet,
-  },
-  sendFabDisabled: {
-    opacity: 0.42,
-  },
-  memberGroup: {
     gap: 6,
-  },
-  memberGroupTitle: {
-    ...t.typography.label,
     paddingHorizontal: 2,
   },
-  memberGroupCard: {
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingHorizontal: spacing.sm + 2,
-    ...t.shadows.subtle,
+  bubbleName: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
   },
-  memberSeparator: {
-    height: 1,
-    backgroundColor: t.colors.border,
-    marginLeft: 52,
+  bubbleTime: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
   },
-  memberRow: {
-    paddingVertical: spacing.sm + 2,
+  bubble: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  bubbleBody: {
+    fontFamily: fonts.medium,
+    fontSize: 14.5,
+    lineHeight: 20,
+  },
+  bubbleReport: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+  },
+});
+
+const useStyles = createThemedStyles((t: Theme) => ({
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
+  },
+  heroFace: {
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  identityRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  clubAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: radii.md,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+    transform: [{ rotate: '-3deg' }],
+  },
+  clubEmoji: {
+    fontSize: 32,
+    lineHeight: 40,
+  },
+  clubTitle: {
+    fontFamily: fonts.display,
+    fontSize: 21,
+    lineHeight: 26,
+    letterSpacing: -0.5,
+    color: t.colors.ink,
+  },
+  stickerRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+    marginTop: 2,
+  },
+  statStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.md,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: 2,
+  },
+  statValue: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 19,
+    color: t.colors.ink,
+  },
+  statLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 1,
+    color: t.colors.sub,
+  },
+  statDivider: {
+    width: 2,
+    height: 28,
+  },
+  tabRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.xl,
+    paddingVertical: 4,
+  },
+  section: {
+    gap: spacing.md,
+  },
+  upcomingHead: {
+    flexDirection: 'row' as const,
+    gap: spacing.md,
+  },
+  inlineMeta: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  attendeeRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: 4,
+  },
+  rsvpRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  quickRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.md,
+  },
+  announcementPreviewFace: {
+    padding: spacing.md,
     gap: spacing.sm,
   },
+  announcementHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  chatHubHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  chatHubFace: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  chatHubIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    transform: [{ rotate: '-2deg' }],
+  },
+  chatConversationHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  composerToggle: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  chipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+  },
+  input: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    minHeight: 48,
+  },
+  inputTall: {
+    minHeight: 96,
+    textAlignVertical: 'top' as const,
+  },
+  composerDock: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  inlineActionRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.lg,
+    marginTop: spacing.md,
+  },
+  inlineAction: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  inlineActionText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+  },
+  permissionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+  },
+  roleCreateRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  roleListItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    borderBottomWidth: 2,
+    borderStyle: 'dashed' as const,
+    paddingVertical: spacing.sm,
+  },
+  previewBox: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    gap: 4,
+  },
+  buttonRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+  },
+  memberRow: {
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
   memberRowMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   memberRowProfile: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  memberCopy: {
-    flex: 1,
-    gap: 2,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    minWidth: 0,
   },
   memberNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  memberName: {
-    ...t.typography.bodyStrong,
-    fontSize: 15.5,
-    flexShrink: 1,
-  },
-  memberMetaText: {
-    ...t.typography.caption,
-    fontSize: 12.5,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
   },
   memberActionButton: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.inputBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  roleBadge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  memberSeparator: {
+    borderBottomWidth: 2,
+    borderStyle: 'dashed' as const,
   },
-  roleBadgeText: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  eventsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  roleAssignWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: spacing.sm,
-  },
-  eventsHeaderActions: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  eventsHeaderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: t.colors.borderStrong,
-    backgroundColor: t.colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  eventsHeaderButtonPrimary: {
-    backgroundColor: t.colors.primary,
-    borderColor: t.colors.primary,
-  },
-  eventsHeaderButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: t.colors.ink,
-  },
-  eventsHeaderButtonTextPrimary: {
-    color: '#FFFFFF',
-  },
-  datePickerCard: {
-    borderRadius: 18,
-    backgroundColor: t.colors.surfaceAlt,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  eventCard: {
-    borderRadius: 24,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-    ...t.shadows.card,
+    paddingLeft: 52,
   },
   eventHead: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  eventActions: {
-    alignItems: 'flex-end',
-    gap: spacing.xs,
-  },
-  eventDeleteButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.dangerBg,
-  },
-  eventCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  eventDateLine: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-    color: t.colors.violet,
-  },
-  eventTitle: {
-    ...t.typography.title,
-    fontSize: 21,
-    lineHeight: 25,
-  },
-  eventLocation: {
-    ...t.typography.body,
-    fontSize: 14,
-  },
-  eventGoingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primarySoft,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  eventGoingText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: t.colors.primarySoftText,
-  },
-  leaderToolsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 16,
-    backgroundColor: t.colors.violetSoft,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 10,
-  },
-  leaderToolsToggleText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: t.colors.violet,
-  },
-  leaderToolsOpenPill: {
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.greenSoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  leaderToolsOpenPillText: {
-    fontFamily: fonts.bold,
-    fontSize: 10.5,
-    color: t.colors.successText,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  leaderToolsSpacer: {
-    flex: 1,
-  },
-  rsvpRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+    flexDirection: 'row' as const,
+    gap: spacing.md,
+    alignItems: 'flex-start' as const,
   },
   eventMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: spacing.sm,
+  },
+  leaderToggle: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 2,
+    borderStyle: 'dashed' as const,
   },
   attendanceBox: {
-    borderRadius: 18,
-    backgroundColor: t.colors.surfaceAlt,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
-  attendanceCodeBlock: {
-    borderRadius: 18,
-    backgroundColor: t.colors.glass,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: 6,
-  },
-  attendanceCodeText: {
-    ...t.typography.h1,
-    fontSize: 36,
-    lineHeight: 42,
-    letterSpacing: 2,
+  attendanceCode: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 24,
+    letterSpacing: 4,
     color: t.colors.ink,
   },
-  eventButtonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  analyticsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  metricCard: {
-    width: '48%',
-    minWidth: 150,
-    borderRadius: 18,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
+  dateWell: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     padding: spacing.md,
-    gap: 4,
+    gap: spacing.sm,
+    alignItems: 'flex-start' as const,
   },
-  metricIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricLabel: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-    fontSize: 13,
-  },
-  metricValue: {
-    ...t.typography.h1,
-    fontSize: 25,
-    lineHeight: 30,
+  metricGrid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.md,
   },
   responseHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: spacing.sm,
   },
   responseValue: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 22,
-    lineHeight: 26,
+    fontFamily: fonts.displayMedium,
+    fontSize: 21,
     color: t.colors.primary,
   },
   progressTrack: {
-    flexDirection: 'row',
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: t.colors.inputBg,
-    overflow: 'hidden',
+    flexDirection: 'row' as const,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: BORDER_W,
+    overflow: 'hidden' as const,
   },
-  progressFill: {
-    backgroundColor: t.colors.primary,
-    borderRadius: 4,
-  },
-  analyticsPanel: {
-    borderRadius: 22,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  analyticsMeetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  feedText: {
-    flex: 1,
-  },
-  analyticsCount: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-    fontSize: 13,
-    textAlign: 'right',
-  },
-  attendeeRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  content: {
-    flexGrow: 1,
-    paddingVertical: spacing.lg,
+  analyticsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 2,
+    borderStyle: 'dashed' as const,
   },
-  errorText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.dangerText,
-  },
-  input: {
-    borderRadius: 18,
-    backgroundColor: t.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  inputTall: {
-    minHeight: 92,
-    textAlignVertical: 'top',
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    gap: spacing.md,
   },
 }));

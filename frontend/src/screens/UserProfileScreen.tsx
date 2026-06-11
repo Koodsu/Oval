@@ -1,15 +1,20 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-	  acceptFriendRequest,
-	  blockUser,
-	  cancelFriendRequest,
-	  createReport,
-	  declineFriendRequest,
-	  getFriendRelationship,
-	  getApiErrorMessage,
+  acceptFriendRequest,
+  blockUser,
+  cancelFriendRequest,
+  createReport,
+  declineFriendRequest,
+  getFriendRelationship,
+  getApiErrorMessage,
   getThreadByUser,
   getUserProfile,
   REPORT_REASON_LABELS,
@@ -20,44 +25,71 @@ import {
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { PublicProfile } from '../types';
-import { Chip, CompactHeader, EmptyState, Panel, PrimaryButton, Screen, ScreenHeader, SkeletonCard, StatTile, UserAvatar } from '../components/ui';
+import {
+  AppBackdrop,
+  Avatar,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  ScreenHeader,
+  SkeletonCard,
+  Slab,
+  Sticker,
+  Tag,
+  accentForSeed,
+} from '../components/ui';
 import { INTEREST_TAG_META } from '../constants/interestTags';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function UserProfileScreen({ route, navigation }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const { userId } = route.params;
   const nav = useNavigation<Nav>();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [relationship, setRelationship] = useState<Awaited<ReturnType<typeof getFriendRelationship>> | null>(null);
+  const [relationship, setRelationship] = useState<Awaited<
+    ReturnType<typeof getFriendRelationship>
+  > | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>('HARASSMENT');
   const [reportDetails, setReportDetails] = useState('');
 
-  const load = useCallback(async (showAlert = true) => {
-    try {
-      const [profileResponse, relationshipResponse] = await Promise.all([
-        getUserProfile(userId),
-        getFriendRelationship(userId),
-      ]);
-      setProfile(profileResponse);
-      setRelationship(relationshipResponse);
-      setLoadError(null);
-	    } catch (error) {
-	      setLoadError(getApiErrorMessage(error));
-	      if (showAlert) Alert.alert('Could not load profile', getApiErrorMessage(error));
-    }
-  }, [userId]);
+  const load = useCallback(
+    async (showAlert = true) => {
+      try {
+        const [profileResponse, relationshipResponse] = await Promise.all([
+          getUserProfile(userId),
+          getFriendRelationship(userId),
+        ]);
+        setProfile(profileResponse);
+        setRelationship(relationshipResponse);
+        setLoadError(null);
+      } catch (error) {
+        setLoadError(getApiErrorMessage(error));
+        if (showAlert) Alert.alert('Could not load profile', getApiErrorMessage(error));
+      }
+    },
+    [userId],
+  );
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   const clubTags = useMemo(() => (profile?.clubs ?? []).slice(0, 4), [profile?.clubs]);
@@ -68,18 +100,23 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     setRelationship(next);
   };
 
-  const handleFriendAction = async (action: 'send' | 'accept' | 'decline' | 'cancel' | 'unfriend') => {
+  const handleFriendAction = async (
+    action: 'send' | 'accept' | 'decline' | 'cancel' | 'unfriend',
+  ) => {
     if (!relationship) return;
     setBusyAction(action);
     try {
       if (action === 'send') await sendFriendRequest(userId);
-      if (action === 'accept' && relationship.requestId) await acceptFriendRequest(relationship.requestId);
-      if (action === 'decline' && relationship.requestId) await declineFriendRequest(relationship.requestId);
-      if (action === 'cancel' && relationship.requestId) await cancelFriendRequest(relationship.requestId);
+      if (action === 'accept' && relationship.requestId)
+        await acceptFriendRequest(relationship.requestId);
+      if (action === 'decline' && relationship.requestId)
+        await declineFriendRequest(relationship.requestId);
+      if (action === 'cancel' && relationship.requestId)
+        await cancelFriendRequest(relationship.requestId);
       if (action === 'unfriend') await unfriend(userId);
       await refreshRelationship();
-	    } catch (error) {
-	      Alert.alert('Could not update friendship', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not update friendship', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -90,8 +127,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     try {
       const thread = await getThreadByUser(userId);
       nav.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name });
-	    } catch (error) {
-	      Alert.alert('Could not open messages', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not open messages', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -104,8 +141,11 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       if (isBlocked) await unblockUser(userId);
       else await blockUser(userId);
       await refreshRelationship();
-	    } catch (error) {
-	      Alert.alert(isBlocked ? 'Could not unblock user' : 'Could not block user', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert(
+        isBlocked ? 'Could not unblock user' : 'Could not block user',
+        getApiErrorMessage(error),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -121,8 +161,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       });
       setReportDetails('');
       Alert.alert('Report sent', 'Thanks. We logged your report for review.');
-	    } catch (error) {
-	      Alert.alert('Could not send report', getApiErrorMessage(error));
+    } catch (error) {
+      Alert.alert('Could not send report', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -132,31 +172,70 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     if (!relationship) return null;
     switch (relationship.status) {
       case 'NONE':
-        return <PrimaryButton label="Send friend request" onPress={() => void handleFriendAction('send')} loading={busyAction === 'send'} />;
+        return (
+          <Button
+            label="Send friend request"
+            icon="person-add"
+            onPress={() => void handleFriendAction('send')}
+            loading={busyAction === 'send'}
+          />
+        );
       case 'PENDING_SENT':
-        return <PrimaryButton label="Cancel request" onPress={() => void handleFriendAction('cancel')} loading={busyAction === 'cancel'} kind="ghost" />;
+        return (
+          <Button
+            label="Cancel request"
+            variant="secondary"
+            onPress={() => void handleFriendAction('cancel')}
+            loading={busyAction === 'cancel'}
+          />
+        );
       case 'PENDING_RECEIVED':
         return (
           <View style={styles.buttonStack}>
-            <PrimaryButton label="Accept friend request" onPress={() => void handleFriendAction('accept')} loading={busyAction === 'accept'} />
-            <PrimaryButton label="Decline request" onPress={() => void handleFriendAction('decline')} loading={busyAction === 'decline'} kind="ghost" />
+            <Button
+              label="Accept friend request"
+              onPress={() => void handleFriendAction('accept')}
+              loading={busyAction === 'accept'}
+            />
+            <Button
+              label="Decline request"
+              variant="secondary"
+              onPress={() => void handleFriendAction('decline')}
+              loading={busyAction === 'decline'}
+            />
           </View>
         );
       case 'FRIENDS':
         return (
           <View style={styles.buttonStack}>
-            <PrimaryButton label="Message" onPress={() => void handleMessage()} loading={busyAction === 'message'} />
-            <PrimaryButton label="Unfriend" onPress={() => void handleFriendAction('unfriend')} loading={busyAction === 'unfriend'} kind="ghost" />
+            <Button
+              label="Message"
+              icon="chatbox"
+              onPress={() => void handleMessage()}
+              loading={busyAction === 'message'}
+            />
+            <Button
+              label="Unfriend"
+              variant="secondary"
+              onPress={() => void handleFriendAction('unfriend')}
+              loading={busyAction === 'unfriend'}
+            />
           </View>
         );
       case 'BLOCKED':
         return (
-          <Panel>
-            <Text style={styles.body}>There is a block on this relationship. Unblock if you were the one who set it.</Text>
-            <View style={styles.inlineAction}>
-              <PrimaryButton label="Unblock" onPress={() => void handleBlockToggle()} loading={busyAction === 'unblock'} kind="ghost" />
-            </View>
-          </Panel>
+          <Card padded>
+            <Text style={typography.body}>
+              There is a block on this relationship. Unblock if you were the one who set it.
+            </Text>
+            <Button
+              label="Unblock"
+              variant="secondary"
+              onPress={() => void handleBlockToggle()}
+              loading={busyAction === 'unblock'}
+              style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
+            />
+          </Card>
         );
       default:
         return null;
@@ -165,82 +244,136 @@ export default function UserProfileScreen({ route, navigation }: Props) {
 
   if (!profile && loadError) {
     return (
-      <Screen>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
+      <AppBackdrop>
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
-          <EmptyState icon="alert-circle-outline" title="Could not load profile" body={loadError} />
-          <PrimaryButton label="Try again" onPress={() => void load(false)} />
+          <EmptyState icon="alert-circle" title="Could not load profile" body={loadError} />
+          <Button label="Try again" onPress={() => void load(false)} />
         </ScrollView>
-      </Screen>
+      </AppBackdrop>
     );
   }
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
+        keyboardDismissMode="on-drag"
+      >
+        <ScreenHeader title="Profile" kicker="STUDENT" onBack={() => navigation.goBack()} />
         {profile ? (
           <>
-            <CompactHeader
-              eyebrow={profile.verifiedUniversity ? 'Verified student' : 'Student profile'}
-              title={profile.name}
-              subtitle={profile.bio ?? `${profile.major ?? 'Major not listed'}${profile.classYear ? ` • ${profile.classYear}` : ''}`}
-            >
-              <View style={styles.headerRow}>
-                <UserAvatar name={profile.name} avatarUrl={profile.avatarUrl} size={78} />
-                <View style={styles.headerMeta}>
-                  <Text style={styles.title}>{profile.major ?? 'Ohio State student'}</Text>
-                  <Text style={styles.body}>
+            {/* Identity */}
+            <Card padded>
+              <View style={styles.identityRow}>
+                <Avatar name={profile.name} uri={profile.avatarUrl} size={78} tilt={-3} />
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                  <Text style={styles.profileName} numberOfLines={2}>
+                    {profile.name}
+                  </Text>
+                  <Text style={typography.subheading}>
+                    {profile.major ?? 'Ohio State student'}
+                  </Text>
+                  <Text style={typography.captionSmall}>
                     {profile.classYear ?? 'Class year not listed'}
                     {profile.instagramHandle ? ` • @${profile.instagramHandle}` : ''}
                   </Text>
+                  <View style={{ flexDirection: 'row', marginTop: 2 }}>
+                    <Sticker
+                      label={profile.verifiedUniversity ? 'Verified student' : 'Student'}
+                      tint={profile.verifiedUniversity ? colors.successSoft : colors.surfaceAlt}
+                      icon={profile.verifiedUniversity ? 'checkmark-circle' : 'school'}
+                      small
+                      tilt={-2}
+                    />
+                  </View>
                 </View>
               </View>
-            </CompactHeader>
+              {profile.bio ? (
+                <Text style={[typography.body, { color: colors.sub, marginTop: spacing.md }]}>
+                  {profile.bio}
+                </Text>
+              ) : null}
+            </Card>
 
             {relationshipActions()}
 
+            {/* Stats */}
             <View style={styles.statRow}>
-              <StatTile label="Pods joined" value={String(profile.podsJoined)} icon="people-outline" />
-              <StatTile label="Pods attended" value={String(profile.podsAttended)} icon="checkmark-circle-outline" />
-              <StatTile label="Reliability" value={profile.reliabilityScore == null ? 'N/A' : `${profile.reliabilityScore}%`} icon="shield-checkmark-outline" />
+              <StatSlab
+                label="PODS JOINED"
+                value={String(profile.podsJoined)}
+                icon="flash"
+                tint={colors.amberSoft}
+              />
+              <StatSlab
+                label="ATTENDED"
+                value={String(profile.podsAttended)}
+                icon="checkmark-circle"
+                tint={colors.greenSoft}
+              />
+              <StatSlab
+                label="RELIABILITY"
+                value={
+                  profile.reliabilityScore == null ? 'N/A' : `${profile.reliabilityScore}%`
+                }
+                icon="shield-checkmark"
+                tint={colors.tealSoft}
+              />
             </View>
 
             {interestTags.length ? (
-              <Panel>
-                <Text style={styles.title}>Interests</Text>
-                <View style={styles.chipWrap}>
+              <Card padded>
+                <Text style={typography.title}>Interests</Text>
+                <View style={styles.tagWrap}>
                   {interestTags.map((tag) => (
-                    <Chip key={tag} label={INTEREST_TAG_META[tag]?.label ?? tag} active />
+                    <Tag
+                      key={tag}
+                      label={INTEREST_TAG_META[tag]?.label ?? tag}
+                      tint={accentForSeed(colors, tag).soft}
+                    />
                   ))}
                 </View>
-              </Panel>
+              </Card>
             ) : null}
 
             {clubTags.length ? (
-              <Panel>
-                <Text style={styles.title}>Clubs</Text>
-                <View style={styles.chipWrap}>
+              <Card padded>
+                <Text style={typography.title}>Clubs</Text>
+                <View style={styles.tagWrap}>
                   {clubTags.map((club) => (
-                    <Chip key={club} label={club} />
+                    <Tag key={club} label={club} />
                   ))}
                 </View>
-              </Panel>
+              </Card>
             ) : null}
 
-            <Panel>
-              <Text style={styles.title}>Safety tools</Text>
-              <Text style={styles.body}>Use this if something about this person or their behavior needs review.</Text>
-              <View style={styles.chipWrap}>
+            {/* Safety */}
+            <Card padded>
+              <Text style={typography.title}>Safety tools</Text>
+              <Text style={[typography.caption, { marginTop: 4 }]}>
+                Use this if something about this person or their behavior needs review.
+              </Text>
+              <View style={styles.tagWrap}>
                 {REPORT_REASONS.map((reason) => (
                   <Chip
                     key={reason}
                     label={REPORT_REASON_LABELS[reason]}
-                    active={selectedReason === reason}
+                    selected={selectedReason === reason}
+                    tint={colors.dangerSoft}
                     onPress={() => setSelectedReason(reason)}
                   />
                 ))}
@@ -248,18 +381,35 @@ export default function UserProfileScreen({ route, navigation }: Props) {
               <TextInput
                 value={reportDetails}
                 onChangeText={setReportDetails}
-                placeholder="Optional details that would help a review..."
+                placeholder="Optional details that would help a review…"
                 placeholderTextColor={colors.faint}
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.surfaceAlt,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
                 multiline
               />
-              <View style={styles.buttonStack}>
-                <PrimaryButton label="Submit report" onPress={() => void handleReport()} loading={busyAction === 'report'} kind="ghost" />
+              <View style={[styles.buttonStack, { marginTop: spacing.md }]}>
+                <Button
+                  label="Submit report"
+                  variant="secondary"
+                  onPress={() => void handleReport()}
+                  loading={busyAction === 'report'}
+                />
                 {relationship?.status !== 'BLOCKED' ? (
-                  <PrimaryButton label="Block user" onPress={() => void handleBlockToggle()} loading={busyAction === 'block'} kind="ghost" />
+                  <Button
+                    label="Block user"
+                    variant="danger"
+                    onPress={() => void handleBlockToggle()}
+                    loading={busyAction === 'block'}
+                  />
                 ) : null}
               </View>
-            </Panel>
+            </Card>
           </>
         ) : (
           <>
@@ -269,58 +419,99 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           </>
         )}
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
+
+function StatSlab({
+  label,
+  value,
+  icon,
+  tint,
+}: {
+  label: string;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Slab
+      accessibilityRole="none"
+      color={tint}
+      style={{ flex: 1 }}
+      faceStyle={statStyles.face}
+    >
+      <Ionicons name={icon} size={16} color={colors.ink} />
+      <Text style={[statStyles.value, { color: colors.ink }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[statStyles.label, { color: colors.sub }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Slab>
+  );
+}
+
+import { StyleSheet } from 'react-native';
+
+const statStyles = StyleSheet.create({
+  face: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: 6,
+    gap: 3,
+  },
+  value: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 8.5,
+    letterSpacing: 1,
+  },
+});
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.sm,
+  identityRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.lg,
   },
-  headerMeta: {
-    flex: 1,
-    gap: 4,
+  profileName: {
+    fontFamily: fonts.display,
+    fontSize: 21,
+    lineHeight: 26,
+    letterSpacing: -0.5,
+    color: t.colors.ink,
   },
   statRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+    flexDirection: 'row' as const,
+    gap: spacing.md,
   },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.sm,
-    marginTop: spacing.sm,
+  tagWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   buttonStack: {
     gap: spacing.sm,
   },
-  inlineAction: {
-    marginTop: spacing.sm,
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-  },
   input: {
     minHeight: 96,
-    marginTop: spacing.sm,
-    borderRadius: 18,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
+    marginTop: spacing.md,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     padding: spacing.md,
-    ...t.typography.body,
-    color: t.colors.ink,
-    textAlignVertical: 'top',
+    fontFamily: fonts.medium,
+    fontSize: 14.5,
+    textAlignVertical: 'top' as const,
   },
 }));

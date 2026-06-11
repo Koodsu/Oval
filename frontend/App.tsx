@@ -1,6 +1,6 @@
 import React from 'react';
 import { LinkingOptions } from '@react-navigation/native';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import {
   BottomTabBarProps,
@@ -9,24 +9,21 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import {
-  Sora_600SemiBold,
-  Sora_700Bold,
-  Sora_800ExtraBold,
-} from '@expo-google-fonts/sora';
+  Unbounded_600SemiBold,
+  Unbounded_700Bold,
+  Unbounded_800ExtraBold,
+} from '@expo-google-fonts/unbounded';
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
-import { LinearGradient } from 'expo-linear-gradient';
+  SpaceGrotesk_400Regular,
+  SpaceGrotesk_500Medium,
+  SpaceGrotesk_600SemiBold,
+  SpaceGrotesk_700Bold,
+} from '@expo-google-fonts/space-grotesk';
 import Animated, {
-  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -55,7 +52,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
 import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
 import { Activity } from './src/types';
-import { ThemeProvider, fonts, motion, useTheme } from './src/theme';
+import { BORDER_W, ThemeProvider, fonts, motion, radii, useTheme } from './src/theme';
 import { AppBackdrop, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 
@@ -100,7 +97,8 @@ const linking: LinkingOptions<RootStackParamList> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab bar
+// The Dock — full-width slab bar with a tilted scarlet sticker on the
+// active tab. Icons ride a spring; the sticker pops.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function tabIcon(
@@ -109,17 +107,25 @@ function tabIcon(
 ): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case 'Home':
-      return focused ? 'home' : 'home-outline';
+      return focused ? 'planet' : 'planet-outline';
     case 'Explore':
-      return focused ? 'compass' : 'compass-outline';
+      return focused ? 'telescope' : 'telescope-outline';
     case 'Pods':
       return focused ? 'flash' : 'flash-outline';
     case 'Clubs':
-      return focused ? 'people' : 'people-outline';
+      return focused ? 'megaphone' : 'megaphone-outline';
     case 'Inbox':
-      return focused ? 'mail' : 'mail-outline';
+      return focused ? 'chatbox-ellipses' : 'chatbox-ellipses-outline';
   }
 }
+
+const TAB_TILTS: Record<keyof MainTabParamList, number> = {
+  Home: -3,
+  Explore: 2.5,
+  Pods: -2,
+  Clubs: 3,
+  Inbox: -2.5,
+};
 
 function TabItem({
   routeName,
@@ -134,125 +140,107 @@ function TabItem({
   onPress: () => void;
   onLongPress: () => void;
 }) {
-  const { colors, gradients } = useTheme();
-  const lift = useSharedValue(focused ? 1 : 0);
+  const { colors } = useTheme();
+  const pop = useSharedValue(focused ? 1 : 0);
 
   React.useEffect(() => {
-    lift.value = withSpring(focused ? 1 : 0, motion.springBouncy);
-  }, [focused, lift]);
+    pop.value = withSpring(focused ? 1 : 0, motion.springBouncy);
+  }, [focused, pop]);
 
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + lift.value * 0.1 }],
+  const stickerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: 0.85 + pop.value * 0.15 },
+      { rotate: `${pop.value * TAB_TILTS[routeName]}deg` },
+    ],
   }));
-
-  const inner = (
-    <View style={styles.tabInner}>
-      <Animated.View style={iconStyle}>
-        <Ionicons
-          name={tabIcon(routeName, focused)}
-          size={22}
-          color={focused ? '#FFFFFF' : colors.faint}
-        />
-      </Animated.View>
-      {focused ? (
-        <Animated.Text
-          entering={FadeIn.duration(160)}
-          style={styles.tabLabelActive}
-          numberOfLines={1}
-        >
-          {label}
-        </Animated.Text>
-      ) : null}
-    </View>
-  );
 
   return (
     <Pressable
       onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)?.catch?.(() => {}); } catch {}
         onPress();
       }}
       onLongPress={onLongPress}
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
+      style={styles.tabSlot}
     >
-      {focused ? (
-        <LinearGradient
-          colors={gradients.brand}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.tabPill, styles.tabPillActive]}
-        >
-          {inner}
-        </LinearGradient>
-      ) : (
-        <View style={styles.tabPill}>{inner}</View>
-      )}
+      <Animated.View
+        style={[
+          styles.tabSticker,
+          focused && {
+            backgroundColor: colors.primary,
+            borderColor: colors.border,
+            borderWidth: BORDER_W,
+          },
+          stickerStyle,
+        ]}
+      >
+        <Ionicons
+          name={tabIcon(routeName, focused)}
+          size={21}
+          color={focused ? colors.onPrimary : colors.faint}
+        />
+      </Animated.View>
+      <Text
+        style={[
+          styles.tabLabel,
+          { color: focused ? colors.ink : colors.faint },
+        ]}
+        numberOfLines={1}
+      >
+        {label.toUpperCase()}
+      </Text>
     </Pressable>
   );
 }
 
-function BridgeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { colors, isDark } = useTheme();
+function BridgeDock({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <View
-      pointerEvents="box-none"
-      style={[styles.dockWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}
+      style={[
+        styles.dock,
+        {
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
+          paddingBottom: Math.max(insets.bottom, 10),
+        },
+      ]}
     >
-      <View style={styles.dockShadow}>
-        <View
-          style={[
-            styles.dock,
-            {
-              backgroundColor: colors.tabBar,
-              borderColor: isDark ? colors.borderStrong : colors.border,
-            },
-          ]}
-        >
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={44}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : null}
-          <View style={styles.tabRow}>
-            {state.routes.map((route, index) => {
-              const { options } = descriptors[route.key];
-              const label =
-                typeof options.tabBarLabel === 'string'
-                  ? options.tabBarLabel
-                  : options.title ?? route.name;
-              const focused = state.index === index;
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+        const label =
+          typeof options.tabBarLabel === 'string'
+            ? options.tabBarLabel
+            : options.title ?? route.name;
+        const focused = state.index === index;
 
-              return (
-                <TabItem
-                  key={route.key}
-                  routeName={route.name as keyof MainTabParamList}
-                  label={label}
-                  focused={focused}
-                  onPress={() => {
-                    const event = navigation.emit({
-                      type: 'tabPress',
-                      target: route.key,
-                      canPreventDefault: true,
-                    });
-                    if (!focused && !event.defaultPrevented) {
-                      navigation.navigate(route.name);
-                    }
-                  }}
-                  onLongPress={() =>
-                    navigation.emit({ type: 'tabLongPress', target: route.key })
-                  }
-                />
-              );
-            })}
-          </View>
-        </View>
-      </View>
+        return (
+          <TabItem
+            key={route.key}
+            routeName={route.name as keyof MainTabParamList}
+            label={label}
+            focused={focused}
+            onPress={() => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!focused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            }}
+            onLongPress={() =>
+              navigation.emit({ type: 'tabLongPress', target: route.key })
+            }
+          />
+        );
+      })}
     </View>
   );
 }
@@ -260,7 +248,7 @@ function BridgeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 function MainTabs() {
   return (
     <Tab.Navigator
-      tabBar={(props) => <BridgeTabBar {...props} />}
+      tabBar={(props) => <BridgeDock {...props} />}
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -357,13 +345,13 @@ function ThemedApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    [fonts.displayMedium]: Sora_600SemiBold,
-    [fonts.display]: Sora_700Bold,
-    [fonts.displayHeavy]: Sora_800ExtraBold,
-    [fonts.body]: Inter_400Regular,
-    [fonts.medium]: Inter_500Medium,
-    [fonts.semibold]: Inter_600SemiBold,
-    [fonts.bold]: Inter_700Bold,
+    [fonts.displayMedium]: Unbounded_600SemiBold,
+    [fonts.display]: Unbounded_700Bold,
+    [fonts.displayHeavy]: Unbounded_800ExtraBold,
+    [fonts.body]: SpaceGrotesk_400Regular,
+    [fonts.medium]: SpaceGrotesk_500Medium,
+    [fonts.semibold]: SpaceGrotesk_600SemiBold,
+    [fonts.bold]: SpaceGrotesk_700Bold,
   });
 
   const onReady = React.useCallback(() => {
@@ -391,55 +379,34 @@ export default function App() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  dockWrap: {
+  dock: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  dockShadow: {
-    borderRadius: 999,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    elevation: 12,
-  },
-  dock: {
-    borderRadius: 999,
-    borderWidth: 1,
-    padding: 6,
-    overflow: 'hidden',
-  },
-  tabRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
+    alignItems: 'flex-start',
+    borderTopWidth: BORDER_W + 1,
+    paddingTop: 8,
+    paddingHorizontal: 6,
   },
-  tabPill: {
-    height: 46,
-    minWidth: 48,
-    borderRadius: 999,
-    paddingHorizontal: 13,
+  tabSlot: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 2,
+  },
+  tabSticker: {
+    width: 44,
+    height: 38,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabPillActive: {
-    paddingHorizontal: 16,
-  },
-  tabInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-  },
-  tabLabelActive: {
-    fontFamily: fonts.semibold,
-    fontSize: 12.5,
-    letterSpacing: 0.2,
-    color: '#FFFFFF',
+  tabLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 1.2,
   },
   loading: {
     flex: 1,
