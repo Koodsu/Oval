@@ -2,9 +2,11 @@ import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import path from 'path';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { getJwtSecret } from './config/jwt';
 
 import prisma from './prisma';
 import authRoutes from './routes/auth';
@@ -102,11 +104,32 @@ const authLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test',
 });
 
+/**
+ * Rate-limit key: authenticated user ID when a valid JWT is present, IP
+ * otherwise. Per-IP limiting alone breaks on campus Wi-Fi, where many
+ * students share one NAT egress IP — a handful of users polling chat would
+ * exhaust the shared IP bucket and the app would appear to stop refreshing
+ * for everyone behind it.
+ */
+function userOrIpKey(req: Request): string {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(header.slice(7), getJwtSecret()) as { userId?: string };
+      if (payload?.userId) return `user:${payload.userId}`;
+    } catch {
+      // Invalid or expired token — fall through to IP keying.
+    }
+  }
+  return ipKeyGenerator(req.ip ?? '');
+}
+
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: { error: 'Too many requests, please try again later' },
   skip: () => process.env.NODE_ENV === 'test',
 });
@@ -116,6 +139,7 @@ const waitlistLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: { error: 'Too many requests, please try again later' },
   skip: () => process.env.NODE_ENV === 'test',
 });

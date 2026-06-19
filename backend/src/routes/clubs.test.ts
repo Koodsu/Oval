@@ -104,6 +104,10 @@ describe('Clubs API (integration)', () => {
           { clubId: create.body.id, title: 'First', location: 'B', meetingTime: t1, createdById: userId },
         ],
       });
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { avatarUrl: '/uploads/club-avatars/chess.png' },
+      });
 
       const res = await request(app)
         .get('/clubs/my')
@@ -114,6 +118,7 @@ describe('Clubs API (integration)', () => {
       const row = res.body.find((r: { club: { id: string } }) => r.club.id === create.body.id);
       expect(row).toBeDefined();
       expect(row!.club.memberCount).toBe(1);
+      expect(row!.club.avatarUrl).toBe('/uploads/club-avatars/chess.png');
       expect(row!.nextMeeting.title).toBe('First');
     });
   });
@@ -1187,7 +1192,7 @@ describe('Clubs API (integration)', () => {
     });
   });
 
-  describe('PATCH /clubs/:id (avatar upload)', () => {
+  describe('PATCH /clubs/:id (profile update)', () => {
     // Minimal 1×1 pixel PNG (valid image binary)
     const minimalPng = Buffer.from(
       '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d76360f8' +
@@ -1214,7 +1219,31 @@ describe('Clubs API (integration)', () => {
       expect(row?.avatarUrl).toMatch(/\/uploads\/club-avatars\//);
     });
 
-    it('returns 400 when no file is attached', async () => {
+    it('updates identity fields without requiring an image', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const res = await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Scarlet Chess',
+          description: 'Competitive and casual chess on campus.',
+          isPublic: false,
+        })
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        name: 'Scarlet Chess',
+        description: 'Competitive and casual chess on campus.',
+        isPublic: false,
+      });
+    });
+
+    it('returns 400 when no updates are provided', async () => {
       const create = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)

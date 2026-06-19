@@ -1,22 +1,26 @@
 import React, { useState } from 'react';
-import {
-  Alert,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_USER_MESSAGE, getApiErrorMessage } from '../api';
-import { Panel, PrimaryButton, Screen } from '../components/ui';
+import { AppBackdrop, Button, Card, Divider, Sticker } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
+
 const SITE_URL = 'https://www.joinbridgeapp.com';
 
 export default function TermsAcceptanceScreen() {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const { acceptGuidelines, signOut } = useAuth();
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -24,7 +28,10 @@ export default function TermsAcceptanceScreen() {
 
   const submit = async () => {
     if (!ageConfirmed || !termsAccepted) {
-      Alert.alert('Confirmation required', 'Confirm your age and accept the current policies to continue.');
+      Alert.alert(
+        'Confirmation required',
+        'Confirm your age and accept the current policies to continue.',
+      );
       return;
     }
     setBusy(true);
@@ -38,61 +45,77 @@ export default function TermsAcceptanceScreen() {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Panel>
-          <Text style={styles.eyebrow}>Before continuing</Text>
-          <Text style={styles.title}>Review Bridge's current policies</Text>
-          <Text style={styles.body}>
-            Bridge coordinates real-world meetups and includes user-created content. Please review
-            the current rules and confirm that you are eligible to use the service.
-          </Text>
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Sticker label="House rules" tint={colors.amberSoft} tilt={2} icon="document-text" />
+        <Text style={styles.title}>The fine{'\n'}print.</Text>
+        <Text style={[typography.body, styles.sub]}>
+          Bridge coordinates real-world meetups with real students. Skim the rules, confirm you're
+          eligible, and you're in.
+        </Text>
 
+        <Card padded>
           <PolicyLink label="Terms of Service" url={`${SITE_URL}/terms`} />
+          <Divider />
           <PolicyLink label="Privacy Policy" url={`${SITE_URL}/privacy`} />
-          <PolicyLink
-            label="Community Guidelines"
-            url={`${SITE_URL}/community-guidelines`}
-          />
+          <Divider />
+          <PolicyLink label="Community Guidelines" url={`${SITE_URL}/community-guidelines`} />
+        </Card>
 
-          <CheckRow
-            checked={ageConfirmed}
-            label="I confirm that I am 18 or older."
-            onPress={() => setAgeConfirmed((value) => !value)}
-          />
-          <CheckRow
-            checked={termsAccepted}
-            label="I accept the current Terms, Privacy Policy, and Community Guidelines."
-            onPress={() => setTermsAccepted((value) => !value)}
-          />
-
-          <PrimaryButton label="Accept and continue" onPress={submit} loading={busy} />
-          <TouchableOpacity
-            onPress={() => void signOut()}
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            style={styles.signOut}
-          >
-            <Text style={styles.signOutText}>Sign out instead</Text>
-          </TouchableOpacity>
-        </Panel>
+        <Card padded>
+          <View style={{ gap: spacing.lg }}>
+            <CheckRow
+              checked={ageConfirmed}
+              label="I confirm that I am 18 or older."
+              onPress={() => setAgeConfirmed((value) => !value)}
+            />
+            <CheckRow
+              checked={termsAccepted}
+              label="I accept the current Terms, Privacy Policy, and Community Guidelines."
+              onPress={() => setTermsAccepted((value) => !value)}
+            />
+            <Button label="Accept and continue" onPress={submit} loading={busy} size="lg" />
+            <Pressable
+              onPress={() => void signOut()}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              style={({ pressed }) => [{ alignSelf: 'center' }, pressed && { opacity: 0.5 }]}
+            >
+              <Text style={[typography.caption, { fontFamily: fonts.bold }]}>Sign out instead</Text>
+            </Pressable>
+          </View>
+        </Card>
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 function PolicyLink({ label, url }: { label: string; url: string }) {
-  const styles = useStyles();
   const { colors } = useTheme();
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={() => void Linking.openURL(url)}
       accessibilityRole="link"
       accessibilityLabel={`Open ${label}`}
-      style={styles.link}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingVertical: 14,
+        },
+        pressed && { opacity: 0.5 },
+      ]}
     >
-      <Text style={styles.linkText}>{label}</Text>
-    </TouchableOpacity>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>{label}</Text>
+      <Ionicons name="open-outline" size={16} color={colors.primary} />
+    </Pressable>
   );
 }
 
@@ -105,86 +128,53 @@ function CheckRow({
   label: string;
   onPress: () => void;
 }) {
-  const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   return (
-    <TouchableOpacity
-      style={styles.checkRow}
+    <Pressable
       onPress={onPress}
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={label}
+      style={({ pressed }) => [
+        { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+        pressed && { opacity: 0.7 },
+      ]}
     >
-      <View style={[styles.checkbox, checked && styles.checkboxActive]}>
-        {checked ? <Text style={styles.checkmark}>✓</Text> : null}
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: radii.xs,
+          borderWidth: BORDER_W,
+          borderColor: checked ? colors.primary : colors.border,
+          backgroundColor: checked ? colors.primary : colors.surface,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {checked ? <Ionicons name="checkmark" size={18} color={colors.onPrimary} /> : null}
       </View>
-      <Text style={styles.checkText}>{label}</Text>
-    </TouchableOpacity>
+      <Text style={[typography.body, { flex: 1, fontSize: 14, lineHeight: 19 }]}>{label}</Text>
+    </Pressable>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: spacing.xl,
-  },
-  eyebrow: {
-    ...t.typography.label,
-    color: t.colors.primary,
-    marginBottom: spacing.sm,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
   title: {
-    ...t.typography.h1,
-    marginBottom: spacing.md,
-  },
-  body: {
-    ...t.typography.body,
-    marginBottom: spacing.md,
-  },
-  link: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.border,
-  },
-  linkText: {
-    ...t.typography.bodyStrong,
-    color: t.colors.primary,
-  },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: t.colors.sub,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxActive: {
-    backgroundColor: t.colors.primary,
-    borderColor: t.colors.primary,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontFamily: fonts.bold,
-  },
-  checkText: {
-    ...t.typography.body,
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
     color: t.colors.ink,
-    flex: 1,
   },
-  signOut: {
-    alignSelf: 'center',
-    padding: spacing.md,
-  },
-  signOutText: {
-    ...t.typography.bodyStrong,
+  sub: {
     color: t.colors.sub,
+    maxWidth: 320,
   },
 }));

@@ -3,307 +3,366 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { getApiErrorMessage, getFriends, getMyClubs } from '../api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getApiErrorMessage, getFriends, getMyClubs, getUserProfile } from '../api';
 import { RootStackParamList } from '../../App';
-import { FriendUser, MyClubMembershipRow } from '../types';
+import { FriendUser, MyClubMembershipRow, PublicProfile } from '../types';
 import {
-  Chip,
+  AppBackdrop,
+  Avatar,
+  Banner,
+  Button,
+  Card,
   EmptyState,
-  Entrance,
-  Panel,
-  PrimaryButton,
-  Screen,
+  ListRow,
   ScreenHeader,
   SectionHeader,
-  Tap,
-  UserAvatar,
+  Slab,
+  StatSlab,
+  Tag,
+  accentForSeed,
 } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
-import { Theme, createThemedStyles, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function ActionRow({
-  icon,
-  label,
-  onPress,
-  tone = 'default',
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  tone?: 'default' | 'danger';
-}) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const color = tone === 'danger' ? colors.danger : colors.ink;
-  return (
-    <Tap onPress={onPress} style={styles.actionRow} accessibilityLabel={label}>
-      <View style={[styles.actionIcon, tone === 'danger' && styles.actionIconDanger]}>
-        <Ionicons name={icon} size={18} color={tone === 'danger' ? colors.danger : colors.primary} />
-      </View>
-      <Text style={[styles.actionLabel, { color }]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-    </Tap>
-  );
-}
 
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { user, signOut } = useAuth();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [myClubs, setMyClubs] = useState<MyClubMembershipRow[]>([]);
+  const [publicProfile, setPublicProfile] = useState<PublicProfile | null>(null);
   const [showAllClubs, setShowAllClubs] = useState(false);
   const [showAllFriends, setShowAllFriends] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [friendList, clubRows] = await Promise.all([
+      const [friendList, clubRows, profile] = await Promise.all([
         getFriends(),
         getMyClubs(),
+        user?.id && typeof getUserProfile === 'function'
+          ? getUserProfile(user.id)
+          : Promise.resolve(null),
       ]);
       setFriends(friendList);
       setMyClubs(clubRows);
-    } catch (error) {
-      Alert.alert('Could not load profile', getApiErrorMessage(error));
+      setPublicProfile(profile);
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — your saved profile is still available.");
     }
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
+        keyboardDismissMode="on-drag"
+      >
+        <ScreenHeader title="Profile" kicker="YOU" onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        <Entrance index={0}>
-          <Panel style={styles.identityPanel}>
-            <UserAvatar name={user?.name ?? 'User'} avatarUrl={user?.avatarUrl} size={84} ring />
+        {/* Identity card */}
+        <Card padded>
+          <View style={styles.identity}>
+            <Avatar name={user?.name ?? 'User'} uri={user?.avatarUrl} size={84} tilt={-3} />
             <Text style={styles.identityName}>{user?.name ?? 'Your profile'}</Text>
-            <Text style={styles.identityMeta}>
+            <Text style={typography.subheading}>
               {user?.major ?? 'Major not set'} • Class of {user?.classYear ?? 'TBD'}
             </Text>
-            <Text style={styles.identityEmail}>{user?.email}</Text>
-            {user?.bio ? <Text style={styles.identityBio}>{user.bio}</Text> : null}
+            <Text style={typography.captionSmall}>{user?.email}</Text>
+            {user?.bio ? (
+              <Text style={[typography.body, styles.identityBio]}>{user.bio}</Text>
+            ) : null}
+            {user?.purpose || user?.campusZones?.length ? (
+              <Text style={typography.captionSmall}>
+                {[
+                  user?.purpose ? `Here for: ${user.purpose}` : null,
+                  user?.campusZones?.length ? `Usually around ${user.campusZones.join(', ')}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' • ')}
+              </Text>
+            ) : null}
             {user?.interestTags?.length ? (
               <View style={styles.tagRow}>
                 {user.interestTags.slice(0, 3).map((tag) => (
-                  <Chip key={tag} label={INTEREST_TAG_META[tag]?.label ?? tag} active />
+                  <Tag
+                    key={tag}
+                    label={INTEREST_TAG_META[tag]?.label ?? tag}
+                    tint={accentForSeed(colors, tag).soft}
+                  />
                 ))}
               </View>
             ) : null}
-            <View style={styles.statRow}>
-              <View style={styles.stat}>
+            <View style={[styles.statStrip, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+              <View style={styles.statCell}>
                 <Text style={styles.statValue}>{friends.length}</Text>
-                <Text style={styles.statLabel}>Friends</Text>
+                <Text style={styles.statLabel}>FRIENDS</Text>
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
+              <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
+              <View style={styles.statCell}>
                 <Text style={styles.statValue}>{myClubs.length}</Text>
-                <Text style={styles.statLabel}>Clubs</Text>
+                <Text style={styles.statLabel}>CLUBS</Text>
               </View>
             </View>
-            <View style={styles.editAction}>
-              <PrimaryButton label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('EditProfile')} />
+            <View style={styles.trustStats}>
+              <StatSlab
+                label="PODS JOINED"
+                value={String(publicProfile?.podsJoined ?? 0)}
+                icon="flash"
+                tint={colors.amberSoft}
+              />
+              <StatSlab
+                label="ATTENDED"
+                value={String(publicProfile?.podsAttended ?? 0)}
+                icon="checkmark-circle"
+                tint={colors.greenSoft}
+              />
+              <StatSlab
+                label="RELIABILITY"
+                value={
+                  publicProfile?.reliabilityScore == null
+                    ? 'N/A'
+                    : `${publicProfile.reliabilityScore}%`
+                }
+                icon="shield-checkmark"
+                tint={colors.tealSoft}
+              />
             </View>
-          </Panel>
-        </Entrance>
+            <Button
+              label="Edit profile"
+              icon="create"
+              onPress={() => navigation.navigate('EditProfile')}
+              style={{ alignSelf: 'stretch' }}
+            />
+          </View>
+        </Card>
 
-        <Entrance index={1}>
-          <Panel style={styles.actionPanel}>
-            <ActionRow icon="search-outline" label="Find people" onPress={() => navigation.navigate('UserSearch')} />
-            <View style={styles.actionDivider} />
-            <ActionRow icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
-            <View style={styles.actionDivider} />
-            <ActionRow icon="log-out-outline" label="Sign out" tone="danger" onPress={() => void signOut()} />
-          </Panel>
-        </Entrance>
+        {/* Actions */}
+        <Card padded={false} faceStyle={{ paddingHorizontal: spacing.lg }}>
+          <ListRow
+            icon="search"
+            title="Find people"
+            tint={colors.tealSoft}
+            onPress={() => navigation.navigate('UserSearch')}
+          />
+          <ListRow
+            icon="settings"
+            title="Settings"
+            tint={colors.violetSoft}
+            onPress={() => navigation.navigate('Settings')}
+          />
+          <ListRow
+            icon="log-out"
+            title="Sign out"
+            destructive
+            last
+            onPress={() => void signOut()}
+          />
+        </Card>
 
-        <Entrance index={2} style={styles.section}>
-          <SectionHeader title="My clubs" />
-          {myClubs.length ? myClubs.slice(0, showAllClubs ? myClubs.length : 6).map((membership) => (
-            <Tap
-              key={membership.club.id}
-              onPress={() => navigation.navigate('ClubDetail', { clubId: membership.club.id })}
-              style={styles.rowCard}
-              accessibilityLabel={membership.club.name}
-            >
-              <View style={styles.clubIcon}>
-                <Ionicons name="people-outline" size={20} color={colors.violet} />
-              </View>
-              <View style={styles.rowCopy}>
-                <Text style={styles.title}>{membership.club.name}</Text>
-                <Text style={styles.body} numberOfLines={1}>
-                  {membership.club.memberCount} {membership.club.memberCount === 1 ? 'member' : 'members'}
-                  {membership.nextMeeting ? ` • Next: ${membership.nextMeeting.title}` : ' • No upcoming meeting'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-            </Tap>
-          )) : <Panel><Text style={styles.body}>You have not joined any clubs yet.</Text></Panel>}
+        {/* Clubs */}
+        <View style={styles.section}>
+          <SectionHeader kicker="Your orgs" title="My clubs" />
+          {myClubs.length ? (
+            myClubs.slice(0, showAllClubs ? myClubs.length : 6).map((membership) => {
+              const accent = accentForSeed(colors, membership.club.name);
+              return (
+                <Slab
+                  key={membership.club.id}
+                  onPress={() => navigation.navigate('ClubDetail', { clubId: membership.club.id })}
+                  faceStyle={styles.rowFace}
+                  accessibilityLabel={membership.club.name}
+                >
+                  <View
+                    style={[
+                      styles.rowIcon,
+                      { backgroundColor: accent.soft, borderColor: colors.border },
+                    ]}
+                  >
+                    <Ionicons name="megaphone" size={17} color={accent.tint} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={typography.heading} numberOfLines={1}>
+                      {membership.club.name}
+                    </Text>
+                    <Text style={typography.captionSmall} numberOfLines={1}>
+                      {membership.club.memberCount}{' '}
+                      {membership.club.memberCount === 1 ? 'member' : 'members'}
+                      {membership.nextMeeting
+                        ? ` • Next: ${membership.nextMeeting.title}`
+                        : ' • No upcoming meeting'}
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                </Slab>
+              );
+            })
+          ) : (
+            <Card padded>
+              <Text style={typography.body}>You have not joined any clubs yet.</Text>
+            </Card>
+          )}
           {myClubs.length > 6 ? (
-            <PrimaryButton label={showAllClubs ? 'Show fewer clubs' : `See all ${myClubs.length} clubs`} onPress={() => setShowAllClubs((value) => !value)} kind="ghost" />
+            <Button
+              label={showAllClubs ? 'Show fewer clubs' : `See all ${myClubs.length} clubs`}
+              variant="secondary"
+              onPress={() => setShowAllClubs((value) => !value)}
+            />
           ) : null}
-        </Entrance>
+        </View>
 
-        <Entrance index={3} style={styles.section}>
-          <SectionHeader title="Friends" />
-          {friends.length ? friends.slice(0, showAllFriends ? friends.length : 6).map((friend) => (
-            <Tap
-              key={friend.id}
-              onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
-              style={styles.rowCard}
-              accessibilityLabel={friend.name}
-            >
-              <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} size={44} />
-              <Text style={[styles.title, styles.rowCopy]}>{friend.name}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-            </Tap>
-          )) : <EmptyState icon="people-outline" title="No friends yet" body="People you connect with after pods will show up here." />}
+        {/* Friends */}
+        <View style={styles.section}>
+          <SectionHeader kicker="Your people" title="Friends" />
+          {friends.length ? (
+            friends.slice(0, showAllFriends ? friends.length : 6).map((friend, index) => (
+              <Slab
+                key={friend.id}
+                onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                faceStyle={styles.rowFace}
+                accessibilityLabel={friend.name}
+              >
+                <Avatar
+                  name={friend.name}
+                  uri={friend.avatarUrl}
+                  size={44}
+                  tilt={index % 2 === 0 ? -2 : 2}
+                />
+                <Text style={[typography.heading, { flex: 1 }]} numberOfLines={1}>
+                  {friend.name}
+                </Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+              </Slab>
+            ))
+          ) : (
+            <EmptyState
+              icon="people"
+              title="No friends yet"
+              body="People you connect with after pods will show up here."
+            />
+          )}
           {friends.length > 6 ? (
-            <PrimaryButton label={showAllFriends ? 'Show fewer friends' : `See all ${friends.length} friends`} onPress={() => setShowAllFriends((value) => !value)} kind="ghost" />
+            <Button
+              label={showAllFriends ? 'Show fewer friends' : `See all ${friends.length} friends`}
+              variant="secondary"
+              onPress={() => setShowAllFriends((value) => !value)}
+            />
           ) : null}
-        </Entrance>
-
+        </View>
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
-  identityPanel: {
+  identity: {
     alignItems: 'center' as const,
     gap: 6,
-    paddingVertical: spacing.lg,
   },
   identityName: {
-    ...t.typography.h1,
-    marginTop: spacing.xs,
-    textAlign: 'center' as const,
-  },
-  identityMeta: {
-    ...t.typography.bodyStrong,
-    color: t.colors.sub,
-    textAlign: 'center' as const,
-  },
-  identityEmail: {
-    ...t.typography.caption,
+    fontFamily: fonts.display,
+    fontSize: 23,
+    lineHeight: 29,
+    letterSpacing: -0.5,
+    color: t.colors.ink,
+    marginTop: spacing.sm,
     textAlign: 'center' as const,
   },
   identityBio: {
-    ...t.typography.body,
     textAlign: 'center' as const,
     marginTop: 4,
     maxWidth: 300,
+    color: t.colors.sub,
   },
   tagRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'center' as const,
+    gap: spacing.sm,
     marginTop: spacing.sm,
-    rowGap: spacing.xs,
   },
-  statRow: {
+  statStrip: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: spacing.lg,
-    marginTop: spacing.md,
-  },
-  stat: {
-    alignItems: 'center' as const,
-    minWidth: 70,
-  },
-  statValue: {
-    ...t.typography.h2,
-  },
-  statLabel: {
-    ...t.typography.caption,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: t.colors.border,
-  },
-  editAction: {
     alignSelf: 'stretch' as const,
+    alignItems: 'center' as const,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.md,
     marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
-  actionPanel: {
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  actionRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    paddingVertical: 13,
-    paddingHorizontal: spacing.sm,
-  },
-  actionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.primarySoft,
-  },
-  actionIconDanger: {
-    backgroundColor: t.colors.dangerBg,
-  },
-  actionLabel: {
-    ...t.typography.bodyStrong,
+  statCell: {
     flex: 1,
-  },
-  actionDivider: {
-    height: 1,
-    backgroundColor: t.colors.border,
-    marginLeft: 56,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  rowCard: {
-    flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    ...t.shadows.subtle,
-  },
-  rowCopy: {
-    flex: 1,
     gap: 2,
   },
-  title: {
-    ...t.typography.title,
+  statValue: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 20,
+    color: t.colors.ink,
   },
-  body: {
-    ...t.typography.body,
+  statLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    letterSpacing: 1.2,
+    color: t.colors.sub,
   },
-  clubIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 15,
+  statDivider: {
+    width: 2,
+    height: 30,
+  },
+  trustStats: {
+    alignSelf: 'stretch' as const,
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  },
+  section: {
+    gap: spacing.md,
+  },
+  rowFace: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  rowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: t.colors.violetSoft,
   },
 }));

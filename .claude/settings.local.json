@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/plugins/marketplaces/frontend-design/.claude-plugin)",
+      "Bash(mkdir -p ~/.claude/plugins/marketplaces/frontend-design/.claude/skills/frontend-design)",
+      "Bash(python3 /Users/brady/.claude/plugins/marketplaces/ui-ux-pro-max-skill/.claude/skills/ui-ux-pro-max/scripts/search.py \"OSU social activity app college students vibrant fun immersive animated landing page\" --design-system -p \"Bridge\" -f markdown)",
+      "Read(//Users/brady/.claude/plugins/marketplaces/ui-ux-pro-max-skill/**)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"editorial dark brutalist energy campus\" --domain style)",
+      "Bash(xargs ls *)"
+    ]
+  }
+}

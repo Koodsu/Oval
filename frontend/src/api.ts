@@ -310,6 +310,9 @@ export const getClubs = (
 export const getClubsToday = (signal?: AbortSignal) =>
   request<import('./types').ClubMeetingToday[]>('/clubs/today', {}, signal);
 
+export const getClubsWeek = (signal?: AbortSignal) =>
+  request<import('./types').ClubMeetingToday[]>('/clubs/week', {}, signal);
+
 export const getMyClubs = (signal?: AbortSignal) =>
   request<import('./types').MyClubMembershipRow[]>('/clubs/my', {}, signal);
 
@@ -442,16 +445,109 @@ export const patchClubMemberRole = (
 export const getClubRoles = (clubId: string) =>
   request<import('./types').ClubRole[]>(`/clubs/${encodeURIComponent(clubId)}/roles`);
 
-export const createClubRole = (clubId: string, name: string) =>
+export interface ClubRoleBody {
+  name?: string;
+  color?: import('./types').ClubRoleColor | null;
+  isSelfAssignable?: boolean;
+}
+
+export const createClubRole = (clubId: string, body: string | ClubRoleBody) =>
   request<import('./types').ClubRole>(
     `/clubs/${encodeURIComponent(clubId)}/roles`,
-    { method: 'POST', body: JSON.stringify({ name }) }
+    { method: 'POST', body: JSON.stringify(typeof body === 'string' ? { name: body } : body) }
   );
 
-export const updateClubRole = (clubId: string, roleId: string, name: string) =>
+export const updateClubRole = (clubId: string, roleId: string, body: string | ClubRoleBody) =>
   request<import('./types').ClubRole>(
     `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}`,
-    { method: 'PATCH', body: JSON.stringify({ name }) }
+    { method: 'PATCH', body: JSON.stringify(typeof body === 'string' ? { name: body } : body) }
+  );
+
+export const selfAssignClubRole = (clubId: string, roleId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}/self`,
+    { method: 'POST' }
+  );
+
+export const selfUnassignClubRole = (clubId: string, roleId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}/self`,
+    { method: 'DELETE' }
+  );
+
+// ── Club channels ─────────────────────────────────────────────────────────────
+
+export interface GetClubChannelsResponse {
+  channels: import('./types').ClubChannelRow[];
+}
+
+export const getClubChannels = (clubId: string, signal?: AbortSignal) =>
+  request<GetClubChannelsResponse>(`/clubs/${encodeURIComponent(clubId)}/channels`, {}, signal);
+
+export interface ClubChannelBody {
+  name?: string;
+  description?: string;
+  allowedRoleIds?: string[];
+}
+
+export const createClubChannel = (clubId: string, body: ClubChannelBody) =>
+  request<import('./types').ClubChannelRow>(
+    `/clubs/${encodeURIComponent(clubId)}/channels`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+
+export const updateClubChannel = (clubId: string, channelId: string, body: ClubChannelBody) =>
+  request<import('./types').ClubChannelRow>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
+export const deleteClubChannel = (clubId: string, channelId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}`,
+    { method: 'DELETE' }
+  );
+
+export interface GetClubChannelMessagesResponse {
+  channel: import('./types').ClubChannelRow;
+  messages: import('./types').ClubMessage[];
+  typingUserIds: string[];
+}
+
+export const getClubChannelMessages = (clubId: string, channelId: string, signal?: AbortSignal) =>
+  request<GetClubChannelMessagesResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages`,
+    {},
+    signal
+  );
+
+export const sendClubChannelMessage = (
+  clubId: string,
+  channelId: string,
+  content: string,
+  mentionRoleIds?: string[]
+) =>
+  request<import('./types').ClubMessage>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages`,
+    { method: 'POST', body: JSON.stringify({ content, mentionRoleIds }) }
+  );
+
+export const deleteClubChannelMessage = (clubId: string, channelId: string, messageId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE' }
+  );
+
+export const sendClubChannelTyping = (clubId: string, channelId: string) =>
+  request<{ ok: boolean }>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/typing`,
+    { method: 'POST' }
+  );
+
+export const markClubChannelRead = (clubId: string, channelId: string) =>
+  request<{ ok: true }>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/read`,
+    { method: 'POST' }
   );
 
 export const deleteClubRole = (clubId: string, roleId: string) =>
@@ -674,16 +770,51 @@ export interface LeavePodResponse {
 export const leavePod = (podId: string) =>
   request<LeavePodResponse>(`/pods/${podId}/leave`, { method: 'POST' });
 
+export interface EditPodPayload {
+  meetupTime?: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export const editPod = (podId: string, payload: EditPodPayload) =>
+  request<import('./types').Pod>(`/pods/${encodeURIComponent(podId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+export const cancelPod = (podId: string) =>
+  request<import('./types').Pod>(`/pods/${encodeURIComponent(podId)}/cancel`, { method: 'POST' });
+
 export const getPod = (podId: string, signal?: AbortSignal) =>
   request<import('./types').Pod>(`/pods/${podId}`, {}, signal);
 
 export interface GetMessagesResponse {
   messages: import('./types').Message[];
   typingUserIds: string[];
+  hasMore?: boolean;
 }
 
-export const getMessages = (podId: string, signal?: AbortSignal) =>
-  request<GetMessagesResponse>(`/pods/${podId}/messages`, {}, signal);
+export interface MessagePageOptions {
+  limit?: number;
+  /** Only messages newer than this message id (cheap polling). */
+  after?: string;
+  /** Page of messages older than this message id (history). */
+  before?: string;
+}
+
+function messagePageQuery(opts?: MessagePageOptions): string {
+  if (!opts) return '';
+  const params = new URLSearchParams();
+  if (opts.limit) params.set('limit', String(opts.limit));
+  if (opts.after) params.set('after', opts.after);
+  if (opts.before) params.set('before', opts.before);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export const getMessages = (podId: string, opts?: MessagePageOptions, signal?: AbortSignal) =>
+  request<GetMessagesResponse>(`/pods/${podId}/messages${messagePageQuery(opts)}`, {}, signal);
 
 export const sendPodTyping = (podId: string) =>
   request<{ ok: boolean }>(`/pods/${podId}/typing`, { method: 'POST' });
@@ -861,6 +992,9 @@ export const updateProfile = (data: {
   clubs?: string[];
   instagramHandle?: string | null;
   interestTags?: string[];
+  purpose?: string | null;
+  campusZones?: string[];
+  clubInterests?: string | null;
 }) =>
   request<import('./types').User>('/users/me', {
     method: 'PATCH',
@@ -962,6 +1096,21 @@ export const uploadClubAvatar = async (clubId: string, uri: string, signal?: Abo
   return res.json();
 };
 
+export const updateClubProfile = (
+  clubId: string,
+  body: { name: string; description: string; isPublic: boolean },
+) =>
+  request<{
+    id: string;
+    name: string;
+    description: string;
+    isPublic: boolean;
+    avatarUrl?: string | null;
+  }>(`/clubs/${encodeURIComponent(clubId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
 // Blocking
 export const blockUser = (userId: string) =>
   request<{ success: boolean; blockId?: string; createdAt?: string }>(`/users/${userId}/block`, {
@@ -1023,10 +1172,11 @@ export interface GetThreadMessagesResponse {
   messages: import('./types').DirectMessage[];
   typingUserIds: string[];
   otherLastReadAt: string | null;
+  hasMore?: boolean;
 }
 
-export const getThreadMessages = (threadId: string) =>
-  request<GetThreadMessagesResponse>(`/messages/threads/${threadId}`);
+export const getThreadMessages = (threadId: string, opts?: MessagePageOptions) =>
+  request<GetThreadMessagesResponse>(`/messages/threads/${threadId}${messagePageQuery(opts)}`);
 
 export const markDMThreadRead = (threadId: string) =>
   request<{ ok: boolean }>(`/messages/threads/${threadId}/read`, { method: 'PATCH' });

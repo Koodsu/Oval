@@ -127,6 +127,17 @@ const STATUS_ATTENDED = 'ATTENDED';
 const MAX_CLUB_MESSAGE_LENGTH = 500;
 const MAX_CLUB_OUTREACH_LENGTH = 800;
 const MAX_ROLE_NAME_LENGTH = 40;
+const MAX_CHANNEL_NAME_LENGTH = 32;
+const MAX_CHANNEL_DESCRIPTION_LENGTH = 140;
+const MAX_CUSTOM_CHANNELS = 20;
+
+const CHANNEL_ANNOUNCEMENTS = 'ANNOUNCEMENTS';
+const CHANNEL_GENERAL = 'GENERAL';
+const CHANNEL_OFFICERS = 'OFFICERS';
+const CHANNEL_CUSTOM = 'CUSTOM';
+
+/** Named accents from the mobile palette. */
+const ROLE_COLORS = new Set(['scarlet', 'blue', 'green', 'amber', 'pink', 'violet', 'teal']);
 const RSVP_REMINDER_COOLDOWN_MS = 15 * 60 * 1000;
 const OUTREACH_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -402,6 +413,246 @@ async function resolveClubAudience(
   return { ok: true, recipients };
 }
 
+// ── Club channels ───────────────────────────────────────────────────────────
+
+type ChannelRecord = {
+  id: string;
+  clubId: string;
+  kind: string;
+  name: string;
+  description: string | null;
+  allowedRoleIds: string | null;
+  position: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type MembershipWithRoles = {
+  id: string;
+  role: string;
+  joinedAt: Date;
+  club?: { officerPermissions?: string | null };
+  customRoles: Array<{ roleId: string }>;
+};
+
+const BUILTIN_CHANNELS = [
+  { kind: CHANNEL_ANNOUNCEMENTS, name: 'Announcements', position: 0 },
+  { kind: CHANNEL_GENERAL, name: 'General', position: 1 },
+  { kind: CHANNEL_OFFICERS, name: 'Officers', position: 2 },
+] as const;
+
+/** Fetch (and lazily create) the club's channels, builtins first. */
+async function ensureClubChannels(clubId: string): Promise<ChannelRecord[]> {
+  const existing = await prisma.clubChannel.findMany({
+    where: { clubId },
+    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+  });
+  const missing = BUILTIN_CHANNELS.filter((builtin) => !existing.some((channel) => channel.kind === builtin.kind));
+  if (missing.length === 0) return existing;
+
+  await prisma.clubChannel
+    .createMany({
+      data: missing.map((builtin) => ({ clubId, ...builtin })),
+      skipDuplicates: true,
+    })
+    .catch(() => {});
+  return prisma.clubChannel.findMany({
+    where: { clubId },
+    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+  });
+}
+
+async function getMembershipWithRoles(clubId: string, userId: string): Promise<MembershipWithRoles | null> {
+  return prisma.clubMember.findUnique({
+    where: { clubId_userId: { clubId, userId } },
+    include: {
+      club: { select: { officerPermissions: true } },
+      customRoles: { select: { roleId: true } },
+    },
+  });
+}
+
+function canSeeChannel(
+  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds'>,
+  membership: MembershipWithRoles | null,
+  myRoleIds: Set<string>
+): boolean {
+  if (channel.kind === CHANNEL_ANNOUNCEMENTS) return true;
+  if (!membership) return false;
+  if (channel.kind === CHANNEL_GENERAL) return true;
+  if (channel.kind === CHANNEL_OFFICERS) return roleRank(membership.role) >= roleRank(ROLE_OFFICER);
+  const allowed = parseStringList(channel.allowedRoleIds);
+  if (allowed.length === 0) return true;
+  if (roleRank(membership.role) >= roleRank(ROLE_OFFICER)) return true;
+  return allowed.some((roleId) => myRoleIds.has(roleId));
+}
+
+function canPostToChannel(
+  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds'>,
+  membership: MembershipWithRoles | null,
+  myRoleIds: Set<string>
+): boolean {
+  if (!membership) return false;
+  if (channel.kind === CHANNEL_ANNOUNCEMENTS) return canPostAnnouncements(membership);
+  return canSeeChannel(channel, membership, myRoleIds);
+}
+
+function canPingRoles(membership: MembershipWithRoles): boolean {
+  return roleRank(membership.role) >= roleRank(ROLE_OFFICER) || hasClubPermission(membership, PERMISSION_POST_ANNOUNCEMENTS);
+}
+
+function typingScopeForChannel(
+  channel: Pick<ChannelRecord, 'id' | 'kind' | 'clubId'>
+): { scope: 'club' | 'club-officer' | 'club-channel'; key: string } {
+  if (channel.kind === CHANNEL_GENERAL) return { scope: 'club', key: channel.clubId };
+  if (channel.kind === CHANNEL_OFFICERS) return { scope: 'club-officer', key: channel.clubId };
+  return { scope: 'club-channel', key: channel.id };
+}
+
+type ChannelActivity = { unreadCount: number; lastMessageAt: Date | null; lastMessagePreview: string | null };
+
+/** Unread + latest-message info for one channel relative to the viewer's read state. */
+async function channelActivity(
+  channel: ChannelRecord,
+  membership: MembershipWithRoles,
+  userId: string,
+  lastReadAt: Date | null
+): Promise<ChannelActivity> {
+  const baseline = lastReadAt ?? membership.joinedAt;
+
+  if (channel.kind === CHANNEL_ANNOUNCEMENTS) {
+    const [unreadCount, latest] = await Promise.all([
+      prisma.clubAnnouncement.count({
+        where: { clubId: channel.clubId, createdAt: { gt: baseline }, userId: { not: userId } },
+      }),
+      prisma.clubAnnouncement.findFirst({
+        where: { clubId: channel.clubId },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true, createdAt: true },
+      }),
+    ]);
+    return {
+      unreadCount,
+      lastMessageAt: latest?.createdAt ?? null,
+      lastMessagePreview: latest?.content ?? null,
+    };
+  }
+
+  if (channel.kind === CHANNEL_OFFICERS) {
+    const [unreadCount, latest] = await Promise.all([
+      prisma.clubOfficerMessage.count({
+        where: { clubId: channel.clubId, createdAt: { gt: baseline }, userId: { not: userId } },
+      }),
+      prisma.clubOfficerMessage.findFirst({
+        where: { clubId: channel.clubId },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true, createdAt: true },
+      }),
+    ]);
+    return {
+      unreadCount,
+      lastMessageAt: latest?.createdAt ?? null,
+      lastMessagePreview: latest?.content ?? null,
+    };
+  }
+
+  const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+  const [unreadCount, latest] = await Promise.all([
+    prisma.clubMessage.count({
+      where: {
+        clubId: channel.clubId,
+        channelId: channelFilter,
+        createdAt: { gt: baseline },
+        userId: { not: userId },
+      },
+    }),
+    prisma.clubMessage.findFirst({
+      where: { clubId: channel.clubId, channelId: channelFilter },
+      orderBy: { createdAt: 'desc' },
+      select: { content: true, createdAt: true },
+    }),
+  ]);
+  return {
+    unreadCount,
+    lastMessageAt: latest?.createdAt ?? null,
+    lastMessagePreview: latest?.content ?? null,
+  };
+}
+
+/** Visible channels with unread counts for a member; announcements-only for non-members. */
+async function visibleChannelsWithActivity(clubId: string, userId: string) {
+  const [channels, membership] = await Promise.all([
+    ensureClubChannels(clubId),
+    getMembershipWithRoles(clubId, userId),
+  ]);
+  const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+  const visible = channels.filter((channel) => canSeeChannel(channel, membership, myRoleIds));
+
+  if (!membership) {
+    return visible.map((channel) => ({
+      ...serializeChannel(channel),
+      unreadCount: 0,
+      lastMessageAt: null as Date | null,
+      lastMessagePreview: null as string | null,
+      canPost: false,
+    }));
+  }
+
+  const readStates = await prisma.clubChannelReadState.findMany({
+    where: { userId, channelId: { in: visible.map((channel) => channel.id) } },
+  });
+  const readByChannel = new Map(readStates.map((state) => [state.channelId, state.lastReadAt]));
+
+  const activities = await Promise.all(
+    visible.map((channel) => channelActivity(channel, membership, userId, readByChannel.get(channel.id) ?? null))
+  );
+
+  return visible.map((channel, index) => ({
+    ...serializeChannel(channel),
+    ...activities[index],
+    canPost: canPostToChannel(channel, membership, myRoleIds),
+  }));
+}
+
+/** Count-only unread query for one channel (used by the /my digest). */
+function unreadCountForChannel(
+  channel: Pick<ChannelRecord, 'id' | 'kind' | 'clubId'>,
+  baseline: Date,
+  userId: string
+): Promise<number> {
+  if (channel.kind === CHANNEL_ANNOUNCEMENTS) {
+    return prisma.clubAnnouncement.count({
+      where: { clubId: channel.clubId, createdAt: { gt: baseline }, userId: { not: userId } },
+    });
+  }
+  if (channel.kind === CHANNEL_OFFICERS) {
+    return prisma.clubOfficerMessage.count({
+      where: { clubId: channel.clubId, createdAt: { gt: baseline }, userId: { not: userId } },
+    });
+  }
+  return prisma.clubMessage.count({
+    where: {
+      clubId: channel.clubId,
+      channelId: channel.kind === CHANNEL_GENERAL ? null : channel.id,
+      createdAt: { gt: baseline },
+      userId: { not: userId },
+    },
+  });
+}
+
+function serializeChannel(channel: ChannelRecord) {
+  return {
+    id: channel.id,
+    clubId: channel.clubId,
+    kind: channel.kind,
+    name: channel.name,
+    description: channel.description,
+    allowedRoleIds: parseStringList(channel.allowedRoleIds),
+    position: channel.position,
+    createdAt: channel.createdAt,
+  };
+}
+
 async function requireClubMembership(
   clubId: string,
   userId: string
@@ -575,17 +826,68 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
       if (!nextByClub.has(m.clubId)) nextByClub.set(m.clubId, m);
     }
 
+    // Unread totals across each club's channels the member can see.
+    const channels =
+      clubIds.length === 0
+        ? []
+        : await prisma.clubChannel.findMany({ where: { clubId: { in: clubIds } } });
+    const membershipIds = rows.map((r) => r.id);
+    const myRoleAssignments =
+      membershipIds.length === 0
+        ? []
+        : await prisma.clubMemberRole.findMany({
+            where: { memberId: { in: membershipIds } },
+            select: { clubId: true, roleId: true },
+          });
+    const readStates =
+      channels.length === 0
+        ? []
+        : await prisma.clubChannelReadState.findMany({
+            where: { userId, channelId: { in: channels.map((channel) => channel.id) } },
+          });
+    const readByChannel = new Map(readStates.map((state) => [state.channelId, state.lastReadAt]));
+    const roleIdsByClub = new Map<string, Set<string>>();
+    for (const assignment of myRoleAssignments) {
+      const set = roleIdsByClub.get(assignment.clubId) ?? new Set<string>();
+      set.add(assignment.roleId);
+      roleIdsByClub.set(assignment.clubId, set);
+    }
+
+    const unreadByClub = new Map<string, number>();
+    await Promise.all(
+      rows.map(async (row) => {
+        const myRoleIds = roleIdsByClub.get(row.clubId) ?? new Set<string>();
+        const membershipLike = {
+          id: row.id,
+          role: row.role,
+          joinedAt: row.joinedAt,
+          customRoles: Array.from(myRoleIds).map((roleId) => ({ roleId })),
+        };
+        const visible = channels.filter(
+          (channel) => channel.clubId === row.clubId && canSeeChannel(channel, membershipLike, myRoleIds)
+        );
+        const counts = await Promise.all(
+          visible.map((channel) =>
+            unreadCountForChannel(channel, readByChannel.get(channel.id) ?? row.joinedAt, userId)
+          )
+        );
+        unreadByClub.set(row.clubId, counts.reduce((sum, count) => sum + count, 0));
+      })
+    );
+
     res.json(
       rows.map((r) => ({
         membershipId: r.id,
         role: r.role,
         joinedAt: r.joinedAt,
+        unreadCount: unreadByClub.get(r.clubId) ?? 0,
         club: {
           id: r.club.id,
           name: r.club.name,
           description: r.club.description,
           category: r.club.category,
           emoji: r.club.emoji,
+          avatarUrl: r.club.avatarUrl,
           isVerified: r.club.isVerified,
           isPublic: r.club.isPublic,
           university: r.club.university,
@@ -595,6 +897,67 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
         },
         nextMeeting: nextByClub.get(r.clubId) ?? null,
       }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /clubs/week — visible meetings for the next 7 days (campus timeline)
+router.get('/week', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { start } = startEndOfLocalToday();
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  end.setHours(23, 59, 59, 999);
+
+  try {
+    const meetings = await prisma.clubMeeting.findMany({
+      where: {
+        meetingTime: { gte: start, lte: end },
+      },
+      include: {
+        club: {
+          select: {
+            id: true,
+            name: true,
+            emoji: true,
+            members: {
+              where: { userId },
+              select: { role: true, customRoles: { select: { roleId: true } } },
+            },
+          },
+        },
+        _count: { select: { attendees: true } },
+      },
+      orderBy: { meetingTime: 'asc' },
+    });
+
+    res.json(
+      meetings
+        .filter((m) => {
+          const membership = m.club.members[0] ?? null;
+          const roleIds = new Set(membership?.customRoles.map((role) => role.roleId) ?? []);
+          return (
+            canAccessVisibility(m.visibility, m.club.members.length > 0, membership?.role) &&
+            canAccessTargetRoles(m.targetRoleIds, roleIds, membership)
+          );
+        })
+        .map((m) => ({
+          id: m.id,
+          title: m.title,
+          location: m.location,
+          meetingTime: m.meetingTime,
+          isPublic: m.visibility === VISIBILITY_PUBLIC,
+          visibility: m.visibility,
+          targetRoleIds: parseStringList(m.targetRoleIds),
+          clubId: m.club.id,
+          clubName: m.club.name,
+          clubEmoji: m.club.emoji,
+          attendeeCount: m._count.attendees,
+          isMyClub: m.club.members.length > 0,
+        }))
     );
   } catch (err) {
     console.error(err);
@@ -1684,8 +2047,10 @@ router.get('/:id/messages', requireAuth, async (req: AuthRequest, res: Response)
       return;
     }
 
+    // channelId null = the built-in General channel; custom-channel messages are
+    // role-gated and only served by the channel endpoints.
     const messages = await prisma.clubMessage.findMany({
-      where: { clubId },
+      where: { clubId, channelId: null },
       include: {
         user: { select: { id: true, name: true, avatarUrl: true } },
       },
@@ -1919,6 +2284,450 @@ router.post('/:id/officer-typing', requireAuth, async (req: AuthRequest, res: Re
   }
 });
 
+// ── Channel endpoints ──────────────────────────────────────────────────────────
+
+// GET /clubs/:id/channels — visible channels with unread counts
+router.get('/:id/channels', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+
+  try {
+    const club = await prisma.club.findUnique({ where: { id: clubId }, select: { id: true, isPublic: true } });
+    if (!club) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      select: { id: true },
+    });
+    if (!club.isPublic && !membership) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+
+    const channels = await visibleChannelsWithActivity(clubId, userId);
+    res.json({ channels });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/channels — create a custom channel (MANAGE_CLUB)
+router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const { name, description, allowedRoleIds } = req.body ?? {};
+
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  const trimmedDescription = typeof description === 'string' ? description.trim() : '';
+  if (!trimmedName) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (trimmedName.length > MAX_CHANNEL_NAME_LENGTH) {
+    res.status(400).json({ error: `name cannot exceed ${MAX_CHANNEL_NAME_LENGTH} characters` });
+    return;
+  }
+  if (trimmedDescription.length > MAX_CHANNEL_DESCRIPTION_LENGTH) {
+    res.status(400).json({ error: `description cannot exceed ${MAX_CHANNEL_DESCRIPTION_LENGTH} characters` });
+    return;
+  }
+  const channelModeration = await moderateTextContent([trimmedName, trimmedDescription].filter(Boolean));
+  if (channelModeration) {
+    res.status(channelModeration.status).json({ error: channelModeration.message });
+    return;
+  }
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    if (!membership || !hasClubPermission(membership, PERMISSION_MANAGE_CLUB)) {
+      res.status(403).json({ error: 'You do not have permission to manage channels' });
+      return;
+    }
+
+    const targetIds = await parseAndValidateTargetRoleIds(clubId, allowedRoleIds);
+    if (targetIds === null) {
+      res.status(400).json({ error: 'allowedRoleIds contains invalid roles' });
+      return;
+    }
+
+    const channels = await ensureClubChannels(clubId);
+    const customCount = channels.filter((channel) => channel.kind === CHANNEL_CUSTOM).length;
+    if (customCount >= MAX_CUSTOM_CHANNELS) {
+      res.status(400).json({ error: `Clubs can have at most ${MAX_CUSTOM_CHANNELS} custom channels` });
+      return;
+    }
+    const maxPosition = channels.reduce((max, channel) => Math.max(max, channel.position), 0);
+
+    const channel = await prisma.clubChannel.create({
+      data: {
+        clubId,
+        kind: CHANNEL_CUSTOM,
+        name: trimmedName,
+        description: trimmedDescription || null,
+        allowedRoleIds: targetIds.length ? stringifyStringList(targetIds) : null,
+        position: Math.max(maxPosition + 1, 10),
+        createdById: userId,
+      },
+    });
+    res.status(201).json(serializeChannel(channel));
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      res.status(400).json({ error: 'A channel with that name already exists' });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /clubs/:id/channels/:channelId — edit a custom channel (MANAGE_CLUB)
+router.patch('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+  const { name, description, allowedRoleIds } = req.body ?? {};
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    if (!membership || !hasClubPermission(membership, PERMISSION_MANAGE_CLUB)) {
+      res.status(403).json({ error: 'You do not have permission to manage channels' });
+      return;
+    }
+
+    const existing = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    if (existing.kind !== CHANNEL_CUSTOM) {
+      res.status(400).json({ error: 'Built-in channels cannot be edited' });
+      return;
+    }
+
+    const data: { name?: string; description?: string | null; allowedRoleIds?: string | null } = {};
+    if (name !== undefined) {
+      const trimmedName = typeof name === 'string' ? name.trim() : '';
+      if (!trimmedName || trimmedName.length > MAX_CHANNEL_NAME_LENGTH) {
+        res.status(400).json({ error: `name must be 1-${MAX_CHANNEL_NAME_LENGTH} characters` });
+        return;
+      }
+      const moderation = await moderateTextContent([trimmedName]);
+      if (moderation) {
+        res.status(moderation.status).json({ error: moderation.message });
+        return;
+      }
+      data.name = trimmedName;
+    }
+    if (description !== undefined) {
+      const trimmedDescription = typeof description === 'string' ? description.trim() : '';
+      if (trimmedDescription.length > MAX_CHANNEL_DESCRIPTION_LENGTH) {
+        res.status(400).json({ error: `description cannot exceed ${MAX_CHANNEL_DESCRIPTION_LENGTH} characters` });
+        return;
+      }
+      data.description = trimmedDescription || null;
+    }
+    if (allowedRoleIds !== undefined) {
+      const targetIds = await parseAndValidateTargetRoleIds(clubId, allowedRoleIds);
+      if (targetIds === null) {
+        res.status(400).json({ error: 'allowedRoleIds contains invalid roles' });
+        return;
+      }
+      data.allowedRoleIds = targetIds.length ? stringifyStringList(targetIds) : null;
+    }
+
+    const channel = await prisma.clubChannel.update({ where: { id: channelId }, data });
+    res.json(serializeChannel(channel));
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      res.status(400).json({ error: 'A channel with that name already exists' });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/channels/:channelId — delete a custom channel (MANAGE_CLUB)
+router.delete('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    if (!membership || !hasClubPermission(membership, PERMISSION_MANAGE_CLUB)) {
+      res.status(403).json({ error: 'You do not have permission to manage channels' });
+      return;
+    }
+
+    const existing = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    if (existing.kind !== CHANNEL_CUSTOM) {
+      res.status(400).json({ error: 'Built-in channels cannot be deleted' });
+      return;
+    }
+
+    await prisma.clubChannel.delete({ where: { id: channelId } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /clubs/:id/channels/:channelId/messages — chat channels only; marks the channel read
+router.get('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    if (channel.kind === CHANNEL_ANNOUNCEMENTS) {
+      res.status(400).json({ error: 'Use the announcements endpoints for this channel' });
+      return;
+    }
+    const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+    if (!canSeeChannel(channel, membership, myRoleIds)) {
+      res.status(403).json({ error: 'You do not have access to this channel' });
+      return;
+    }
+
+    let messages;
+    if (channel.kind === CHANNEL_OFFICERS) {
+      messages = await prisma.clubOfficerMessage.findMany({
+        where: { clubId },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+    } else {
+      const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+      const rows = await prisma.clubMessage.findMany({
+        where: { clubId, channelId: channelFilter },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+      messages = rows.map((row) => ({ ...row, mentionRoleIds: parseStringList(row.mentionRoleIds) }));
+    }
+
+    // Viewing the channel marks it read.
+    await prisma.clubChannelReadState.upsert({
+      where: { channelId_userId: { channelId: channel.id, userId } },
+      update: { lastReadAt: new Date() },
+      create: { channelId: channel.id, userId },
+    });
+
+    const typing = typingScopeForChannel(channel);
+    const typingUserIds = getTypingUserIds(typing.scope, typing.key, userId);
+    res.json({ channel: serializeChannel(channel), messages, typingUserIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/channels/:channelId/messages — send to a chat channel (supports @role pings)
+router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+  const { content, mentionRoleIds } = req.body ?? {};
+
+  const trimmed = typeof content === 'string' ? content.trim() : '';
+  if (!trimmed) {
+    res.status(400).json({ error: 'content is required' });
+    return;
+  }
+  if (trimmed.length > MAX_CLUB_MESSAGE_LENGTH) {
+    res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
+    return;
+  }
+  const moderation = await moderateTextContent([trimmed]);
+  if (moderation) {
+    res.status(moderation.status).json({ error: moderation.message });
+    return;
+  }
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    if (channel.kind === CHANNEL_ANNOUNCEMENTS) {
+      res.status(400).json({ error: 'Use the announcements endpoints for this channel' });
+      return;
+    }
+    const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+    if (!membership || !canPostToChannel(channel, membership, myRoleIds)) {
+      res.status(403).json({ error: 'You do not have access to this channel' });
+      return;
+    }
+
+    let pingRoleIds: string[] = [];
+    if (mentionRoleIds !== undefined && mentionRoleIds !== null) {
+      const validated = await parseAndValidateTargetRoleIds(clubId, mentionRoleIds);
+      if (validated === null) {
+        res.status(400).json({ error: 'mentionRoleIds contains invalid roles' });
+        return;
+      }
+      if (validated.length > 0 && !canPingRoles(membership)) {
+        res.status(403).json({ error: 'Only officers can ping roles' });
+        return;
+      }
+      pingRoleIds = validated;
+    }
+
+    let message;
+    if (channel.kind === CHANNEL_OFFICERS) {
+      message = await prisma.clubOfficerMessage.create({
+        data: { clubId, userId, content: trimmed },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      });
+    } else {
+      const created = await prisma.clubMessage.create({
+        data: {
+          clubId,
+          channelId: channel.kind === CHANNEL_GENERAL ? null : channel.id,
+          userId,
+          content: trimmed,
+          mentionRoleIds: pingRoleIds.length ? stringifyStringList(pingRoleIds) : null,
+        },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      });
+      message = { ...created, mentionRoleIds: pingRoleIds };
+    }
+
+    // Sending implies the channel is read up to now.
+    await prisma.clubChannelReadState.upsert({
+      where: { channelId_userId: { channelId: channel.id, userId } },
+      update: { lastReadAt: new Date() },
+      create: { channelId: channel.id, userId },
+    });
+
+    if (pingRoleIds.length > 0) {
+      void NotificationService.notifyClubRolePing(clubId, userId, pingRoleIds, channel.name, trimmed);
+    }
+
+    res.status(201).json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/channels/:channelId/messages/:messageId — DELETE_MESSAGES permission
+router.delete(
+  '/:id/channels/:channelId/messages/:messageId',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, channelId, messageId } = req.params;
+
+    try {
+      const membership = await getMembershipWithRoles(clubId, userId);
+      if (!membership || !canDeleteMessages(membership)) {
+        res.status(403).json({ error: 'You do not have permission to delete messages' });
+        return;
+      }
+
+      const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+      if (!channel) {
+        res.status(404).json({ error: 'Channel not found' });
+        return;
+      }
+
+      if (channel.kind === CHANNEL_OFFICERS) {
+        const message = await prisma.clubOfficerMessage.findFirst({ where: { id: messageId, clubId } });
+        if (!message) {
+          res.status(404).json({ error: 'Message not found' });
+          return;
+        }
+        await prisma.clubOfficerMessage.delete({ where: { id: messageId } });
+      } else {
+        const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+        const message = await prisma.clubMessage.findFirst({
+          where: { id: messageId, clubId, channelId: channelFilter },
+        });
+        if (!message) {
+          res.status(404).json({ error: 'Message not found' });
+          return;
+        }
+        await prisma.clubMessage.delete({ where: { id: messageId } });
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// POST /clubs/:id/channels/:channelId/typing
+router.post('/:id/channels/:channelId/typing', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+    if (!membership || !canPostToChannel(channel, membership, myRoleIds)) {
+      res.status(403).json({ error: 'You do not have access to this channel' });
+      return;
+    }
+
+    const typing = typingScopeForChannel(channel);
+    setTyping(typing.scope, typing.key, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/channels/:channelId/read — mark a channel read (incl. announcements)
+router.post('/:id/channels/:channelId/read', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, channelId } = req.params;
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+    const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+    if (!membership || !canSeeChannel(channel, membership, myRoleIds)) {
+      res.status(403).json({ error: 'You do not have access to this channel' });
+      return;
+    }
+
+    await prisma.clubChannelReadState.upsert({
+      where: { channelId_userId: { channelId: channel.id, userId } },
+      update: { lastReadAt: new Date() },
+      create: { channelId: channel.id, userId },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /clubs/:id/roles — members can list member tags
 router.get('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
@@ -1952,11 +2761,20 @@ router.get('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): P
   }
 });
 
+/** Validate optional role color; returns undefined when not provided, null to clear. */
+function parseRoleColor(raw: unknown): string | null | undefined | false {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === '') return null;
+  if (typeof raw !== 'string') return false;
+  const normalized = raw.trim().toLowerCase();
+  return ROLE_COLORS.has(normalized) ? normalized : false;
+}
+
 // POST /clubs/:id/roles — create a named member tag
 router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
-  const { name } = req.body ?? {};
+  const { name, color, isSelfAssignable } = req.body ?? {};
   const trimmedName = typeof name === 'string' ? name.trim() : '';
 
   if (!trimmedName) {
@@ -1965,6 +2783,11 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
   }
   if (trimmedName.length > MAX_ROLE_NAME_LENGTH) {
     res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
+    return;
+  }
+  const parsedColor = parseRoleColor(color);
+  if (parsedColor === false) {
+    res.status(400).json({ error: 'color must be one of: ' + Array.from(ROLE_COLORS).join(', ') });
     return;
   }
   const roleModeration = await moderateTextContent([trimmedName]);
@@ -1984,7 +2807,13 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
     }
 
     const role = await prisma.clubRole.create({
-      data: { clubId, name: trimmedName, createdById: userId },
+      data: {
+        clubId,
+        name: trimmedName,
+        createdById: userId,
+        color: parsedColor ?? null,
+        isSelfAssignable: isSelfAssignable === true,
+      },
     });
     res.status(201).json({ ...role, permissions: [] });
   } catch (err: any) {
@@ -1997,24 +2826,49 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
   }
 });
 
-// PATCH /clubs/:id/roles/:roleId — rename a member tag
+// PATCH /clubs/:id/roles/:roleId — rename / recolor / toggle self-assign on a member tag
 router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId, roleId } = req.params;
-  const { name } = req.body ?? {};
-  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  const { name, color, isSelfAssignable } = req.body ?? {};
 
-  if (!trimmedName) {
-    res.status(400).json({ error: 'name is required' });
+  const data: { name?: string; color?: string | null; isSelfAssignable?: boolean } = {};
+
+  if (name !== undefined) {
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+    if (trimmedName.length > MAX_ROLE_NAME_LENGTH) {
+      res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
+      return;
+    }
+    const roleModeration = await moderateTextContent([trimmedName]);
+    if (roleModeration) {
+      res.status(roleModeration.status).json({ error: roleModeration.message });
+      return;
+    }
+    data.name = trimmedName;
+  }
+
+  const parsedColor = parseRoleColor(color);
+  if (parsedColor === false) {
+    res.status(400).json({ error: 'color must be one of: ' + Array.from(ROLE_COLORS).join(', ') });
     return;
   }
-  if (trimmedName.length > MAX_ROLE_NAME_LENGTH) {
-    res.status(400).json({ error: `name cannot exceed ${MAX_ROLE_NAME_LENGTH} characters` });
-    return;
+  if (parsedColor !== undefined) data.color = parsedColor;
+
+  if (isSelfAssignable !== undefined) {
+    if (typeof isSelfAssignable !== 'boolean') {
+      res.status(400).json({ error: 'isSelfAssignable must be a boolean' });
+      return;
+    }
+    data.isSelfAssignable = isSelfAssignable;
   }
-  const roleModeration = await moderateTextContent([trimmedName]);
-  if (roleModeration) {
-    res.status(roleModeration.status).json({ error: roleModeration.message });
+
+  if (Object.keys(data).length === 0) {
+    res.status(400).json({ error: 'Nothing to update' });
     return;
   }
 
@@ -2036,7 +2890,7 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
 
     const role = await prisma.clubRole.update({
       where: { id: roleId },
-      data: { name: trimmedName },
+      data,
     });
     res.json({ ...role, permissions: parseStringList(role.permissions) });
   } catch (err: any) {
@@ -2044,6 +2898,72 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
       res.status(400).json({ error: 'A role with that name already exists' });
       return;
     }
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/roles/:roleId/self — opt into a self-assignable role
+router.post('/:id/roles/:roleId/self', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, roleId } = req.params;
+
+  try {
+    const [membership, role] = await Promise.all([
+      prisma.clubMember.findUnique({ where: { clubId_userId: { clubId, userId } } }),
+      prisma.clubRole.findFirst({ where: { id: roleId, clubId } }),
+    ]);
+    if (!membership) {
+      res.status(403).json({ error: 'You must be a club member' });
+      return;
+    }
+    if (!role) {
+      res.status(404).json({ error: 'Role not found' });
+      return;
+    }
+    if (!role.isSelfAssignable) {
+      res.status(403).json({ error: 'This role is not self-assignable' });
+      return;
+    }
+
+    await prisma.clubMemberRole
+      .create({ data: { clubId, memberId: membership.id, roleId, assignedById: userId } })
+      .catch((err: any) => {
+        if (err?.code !== 'P2002') throw err; // already assigned → idempotent
+      });
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/roles/:roleId/self — leave a self-assignable role
+router.delete('/:id/roles/:roleId/self', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, roleId } = req.params;
+
+  try {
+    const [membership, role] = await Promise.all([
+      prisma.clubMember.findUnique({ where: { clubId_userId: { clubId, userId } } }),
+      prisma.clubRole.findFirst({ where: { id: roleId, clubId } }),
+    ]);
+    if (!membership) {
+      res.status(403).json({ error: 'You must be a club member' });
+      return;
+    }
+    if (!role) {
+      res.status(404).json({ error: 'Role not found' });
+      return;
+    }
+    if (!role.isSelfAssignable) {
+      res.status(403).json({ error: 'This role is not self-assignable' });
+      return;
+    }
+
+    await prisma.clubMemberRole.deleteMany({ where: { memberId: membership.id, roleId } });
+    res.json({ ok: true });
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -2420,7 +3340,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 });
 
-// PATCH /clubs/:id — upload club avatar (ADMIN only)
+// PATCH /clubs/:id — update club profile or upload an avatar
 router.patch(
   '/:id',
   requireAuth,
@@ -2428,9 +3348,52 @@ router.patch(
   async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user!.userId;
     const { id: clubId } = req.params;
+    const body = req.body ?? {};
+    const hasProfileFields =
+      Object.prototype.hasOwnProperty.call(body, 'name') ||
+      Object.prototype.hasOwnProperty.call(body, 'description') ||
+      Object.prototype.hasOwnProperty.call(body, 'isPublic');
 
-    if (!req.file) {
-      res.status(400).json({ error: 'No file uploaded' });
+    if (!req.file && !hasProfileFields) {
+      res.status(400).json({ error: 'No club updates provided' });
+      return;
+    }
+
+    const updates: {
+      name?: string;
+      description?: string;
+      isPublic?: boolean;
+      avatarUrl?: string;
+    } = {};
+
+    if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+      if (typeof body.name !== 'string' || !body.name.trim()) {
+        res.status(400).json({ error: 'name is required' });
+        return;
+      }
+      updates.name = body.name.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+      if (typeof body.description !== 'string' || !body.description.trim()) {
+        res.status(400).json({ error: 'description is required' });
+        return;
+      }
+      updates.description = body.description.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'isPublic')) {
+      if (typeof body.isPublic !== 'boolean') {
+        res.status(400).json({ error: 'isPublic must be a boolean' });
+        return;
+      }
+      updates.isPublic = body.isPublic;
+    }
+
+    const profileModeration = await moderateTextContent([
+      updates.name ?? null,
+      updates.description ?? null,
+    ]);
+    if (profileModeration) {
+      res.status(profileModeration.status).json({ error: profileModeration.message });
       return;
     }
 
@@ -2450,51 +3413,66 @@ router.patch(
         return;
       }
       if (!hasClubPermission(membership, PERMISSION_MANAGE_CLUB)) {
-        res.status(403).json({ error: 'You do not have permission to update the club avatar' });
-        return;
-      }
-      if (!isSupabaseStorageConfigured() && process.env.NODE_ENV === 'production') {
-        res.status(500).json({ error: 'Avatar storage is not configured' });
+        res.status(403).json({ error: 'You do not have permission to update the club' });
         return;
       }
 
-      const moderation = await moderateImageContent(req.file.buffer, req.file.mimetype);
-      if (moderation) {
-        res.status(moderation.status).json({ error: moderation.message });
-        return;
-      }
-
-      let avatarUrl: string;
-      const filename = `${clubId}-${Date.now()}.${clubAvatarExtension(req.file.mimetype)}`;
-
-      if (isSupabaseStorageConfigured()) {
-        const { error: uploadError } = await supabaseStorage.storage
-          .from(CLUB_AVATAR_BUCKET)
-          .upload(filename, req.file.buffer, {
-            contentType: req.file.mimetype,
-            upsert: true,
-          });
-
-        if (uploadError) {
-          res.status(500).json({ error: 'Failed to upload avatar' });
+      if (req.file) {
+        if (!isSupabaseStorageConfigured() && process.env.NODE_ENV === 'production') {
+          res.status(500).json({ error: 'Avatar storage is not configured' });
           return;
         }
 
-        const { data: publicUrlData } = supabaseStorage.storage
-          .from(CLUB_AVATAR_BUCKET)
-          .getPublicUrl(filename);
+        const moderation = await moderateImageContent(req.file.buffer, req.file.mimetype);
+        if (moderation) {
+          res.status(moderation.status).json({ error: moderation.message });
+          return;
+        }
 
-        avatarUrl = publicUrlData.publicUrl;
-      } else {
-        await fs.promises.mkdir(CLUB_AVATAR_UPLOAD_DIR, { recursive: true });
-        await fs.promises.writeFile(path.join(CLUB_AVATAR_UPLOAD_DIR, filename), req.file.buffer);
-        avatarUrl = `/uploads/club-avatars/${filename}`;
+        const filename = `${clubId}-${Date.now()}.${clubAvatarExtension(req.file.mimetype)}`;
+
+        if (isSupabaseStorageConfigured()) {
+          const { error: uploadError } = await supabaseStorage.storage
+            .from(CLUB_AVATAR_BUCKET)
+            .upload(filename, req.file.buffer, {
+              contentType: req.file.mimetype,
+              upsert: true,
+            });
+
+          if (uploadError) {
+            res.status(500).json({ error: 'Failed to upload avatar' });
+            return;
+          }
+
+          const { data: publicUrlData } = supabaseStorage.storage
+            .from(CLUB_AVATAR_BUCKET)
+            .getPublicUrl(filename);
+
+          updates.avatarUrl = publicUrlData.publicUrl;
+        } else {
+          await fs.promises.mkdir(CLUB_AVATAR_UPLOAD_DIR, { recursive: true });
+          await fs.promises.writeFile(path.join(CLUB_AVATAR_UPLOAD_DIR, filename), req.file.buffer);
+          updates.avatarUrl = `/uploads/club-avatars/${filename}`;
+        }
       }
 
-      await cleanupClubAvatarUrl(club.avatarUrl);
+      const updated = await prisma.club.update({
+        where: { id: clubId },
+        data: updates,
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          isPublic: true,
+          avatarUrl: true,
+        },
+      });
 
-      await prisma.club.update({ where: { id: clubId }, data: { avatarUrl } });
-      res.json({ avatarUrl });
+      if (req.file) {
+        await cleanupClubAvatarUrl(club.avatarUrl);
+      }
+
+      res.json(updated);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Internal server error' });

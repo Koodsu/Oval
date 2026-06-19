@@ -1,18 +1,29 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Hero, Panel, PrimaryButton, Screen } from '../components/ui';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { AppBackdrop, Button, Card, Sticker } from '../components/ui';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 export default function VerifyEmailScreen() {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const submittedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -20,7 +31,7 @@ export default function VerifyEmailScreen() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  const submit = async () => {
+  const submit = useCallback(async () => {
     if (!/^\d{6}$/.test(code.trim())) {
       Alert.alert('Verification code needed', 'Enter the 6-digit code from your school email.');
       return;
@@ -35,7 +46,13 @@ export default function VerifyEmailScreen() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [code, updateUser]);
+
+  useEffect(() => {
+    if (code.length !== 6 || busy || submittedCodeRef.current === code) return;
+    submittedCodeRef.current = code;
+    void submit();
+  }, [busy, code, submit]);
 
   const resend = async () => {
     if (resendCooldown > 0) return;
@@ -52,66 +69,91 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <Screen>
-      <View style={styles.content}>
-        <Hero
-          eyebrow="Verify"
-          title="One last step before the campus opens up."
-          subtitle={`We sent a code to ${user?.email ?? 'your university email'} so pods, clubs, and chats stay tied to real students.`}
-        />
-        <Panel>
-          <Text style={styles.label}>Verification code</Text>
+    <AppBackdrop>
+      <View
+        style={[
+          styles.content,
+          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
+        ]}
+      >
+        <Sticker label="Almost in" tint={colors.greenSoft} tilt={-2} icon="mail-unread" />
+        <Text style={styles.title}>Check your{'\n'}inbox.</Text>
+        <Text style={[typography.body, styles.sub]}>
+          We sent a 6-digit code to{' '}
+          <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>{' '}
+          — it keeps Bridge students-only.
+        </Text>
+
+        <Card padded>
+          <Text style={[typography.kicker, { marginBottom: spacing.sm }]}>Verification code</Text>
           <TextInput
             value={code}
             onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="123456"
+            placeholder="••••••"
             keyboardType="number-pad"
             textContentType="oneTimeCode"
             autoComplete="one-time-code"
             maxLength={6}
             placeholderTextColor={colors.faint}
-            style={styles.input}
+            style={styles.codeInput}
             accessibilityLabel="Verification code"
             onSubmitEditing={() => void submit()}
           />
           <View style={styles.actions}>
-            <PrimaryButton label="Verify account" onPress={submit} loading={busy} disabled={code.length !== 6} />
-            <PrimaryButton
+            <Button
+              label="Verify account"
+              onPress={submit}
+              loading={busy}
+              disabled={code.length !== 6}
+              size="lg"
+              icon="checkmark-circle"
+            />
+            <Button
               label={resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend email'}
               onPress={resend}
               loading={resending}
               disabled={resendCooldown > 0}
-              kind="ghost"
+              variant="ghost"
             />
           </View>
-        </Panel>
+        </Card>
       </View>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    flex: 1,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.xl,
     gap: spacing.lg,
   },
-  label: {
-    ...t.typography.label,
-    marginBottom: spacing.xs,
+  title: {
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
+    color: t.colors.ink,
   },
-  input: {
-    borderRadius: radii.md,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
+  sub: {
+    color: t.colors.sub,
+    maxWidth: 320,
+  },
+  codeInput: {
+    borderWidth: BORDER_W,
     borderColor: t.colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    ...t.typography.bodyStrong,
+    borderRadius: radii.sm,
+    backgroundColor: t.colors.surfaceAlt,
+    paddingVertical: 16,
+    textAlign: 'center' as const,
+    fontFamily: fonts.displayMedium,
+    fontSize: 26,
+    letterSpacing: 10,
     color: t.colors.ink,
   },
   actions: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     gap: spacing.sm,
   },
 }));

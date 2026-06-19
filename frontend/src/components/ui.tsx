@@ -1,1217 +1,1750 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Image,
-  Keyboard,
   KeyboardAvoidingView,
-  LayoutChangeEvent,
+  Modal,
   Platform,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  TextInputProps,
+  TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
-  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
-import { resolveAvatarUrl } from '../api';
-import { getInitials } from '../utils/format';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Theme,
-  createThemedStyles,
+  BORDER_W,
+  GLASS_BLUR,
+  SLAB_OFFSET,
+  ThemeColors,
+  backdropEnd,
+  backdropStart,
+  darkBackdrop,
+  elevation,
   fonts,
+  lightBackdrop,
   motion,
   radii,
   spacing,
   useTheme,
 } from '../theme';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Motion primitives
-// ─────────────────────────────────────────────────────────────────────────────
+import { resolveAvatarUrl } from '../api';
 
 /**
- * Tap — the standard Bridge touchable. Spring press-scale + optional haptic.
- * Use everywhere a card, row, or control is pressable.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LUMEN COMPONENT KIT
+ *
+ * Surfaces are frosted glass: a translucent fill over a real backdrop blur,
+ * outlined by a hairline highlight and lifted on a soft, diffuse shadow.
+ * Pressing gently scales the surface instead of pushing it into a hard offset.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-export function Tap({
-  children,
-  onPress,
-  onLongPress,
-  disabled,
-  haptic = false,
-  scaleTo = 0.97,
-  style,
-  accessibilityLabel,
-  accessibilityHint,
-  accessibilityRole = 'button',
-  accessibilityState,
-  testID,
-}: {
+
+/** Fire a light haptic tick, safely (no-ops in tests/web). */
+function tick() {
+  try {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)?.catch?.(() => {});
+  } catch {
+    // haptics unavailable
+  }
+}
+
+// ── Accent hashing — stable crayon color per entity ─────────────────────────
+
+const ACCENT_KEYS = ['blue', 'green', 'amber', 'pink', 'violet', 'teal'] as const;
+export type AccentKey = (typeof ACCENT_KEYS)[number];
+
+export function accentKeyForSeed(seed: string): AccentKey {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return ACCENT_KEYS[hash % ACCENT_KEYS.length];
+}
+
+export function accentForSeed(colors: ThemeColors, seed: string) {
+  const key = accentKeyForSeed(seed);
+  return {
+    key,
+    tint: colors[key],
+    soft: colors[`${key}Soft` as const],
+  };
+}
+
+// ── Slab — the signature pressable surface ───────────────────────────────────
+
+export type SlabProps = {
   children: React.ReactNode;
   onPress?: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
+  /** Face background. Defaults to surface. */
+  color?: string;
+  /** Border + shadow color. Defaults to theme border. */
+  borderColor?: string;
+  radius?: number;
+  /** Sticker tilt, in degrees. Use sparingly. */
+  tilt?: number;
+  /** Set false to hide the offset shadow (quiet slabs). */
+  raised?: boolean;
   haptic?: boolean;
-  scaleTo?: number;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
+  faceStyle?: StyleProp<ViewStyle>;
+  accessibilityRole?: 'button' | 'link' | 'tab' | 'none';
   accessibilityLabel?: string;
-  accessibilityHint?: string;
-  accessibilityRole?: 'button' | 'tab' | 'link';
-  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  hitSlop?: React.ComponentProps<typeof Pressable>['hitSlop'];
   testID?: string;
-}) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+};
 
-  return (
-    <Pressable
-      onPress={() => {
-        if (haptic) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress?.();
-      }}
-      onLongPress={onLongPress}
-      disabled={disabled || !onPress}
-      onPressIn={() => {
-        scale.value = withSpring(scaleTo, motion.spring);
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, motion.springBouncy);
-      }}
-      accessibilityRole={accessibilityRole}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-      accessibilityState={accessibilityState}
-      testID={testID}
-    >
-      <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
-    </Pressable>
-  );
-}
-
-/**
- * Entrance — staggered fade-in-up wrapper for list/section reveals.
- * `index` staggers siblings; keep indexes small (0–8).
- */
-export function Entrance({
+export function Slab({
   children,
-  index = 0,
-  style,
-}: {
-  children: React.ReactNode;
-  index?: number;
-  style?: ViewStyle | ViewStyle[];
-}) {
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(Math.min(index, 8) * 55)
-        .springify()
-        .damping(18)
-        .stiffness(190)}
-      style={style}
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Canvas
-// ─────────────────────────────────────────────────────────────────────────────
-
-function GlowBlob({
+  onPress,
+  onLongPress,
+  disabled,
   color,
-  size,
-  position,
-  drift = 14,
-  duration = 7000,
-}: {
-  color: string;
-  size: number;
-  position: ViewStyle;
-  drift?: number;
-  duration?: number;
-}) {
-  const t = useSharedValue(0);
-  React.useEffect(() => {
-    t.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      true,
-    );
-  }, [t, duration]);
+  borderColor,
+  radius = radii.md,
+  tilt = 0,
+  raised = true,
+  haptic = true,
+  style,
+  faceStyle,
+  accessibilityRole = 'button',
+  accessibilityLabel,
+  hitSlop,
+  testID,
+}: SlabProps) {
+  const { colors, isDark } = useTheme();
+  const press = useSharedValue(0);
+  const interactive = Boolean(onPress || onLongPress) && !disabled;
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: t.value * drift },
-      { translateX: t.value * -drift * 0.6 },
-      { scale: 1 + t.value * 0.08 },
-    ],
+  // A solid `color` (a button fill, a tinted chip) opts out of frosted glass —
+  // it gets a clean opaque face. Surfaces left to the theme stay translucent
+  // and let the backdrop blur read through.
+  const isGlass = color == null || color === colors.surface || color === colors.surfaceAlt;
+  const faceFill = color ?? colors.surface;
+
+  const faceAnimated = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - press.value * 0.025 }],
+    opacity: 1 - press.value * 0.06,
   }));
 
+  const faceStyles = [
+    slabStyles.face,
+    {
+      backgroundColor: faceFill,
+      borderColor: borderColor ?? colors.border,
+      borderRadius: radius,
+    },
+    interactive ? faceAnimated : null,
+    faceStyle,
+  ];
+
+  const content = (
+    <>
+      {isGlass ? (
+        <BlurView
+          tint={isDark ? 'dark' : 'light'}
+          intensity={GLASS_BLUR}
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      ) : null}
+      {children}
+    </>
+  );
+
   return (
-    <Animated.View
-      pointerEvents="none"
+    <View
       style={[
-        {
-          position: 'absolute',
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: color,
-        },
-        position,
+        slabStyles.wrap,
+        raised && { borderRadius: radius, ...elevation.card, shadowColor: colors.shadow },
+        disabled && slabStyles.disabled,
         style,
       ]}
-    />
-  );
-}
-
-export function AppBackdrop({ children }: { children: React.ReactNode }) {
-  const { gradients, isDark } = useTheme();
-  return (
-    <View style={baseStyles.flex}>
-      <LinearGradient colors={gradients.app} style={StyleSheet.absoluteFill} />
-      <GlowBlob
-        color={isDark ? 'rgba(242,62,22,0.10)' : 'rgba(255,138,61,0.16)'}
-        size={220}
-        position={{ top: 40, right: -60 }}
-      />
-      <GlowBlob
-        color={isDark ? 'rgba(111,85,242,0.10)' : 'rgba(111,85,242,0.10)'}
-        size={260}
-        position={{ bottom: 60, left: -80 }}
-        duration={9000}
-      />
-      {children}
-    </View>
-  );
-}
-
-export function Screen({
-  children,
-  padded = true,
-}: {
-  children: React.ReactNode;
-  padded?: boolean;
-}) {
-  return (
-    <SafeAreaView style={baseStyles.flex} edges={['top', 'left', 'right']}>
-      <AppBackdrop>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={baseStyles.flex}
+    >
+      {interactive ? (
+        <AnimatedPressable
+          onPress={() => {
+            if (haptic) tick();
+            onPress?.();
+          }}
+          onLongPress={onLongPress}
+          onPressIn={() => {
+            press.value = withSpring(1, motion.springSnappy);
+          }}
+          onPressOut={() => {
+            press.value = withSpring(0, motion.springSnappy);
+          }}
+          disabled={disabled}
+          accessibilityRole={accessibilityRole}
+          accessibilityLabel={accessibilityLabel}
+          hitSlop={hitSlop}
+          testID={testID}
+          style={faceStyles}
         >
-          <View style={[baseStyles.screen, !padded && { paddingHorizontal: 0 }]}>{children}</View>
-        </KeyboardAvoidingView>
-      </AppBackdrop>
-    </SafeAreaView>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Headers & heroes
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function Hero({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-}: {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
-  children?: React.ReactNode;
-}) {
-  const styles = useUiStyles();
-  const { gradients } = useTheme();
-  return (
-    <View style={styles.heroWrap}>
-      <LinearGradient
-        colors={gradients.hero}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1.1, y: 1.2 }}
-        style={styles.hero}
-      >
-        <View pointerEvents="none" style={styles.heroEmber} />
-        <View pointerEvents="none" style={styles.heroEmberSmall} />
-        {eyebrow ? <Text style={styles.heroEyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.heroTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.heroSubtitle}>{subtitle}</Text> : null}
-        {children}
-      </LinearGradient>
+          {content}
+        </AnimatedPressable>
+      ) : (
+        <Animated.View style={faceStyles}>{content}</Animated.View>
+      )}
     </View>
   );
 }
 
-export function CompactHeader({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-}: {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
-  children?: React.ReactNode;
-}) {
-  const styles = useUiStyles();
-  return (
-    <View style={styles.compactHeader}>
-      {eyebrow ? <Text style={styles.compactEyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.compactTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.compactSubtitle}>{subtitle}</Text> : null}
-      {children}
-    </View>
-  );
-}
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function ScreenHeader({
-  title,
-  onBack,
-  right,
-}: {
-  title?: string;
-  onBack?: () => void;
-  right?: React.ReactNode;
-}) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  return (
-    <View style={styles.screenHeader}>
-      <View style={styles.screenHeaderSide}>
-        {onBack ? (
-          <Tooltip label="Go back">
-            <TouchableOpacity
-              onPress={() => {
-                Keyboard.dismiss();
-                onBack();
-              }}
-              style={styles.backButton}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-              accessibilityHint="Returns to the previous screen"
-            >
-              <Ionicons name="chevron-back" size={20} color={colors.ink} />
-            </TouchableOpacity>
-          </Tooltip>
-        ) : null}
-      </View>
-      <Text style={styles.screenHeaderTitle} numberOfLines={1}>
-        {title ?? ''}
-      </Text>
-      <View style={[styles.screenHeaderSide, styles.screenHeaderRight]}>{right}</View>
-    </View>
-  );
-}
+const slabStyles = StyleSheet.create({
+  wrap: {
+    position: 'relative',
+  },
+  face: {
+    borderWidth: BORDER_W,
+    overflow: 'hidden',
+  },
+  disabled: {
+    opacity: 0.45,
+  },
+});
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Surfaces
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function Panel({
+/** Non-interactive slab with default padding — a plain card. */
+export function Card({
   children,
   style,
-  onPress,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-  onPress?: () => void;
-}) {
-  const styles = useUiStyles();
-  if (onPress) {
-    return (
-      <Tap onPress={onPress} style={[styles.panel, style as ViewStyle]}>
-        {children}
-      </Tap>
-    );
-  }
-  return <View style={[styles.panel, style]}>{children}</View>;
-}
-
-type SectionHeaderProps = {
-  title: string;
-} & (
-  | { actionLabel?: undefined; onActionPress?: undefined }
-  | { actionLabel: string | undefined; onActionPress: () => void }
-);
-
-export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
-  const styles = useUiStyles();
+  faceStyle,
+  padded = true,
+  ...rest
+}: Omit<SlabProps, 'onPress' | 'onLongPress'> & { padded?: boolean }) {
   return (
-    <View style={styles.sectionRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {actionLabel && onActionPress ? (
-        <TouchableOpacity
-          onPress={onActionPress}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.sectionAction}>{actionLabel}</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+    <Slab
+      {...rest}
+      accessibilityRole="none"
+      style={style}
+      faceStyle={[padded && { padding: spacing.lg }, faceStyle]}
+    >
+      {children}
+    </Slab>
   );
 }
 
-export function StatTile({
+// ── Buttons ──────────────────────────────────────────────────────────────────
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
+export type ButtonSize = 'lg' | 'md' | 'sm';
+
+export function Button({
   label,
-  value,
+  onPress,
+  variant = 'primary',
+  size = 'md',
   icon,
+  loading,
+  disabled,
+  tint,
+  style,
+  testID,
 }: {
   label: string;
-  value: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: keyof typeof Ionicons.glyphMap;
+  loading?: boolean;
+  disabled?: boolean;
+  /** Custom fill for variant="accent" */
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
-  const styles = useUiStyles();
   const { colors } = useTheme();
+
+  const fill =
+    variant === 'primary'
+      ? colors.primary
+      : variant === 'danger'
+        ? colors.danger
+        : variant === 'accent'
+          ? (tint ?? colors.amber)
+          : variant === 'ghost'
+            ? 'transparent'
+            : colors.surface;
+  const labelColor =
+    variant === 'primary' || variant === 'danger' ? colors.onPrimary : colors.ink;
+  const height = size === 'lg' ? 56 : size === 'md' ? 48 : 38;
+  const fontSize = size === 'sm' ? 13.5 : 15.5;
+
+  if (variant === 'ghost') {
+    return (
+      <Pressable
+        onPress={() => {
+          tick();
+          onPress?.();
+        }}
+        disabled={disabled || loading}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID={testID}
+        style={({ pressed }) => [
+          buttonStyles.ghost,
+          { height, opacity: disabled ? 0.45 : pressed ? 0.6 : 1 },
+          style,
+        ]}
+      >
+        {icon ? <Ionicons name={icon} size={17} color={colors.ink} /> : null}
+        <Text style={[buttonStyles.label, { color: colors.ink, fontSize }]}>{label}</Text>
+      </Pressable>
+    );
+  }
+
   return (
-    <Panel style={styles.statTile}>
-      <View style={styles.statIcon}>
-        <Ionicons name={icon} size={16} color={colors.primary} />
+    <Slab
+      onPress={onPress}
+      disabled={disabled || loading}
+      color={fill}
+      radius={radii.sm}
+      style={style}
+      faceStyle={[buttonStyles.face, { height: height - SLAB_OFFSET }]}
+      accessibilityLabel={label}
+      testID={testID}
+    >
+      <View style={buttonStyles.loadingFrame}>
+        <View style={[buttonStyles.inner, loading && buttonStyles.loadingLabel]}>
+          {icon ? <Ionicons name={icon} size={size === 'sm' ? 15 : 18} color={labelColor} /> : null}
+          <Text style={[buttonStyles.label, { color: labelColor, fontSize }]} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={labelColor}
+            style={buttonStyles.spinner}
+          />
+        ) : null}
       </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </Panel>
+    </Slab>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Controls
-// ─────────────────────────────────────────────────────────────────────────────
+const buttonStyles = StyleSheet.create({
+  face: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  loadingFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLabel: {
+    opacity: 0,
+  },
+  spinner: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    letterSpacing: 0.2,
+  },
+  ghost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+});
+
+/** Small square icon button (back arrows, header actions). */
+export function IconButton({
+  icon,
+  onPress,
+  color,
+  iconColor,
+  size = 42,
+  disabled,
+  accessibilityLabel,
+  style,
+  testID,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  color?: string;
+  iconColor?: string;
+  size?: number;
+  disabled?: boolean;
+  accessibilityLabel: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Slab
+      onPress={onPress}
+      disabled={disabled}
+      color={color ?? colors.surface}
+      radius={radii.sm}
+      style={style}
+      faceStyle={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+    >
+      <Ionicons name={icon} size={Math.round(size * 0.46)} color={iconColor ?? colors.ink} />
+    </Slab>
+  );
+}
+
+// ── Chips & badges ───────────────────────────────────────────────────────────
 
 export function Chip({
   label,
-  active = false,
+  selected,
   onPress,
   icon,
+  tint,
+  style,
+  testID,
 }: {
   label: string;
-  active?: boolean;
+  selected?: boolean;
   onPress?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** Fill when selected; defaults to ink. */
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  const content = (
-    <View style={[styles.chip, active && styles.chipActive]}>
-      {icon ? (
-        <Ionicons name={icon} size={14} color={active ? colors.onPrimary : colors.sub} />
-      ) : null}
-      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
-    </View>
-  );
+  const { colors, isDark } = useTheme();
+  const fill = selected ? (tint ?? colors.ink) : colors.surface;
+  const fg = selected ? (tint ? colors.ink : isDark ? colors.bg : colors.surface) : colors.ink;
+  // When tinted fills are light pastels, keep ink text; ink fill gets paper text.
+  const labelColor = selected && !tint ? (isDark ? '#181210' : '#FFFCF2') : fg;
 
-  if (!onPress) return content;
   return (
-    <Tap
+    <Slab
       onPress={onPress}
-      haptic
-      scaleTo={0.94}
-      accessibilityRole="button"
+      color={fill}
+      radius={radii.pill}
+      raised={Boolean(selected)}
+      style={style}
+      faceStyle={chipStyles.face}
+      hitSlop={{ top: 6, bottom: 6 }}
       accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
+      testID={testID}
     >
-      {content}
-    </Tap>
+      <View style={chipStyles.inner}>
+        {icon ? <Ionicons name={icon} size={14} color={labelColor} /> : null}
+        <Text style={[chipStyles.label, { color: labelColor }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </Slab>
   );
 }
 
-export function SegmentedControl<T extends string>({
-  value,
+const chipStyles = StyleSheet.create({
+  face: {
+    paddingHorizontal: 14,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+  },
+});
+
+/**
+ * Segmented control — a glass track with a sliding scarlet thumb. The Lumen
+ * replacement for rows of mode-switch chips.
+ */
+export function Segmented<T extends string>({
   options,
+  value,
   onChange,
+  style,
 }: {
+  options: { value: T; label: string }[];
   value: T;
-  options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
-  const [width, setWidth] = React.useState(0);
-  const index = Math.max(
-    0,
-    options.findIndex((option) => option.value === value),
-  );
-  const pad = 4;
-  const gap = 6;
-  const segWidth =
-    width > 0 ? (width - pad * 2 - gap * (options.length - 1)) / options.length : 0;
-  const x = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (segWidth > 0) {
-      x.value = withSpring(index * (segWidth + gap), motion.spring);
-    }
-  }, [index, segWidth, x]);
-
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }],
-  }));
-
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
-
+  const { colors } = useTheme();
   return (
-    <View style={styles.segmented} onLayout={onLayout}>
-      {segWidth > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.segmentThumb, { width: segWidth }, thumbStyle]}
-        />
-      ) : null}
-      {options.map((option) => {
-        const active = option.value === value;
+    <View
+      style={[
+        segmentedStyles.track,
+        { backgroundColor: colors.sunken, borderColor: colors.border },
+        style,
+      ]}
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
         return (
-          <TouchableOpacity
-            key={option.value}
-            style={styles.segment}
+          <Pressable
+            key={opt.value}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onChange(option.value);
+              if (!active) {
+                tick();
+                onChange(opt.value);
+              }
             }}
             accessibilityRole="tab"
-            accessibilityLabel={option.label}
             accessibilityState={{ selected: active }}
+            accessibilityLabel={opt.label}
+            style={[
+              segmentedStyles.segment,
+              active && { backgroundColor: colors.primary },
+            ]}
           >
-            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
-              {option.label}
+            <Text
+              style={[
+                segmentedStyles.label,
+                { color: active ? colors.onPrimary : colors.sub },
+              ]}
+              numberOfLines={1}
+            >
+              {opt.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
   );
 }
 
-export function SearchField({
-  value,
-  onChangeText,
-  placeholder,
-}: {
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-}) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
-  const [focused, setFocused] = React.useState(false);
-  return (
-    <View style={[styles.search, focused && styles.searchFocused]}>
-      <Ionicons name="search" size={18} color={focused ? colors.primary : colors.faint} />
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.faint}
-        style={styles.searchInput}
-        accessibilityLabel={placeholder}
-        returnKeyType="search"
-        clearButtonMode="while-editing"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-      />
-    </View>
-  );
-}
+const segmentedStyles = StyleSheet.create({
+  track: {
+    flexDirection: 'row',
+    borderRadius: radii.pill,
+    borderWidth: BORDER_W,
+    padding: 4,
+    gap: 4,
+  },
+  segment: {
+    flex: 1,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 13.5,
+  },
+});
 
-export function PrimaryButton({
+/**
+ * Soft status pill — category tags, counts, live flags. The `tilt` prop is
+ * retained for call-site compatibility but Lumen pills sit flat.
+ */
+export function Sticker({
   label,
-  onPress,
-  disabled,
-  loading,
-  kind = 'solid',
+  tint,
+  textColor,
   icon,
-  tooltip,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  kind?: 'solid' | 'ghost' | 'soft' | 'danger';
-  icon?: keyof typeof Ionicons.glyphMap;
-  tooltip?: string;
-}) {
-  const styles = useUiStyles();
-  const { colors, gradients } = useTheme();
-
-  const labelColor =
-    kind === 'solid'
-      ? colors.onPrimary
-      : kind === 'soft'
-        ? colors.primarySoftText
-        : kind === 'danger'
-          ? colors.dangerText
-          : colors.ink;
-
-  const inner = (
-    <View style={styles.buttonInner}>
-      {loading ? (
-        <ActivityIndicator size="small" color={labelColor} />
-      ) : (
-        <>
-          {icon ? <Ionicons name={icon} size={17} color={labelColor} /> : null}
-          <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
-        </>
-      )}
-    </View>
-  );
-
-  const button = (
-    <Tap
-      onPress={onPress}
-      disabled={disabled || loading}
-      haptic
-      scaleTo={0.96}
-      accessibilityLabel={label}
-      accessibilityHint={tooltip}
-      accessibilityState={{ disabled: disabled || loading }}
-      style={(disabled || loading ? [styles.buttonDim] : []) as ViewStyle[]}
-    >
-      {kind === 'solid' ? (
-        <LinearGradient
-          colors={gradients.brand}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.button, styles.buttonSolid]}
-        >
-          {inner}
-        </LinearGradient>
-      ) : (
-        <View
-          style={[
-            styles.button,
-            kind === 'ghost' && styles.buttonGhost,
-            kind === 'soft' && styles.buttonSoft,
-            kind === 'danger' && styles.buttonDanger,
-          ]}
-        >
-          {inner}
-        </View>
-      )}
-    </Tap>
-  );
-
-  return tooltip ? <Tooltip label={tooltip}>{button}</Tooltip> : button;
-}
-
-export function IconButton({
-  icon,
-  onPress,
-  tooltip,
-  size = 44,
-  iconSize = 22,
+  small,
   style,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  tooltip: string;
-  size?: number;
-  iconSize?: number;
-  style?: ViewStyle;
+  label: string;
+  tint?: string;
+  textColor?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** @deprecated Lumen pills sit flat; kept for call-site compatibility. */
+  tilt?: number;
+  small?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
   const { colors } = useTheme();
+  const fg = textColor ?? colors.ink;
   return (
-    <Tooltip label={tooltip}>
-      <TouchableOpacity
-        style={[styles.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}
-        activeOpacity={0.8}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onPress();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={tooltip}
-        accessibilityHint={tooltip}
+    <View
+      style={[
+        stickerStyles.base,
+        {
+          backgroundColor: tint ?? colors.warningSoft,
+          paddingHorizontal: small ? 9 : 11,
+          paddingVertical: small ? 4 : 6,
+        },
+        style,
+      ]}
+    >
+      {icon ? <Ionicons name={icon} size={small ? 11 : 13} color={fg} /> : null}
+      <Text
+        style={[stickerStyles.label, { color: fg, fontSize: small ? 10.5 : 12 }]}
+        numberOfLines={1}
       >
-        <Ionicons name={icon} size={iconSize} color={colors.ink} />
-      </TouchableOpacity>
-    </Tooltip>
+        {label}
+      </Text>
+    </View>
   );
 }
 
-export function Tooltip({
+const stickerStyles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    letterSpacing: 0.2,
+    flexShrink: 1,
+  },
+});
+
+/** Quiet inline tag (no border drama). */
+export function Tag({ label, tint, style }: { label: string; tint?: string; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[tagStyles.base, { backgroundColor: tint ?? colors.surfaceAlt }, style]}>
+      <Text style={[tagStyles.label, { color: colors.ink }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const tagStyles = StyleSheet.create({
+  base: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radii.xs,
+    alignSelf: 'flex-start',
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 11.5,
+  },
+});
+
+/** Notification count dot. */
+export function CountBubble({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  if (count <= 0) return null;
+  return (
+    <View
+      style={[
+        bubbleStyles.base,
+        { backgroundColor: colors.primary, borderColor: colors.border },
+        style,
+      ]}
+    >
+      <Text style={[bubbleStyles.label, { color: colors.onPrimary }]}>
+        {count > 99 ? '99+' : String(count)}
+      </Text>
+    </View>
+  );
+}
+
+export function StatSlab({
   label,
-  children,
+  value,
+  icon,
+  tint,
+  style,
 }: {
   label: string;
-  children: React.ReactElement<Record<string, unknown>>;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
-  const [visible, setVisible] = React.useState(false);
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const show = React.useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    setVisible(true);
-    timer.current = setTimeout(() => setVisible(false), 1600);
-  }, []);
-
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
+  const { colors } = useTheme();
+  return (
+    <Slab
+      accessibilityRole="none"
+      color={tint}
+      style={[{ flex: 1 }, style]}
+      faceStyle={statSlabStyles.face}
+    >
+      <Ionicons name={icon} size={16} color={colors.ink} />
+      <Text style={[statSlabStyles.value, { color: colors.ink }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[statSlabStyles.label, { color: colors.sub }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Slab>
   );
+}
 
-  const childProps = children.props as {
-    onLongPress?: (...args: unknown[]) => void;
-    delayLongPress?: number;
-    onHoverIn?: (...args: unknown[]) => void;
-    onHoverOut?: (...args: unknown[]) => void;
-  };
+const statSlabStyles = StyleSheet.create({
+  face: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: 6,
+    gap: 3,
+  },
+  value: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 8.5,
+    letterSpacing: 1,
+  },
+});
 
-  const child = React.cloneElement(children, {
-    onLongPress: (...args: unknown[]) => {
-      show();
-      childProps.onLongPress?.(...args);
-    },
-    delayLongPress: childProps.delayLongPress ?? 300,
-    onHoverIn: (...args: unknown[]) => {
-      show();
-      childProps.onHoverIn?.(...args);
-    },
-    onHoverOut: (...args: unknown[]) => {
-      setVisible(false);
-      childProps.onHoverOut?.(...args);
-    },
-  });
+const bubbleStyles = StyleSheet.create({
+  base: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+  },
+});
+
+// ── Avatars ──────────────────────────────────────────────────────────────────
+
+export function Avatar({
+  name,
+  uri,
+  size = 44,
+  tilt = 0,
+  style,
+}: {
+  name?: string | null;
+  uri?: string | null;
+  size?: number;
+  tilt?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const resolved = resolveAvatarUrl(uri);
+  const seed = name?.trim() || '?';
+  const accent = accentForSeed(colors, seed);
+  const initials = seed
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
 
   return (
-    <View style={styles.tooltipAnchor}>
-      {child}
-      {visible ? (
-        <View style={styles.tooltipBubble} pointerEvents="none">
-          <Text style={styles.tooltipText}>{label}</Text>
+    <View
+      style={[
+        avatarStyles.base,
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.34,
+          backgroundColor: accent.soft,
+          borderColor: colors.border,
+        },
+        style,
+      ]}
+    >
+      {resolved ? (
+        <Animated.Image
+          source={{ uri: resolved }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          style={[
+            avatarStyles.initials,
+            { color: accent.tint, fontSize: Math.max(11, size * 0.34) },
+          ]}
+        >
+          {initials}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const avatarStyles = StyleSheet.create({
+  base: {
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  initials: {
+    fontFamily: fonts.bold,
+  },
+});
+
+/**
+ * Club identity tile. Falls back gracefully: photo → emoji → initials on the
+ * club's accent color, so a club without assets still looks intentional.
+ */
+export function ClubMark({
+  name,
+  emoji,
+  uri,
+  size = 44,
+  tilt = 0,
+  style,
+}: {
+  name?: string | null;
+  emoji?: string | null;
+  uri?: string | null;
+  size?: number;
+  tilt?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const resolved = resolveAvatarUrl(uri);
+  const seed = name?.trim() || '?';
+  const accent = accentForSeed(colors, seed);
+  const cleanEmoji = emoji?.trim();
+  const initials = seed
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
+
+  return (
+    <View
+      style={[
+        clubMarkStyles.base,
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.29,
+          backgroundColor: accent.soft,
+          borderColor: colors.border,
+          transform: tilt ? [{ rotate: `${tilt}deg` }] : undefined,
+        },
+        style,
+      ]}
+    >
+      {resolved ? (
+        <Animated.Image
+          source={{ uri: resolved }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      ) : cleanEmoji ? (
+        <Text style={{ fontSize: size * 0.44, lineHeight: size * 0.58 }}>{cleanEmoji}</Text>
+      ) : (
+        <Text
+          style={[
+            clubMarkStyles.initials,
+            { color: accent.tint, fontSize: Math.max(11, size * 0.3) },
+          ]}
+        >
+          {initials}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const clubMarkStyles = StyleSheet.create({
+  base: {
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  initials: {
+    fontFamily: fonts.bold,
+    letterSpacing: 0.5,
+  },
+});
+
+export function AvatarStack({
+  names,
+  size = 30,
+  max = 4,
+  style,
+}: {
+  names: { name?: string | null; uri?: string | null }[];
+  size?: number;
+  max?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const shown = names.slice(0, max);
+  const extra = names.length - shown.length;
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+      {shown.map((member, index) => (
+        <Avatar
+          key={`${member.name ?? 'member'}-${index}`}
+          name={member.name}
+          uri={member.uri}
+          size={size}
+          style={{ marginLeft: index === 0 ? 0 : -size * 0.3 }}
+        />
+      ))}
+      {extra > 0 ? (
+        <View
+          style={[
+            avatarStyles.base,
+            {
+              width: size,
+              height: size,
+              borderRadius: size * 0.32,
+              marginLeft: -size * 0.3,
+              backgroundColor: colors.surfaceAlt,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[avatarStyles.initials, { color: colors.sub, fontSize: size * 0.34 }]}>
+            +{extra}
+          </Text>
         </View>
       ) : null}
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeletons (shimmer pulse)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Layout primitives ────────────────────────────────────────────────────────
 
-export function SkeletonBlock({
-  width = '100%',
-  height,
-  radius = radii.md,
-  color,
-  style,
-}: {
-  width?: ViewStyle['width'];
-  height: number;
-  radius?: number;
-  color?: string;
-  style?: ViewStyle;
-}) {
-  const { colors } = useTheme();
-  const opacity = useSharedValue(0.6);
-  React.useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-      true,
-    );
-  }, [opacity]);
-  const pulse = useAnimatedStyle(() => ({ opacity: opacity.value }));
+export function AppBackdrop({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { colors, isDark } = useTheme();
   return (
-    <Animated.View
+    <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>
+      <LinearGradient
+        colors={[...(isDark ? darkBackdrop : lightBackdrop)] as [string, string, string]}
+        start={backdropStart}
+        end={backdropEnd}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {children}
+    </View>
+  );
+}
+
+/** Hairline rule. */
+export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View
       style={[
         {
-          width,
-          height,
-          borderRadius: radius,
-          backgroundColor: color ?? colors.skeleton,
-          overflow: 'hidden',
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: colors.border,
         },
-        pulse,
         style,
       ]}
     />
   );
 }
 
-export function SkeletonLine({ width = '100%' }: { width?: ViewStyle['width'] }) {
-  return <SkeletonBlock width={width} height={12} radius={6} />;
-}
-
-export function SkeletonCard({ compact = false }: { compact?: boolean }) {
-  const styles = useUiStyles();
-  return (
-    <Panel style={styles.skeletonCard}>
-      <SkeletonBlock width={compact ? 72 : 120} height={14} radius={7} />
-      <SkeletonBlock width="82%" height={compact ? 20 : 28} radius={8} />
-      <SkeletonLine width="64%" />
-      <View style={styles.skeletonRow}>
-        <SkeletonBlock width={34} height={34} radius={17} />
-        <View style={styles.skeletonTextStack}>
-          <SkeletonLine width="78%" />
-          <SkeletonLine width="48%" />
-        </View>
-      </View>
-    </Panel>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Content
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function EmptyState({
-  icon,
+/** Eyebrow kicker + display title, optional right action. */
+export function SectionHeader({
+  kicker,
   title,
-  body,
   actionLabel,
-  onActionPress,
+  onAction,
+  style,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  kicker?: string;
   title: string;
-  body: string;
   actionLabel?: string;
-  onActionPress?: () => void;
+  onAction?: () => void;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useUiStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   return (
-    <Panel style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={22} color={colors.primary} />
+    <View style={[sectionStyles.row, style]}>
+      <View style={{ flex: 1 }}>
+        {kicker ? <Text style={[typography.kicker, sectionStyles.kicker]}>{kicker}</Text> : null}
+        <Text style={typography.title}>{title}</Text>
       </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
-      {actionLabel && onActionPress ? (
-        <View style={styles.emptyAction}>
-          <PrimaryButton label={actionLabel} onPress={onActionPress} kind="soft" />
-        </View>
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+        >
+          <Text style={[sectionStyles.action, { color: colors.primary }]}>{actionLabel} →</Text>
+        </Pressable>
       ) : null}
-    </Panel>
+    </View>
   );
 }
 
-export function UserAvatar({
-  name,
-  avatarUrl,
-  size = 42,
-  ring = false,
+const sectionStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.md,
+  },
+  kicker: {
+    marginBottom: 3,
+  },
+  action: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    paddingBottom: 2,
+  },
+});
+
+/** Stack-screen header: back slab + kicker/title. */
+export function ScreenHeader({
+  title,
+  kicker,
+  onBack,
+  right,
+  style,
 }: {
-  name: string;
-  avatarUrl?: string | null;
-  size?: number;
-  ring?: boolean;
+  title: string;
+  kicker?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const { colors, gradients } = useTheme();
-  const uri = resolveAvatarUrl(avatarUrl);
-
-  const core = uri ? (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        overflow: 'hidden',
-        backgroundColor: colors.surfaceAlt,
-      }}
-    >
-      <Image source={{ uri }} style={{ width: size, height: size }} />
+  const { typography } = useTheme();
+  return (
+    <View style={[headerStyles.row, style]}>
+      {onBack ? (
+        <IconButton icon="arrow-back" onPress={onBack} accessibilityLabel="Go back" />
+      ) : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
+        <Text style={typography.display} numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
+      {right}
     </View>
-  ) : (
-    <LinearGradient
-      colors={gradients.brand}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text
-        style={{
-          color: '#FFFFFF',
-          fontFamily: fonts.bold,
-          fontSize: size * 0.34,
-        }}
-      >
-        {getInitials(name)}
-      </Text>
-    </LinearGradient>
   );
+}
 
-  if (!ring) return core;
+const headerStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+});
+
+// ── Inputs ───────────────────────────────────────────────────────────────────
+
+export function Field({
+  label,
+  error,
+  hint,
+  style,
+  inputStyle,
+  multiline,
+  secureToggle,
+  ...inputProps
+}: TextInputProps & {
+  label?: string;
+  error?: string | null;
+  hint?: string;
+  style?: StyleProp<ViewStyle>;
+  inputStyle?: StyleProp<TextStyle>;
+  secureToggle?: boolean;
+}) {
+  const { colors, typography } = useTheme();
+  const [focused, setFocused] = React.useState(false);
+  const [secureVisible, setSecureVisible] = React.useState(false);
 
   return (
-    <LinearGradient
-      colors={gradients.brand}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{
-        width: size + 6,
-        height: size + 6,
-        borderRadius: (size + 6) / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
+    <View style={style}>
+      {label ? <Text style={[typography.kicker, { marginBottom: 6 }]}>{label}</Text> : null}
       <View
-        style={{
-          width: size + 2,
-          height: size + 2,
-          borderRadius: (size + 2) / 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.bg,
-        }}
+        style={[
+          fieldStyles.well,
+          {
+            backgroundColor: colors.surface,
+            borderColor: error ? colors.danger : focused ? colors.primary : colors.border,
+          },
+          multiline && { minHeight: 96, paddingVertical: 10 },
+        ]}
       >
-        {core}
+        <TextInput
+          {...inputProps}
+          multiline={multiline}
+          secureTextEntry={
+            secureToggle ? !secureVisible : inputProps.secureTextEntry
+          }
+          onFocus={(event) => {
+            setFocused(true);
+            inputProps.onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            inputProps.onBlur?.(event);
+          }}
+          placeholderTextColor={colors.faint}
+          style={[
+            fieldStyles.input,
+            { color: colors.ink },
+            multiline && { textAlignVertical: 'top', flex: 1 },
+            inputStyle,
+          ]}
+        />
+        {secureToggle ? (
+          <Pressable
+            onPress={() => setSecureVisible((visible) => !visible)}
+            accessibilityRole="button"
+            accessibilityLabel={secureVisible ? 'Hide password' : 'Show password'}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={secureVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={colors.sub}
+            />
+          </Pressable>
+        ) : null}
       </View>
-    </LinearGradient>
+      {error ? (
+        <Text style={[fieldStyles.meta, { color: colors.danger }]}>{error}</Text>
+      ) : hint ? (
+        <Text style={[fieldStyles.meta, { color: colors.faint }]}>{hint}</Text>
+      ) : null}
+    </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
-
-const baseStyles = StyleSheet.create({
-  flex: { flex: 1 },
-  screen: {
+const fieldStyles = StyleSheet.create({
+  well: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: 14,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  input: {
     flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    paddingVertical: 12,
+  },
+  meta: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    marginTop: 6,
+  },
+});
+
+export function SearchBar({
+  value,
+  onChangeText,
+  placeholder = 'Search…',
+  onClear,
+  autoFocus,
+  onSubmitEditing,
+  style,
+  testID,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  onClear?: () => void;
+  autoFocus?: boolean;
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  const [focused, setFocused] = React.useState(false);
+  const inputRef = React.useRef<TextInput>(null);
+  return (
+    <View
+      style={[
+        fieldStyles.well,
+        {
+          backgroundColor: colors.surface,
+          borderColor: focused ? colors.primary : colors.border,
+          gap: spacing.sm,
+        },
+        style,
+      ]}
+    >
+      <Ionicons name="search" size={18} color={colors.sub} />
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.faint}
+        autoFocus={autoFocus}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        onSubmitEditing={(event) => {
+          onSubmitEditing?.(event);
+          inputRef.current?.blur();
+        }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={[fieldStyles.input, { color: colors.ink }]}
+        accessibilityLabel={placeholder}
+        testID={testID}
+      />
+      {value.length > 0 ? (
+        <Pressable
+          onPress={() => {
+            onChangeText('');
+            onClear?.();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          hitSlop={8}
+        >
+          <Ionicons name="close-circle" size={18} color={colors.faint} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function DateTimeField({
+  value,
+  onChange,
+  minimumDate,
+  maximumDate,
+}: {
+  value: Date;
+  onChange: (value: Date) => void;
+  minimumDate?: Date;
+  maximumDate?: Date;
+}) {
+  const { colors, typography } = useTheme();
+  const [androidMode, setAndroidMode] = React.useState<'date' | 'time' | null>(null);
+
+  if (Platform.OS === 'ios') {
+    return (
+      <DateTimePicker
+        value={value}
+        mode="datetime"
+        minimumDate={minimumDate}
+        maximumDate={maximumDate}
+        onChange={(_, nextValue) => {
+          if (nextValue) onChange(nextValue);
+        }}
+        display="default"
+      />
+    );
+  }
+
+  const updatePart = (mode: 'date' | 'time', nextValue?: Date) => {
+    setAndroidMode(null);
+    if (!nextValue) return;
+    const next = new Date(value);
+    if (mode === 'date') {
+      next.setFullYear(nextValue.getFullYear(), nextValue.getMonth(), nextValue.getDate());
+    } else {
+      next.setHours(nextValue.getHours(), nextValue.getMinutes(), 0, 0);
+    }
+    onChange(next);
+  };
+
+  return (
+    <View style={dateTimeStyles.androidRow}>
+      <Pressable
+        onPress={() => setAndroidMode('date')}
+        accessibilityRole="button"
+        accessibilityLabel="Choose date"
+        style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
+      >
+        <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+        <Text style={typography.caption}>
+          {value.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setAndroidMode('time')}
+        accessibilityRole="button"
+        accessibilityLabel="Choose time"
+        style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
+      >
+        <Ionicons name="time-outline" size={17} color={colors.primary} />
+        <Text style={typography.caption}>
+          {value.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+        </Text>
+      </Pressable>
+      {androidMode ? (
+        <DateTimePicker
+          value={value}
+          mode={androidMode}
+          minimumDate={androidMode === 'date' ? minimumDate : undefined}
+          maximumDate={androidMode === 'date' ? maximumDate : undefined}
+          onChange={(_, nextValue) => updatePart(androidMode, nextValue)}
+          display="default"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const dateTimeStyles = StyleSheet.create({
+  androidRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  androidButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
   },
 });
 
-const useUiStyles = createThemedStyles((t: Theme) => ({
-  iconButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.glass,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  tooltipAnchor: {
-    position: 'relative' as const,
-  },
-  tooltipBubble: {
-    position: 'absolute' as const,
-    right: 0,
-    bottom: '100%' as const,
-    marginBottom: 8,
-    maxWidth: 220,
+// ── Feedback ─────────────────────────────────────────────────────────────────
+
+export function Banner({
+  message,
+  kind = 'error',
+  style,
+}: {
+  message: string;
+  kind?: 'error' | 'info' | 'success';
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const tint =
+    kind === 'error' ? colors.dangerSoft : kind === 'success' ? colors.successSoft : colors.blueSoft;
+  const fg = kind === 'error' ? colors.danger : kind === 'success' ? colors.success : colors.blue;
+  const icon =
+    kind === 'error' ? 'alert-circle' : kind === 'success' ? 'checkmark-circle' : 'information-circle';
+  return (
+    <View
+      style={[
+        bannerStyles.base,
+        { backgroundColor: tint, borderColor: colors.border },
+        style,
+      ]}
+      accessibilityRole="alert"
+    >
+      <Ionicons name={icon} size={18} color={fg} />
+      <Text style={[bannerStyles.text, { color: colors.ink }]}>{message}</Text>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: BORDER_W,
     borderRadius: radii.sm,
-    backgroundColor: t.isDark ? t.colors.surfaceAlt : t.colors.ink,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    zIndex: 50,
-  },
-  tooltipText: {
-    color: t.isDark ? t.colors.ink : '#FFFFFF',
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-  },
-  skeletonCard: {
-    gap: spacing.sm,
-  },
-  skeletonRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-  },
-  skeletonTextStack: {
-    flex: 1,
-    gap: 8,
-  },
-  heroWrap: {
-    borderRadius: radii.lg,
-    ...t.shadows.raised,
-  },
-  hero: {
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    gap: spacing.xs,
-    overflow: 'hidden' as const,
-  },
-  heroEmber: {
-    position: 'absolute' as const,
-    top: -70,
-    right: -50,
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    backgroundColor: 'rgba(242,62,22,0.32)',
-  },
-  heroEmberSmall: {
-    position: 'absolute' as const,
-    bottom: -60,
-    left: -30,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(111,85,242,0.22)',
-  },
-  heroEyebrow: {
-    ...t.typography.label,
-    color: 'rgba(255,255,255,0.62)',
-  },
-  heroTitle: {
-    ...t.typography.h1,
-    color: t.colors.onHero,
-  },
-  heroSubtitle: {
-    ...t.typography.body,
-    color: t.colors.heroSub,
-  },
-  compactHeader: {
-    gap: spacing.xs,
-    paddingHorizontal: 2,
-  },
-  compactEyebrow: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  compactTitle: {
-    ...t.typography.h1,
-  },
-  compactSubtitle: {
-    ...t.typography.body,
-    maxWidth: '92%' as const,
-  },
-  screenHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    minHeight: 46,
-    marginBottom: spacing.md,
-  },
-  screenHeaderSide: {
-    width: 52,
-    alignItems: 'flex-start' as const,
-    justifyContent: 'center' as const,
-  },
-  screenHeaderRight: {
-    alignItems: 'flex-end' as const,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.glass,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  screenHeaderTitle: {
-    flex: 1,
-    textAlign: 'center' as const,
-    ...t.typography.title,
-  },
-  panel: {
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
     padding: spacing.md,
-    ...t.shadows.card,
   },
-  sectionRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    ...t.typography.h2,
-  },
-  sectionAction: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: t.colors.primary,
-  },
-  statTile: {
-    minWidth: 110,
-    gap: spacing.xs,
-  },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.primarySoft,
-  },
-  statValue: {
-    ...t.typography.h2,
-    fontSize: 22,
-  },
-  statLabel: {
-    ...t.typography.caption,
-  },
-  chip: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    marginRight: spacing.sm,
-    ...t.shadows.subtle,
-  },
-  chipActive: {
-    backgroundColor: t.colors.ink,
-    borderColor: t.colors.ink,
-  },
-  chipLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: t.colors.ink,
-  },
-  chipLabelActive: {
-    color: t.isDark ? '#0C0D11' : '#FFFFFF',
-  },
-  segmented: {
-    flexDirection: 'row' as const,
-    backgroundColor: t.colors.inputBg,
-    borderRadius: radii.pill,
-    padding: 4,
-    gap: 6,
-    position: 'relative' as const,
-  },
-  segmentThumb: {
-    position: 'absolute' as const,
-    top: 4,
-    left: 4,
-    bottom: 4,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    ...t.shadows.subtle,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: radii.pill,
-    alignItems: 'center' as const,
-  },
-  segmentLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: t.colors.faint,
-  },
-  segmentLabelActive: {
-    color: t.colors.ink,
-  },
-  search: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: t.colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    ...t.shadows.subtle,
-  },
-  searchFocused: {
-    borderColor: t.colors.primary,
-  },
-  searchInput: {
+  text: {
     flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 15,
-    color: t.colors.ink,
-    padding: 0,
+    fontSize: 13.5,
+    lineHeight: 19,
   },
-  button: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+});
+
+export function EmptyState({
+  icon = 'sparkles',
+  title,
+  body,
+  actionLabel,
+  onAction,
+  tint,
+  style,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  body?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  tint?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors, typography } = useTheme();
+  return (
+    <View style={[emptyStyles.wrap, style]}>
+      <View
+        style={[
+          emptyStyles.badge,
+          {
+            backgroundColor: tint ?? colors.primarySoft,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Ionicons name={icon} size={30} color={colors.ink} />
+      </View>
+      <Text style={[typography.title, emptyStyles.title]}>{title}</Text>
+      {body ? <Text style={[typography.caption, emptyStyles.body]}>{body}</Text> : null}
+      {actionLabel && onAction ? (
+        <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
+      ) : null}
+    </View>
+  );
+}
+
+const emptyStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xxl,
   },
-  buttonInner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
-    minHeight: 20,
+  badge: {
+    width: 74,
+    height: 74,
+    borderRadius: radii.lg,
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
-  buttonSolid: {
-    ...t.shadows.glow,
+  title: {
+    textAlign: 'center',
   },
-  buttonGhost: {
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.borderStrong,
-  },
-  buttonSoft: {
-    backgroundColor: t.colors.primarySoft,
-  },
-  buttonDanger: {
-    backgroundColor: t.colors.dangerBg,
-  },
-  buttonDim: {
-    opacity: 0.55,
-  },
-  buttonLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    letterSpacing: 0.1,
-  },
-  empty: {
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.primarySoft,
-  },
-  emptyTitle: {
-    ...t.typography.title,
-  },
-  emptyBody: {
-    ...t.typography.body,
-    textAlign: 'center' as const,
+  body: {
+    textAlign: 'center',
+    marginTop: 6,
     maxWidth: 280,
   },
-  emptyAction: {
-    marginTop: spacing.xs,
+});
+
+// ── Skeletons ────────────────────────────────────────────────────────────────
+
+function usePulse() {
+  const pulse = useSharedValue(0.45);
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 760, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [pulse]);
+  return useAnimatedStyle(() => ({ opacity: pulse.value }));
+}
+
+export function SkeletonBlock({
+  width = '100%',
+  height = 16,
+  radius = radii.xs,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const animated = usePulse();
+  return (
+    <Animated.View
+      style={[
+        { width, height, borderRadius: radius, backgroundColor: colors.surfaceAlt },
+        animated,
+        style,
+      ]}
+    />
+  );
+}
+
+export function SkeletonCard({ compact, style }: { compact?: boolean; style?: StyleProp<ViewStyle> }) {
+  return (
+    <Card padded style={style}>
+      <View style={{ gap: spacing.md }}>
+        <SkeletonBlock width="42%" height={12} />
+        <SkeletonBlock width="78%" height={compact ? 16 : 22} />
+        {!compact ? <SkeletonBlock width="60%" height={13} /> : null}
+      </View>
+    </Card>
+  );
+}
+
+// ── Sheet modal ──────────────────────────────────────────────────────────────
+
+export function Sheet({
+  visible,
+  onClose,
+  title,
+  kicker,
+  children,
+  scrollable,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title?: string;
+  kicker?: string;
+  children: React.ReactNode;
+  scrollable?: boolean;
+}) {
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[sheetStyles.scrim, { backgroundColor: colors.overlay }]}>
+          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+          <View
+            style={[
+              sheetStyles.sheet,
+              {
+                backgroundColor: colors.bg,
+                borderColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, spacing.xl),
+              },
+            ]}
+          >
+            <View style={[sheetStyles.grabber, { backgroundColor: colors.borderSoft }]} />
+            {(title || kicker) ? (
+              <View style={sheetStyles.header}>
+                <View style={{ flex: 1 }}>
+                  {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
+                  {title ? <Text style={typography.display}>{title}</Text> : null}
+                </View>
+                <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" size={38} />
+              </View>
+            ) : null}
+            {scrollable ? (
+              <Animated.ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 520 }}
+                contentContainerStyle={{ paddingBottom: spacing.md }}
+              >
+                {children}
+              </Animated.ScrollView>
+            ) : (
+              children
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  scrim: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-}));
+  sheet: {
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    borderWidth: BORDER_W + 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 52,
+    height: 5,
+    borderRadius: 3,
+    marginBottom: spacing.md,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+});
+
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
+/** Settings-style list row inside a Card: icon well, title, sub, chevron. */
+export function ListRow({
+  icon,
+  title,
+  sub,
+  onPress,
+  tint,
+  right,
+  destructive,
+  last,
+  testID,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  sub?: string;
+  onPress?: () => void;
+  tint?: string;
+  right?: React.ReactNode;
+  destructive?: boolean;
+  last?: boolean;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  const fg = destructive ? colors.danger : colors.ink;
+  return (
+    <Pressable
+      onPress={
+        onPress
+          ? () => {
+              tick();
+              onPress();
+            }
+          : undefined
+      }
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : 'none'}
+      accessibilityLabel={title}
+      testID={testID}
+      style={({ pressed }) => [
+        rowStyles.row,
+        !last && { borderBottomWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      {icon ? (
+        <View
+          style={[
+            rowStyles.iconWell,
+            {
+              backgroundColor: destructive ? colors.dangerSoft : (tint ?? colors.surfaceAlt),
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Ionicons name={icon} size={17} color={fg} />
+        </View>
+      ) : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[rowStyles.title, { color: fg }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {sub ? (
+          <Text style={[rowStyles.sub, { color: colors.sub }]} numberOfLines={2}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.faint} /> : null)}
+    </Pressable>
+  );
+}
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 13,
+  },
+  iconWell: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.xs + 2,
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+  },
+  sub: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    marginTop: 1,
+  },
+});
+
+// ── Misc ─────────────────────────────────────────────────────────────────────
+
+export function ProgressBar({
+  value,
+  tint,
+  height = 12,
+  style,
+}: {
+  /** 0..1 */
+  value: number;
+  tint?: string;
+  height?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const clamped = Math.max(0, Math.min(1, value));
+  return (
+    <View
+      style={[
+        {
+          height,
+          borderRadius: height / 2,
+          borderWidth: BORDER_W,
+          borderColor: colors.border,
+          backgroundColor: colors.sunken,
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+      accessibilityRole="progressbar"
+    >
+      <View
+        style={{
+          width: `${clamped * 100}%`,
+          flex: 1,
+          backgroundColor: tint ?? colors.primary,
+        }}
+      />
+    </View>
+  );
+}
+
+export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+  const { colors, typography } = useTheme();
+  return (
+    <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }}>
+      <ActivityIndicator color={colors.primary} />
+      <Text style={typography.caption}>{label}</Text>
+    </View>
+  );
+}

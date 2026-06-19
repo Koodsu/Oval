@@ -19,7 +19,7 @@ function prune(key: string): void {
   if (m.size === 0) store.delete(key);
 }
 
-export function setTyping(type: 'pod' | 'dm' | 'club' | 'club-officer', id: string, userId: string): void {
+export function setTyping(type: 'pod' | 'dm' | 'club' | 'club-officer' | 'club-channel', id: string, userId: string): void {
   const key = `${type}:${id}`;
   let m = store.get(key);
   if (!m) {
@@ -29,7 +29,7 @@ export function setTyping(type: 'pod' | 'dm' | 'club' | 'club-officer', id: stri
   m.set(userId, Date.now());
 }
 
-export function getTypingUserIds(type: 'pod' | 'dm' | 'club' | 'club-officer', id: string, excludeUserId?: string): string[] {
+export function getTypingUserIds(type: 'pod' | 'dm' | 'club' | 'club-officer' | 'club-channel', id: string, excludeUserId?: string): string[] {
   const key = `${type}:${id}`;
   prune(key);
   const m = store.get(key);

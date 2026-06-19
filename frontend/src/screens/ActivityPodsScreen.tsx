@@ -1,18 +1,58 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import type { MapPressEvent } from '../components/CampusMap';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
-import { createPod, getActivityLocations, getApiErrorMessage, getPodsByActivity, joinPod, joinWaitlist } from '../api';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  createPod,
+  getActivityLocations,
+  getApiErrorMessage,
+  getPodsByActivity,
+  joinPod,
+  joinWaitlist,
+} from '../api';
 import { RootStackParamList } from '../../App';
 import { Pod } from '../types';
-import { Chip, EmptyState, Hero, PrimaryButton, Screen, ScreenHeader, SectionHeader, SkeletonCard } from '../components/ui';
+import {
+  AppBackdrop,
+  Banner,
+  Button,
+  Card,
+  Chip,
+  DateTimeField,
+  EmptyState,
+  ScreenHeader,
+  SectionHeader,
+  SkeletonCard,
+  Slab,
+  Sticker,
+} from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
 import { formatDateTime } from '../utils/format';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'>;
 
@@ -21,7 +61,7 @@ function dedupeLocations(locations: string[]) {
   return locations.filter((location) => {
     const key = location
       .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '');
     if (seen.has(key)) return false;
@@ -32,7 +72,8 @@ function dedupeLocations(locations: string[]) {
 
 export default function ActivityPodsScreen({ route, navigation }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const { activity, startCreate } = route.params;
   const [pods, setPods] = useState<Pod[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -40,12 +81,15 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   const [location, setLocation] = useState('');
   const [meetupTime, setMeetupTime] = useState(() => new Date(Date.now() + 45 * 60 * 1000));
   const [maxMembers, setMaxMembers] = useState(4);
-  const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(
+    null,
+  );
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [composerExpanded, setComposerExpanded] = useState(!!startCreate);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const latestLocationRef = useRef(location);
 
   useEffect(() => {
@@ -56,8 +100,9 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     try {
       const response = await getPodsByActivity(activity.id);
       setPods(response);
-    } catch (error) {
-      Alert.alert('Could not load pods', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — return to this screen to retry.");
     } finally {
       setLoaded(true);
     }
@@ -66,7 +111,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   useEffect(() => {
@@ -85,7 +130,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null),
-    [pods]
+    [pods],
   );
 
   const handleJoin = async (pod: Pod) => {
@@ -110,14 +155,27 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const handleCreate = async () => {
     if (!location.trim()) {
-      Alert.alert('Add a meetup spot', 'Choose a suggested spot or drop a pin for a custom campus location.');
+      Alert.alert(
+        'Add a meetup spot',
+        'Choose a suggested spot or drop a pin for a custom campus location.',
+      );
       return;
     }
-    if (!selectedPin && locationSuggestions.length > 0 && !locationSuggestions.includes(location.trim())) {
-      Alert.alert('Drop a pin for custom spots', 'Custom meetup notes need a campus map pin. Choose a suggested spot, or tap the map to save coordinates.');
+    if (
+      !selectedPin &&
+      locationSuggestions.length > 0 &&
+      !locationSuggestions.includes(location.trim())
+    ) {
+      Alert.alert(
+        'Drop a pin for custom spots',
+        'Custom meetup notes need a campus map pin. Choose a suggested spot, or tap the map to save coordinates.',
+      );
       return;
     }
-    if (meetupTime.getTime() < Date.now() || meetupTime.getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000) {
+    if (
+      meetupTime.getTime() < Date.now() ||
+      meetupTime.getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000
+    ) {
       Alert.alert('Choose a valid time', 'Pods can be scheduled any time within the next week.');
       return;
     }
@@ -156,18 +214,26 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
           if (latestLocationRef.current === locationBeforeLookup) {
             latestLocationRef.current = resolved;
             setLocation(resolved);
-            setLocationMessage('Pin saved and location filled in. Edit it if you want a clearer meetup note.');
+            setLocationMessage(
+              'Pin saved and location filled in. Edit it if you want a clearer meetup note.',
+            );
           } else {
             setLocationMessage('Pin saved. Keeping the location you typed.');
           }
         } else {
-          setLocationMessage('Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.');
+          setLocationMessage(
+            'Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.',
+          );
         }
       } else {
-        setLocationMessage('Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.');
+        setLocationMessage(
+          'Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.',
+        );
       }
     } catch {
-      setLocationMessage('Pin saved, but we could not look up the address. Type the meetup spot and you can still create the pod.');
+      setLocationMessage(
+        'Pin saved, but we could not look up the address. Type the meetup spot and you can still create the pod.',
+      );
     } finally {
       setResolvingAddress(false);
     }
@@ -179,320 +245,396 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <ScreenHeader title="Pods" onBack={() => navigation.goBack()} />
-        <Hero eyebrow={activity.category} title={activity.title} subtitle={activity.description} />
+    <AppBackdrop>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+        <ScreenHeader title="Pods" kicker={activity.category} onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        <View style={styles.panel}>
-          <TouchableOpacity
+        <View style={styles.heroBlock}>
+          <Text style={styles.heroTitle}>{activity.title}</Text>
+          {activity.description ? (
+            <Text style={[typography.body, { color: colors.sub }]}>{activity.description}</Text>
+          ) : null}
+        </View>
+
+        {/* Composer */}
+        <Card padded={false}>
+          <Pressable
             style={styles.composerToggle}
             onPress={toggleComposer}
-            activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityLabel={composerExpanded ? 'Collapse create pod' : 'Expand create pod'}
           >
-            <Text style={styles.sectionTitleStatic}>Create pod</Text>
-            <Text style={styles.chevron}>{composerExpanded ? '-' : '+'}</Text>
-          </TouchableOpacity>
+            <Text style={typography.title}>Start a pod</Text>
+            <View
+              style={[
+                styles.toggleBadge,
+                { backgroundColor: colors.primary, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons
+                name={composerExpanded ? 'remove' : 'add'}
+                size={18}
+                color={colors.onPrimary}
+              />
+            </View>
+          </Pressable>
           {composerExpanded ? (
-          <View style={styles.composerWrap}>
-            <View style={styles.creatorCard}>
-              <View style={styles.creatorPanel}>
-              <Text style={styles.panelBody}>Choose a suggested campus spot, or tap the map to save coordinates for a custom meetup note.</Text>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>Location</Text>
-                <TextInput
-                  value={location}
-                  onChangeText={(value) => {
-                    latestLocationRef.current = value;
-                    setLocation(value);
-                    if (locationMessage) setLocationMessage(null);
-                  }}
-	                  placeholder="Choose below, or drop a map pin first..."
-                  placeholderTextColor={colors.faint}
-                  style={styles.locationInput}
-                  multiline
-                />
-                <Text style={styles.locationHint}>
+            <View style={[styles.composerBody, { borderTopColor: colors.borderSoft }]}>
+              <Text style={typography.caption}>
+                Choose a suggested campus spot, or tap the map to save coordinates for a custom
+                meetup note.
+              </Text>
+
+              <View style={{ gap: 6 }}>
+                <Text style={typography.kicker}>Location</Text>
+                <View
+                  style={[
+                    styles.locationWell,
+                    { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                  ]}
+                >
+                  <TextInput
+                    value={location}
+                    onChangeText={(value) => {
+                      latestLocationRef.current = value;
+                      setLocation(value);
+                      if (locationMessage) setLocationMessage(null);
+                    }}
+                    placeholder="Choose below, or drop a map pin first…"
+                    placeholderTextColor={colors.faint}
+                    style={[styles.locationInput, { color: colors.ink }]}
+                    multiline
+                  />
+                </View>
+                <Text style={typography.captionSmall}>
                   {resolvingAddress
-                    ? 'Finding an address for the pin...'
-	                    : locationMessage ?? (selectedPin ? 'Pin coordinates will be saved with this location.' : 'Custom spots require a map pin.')}
-	                </Text>
-	              </View>
-	              {locationSuggestions.length ? (
-	                <View style={styles.locationSuggestionBlock}>
-	                  <Text style={styles.inputLabel}>Suggested spots</Text>
-	                  <View style={styles.locationChips}>
-	                    {locationSuggestions.slice(0, 8).map((suggestion) => (
-	                      <Chip
-	                        key={suggestion}
-	                        label={suggestion}
-	                        active={location.trim() === suggestion && !selectedPin}
-	                        onPress={() => {
-	                          latestLocationRef.current = suggestion;
-	                          setLocation(suggestion);
-	                          setSelectedPin(null);
-	                          setLocationMessage('Using a suggested campus spot.');
-	                        }}
-	                      />
-	                    ))}
-	                  </View>
-	                </View>
-	              ) : null}
-              <View style={styles.dateWrap}>
-                <Text style={styles.body}>Meetup time</Text>
-                <DateTimePicker
-                  value={meetupTime}
-                  mode="datetime"
-                  minimumDate={new Date()}
-                  maximumDate={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
-                  onChange={(_, value) => {
-                    if (value) setMeetupTime(value);
-                  }}
-                  display="default"
-                />
+                    ? 'Finding an address for the pin…'
+                    : (locationMessage ??
+                      (selectedPin
+                        ? 'Pin coordinates will be saved with this location.'
+                        : 'Custom spots require a map pin.'))}
+                </Text>
               </View>
+
+              {locationSuggestions.length ? (
+                <View style={{ gap: spacing.sm }}>
+                  <Text style={typography.kicker}>Suggested spots</Text>
+                  <View style={styles.chipWrap}>
+                    {locationSuggestions.slice(0, 8).map((suggestion) => (
+                      <Chip
+                        key={suggestion}
+                        label={suggestion}
+                        selected={location.trim() === suggestion && !selectedPin}
+                        tint={colors.tealSoft}
+                        onPress={() => {
+                          latestLocationRef.current = suggestion;
+                          setLocation(suggestion);
+                          setSelectedPin(null);
+                          setLocationMessage('Using a suggested campus spot.');
+                        }}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={{ gap: 6 }}>
+                <Text style={typography.kicker}>Meetup time</Text>
+                <View
+                  style={[
+                    styles.dateWell,
+                    { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                  ]}
+                >
+                  <DateTimeField
+                    value={meetupTime}
+                    minimumDate={new Date()}
+                    maximumDate={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
+                    onChange={setMeetupTime}
+                  />
+                </View>
+              </View>
+
               <View style={styles.memberRow}>
-                <View style={styles.memberCopy}>
-                  <Text style={styles.panelTitle}>Max members</Text>
-                  <Text style={styles.body}>Anywhere from 2 to 10 people.</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={typography.subheading}>Max members</Text>
+                  <Text style={typography.captionSmall}>2 to 10 people.</Text>
                 </View>
                 <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
+                  <Pressable
+                    style={[
+                      styles.stepperButton,
+                      {
+                        backgroundColor: maxMembers === 2 ? colors.surfaceAlt : colors.ink,
+                        borderColor: colors.border,
+                      },
+                    ]}
                     onPress={() => setMaxMembers((current) => Math.max(2, current - 1))}
                     disabled={maxMembers === 2}
                     accessibilityRole="button"
                     accessibilityLabel="Decrease maximum members"
                     accessibilityState={{ disabled: maxMembers === 2 }}
                   >
-                    <Text style={styles.stepperText}>-</Text>
-                  </TouchableOpacity>
+                    <Ionicons
+                      name="remove"
+                      size={18}
+                      color={maxMembers === 2 ? colors.faint : colors.bg}
+                    />
+                  </Pressable>
                   <Text style={styles.stepperValue}>{maxMembers}</Text>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
+                  <Pressable
+                    style={[
+                      styles.stepperButton,
+                      {
+                        backgroundColor: maxMembers === 10 ? colors.surfaceAlt : colors.ink,
+                        borderColor: colors.border,
+                      },
+                    ]}
                     onPress={() => setMaxMembers((current) => Math.min(10, current + 1))}
                     disabled={maxMembers === 10}
                     accessibilityRole="button"
                     accessibilityLabel="Increase maximum members"
                     accessibilityState={{ disabled: maxMembers === 10 }}
                   >
-                    <Text style={styles.stepperText}>+</Text>
-                  </TouchableOpacity>
+                    <Ionicons
+                      name="add"
+                      size={18}
+                      color={maxMembers === 10 ? colors.faint : colors.bg}
+                    />
+                  </Pressable>
                 </View>
               </View>
-              <PrimaryButton label="Start pod" onPress={handleCreate} loading={creating} />
-              <MapView
-                provider={PROVIDER_DEFAULT}
-                style={styles.map}
-                initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
-                onPress={(event) => {
-                  void handleMapPress(event);
-                }}
-              >
-                <Polygon coordinates={OSU_CAMPUS_POLYGON} fillColor="rgba(239,62,27,0.06)" strokeColor="rgba(239,62,27,0.25)" />
-                {mappablePods.map((pod) => (
-                  <Marker
-                    key={pod.id}
-                    coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
-                    title={activity.title}
-                    description={pod.location}
-                  />
-                ))}
-                {selectedPin ? (
-                  <Marker
-                    coordinate={selectedPin}
-                    title="New pod"
-                    description={location.trim() || 'Pinned meetup spot'}
-                    pinColor={colors.primary}
-                  />
-                ) : null}
-              </MapView>
-            </View>
-            </View>
-          </View>
-          ) : null}
-        </View>
 
+              <Button label="Start pod" onPress={handleCreate} loading={creating} size="lg" icon="flash" />
+
+              <View style={[styles.mapWrap, { borderColor: colors.border }]}>
+                <MapView
+                  provider={PROVIDER_DEFAULT}
+                  style={styles.map}
+                  initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+                  onPress={(event) => {
+                    void handleMapPress(event);
+                  }}
+                >
+                  <Polygon
+                    coordinates={OSU_CAMPUS_POLYGON}
+                    fillColor="rgba(200,16,46,0.06)"
+                    strokeColor="rgba(200,16,46,0.3)"
+                  />
+                  {mappablePods.map((pod) => (
+                    <Marker
+                      key={pod.id}
+                      coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
+                      title={activity.title}
+                      description={pod.location}
+                    />
+                  ))}
+                  {selectedPin ? (
+                    <Marker
+                      coordinate={selectedPin}
+                      title="New pod"
+                      description={location.trim() || 'Pinned meetup spot'}
+                      pinColor={colors.primary}
+                    />
+                  ) : null}
+                </MapView>
+              </View>
+            </View>
+          ) : null}
+        </Card>
+
+        {/* Available pods */}
         <View style={styles.section}>
-          <SectionHeader title="Available pods" />
+          <SectionHeader kicker="Join one" title="Available pods" />
           {!loaded ? (
             <>
               <SkeletonCard compact />
               <SkeletonCard compact />
             </>
-          ) : pods.length ? pods.map((pod) => {
-            const isOpen = pod.status === 'FORMING';
-            const isFull = pod.members.length >= pod.maxMembers;
-            return (
-              <TouchableOpacity
-                key={pod.id}
-                style={styles.row}
-                onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                accessibilityRole="button"
-                accessibilityLabel={`Open pod at ${pod.location}`}
-              >
-                <View style={styles.rowText}>
-                  <Text style={styles.title}>{formatDateTime(pod.meetupTime)}</Text>
-                  <Text style={styles.body}>{pod.location}</Text>
-                  <Text style={styles.body}>
-                    {pod.members.length}/{pod.maxMembers} joined • {isOpen ? 'open' : pod.status.toLowerCase()}
+          ) : pods.length ? (
+            pods.map((pod) => {
+              const isOpen = pod.status === 'FORMING';
+              const isFull = pod.members.length >= pod.maxMembers;
+              return (
+                <Slab
+                  key={pod.id}
+                  onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                  faceStyle={styles.podFace}
+                  accessibilityLabel={`Open pod at ${pod.location}`}
+                >
+                  <View style={styles.podTop}>
+                    <Text style={typography.heading} numberOfLines={1}>
+                      {formatDateTime(pod.meetupTime)}
+                    </Text>
+                    {!isOpen ? (
+                      <Sticker
+                        label={pod.status === 'COMPLETED' ? 'Done' : pod.status.toLowerCase()}
+                        tint={colors.blueSoft}
+                        small
+                        tilt={2}
+                      />
+                    ) : isFull ? (
+                      <Sticker label="Full" tint={colors.warningSoft} small tilt={2} />
+                    ) : (
+                      <Sticker
+                        label="Open"
+                        tint={colors.successSoft}
+                        small
+                        tilt={-2}
+                      />
+                    )}
+                  </View>
+                  <Text style={typography.caption} numberOfLines={1}>
+                    {pod.location}
                   </Text>
-                </View>
-                <View style={styles.rowAction}>
-                  <PrimaryButton
-                    label={isOpen ? (isFull ? 'Waitlist' : 'Join') : 'View details'}
-                    onPress={() => isOpen ? void handleJoin(pod) : navigation.navigate('PodDetail', { podId: pod.id })}
+                  <Text style={typography.captionSmall}>
+                    {pod.members.length}/{pod.maxMembers} joined
+                  </Text>
+                  <Button
+                    label={isOpen ? (isFull ? 'Join waitlist' : 'Join pod') : 'View details'}
+                    onPress={() =>
+                      isOpen ? void handleJoin(pod) : navigation.navigate('PodDetail', { podId: pod.id })
+                    }
                     loading={busyId === pod.id}
-                    kind={isOpen ? 'solid' : 'ghost'}
+                    variant={isOpen ? 'primary' : 'secondary'}
+                    size="sm"
+                    style={{ alignSelf: 'flex-start', marginTop: 4 }}
                   />
-                </View>
-              </TouchableOpacity>
-            );
-          }) : <EmptyState icon="flash-outline" title="No pods yet" body="Start the first one and set the tone for this activity." />}
+                </Slab>
+              );
+            })
+          ) : (
+            <EmptyState
+              icon="flash"
+              title="No pods yet"
+              body="Start the first one and set the tone for this activity."
+            />
+          )}
         </View>
-      </ScrollView>
-    </Screen>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     gap: spacing.lg,
   },
-  panel: {
-    gap: spacing.md,
-  },
-  panelTitle: {
-    ...t.typography.title,
-  },
-  panelBody: {
-    ...t.typography.body,
-  },
-  map: {
-    height: 240,
-    borderRadius: radii.lg,
-  },
-  creatorPanel: {
+  heroBlock: {
     gap: spacing.sm,
   },
-  creatorCard: {
-    backgroundColor: t.colors.glass,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
+  heroTitle: {
+    fontFamily: fonts.display,
+    fontSize: 25,
+    lineHeight: 31,
+    letterSpacing: -0.6,
+    color: t.colors.ink,
   },
   composerToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  chevron: {
-    ...t.typography.title,
-    color: t.colors.primary,
+  toggleBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  sectionTitleStatic: {
-    ...t.typography.h2,
-    fontSize: 20,
-    color: t.colors.ink,
+  composerBody: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    padding: spacing.lg,
+    gap: spacing.lg,
   },
-  composerWrap: {},
-  section: {
-    gap: spacing.sm,
-  },
-  row: {
-    backgroundColor: t.colors.glass,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  rowText: {
-    gap: 4,
-  },
-  rowAction: {
-    alignSelf: 'flex-start',
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-  },
-  inputWrap: {
-    borderRadius: radii.md,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  inputLabel: {
-    ...t.typography.label,
+  locationWell: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   locationInput: {
-    ...t.typography.body,
-    color: t.colors.ink,
-    minHeight: 46,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    minHeight: 44,
     padding: 0,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
   },
-	  locationHint: {
-	    ...t.typography.body,
-	    fontSize: 13,
-	    color: t.colors.sub,
-	  },
-	  locationSuggestionBlock: {
-	    gap: spacing.xs,
-	  },
-	  locationChips: {
-	    flexDirection: 'row',
-	    flexWrap: 'wrap',
-	    rowGap: spacing.sm,
-	  },
-	  dateWrap: {
-    borderRadius: radii.md,
-    backgroundColor: t.colors.glass,
+  chipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
+  },
+  dateWell: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     padding: spacing.sm,
+    alignItems: 'flex-start' as const,
   },
   memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.md,
   },
-  memberCopy: {
-    flex: 1,
-  },
   stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
   },
   stepperButton: {
     width: 38,
     height: 38,
-    borderRadius: 19,
-    backgroundColor: t.colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    lineHeight: 22,
+    borderRadius: radii.xs,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   stepperValue: {
-    ...t.typography.title,
-    minWidth: 24,
-    textAlign: 'center',
+    fontFamily: fonts.displayMedium,
+    fontSize: 19,
+    minWidth: 26,
+    textAlign: 'center' as const,
+    color: t.colors.ink,
+  },
+  mapWrap: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    overflow: 'hidden' as const,
+  },
+  map: {
+    height: 240,
+  },
+  section: {
+    gap: spacing.md,
+  },
+  podFace: {
+    padding: spacing.lg,
+    gap: 5,
+  },
+  podTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
   },
 }));

@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
-import { hasBlockingRelationship } from '../lib/blocks';
+import { hasBlockingRelationshipWithAny } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+import { broadcast, podTopic, REALTIME_EVENTS } from '../lib/realtime';
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
 
@@ -25,10 +26,41 @@ function formatPodMessage<T extends {
   };
 }
 
+const MESSAGE_INCLUDE = {
+  user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
+  reactions: { select: { emoji: true, userId: true } },
+  replyTo: {
+    select: {
+      id: true,
+      content: true,
+      userId: true,
+      user: { select: { id: true, name: true, firstName: true, lastName: true } },
+    },
+  },
+} as const;
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function parsePageSize(raw: unknown): number {
+  const parsed = typeof raw === 'string' ? parseInt(raw, 10) : NaN;
+  if (isNaN(parsed) || parsed <= 0) return DEFAULT_PAGE_SIZE;
+  return Math.min(parsed, MAX_PAGE_SIZE);
+}
+
 // GET /pods/:id/messages
+// Query params:
+//   limit  — page size (default 50, max 200)
+//   after  — message id; return only messages newer than this (cheap polling)
+//   before — message id; return the page of messages older than this (history)
+// Without cursors, returns the most recent `limit` messages.
+// Always ascending by createdAt. `hasMore` indicates older history exists.
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const podId = req.params.id;
   const userId = req.user!.userId;
+  const limit = parsePageSize(req.query.limit);
+  const after = typeof req.query.after === 'string' ? req.query.after : null;
+  const before = typeof req.query.before === 'string' ? req.query.before : null;
 
   try {
     const pod = await prisma.pod.findUnique({
@@ -46,33 +78,57 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    for (const m of pod.members) {
-      if (await hasBlockingRelationship(userId, m.userId)) {
-        res.status(403).json({ error: "You can't view messages in this pod." });
-        return;
-      }
+    if (await hasBlockingRelationshipWithAny(userId, pod.members.map((m) => m.userId))) {
+      res.status(403).json({ error: "You can't view messages in this pod." });
+      return;
     }
 
-    const messages = await prisma.message.findMany({
-      where: { podId },
-      include: {
-        user: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
-        reactions: { select: { emoji: true, userId: true } },
-        replyTo: {
-          select: {
-            id: true,
-            content: true,
-            userId: true,
-            user: { select: { id: true, name: true, firstName: true, lastName: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Deleted messages can invalidate a cursor — resolve it first and fall
+    // back to the latest page when it no longer exists.
+    const cursorId = after ?? before;
+    const cursorExists = cursorId
+      ? (await prisma.message.findUnique({ where: { id: cursorId, podId }, select: { id: true } })) != null
+      : false;
+
+    let messages;
+    let hasMore = false;
+    if (after && cursorExists) {
+      // Poll path: only messages newer than the cursor.
+      messages = await prisma.message.findMany({
+        where: { podId },
+        include: MESSAGE_INCLUDE,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        cursor: { id: after },
+        skip: 1,
+        take: MAX_PAGE_SIZE,
+      });
+    } else if (before && cursorExists) {
+      // History path: page of older messages ending just before the cursor.
+      const older = await prisma.message.findMany({
+        where: { podId },
+        include: MESSAGE_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        cursor: { id: before },
+        skip: 1,
+        take: limit + 1,
+      });
+      hasMore = older.length > limit;
+      messages = older.slice(0, limit).reverse();
+    } else {
+      // Initial load: latest page.
+      const latest = await prisma.message.findMany({
+        where: { podId },
+        include: MESSAGE_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      });
+      hasMore = latest.length > limit;
+      messages = latest.slice(0, limit).reverse();
+    }
 
     const typingUserIds = getTypingUserIds('pod', podId, userId);
 
-    res.json({ messages: messages.map(formatPodMessage), typingUserIds });
+    res.json({ messages: messages.map(formatPodMessage), typingUserIds, hasMore });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -118,11 +174,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    for (const m of pod.members) {
-      if (await hasBlockingRelationship(userId, m.userId)) {
-        res.status(403).json({ error: "You can't send messages in this pod." });
-        return;
-      }
+    if (await hasBlockingRelationshipWithAny(userId, pod.members.map((m) => m.userId))) {
+      res.status(403).json({ error: "You can't send messages in this pod." });
+      return;
     }
 
     const data: { podId: string; userId: string; content: string; replyToId?: string } = {
@@ -155,6 +209,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
     // Fire-and-forget — don't await so message response isn't delayed
     NotificationService.notifyNewMessage(podId, userId).catch(() => {});
+    void broadcast(podTopic(podId), REALTIME_EVENTS.NEW_MESSAGE);
 
     res.status(201).json(formatPodMessage(message));
   } catch (err) {
@@ -199,11 +254,9 @@ router.post('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Resp
       return;
     }
 
-    for (const m of pod.members) {
-      if (await hasBlockingRelationship(userId, m.userId)) {
-        res.status(403).json({ error: "You can't react in this pod." });
-        return;
-      }
+    if (await hasBlockingRelationshipWithAny(userId, pod.members.map((m) => m.userId))) {
+      res.status(403).json({ error: "You can't react in this pod." });
+      return;
     }
 
     await prisma.messageReaction.upsert({
@@ -213,6 +266,7 @@ router.post('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Resp
       create: { messageId: msgId, userId, emoji },
       update: {},
     });
+    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
 
     const updated = await prisma.message.findUnique({
       where: { id: msgId },
@@ -256,6 +310,7 @@ router.delete('/:msgId', requireAuth, async (req: AuthRequest, res: Response): P
       return;
     }
     await prisma.message.delete({ where: { id: msgId } });
+    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
     res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -294,6 +349,7 @@ router.delete('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Re
     await prisma.messageReaction.deleteMany({
       where: { messageId: msgId, userId, emoji },
     });
+    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
 
     const updated = await prisma.message.findUnique({
       where: { id: msgId },

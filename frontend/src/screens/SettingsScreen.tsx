@@ -1,176 +1,131 @@
 import React from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
-import { Panel, Screen, ScreenHeader, SegmentedControl } from '../components/ui';
-import { AppearancePreference, Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import { AppBackdrop, Card, Chip, ListRow, ScreenHeader } from '../components/ui';
+import {
+  AppearancePreference,
+  Theme,
+  createThemedStyles,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 const SITE_URL = 'https://www.joinbridgeapp.com';
 
+const APPEARANCE_OPTIONS: Array<{ value: AppearancePreference; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+  { value: 'system', label: 'Auto', icon: 'contrast' },
+  { value: 'light', label: 'Light', icon: 'sunny' },
+  { value: 'dark', label: 'Dark', icon: 'moon' },
+];
+
 export default function SettingsScreen({ navigation }: Props) {
   const styles = useStyles();
-  const { colors, preference, setPreference } = useTheme();
+  const { colors, typography, preference, setPreference } = useTheme();
+  const insets = useSafeAreaInsets();
+
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScreenHeader title="Settings" kicker="TUNE IT" onBack={() => navigation.goBack()} />
 
-        <Text style={styles.sectionLabel}>Appearance</Text>
-        <Panel>
-          <View style={styles.appearanceRow}>
-            <View style={styles.icon}>
-              <Ionicons name="moon-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.copy}>
-              <Text style={styles.title}>Theme</Text>
-              <Text style={styles.body}>Match your system or pick a side.</Text>
-            </View>
+        <Text style={typography.kicker}>APPEARANCE</Text>
+        <Card padded>
+          <View style={styles.appearanceCopy}>
+            <Text style={typography.subheading}>Theme</Text>
+            <Text style={typography.captionSmall}>Match your system or pick a side.</Text>
           </View>
-          <SegmentedControl<AppearancePreference>
-            value={preference}
-            options={[
-              { value: 'system', label: 'Auto' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            onChange={setPreference}
-          />
-        </Panel>
+          <View style={styles.appearanceRow}>
+            {APPEARANCE_OPTIONS.map((option) => (
+              <Chip
+                key={option.value}
+                label={option.label}
+                icon={option.icon}
+                selected={preference === option.value}
+                onPress={() => setPreference(option.value)}
+              />
+            ))}
+          </View>
+        </Card>
 
-        <Text style={styles.sectionLabel}>Account</Text>
-        <Panel>
-          <SettingsRow
-            icon="person-outline"
+        <Text style={typography.kicker}>ACCOUNT</Text>
+        <Card padded={false} faceStyle={{ paddingHorizontal: spacing.lg }}>
+          <ListRow
+            icon="person"
             title="Profile information"
-            body="Update your photo, bio, school details, interests, and social profile."
+            sub="Update your photo, bio, school details, interests, and social profile."
+            tint={colors.blueSoft}
             onPress={() => navigation.navigate('EditProfile')}
           />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="shield-checkmark-outline"
+          <ListRow
+            icon="shield-checkmark"
             title="Privacy & Data"
-            body="Download your data, control notifications and connected accounts, or delete your account."
+            sub="Download your data, control notifications and connected accounts, or delete your account."
+            tint={colors.tealSoft}
+            last
             onPress={() => navigation.navigate('PrivacyData')}
           />
-        </Panel>
+        </Card>
 
-        <Text style={styles.sectionLabel}>Safety & Legal</Text>
-        <Panel>
-          <SettingsRow
-            icon="ban-outline"
+        <Text style={typography.kicker}>SAFETY & LEGAL</Text>
+        <Card padded={false} faceStyle={{ paddingHorizontal: spacing.lg }}>
+          <ListRow
+            icon="ban"
             title="Blocked users"
+            tint={colors.dangerSoft}
             onPress={() => navigation.navigate('BlockedUsers')}
           />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="document-text-outline"
+          <ListRow
+            icon="document-text"
             title="Privacy policy"
+            tint={colors.amberSoft}
             onPress={() => void Linking.openURL(`${SITE_URL}/privacy`)}
           />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="reader-outline"
+          <ListRow
+            icon="reader"
             title="Terms of service"
+            tint={colors.violetSoft}
             onPress={() => void Linking.openURL(`${SITE_URL}/terms`)}
           />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="people-outline"
+          <ListRow
+            icon="people"
             title="Community guidelines"
+            tint={colors.greenSoft}
             onPress={() => void Linking.openURL(`${SITE_URL}/community-guidelines`)}
           />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="mail-outline"
+          <ListRow
+            icon="mail"
             title="Contact support"
+            tint={colors.pinkSoft}
+            last
             onPress={() => void Linking.openURL('mailto:contactus@joinbridgeapp.com')}
           />
-        </Panel>
+        </Card>
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
-function SettingsRow({
-  icon,
-  title,
-  body,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body?: string;
-  onPress: () => void;
-}) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  return (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityHint={body}
-    >
-      <View style={styles.icon}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
-      </View>
-      <View style={styles.copy}>
-        <Text style={styles.title}>{title}</Text>
-        {body ? <Text style={styles.body}>{body}</Text> : null}
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.sub} />
-    </TouchableOpacity>
-  );
-}
-
-const useStyles = createThemedStyles((t: Theme) => ({
+const useStyles = createThemedStyles((_t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     gap: spacing.md,
   },
-  sectionLabel: {
-    ...t.typography.label,
-    marginTop: spacing.sm,
+  appearanceCopy: {
+    marginBottom: spacing.md,
   },
   appearanceRow: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.colors.primarySoft,
-  },
-  copy: {
-    flex: 1,
-    gap: 2,
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: t.colors.border,
-    marginVertical: spacing.xs,
+    gap: spacing.sm,
   },
 }));

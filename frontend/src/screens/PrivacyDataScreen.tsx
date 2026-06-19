@@ -1,15 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
 import {
   deleteMyAccount,
@@ -20,10 +13,25 @@ import {
   updateNotificationPreferences,
   updateProfile,
 } from '../api';
-import { Panel, PrimaryButton, Screen, ScreenHeader, SectionHeader } from '../components/ui';
+import {
+  AppBackdrop,
+  Banner,
+  Button,
+  Card,
+  ScreenHeader,
+  SectionHeader,
+} from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { exportTextFile } from '../utils/fileExport';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyData'>;
 
@@ -34,11 +42,19 @@ const PREFERENCE_ROWS: Array<{
 }> = [
   { key: 'podJoin', title: 'Pod joins', body: 'When someone joins a pod you created.' },
   { key: 'newMessage', title: 'New messages', body: 'Pod, club, officer, and direct messages.' },
-  { key: 'meetupReminder', title: 'Meetup reminders', body: 'Reminders before pods and club meetings.' },
+  {
+    key: 'meetupReminder',
+    title: 'Meetup reminders',
+    body: 'Reminders before pods and club meetings.',
+  },
   { key: 'recapPrompt', title: 'Recap prompts', body: 'Post-meetup feedback and connection prompts.' },
   { key: 'waitlistSpot', title: 'Waitlist openings', body: 'When a spot opens in a full pod.' },
   { key: 'clubMeetingCreated', title: 'New club meetings', body: 'When a club schedules a meeting.' },
-  { key: 'clubAnnouncementCreated', title: 'Club announcements', body: 'Official updates from your clubs.' },
+  {
+    key: 'clubAnnouncementCreated',
+    title: 'Club announcements',
+    body: 'Official updates from your clubs.',
+  },
   { key: 'clubKick', title: 'Club membership changes', body: 'When you are removed from a club.' },
   { key: 'clubRoleChange', title: 'Club role changes', body: 'When your club permissions change.' },
   { key: 'clubAttendanceOpen', title: 'Attendance check-in', body: 'When meeting attendance opens.' },
@@ -46,20 +62,24 @@ const PREFERENCE_ROWS: Array<{
 
 export default function PrivacyDataScreen({ navigation }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   const { user, updateUser, clearSession } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [instagram, setInstagram] = useState(user?.instagramHandle ?? '');
   const [socialBusy, setSocialBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       void getNotificationPreferences()
-        .then((response) => setPrefs(response.preferences))
-        .catch((error) => Alert.alert('Could not load preferences', getApiErrorMessage(error)));
-    }, [])
+        .then((response) => {
+          setPrefs(response.preferences);
+          setLoadWarning(null);
+        })
+        .catch(() => setLoadWarning("Couldn't refresh preferences — reopen to retry."));
+    }, []),
   );
 
   const updatePreference = async (key: keyof NotificationPreferences, value: boolean) => {
@@ -78,12 +98,16 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   const saveInstagram = async () => {
     setSocialBusy(true);
     try {
-      const updated = await updateProfile({ instagramHandle: instagram.trim() || null });
+      const normalizedInstagram = instagram.trim().replace(/^@+/, '');
+      const updated = await updateProfile({ instagramHandle: normalizedInstagram || null });
       await updateUser(updated);
       setInstagram(updated.instagramHandle ?? '');
-      Alert.alert('Connected accounts updated', updated.instagramHandle
-        ? `Instagram @${updated.instagramHandle} is linked to your profile.`
-        : 'Instagram has been unlinked from your profile.');
+      Alert.alert(
+        'Connected accounts updated',
+        updated.instagramHandle
+          ? `Instagram @${updated.instagramHandle} is linked to your profile.`
+          : 'Instagram has been unlinked from your profile.',
+      );
     } catch (error) {
       Alert.alert('Could not update Instagram', getApiErrorMessage(error));
     } finally {
@@ -153,56 +177,80 @@ export default function PrivacyDataScreen({ navigation }: Props) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <ScreenHeader title="Privacy & Data" onBack={() => navigation.goBack()} />
+    <AppBackdrop>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+        <ScreenHeader title="Privacy & Data" kicker="YOUR CONTROL" onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         <View style={styles.section}>
-          <SectionHeader title="Your data" />
-          <Panel>
-            <Text style={styles.title}>Download my data</Text>
-            <Text style={styles.body}>
-              Export the account, profile, content, memberships, connections, reports, and activity data Bridge stores about you.
+          <SectionHeader kicker="Export" title="Your data" />
+          <Card padded>
+            <Text style={typography.title}>Download my data</Text>
+            <Text style={[typography.caption, { marginTop: 4 }]}>
+              Export the account, profile, content, memberships, connections, reports, and activity
+              data Bridge stores about you.
             </Text>
-            <View style={styles.action}>
-              <PrimaryButton label="Download JSON export" onPress={() => void exportData()} loading={exportBusy} />
-            </View>
-          </Panel>
+            <Button
+              label="Download JSON export"
+              icon="download"
+              onPress={() => void exportData()}
+              loading={exportBusy}
+              style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
+            />
+          </Card>
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Notification preferences" />
-          {prefs ? PREFERENCE_ROWS.map((row) => (
-            <Panel key={row.key}>
-              <View style={styles.preferenceRow}>
-                <View style={styles.copy}>
-                  <Text style={styles.title}>{row.title}</Text>
-                  <Text style={styles.body}>{row.body}</Text>
+          <SectionHeader kicker="Pings" title="Notification preferences" />
+          {prefs ? (
+            <Card padded>
+              {PREFERENCE_ROWS.map((row, index) => (
+                <View
+                  key={row.key}
+                  style={[
+                    styles.preferenceRow,
+                    index < PREFERENCE_ROWS.length - 1 && {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={typography.subheading}>{row.title}</Text>
+                    <Text style={typography.captionSmall}>{row.body}</Text>
+                  </View>
+                  <Switch
+                    value={prefs[row.key]}
+                    onValueChange={(value) => void updatePreference(row.key, value)}
+                    trackColor={{ false: colors.sunken, true: colors.primarySoft }}
+                    thumbColor={prefs[row.key] ? colors.primary : colors.surface}
+                  />
                 </View>
-                <Switch
-                  value={prefs[row.key]}
-                  onValueChange={(value) => void updatePreference(row.key, value)}
-                  trackColor={{ false: '#D8D7D2', true: '#E29A7A' }}
-                  thumbColor={prefs[row.key] ? colors.primary : '#F8F7F3'}
-                />
-              </View>
-            </Panel>
-          )) : (
-            <Panel><Text style={styles.body}>Loading notification preferences...</Text></Panel>
+              ))}
+            </Card>
+          ) : (
+            <Card padded>
+              <Text style={typography.caption}>Loading notification preferences…</Text>
+            </Card>
           )}
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Connected accounts" />
-          <Panel>
-            <Text style={styles.title}>Instagram</Text>
-            <Text style={styles.body}>
+          <SectionHeader kicker="Linked" title="Connected accounts" />
+          <Card padded>
+            <Text style={typography.title}>Instagram</Text>
+            <Text style={[typography.caption, { marginTop: 4 }]}>
               Link the Instagram handle shown on your Bridge profile, or remove it at any time.
             </Text>
             <TextInput
@@ -212,86 +260,82 @@ export default function PrivacyDataScreen({ navigation }: Props) {
               autoCorrect={false}
               placeholder="@yourhandle"
               placeholderTextColor={colors.faint}
-              style={styles.input}
+              style={[
+                styles.input,
+                { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.ink },
+              ]}
             />
             <View style={styles.actionStack}>
-              <PrimaryButton
+              <Button
                 label={user?.instagramHandle ? 'Update Instagram' : 'Link Instagram'}
                 onPress={() => void saveInstagram()}
                 loading={socialBusy}
                 disabled={!instagram.trim()}
               />
               {user?.instagramHandle ? (
-                <PrimaryButton label="Unlink Instagram" onPress={unlinkInstagram} kind="ghost" disabled={socialBusy} />
+                <Button
+                  label="Unlink Instagram"
+                  variant="secondary"
+                  onPress={unlinkInstagram}
+                  disabled={socialBusy}
+                />
               ) : null}
             </View>
-          </Panel>
+          </Card>
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Delete my account" />
-          <Panel style={styles.dangerPanel}>
-            <Text style={styles.dangerTitle}>Permanent account deletion</Text>
-            <Text style={styles.body}>
-              Deletes your profile, posts, messages, memberships, preferences, and connected account data. Limited safety records may be retained under the Privacy Policy.
+          <SectionHeader kicker="Danger zone" title="Delete my account" />
+          <Card padded borderColor={colors.danger}>
+            <Text style={[typography.title, { color: colors.danger }]}>
+              Permanent account deletion
             </Text>
-            <View style={styles.action}>
-              <PrimaryButton label="Delete my account" onPress={confirmDeleteAccount} kind="ghost" loading={deleteBusy} />
-            </View>
-          </Panel>
+            <Text style={[typography.caption, { marginTop: 4 }]}>
+              Deletes your profile, posts, messages, memberships, preferences, and connected account
+              data. Limited safety records may be retained under the Privacy Policy.
+            </Text>
+            <Button
+              label="Delete my account"
+              variant="danger"
+              onPress={confirmDeleteAccount}
+              loading={deleteBusy}
+              style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
+            />
+          </Card>
         </View>
-      </ScrollView>
-    </Screen>
+        </ScrollView>
+      </SafeAreaView>
+    </AppBackdrop>
   );
 }
 
-const useStyles = createThemedStyles((t: Theme) => ({
+const useStyles = createThemedStyles((_t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
     gap: spacing.lg,
   },
   section: {
-    gap: spacing.sm,
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-  },
-  copy: {
-    flex: 1,
-    gap: 3,
+    gap: spacing.md,
   },
   preferenceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.md,
+    paddingVertical: spacing.md,
   },
   input: {
     marginTop: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1,
-    borderColor: t.colors.border,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    ...t.typography.body,
-    color: t.colors.ink,
-  },
-  action: {
-    marginTop: spacing.md,
+    paddingVertical: 13,
+    fontFamily: fonts.medium,
+    fontSize: 15,
   },
   actionStack: {
     marginTop: spacing.md,
     gap: spacing.sm,
-  },
-  dangerPanel: {
-    borderColor: 'rgba(160, 53, 40, 0.22)',
-  },
-  dangerTitle: {
-    ...t.typography.title,
-    color: t.colors.dangerText,
   },
 }));

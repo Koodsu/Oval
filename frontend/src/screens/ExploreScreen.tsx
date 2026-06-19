@@ -1,26 +1,39 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, getActivities, getApiErrorMessage } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
 import {
+  AppBackdrop,
+  Banner,
+  Button,
   Chip,
   EmptyState,
-  Entrance,
-  PrimaryButton,
-  Screen,
-  SearchField,
+  SearchBar,
   SectionHeader,
   SkeletonCard,
-  Tap,
+  Slab,
+  Sticker,
+  accentForSeed,
 } from '../components/ui';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
 import { useLocationPermission } from '../hooks/useLocationPermission';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  BORDER_W,
+  DOCK_CLEARANCE,
+  Theme,
+  createThemedStyles,
+  fonts,
+  motion,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -39,7 +52,7 @@ function categoryShortLabel(category: string) {
 
 function distanceMiles(
   from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number }
+  to: { latitude: number; longitude: number },
 ) {
   const earthRadiusMiles = 3958.8;
   const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -47,8 +60,8 @@ function distanceMiles(
   const dLng = toRadians(to.longitude - from.longitude);
   const lat1 = toRadians(from.latitude);
   const lat2 = toRadians(to.latitude);
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * earthRadiusMiles * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -60,40 +73,36 @@ function formatDistanceLabel(miles: number) {
 
 function isUsableCoordinate(coords: { latitude: number; longitude: number } | null | undefined) {
   if (!coords) return false;
-  return Number.isFinite(coords.latitude)
-    && Number.isFinite(coords.longitude)
-    && Math.abs(coords.latitude) <= 90
-    && Math.abs(coords.longitude) <= 180
-    && !(coords.latitude === 0 && coords.longitude === 0);
+  return (
+    Number.isFinite(coords.latitude) &&
+    Number.isFinite(coords.longitude) &&
+    Math.abs(coords.latitude) <= 90 &&
+    Math.abs(coords.longitude) <= 180 &&
+    !(coords.latitude === 0 && coords.longitude === 0)
+  );
 }
 
-function trustworthyDistanceLabel(activePods: Pod[], userLocation: { latitude: number; longitude: number } | null) {
+function trustworthyDistanceLabel(
+  activePods: Pod[],
+  userLocation: { latitude: number; longitude: number } | null,
+) {
   if (!isUsableCoordinate(userLocation)) return null;
-  const podsWithCoordinates = activePods.filter((pod) => pod.latitude != null && pod.longitude != null);
+  const podsWithCoordinates = activePods.filter(
+    (pod) => pod.latitude != null && pod.longitude != null,
+  );
   if (userLocation && podsWithCoordinates.length) {
-    const nearestMiles = Math.min(...podsWithCoordinates.map((pod) => distanceMiles(userLocation, {
-      latitude: pod.latitude ?? 0,
-      longitude: pod.longitude ?? 0,
-    })));
+    const nearestMiles = Math.min(
+      ...podsWithCoordinates.map((pod) =>
+        distanceMiles(userLocation, {
+          latitude: pod.latitude ?? 0,
+          longitude: pod.longitude ?? 0,
+        }),
+      ),
+    );
     if (nearestMiles > MAX_TRUSTWORTHY_DISTANCE_MILES) return null;
     return formatDistanceLabel(nearestMiles);
   }
   return null;
-}
-
-function statusMeta(liveCount: number) {
-  if (liveCount > 0) {
-    return {
-      label: liveCount === 1 ? '1 active pod' : `${liveCount} active pods`,
-      icon: 'flame' as const,
-      style: 'live' as const,
-    };
-  }
-  return {
-    label: 'No pods yet',
-    icon: 'add-circle-outline' as const,
-    style: 'quiet' as const,
-  };
 }
 
 function ctaLabel(liveCount: number) {
@@ -107,9 +116,9 @@ function activePodLocation(activePods: Pod[]) {
   if (!rawLocation) return null;
   const firstPart = rawLocation.split('•')[0]?.trim() ?? rawLocation;
   const words = firstPart.split(/\s+/);
-  const cleanedWords = words.filter((word, index) => (
-    index < 2 || word.toLowerCase() !== words[index - 1]?.toLowerCase()
-  ));
+  const cleanedWords = words.filter(
+    (word, index) => index < 2 || word.toLowerCase() !== words[index - 1]?.toLowerCase(),
+  );
   const cleaned = cleanedWords.join(' ').replace(/\s+/g, ' ').trim();
   if (!cleaned || cleaned.length > 36) return 'Near campus';
   return cleaned;
@@ -119,16 +128,26 @@ function displayTitle(activity: Activity) {
   return activity.title;
 }
 
+type ExploreCard = {
+  activity: Activity;
+  activePods: Pod[];
+  liveCount: number;
+  totalParticipants: number;
+};
+
 export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
-  const { colors, isDark } = useTheme();
+  const { colors, typography } = useTheme();
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [feed, setFeed] = useState<Pod[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(12);
   const deferredQuery = useDeferredValue(query);
 
@@ -140,10 +159,12 @@ export default function ExploreScreen() {
       ]);
       setActivities(activityList);
       setFeed(podFeed);
-    } catch (error) {
-      Alert.alert('Could not load explore', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — pull to retry.");
     } finally {
       setLoaded(true);
+      setRefreshing(false);
     }
   }, [category]);
 
@@ -158,37 +179,35 @@ export default function ExploreScreen() {
           onPress: () => {
             void requestLocation().then((allowed) => {
               if (!allowed) {
-                Alert.alert('Location is off', 'No problem. You can still browse every activity and join pods normally.');
+                Alert.alert(
+                  'Location is off',
+                  'No problem. You can still browse every activity and join pods normally.',
+                );
               }
             });
           },
         },
-      ]
+      ],
     );
   }, [requestLocation]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   useEffect(() => {
     setVisibleCount(12);
   }, [category, deferredQuery]);
 
-  const cards = useMemo(() => {
+  const cards = useMemo<ExploreCard[]>(() => {
     const q = deferredQuery.trim().toLowerCase();
     return activities
       .filter((activity) => {
         if (category && activity.category !== category) return false;
         if (!q) return true;
-        return [
-          activity.title,
-          activity.description,
-          activity.category,
-          activity.defaultLocation,
-        ]
+        return [activity.title, activity.description, activity.category, activity.defaultLocation]
           .join(' ')
           .toLowerCase()
           .includes(q);
@@ -202,305 +221,350 @@ export default function ExploreScreen() {
       })
       .sort((a, b) => {
         if (b.liveCount !== a.liveCount) return b.liveCount - a.liveCount;
-        if (b.totalParticipants !== a.totalParticipants) return b.totalParticipants - a.totalParticipants;
+        if (b.totalParticipants !== a.totalParticipants)
+          return b.totalParticipants - a.totalParticipants;
         return a.activity.title.localeCompare(b.activity.title);
       });
   }, [activities, category, deferredQuery, feed]);
+
+  const liveCards = useMemo(() => cards.filter((item) => item.liveCount > 0).slice(0, 6), [cards]);
+  const totalLivePods = useMemo(() => cards.reduce((sum, item) => sum + item.liveCount, 0), [cards]);
   const visibleCards = cards.slice(0, visibleCount);
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <Entrance index={0}>
-          <View style={styles.titleRow}>
-            <View>
-              <Text style={styles.pageEyebrow}>Find your people</Text>
+        keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* Masthead */}
+        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
+          <View style={styles.masthead}>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.kicker, { color: colors.primary }]}>FIND YOUR PEOPLE</Text>
               <Text style={styles.pageTitle}>Explore</Text>
+              <View style={styles.liveSummary}>
+                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+                <Text style={typography.caption}>
+                  {loaded
+                    ? totalLivePods
+                      ? `${totalLivePods} pod${totalLivePods === 1 ? '' : 's'} live across campus`
+                      : 'Quiet right now — start something'
+                    : 'Reading campus…'}
+                </Text>
+              </View>
             </View>
             {!granted && canAskAgain ? (
-              <TouchableOpacity
-                style={styles.locationButton}
-                activeOpacity={0.86}
+              <Chip
+                label="Nearby"
+                icon="navigate"
                 onPress={explainAndRequestLocation}
-                accessibilityRole="button"
-                accessibilityLabel="Use campus location"
-              >
-                <Ionicons name="navigate-outline" size={15} color={colors.primary} />
-                <Text style={styles.locationButtonText}>Nearby</Text>
-              </TouchableOpacity>
+                tint={colors.tealSoft}
+                selected
+              />
             ) : null}
           </View>
-        </Entrance>
+        </Animated.View>
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        <Entrance index={1}>
-          <SearchField
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          <SearchBar
             value={query}
             onChangeText={setQuery}
             placeholder="Search activities or places"
           />
-        </Entrance>
+        </Animated.View>
 
-        <Entrance index={2}>
+        <Animated.View entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            <Chip label="All" active={!category} onPress={() => setCategory(null)} />
+            <Chip label="All" selected={!category} onPress={() => setCategory(null)} />
             {CATEGORIES.map((item) => (
               <Chip
                 key={item}
                 label={categoryShortLabel(item)}
-                active={category === item}
+                selected={category === item}
+                tint={category === item ? accentForSeed(colors, item).soft : undefined}
                 onPress={() => setCategory(item)}
               />
             ))}
           </ScrollView>
-        </Entrance>
+        </Animated.View>
 
+        {/* Live right now rail */}
+        {loaded && liveCards.length ? (
+          <Animated.View
+            entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
+            style={styles.section}
+          >
+            <SectionHeader kicker="Happening" title="Live right now" />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rail}
+            >
+              {liveCards.map((item, index) => {
+                const meta = CATEGORY_META[item.activity.category];
+                const accent = accentForSeed(colors, item.activity.category ?? item.activity.title);
+                const podLocation = activePodLocation(item.activePods);
+                const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
+                return (
+                  <Slab
+                    key={item.activity.id}
+                    onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
+                    color={accent.soft}
+                    tilt={index % 2 === 0 ? -0.8 : 0.8}
+                    style={styles.liveCard}
+                    faceStyle={styles.liveCardFace}
+                    accessibilityLabel={`${displayTitle(item.activity)}, ${item.liveCount} active pod${item.liveCount === 1 ? '' : 's'}`}
+                  >
+                    <View style={styles.liveCardTop}>
+                      <View
+                        style={[
+                          styles.liveCardIcon,
+                          { backgroundColor: colors.surface, borderColor: colors.border },
+                        ]}
+                      >
+                        <Ionicons
+                          name={meta?.icon ?? 'sparkles-outline'}
+                          size={20}
+                          color={accent.tint}
+                        />
+                      </View>
+                      <Sticker
+                        label={`${item.liveCount} LIVE`}
+                        tint={colors.primary}
+                        textColor={colors.onPrimary}
+                        tilt={3}
+                        small
+                      />
+                    </View>
+                    <Text style={typography.heading} numberOfLines={1}>
+                      {displayTitle(item.activity)}
+                    </Text>
+                    <View style={styles.factList}>
+                      <View style={styles.factItem}>
+                        <Ionicons name="people" size={12} color={colors.sub} />
+                        <Text style={styles.factText} numberOfLines={1}>
+                          {formatParticipantCount(item.activePods)}
+                        </Text>
+                      </View>
+                      {podLocation ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="location" size={12} color={colors.sub} />
+                          <Text style={styles.factText} numberOfLines={1}>
+                            {podLocation}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {distanceLabel ? (
+                        <View style={styles.factItem}>
+                          <Ionicons name="navigate" size={12} color={colors.sub} />
+                          <Text style={styles.factText}>{distanceLabel}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </Slab>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        ) : null}
+
+        {/* Browse grid */}
         <View style={styles.section}>
-          <Entrance index={3}>
-            <SectionHeader title="Browse activities" />
-          </Entrance>
+          <SectionHeader kicker="The catalog" title="Browse activities" />
           {!loaded ? (
             <>
               <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </>
-          ) : cards.length ? visibleCards.map((item, cardIndex) => {
-            const meta = CATEGORY_META[item.activity.category];
-            const accent = meta?.color ?? colors.primary;
-            const status = statusMeta(item.liveCount);
-            const podLocation = activePodLocation(item.activePods);
-            const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
-            const hasActivePods = item.liveCount > 0;
-            return (
-              <Entrance key={item.activity.id} index={Math.min(cardIndex, 6) + 3}>
-                <Tap
-                  onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
-                  style={styles.activityCard}
-                  accessibilityLabel={displayTitle(item.activity)}
-                >
-                  <LinearGradient
-                    colors={[`${accent}2E`, isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.9)']}
-                    style={styles.categoryVisual}
-                  >
-                    <Ionicons
-                      name={meta?.icon ?? 'sparkles-outline'}
-                      size={24}
-                      color={accent}
-                    />
-                  </LinearGradient>
-
-                  <View style={styles.cardBody}>
-                    <View style={styles.cardTopRow}>
-                      <View style={[
-                        styles.statusPill,
-                        status.style === 'live' ? styles.statusPillLive : styles.statusPillQuiet,
-                      ]}>
-                        <Ionicons
-                          name={status.icon}
-                          size={12}
-                          color={status.style === 'live' ? '#FFFFFF' : colors.sub}
-                        />
-                        <Text style={[
-                          styles.statusText,
-                          status.style === 'live' ? styles.statusTextLive : styles.statusTextQuiet,
-                        ]}>
-                          {status.label}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.categoryLabel} numberOfLines={1}>{meta?.label ?? item.activity.category}</Text>
-                    </View>
-
-                    <Text style={styles.activityTitle} numberOfLines={1}>{displayTitle(item.activity)}</Text>
-                    <Text style={styles.activityDescription} numberOfLines={2}>{item.activity.description}</Text>
-
-                    {hasActivePods ? (
-                      <View style={styles.factRow}>
-                        {podLocation ? (
-                          <View style={styles.factItem}>
-                            <Ionicons name="location-outline" size={13} color={colors.faint} />
-                            <Text style={styles.factText} numberOfLines={1}>{podLocation}</Text>
-                          </View>
-                        ) : null}
-                        <View style={styles.factItem}>
-                          <Ionicons name="people-outline" size={13} color={colors.faint} />
-                          <Text style={styles.factText}>{formatParticipantCount(item.activePods)}</Text>
-                        </View>
-                        {distanceLabel ? (
-                          <View style={styles.factItem}>
-                            <Ionicons name="navigate-outline" size={13} color={colors.faint} />
-                            <Text style={styles.factText}>{distanceLabel}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : (
-                      <Text style={styles.emptySupport}>Be the first to start one.</Text>
+          ) : cards.length ? (
+            <View style={styles.grid}>
+              {visibleCards.map((item, cardIndex) => {
+                const meta = CATEGORY_META[item.activity.category];
+                const accent = accentForSeed(colors, item.activity.category ?? item.activity.title);
+                const hasActivePods = item.liveCount > 0;
+                return (
+                  <Animated.View
+                    key={item.activity.id}
+                    entering={FadeInDown.delay(Math.min(cardIndex, 6) * motion.stagger).duration(
+                      motion.durBase,
                     )}
-
-                    <View style={styles.actionRow}>
-                      <Text style={styles.actionHint} numberOfLines={1}>
-                        {hasActivePods ? 'View meetup options' : 'Create the first pod'}
-                      </Text>
-                      <View style={styles.ctaPill}>
-                        <Text style={styles.ctaText}>{ctaLabel(item.liveCount)}</Text>
-                        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                    style={styles.gridSlot}
+                  >
+                    <Slab
+                      onPress={() =>
+                        navigation.navigate('ActivityPods', { activity: item.activity })
+                      }
+                      style={{ flex: 1 }}
+                      faceStyle={styles.tileFace}
+                      accessibilityLabel={displayTitle(item.activity)}
+                    >
+                      <View style={styles.tileTop}>
+                        <View
+                          style={[
+                            styles.tileIcon,
+                            { backgroundColor: accent.soft, borderColor: colors.border },
+                          ]}
+                        >
+                          <Ionicons
+                            name={meta?.icon ?? 'sparkles-outline'}
+                            size={20}
+                            color={accent.tint}
+                          />
+                        </View>
+                        {hasActivePods ? (
+                          <Sticker
+                            label={String(item.liveCount)}
+                            tint={colors.primary}
+                            textColor={colors.onPrimary}
+                            tilt={4}
+                            small
+                          />
+                        ) : null}
                       </View>
-                    </View>
-                  </View>
-                </Tap>
-              </Entrance>
-            );
-          }) : (
+                      <Text style={styles.tileCategory} numberOfLines={1}>
+                        {(meta?.label ?? item.activity.category ?? '').toUpperCase()}
+                      </Text>
+                      <Text style={[typography.heading, styles.tileTitle]} numberOfLines={2}>
+                        {displayTitle(item.activity)}
+                      </Text>
+                      <Text style={styles.tileDescription} numberOfLines={2}>
+                        {item.activity.description}
+                      </Text>
+                      <View style={[styles.tileFooter, { borderTopColor: colors.borderSoft }]}>
+                        <Text
+                          style={[
+                            styles.tileCta,
+                            { color: hasActivePods ? colors.primary : colors.sub },
+                          ]}
+                        >
+                          {ctaLabel(item.liveCount)}
+                        </Text>
+                        <Ionicons
+                          name="arrow-forward"
+                          size={13}
+                          color={hasActivePods ? colors.primary : colors.sub}
+                        />
+                      </View>
+                    </Slab>
+                  </Animated.View>
+                );
+              })}
+            </View>
+          ) : (
             <EmptyState
-              icon="compass-outline"
-              title="Nothing matches that view yet"
+              icon="telescope"
+              title="Nothing matches that view"
               body="Try another category or search for a different place."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setCategory(null);
+                setQuery('');
+              }}
             />
           )}
           {visibleCount < cards.length ? (
-            <View style={styles.loadMore}>
-              <PrimaryButton
-                label={`Show ${Math.min(12, cards.length - visibleCount)} more activities`}
-                onPress={() => setVisibleCount((count) => count + 12)}
-                kind="ghost"
-              />
-            </View>
+            <Button
+              label={`Show ${Math.min(12, cards.length - visibleCount)} more`}
+              onPress={() => setVisibleCount((count) => count + 12)}
+              variant="secondary"
+            />
           ) : null}
         </View>
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingTop: spacing.sm,
-    paddingBottom: 112,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: DOCK_CLEARANCE,
+    gap: spacing.lg,
   },
-  titleRow: {
+  masthead: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
-    justifyContent: 'space-between' as const,
-  },
-  pageEyebrow: {
-    ...t.typography.label,
-    color: t.colors.primary,
-    marginBottom: 2,
+    alignItems: 'flex-start' as const,
+    gap: spacing.md,
   },
   pageTitle: {
-    ...t.typography.display,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
+    color: t.colors.ink,
+    marginTop: 4,
   },
-  locationButton: {
-    height: 38,
+  liveSummary: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 5,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primarySoft,
+    gap: 7,
+    marginTop: 6,
   },
-  locationButtonText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    lineHeight: 18,
-    color: t.colors.primarySoftText,
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   chipRow: {
-    paddingLeft: 1,
-    paddingTop: 2,
-    paddingBottom: 6,
+    gap: spacing.sm,
     paddingRight: spacing.xl,
+    paddingVertical: 4,
   },
   section: {
+    gap: spacing.md,
+  },
+  rail: {
+    gap: spacing.md,
+    paddingRight: spacing.xl,
+    paddingVertical: 4,
+  },
+  liveCard: {
+    width: 230,
+  },
+  liveCardFace: {
+    padding: spacing.lg,
     gap: spacing.sm,
-    paddingTop: 2,
   },
-  loadMore: {
-    marginTop: spacing.xs,
-  },
-  activityCard: {
-    flexDirection: 'row' as const,
-    gap: spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 12,
-    ...t.shadows.card,
-  },
-  categoryVisual: {
-    width: 54,
-    minHeight: 108,
-    borderRadius: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  cardBody: {
-    flex: 1,
-    gap: 7,
-  },
-  cardTopRow: {
+  liveCardTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: 8,
   },
-  statusPill: {
+  liveCardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  factList: {
+    gap: 5,
+  },
+  factItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 5,
-    borderRadius: radii.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  statusPillLive: {
-    backgroundColor: t.colors.primary,
-  },
-  statusPillQuiet: {
-    backgroundColor: t.colors.inputBg,
-  },
-  statusText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
-  statusTextLive: {
-    color: '#FFFFFF',
-  },
-  statusTextQuiet: {
-    color: t.colors.sub,
-  },
-  activityTitle: {
-    ...t.typography.h2,
-    fontSize: 19,
-    lineHeight: 24,
-  },
-  activityDescription: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  factRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    flexWrap: 'wrap' as const,
-    gap: 8,
-  },
-  factItem: {
-    maxWidth: '100%' as const,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
   },
   factText: {
     color: t.colors.sub,
@@ -508,45 +572,64 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontSize: 12,
     flexShrink: 1,
   },
-  emptySupport: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+  grid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.md,
   },
-  actionRow: {
+  gridSlot: {
+    flexBasis: '47%' as const,
+    flexGrow: 0,
+    maxWidth: '48%' as const,
+  },
+  tileFace: {
+    flex: 1,
+    padding: spacing.md,
+    gap: 7,
+    minHeight: 172,
+  },
+  tileTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: t.colors.border,
-    paddingTop: 8,
+    marginBottom: 2,
   },
-  categoryLabel: {
-    color: t.colors.faint,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    flex: 1,
-    textAlign: 'right' as const,
+  tileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  actionHint: {
+  tileCategory: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
     color: t.colors.faint,
+  },
+  tileTitle: {
+    // Reserve two lines so neighboring tiles in a row stay the same height.
+    minHeight: 42,
+  },
+  tileDescription: {
     fontFamily: fonts.medium,
-    fontSize: 12,
-    flex: 1,
-    marginRight: 4,
+    fontSize: 12.5,
+    lineHeight: 17,
+    minHeight: 34,
+    color: t.colors.sub,
   },
-  ctaPill: {
+  tileFooter: {
+    marginTop: 'auto' as const,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'flex-end' as const,
-    gap: 2,
-    minWidth: 76,
-    flexShrink: 0,
+    gap: 4,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  ctaText: {
-    color: t.colors.primary,
-    fontFamily: fonts.bold,
-    fontSize: 13,
+  tileCta: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    letterSpacing: 0.1,
   },
 }));

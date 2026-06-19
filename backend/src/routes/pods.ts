@@ -10,6 +10,7 @@ import { getActivityEmoji } from '../lib/activityEmoji';
 import { joinExistingPodMember, parsePodMembers, MEMBER_USER_SELECT } from '../lib/joinExistingPod';
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
+import { broadcast, podTopic, REALTIME_EVENTS } from '../lib/realtime';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
 const EXPIRED = 'EXPIRED';
+const CANCELLED = 'CANCELLED';
 const PUBLIC_LOCATION_TYPE = 'public';
 const PRIVATE_LOCATION_TYPE = 'private';
 
@@ -103,7 +105,7 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
     const blockedIds = await getBlockedUserIds(userId);
     const pods = await prisma.pod.findMany({
       where: {
-        status: { notIn: ['EXPIRED', 'COMPLETED'] },
+        status: { notIn: [EXPIRED, COMPLETED, CANCELLED] },
         members: {
           some: { userId },
           none: { userId: { in: [...blockedIds] } },
@@ -134,7 +136,7 @@ router.get('/mine/history', requireAuth, async (req: AuthRequest, res: Response)
   try {
     const pods = await prisma.pod.findMany({
       where: {
-        status: { in: [COMPLETED, EXPIRED] },
+        status: { in: [COMPLETED, EXPIRED, CANCELLED] },
         members: { some: { userId } },
         meetupTime: { gte: since },
       },
@@ -724,6 +726,148 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
   }
 });
 
+// PATCH /pods/:id — creator only; edit meetup time, location, and coordinates
+router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true, activity: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const creatorId =
+      pod.creatorId ??
+      pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can edit the pod' });
+      return;
+    }
+    if (pod.status !== FORMING && pod.status !== LOCKED) {
+      res.status(409).json({ error: 'Completed, expired, or cancelled pods cannot be edited' });
+      return;
+    }
+
+    const data: Record<string, unknown> = {};
+
+    if (req.body.meetupTime != null) {
+      const parsed = new Date(req.body.meetupTime);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: 'Invalid meetupTime' });
+        return;
+      }
+      if (parsed <= new Date()) {
+        res.status(400).json({ error: 'Meetup time must be in the future' });
+        return;
+      }
+      if (parsed > getMaxMeetupTime()) {
+        res.status(400).json({ error: 'Meetup time cannot be more than 1 week from now' });
+        return;
+      }
+      data.meetupTime = parsed;
+    }
+
+    if (req.body.location != null) {
+      const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+      if (!locationInput) {
+        res.status(400).json({ error: 'Location cannot be empty' });
+        return;
+      }
+      const moderation = await moderateTextContent([locationInput]);
+      if (moderation) {
+        res.status(moderation.status).json({ error: moderation.message });
+        return;
+      }
+      data.location = locationInput;
+    }
+
+    const rawLat = req.body.latitude != null ? parseFloat(req.body.latitude) : null;
+    const rawLng = req.body.longitude != null ? parseFloat(req.body.longitude) : null;
+    const hasCoords = rawLat !== null && rawLng !== null && !isNaN(rawLat) && !isNaN(rawLng);
+    if (hasCoords) {
+      if (!isInsideCampus(rawLat!, rawLng!)) {
+        res.status(400).json({ error: 'Location must be on or near OSU campus' });
+        return;
+      }
+      data.latitude = rawLat;
+      data.longitude = rawLng;
+    }
+
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({ error: 'Nothing to update' });
+      return;
+    }
+
+    const updated = await prisma.pod.update({
+      where: { id },
+      data,
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
+      },
+    });
+
+    NotificationService.notifyPodPlanChange(id, userId, 'updated').catch(() => {});
+
+    res.json(parsePodMembers(updated));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /pods/:id/cancel — creator only; cancels a forming or locked pod
+router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
+
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id },
+      include: { members: true },
+    });
+    if (!pod) {
+      res.status(404).json({ error: 'Pod not found' });
+      return;
+    }
+    const creatorId =
+      pod.creatorId ??
+      pod.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0]?.userId;
+    if (creatorId !== userId) {
+      res.status(403).json({ error: 'Only the pod creator can cancel the pod' });
+      return;
+    }
+    if (pod.status !== FORMING && pod.status !== LOCKED) {
+      res.status(409).json({ error: 'Only forming or locked pods can be cancelled' });
+      return;
+    }
+
+    const memberUserIds = pod.members.map((m) => m.userId);
+
+    const updated = await prisma.pod.update({
+      where: { id },
+      data: { status: CANCELLED },
+      include: {
+        activity: true,
+        creator: { select: { id: true } },
+        members: { include: { user: { select: MEMBER_USER_SELECT } } },
+      },
+    });
+
+    NotificationService.notifyPodPlanChange(id, userId, 'cancelled', memberUserIds).catch(() => {});
+
+    res.json(parsePodMembers(updated));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /pods/:id/kick/:memberId — creator-only member removal
 router.post('/:id/kick/:memberId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
@@ -802,6 +946,7 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
       return;
     }
     setTyping('pod', podId, userId);
+    void broadcast(podTopic(podId), REALTIME_EVENTS.TYPING);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

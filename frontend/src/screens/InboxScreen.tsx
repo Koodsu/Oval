@@ -1,43 +1,72 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-	  acceptFriendRequest,
-	  acceptPodInvite,
-	  cancelFriendRequest,
-	  declineFriendRequest,
-	  declinePodInvite,
-	  getFriends,
-	  getFriendRequests,
-	  getApiErrorMessage,
-	  getMessageThreads,
-	  getPodInvites,
+  acceptFriendRequest,
+  acceptPodInvite,
+  cancelFriendRequest,
+  declineFriendRequest,
+  declinePodInvite,
+  getFriends,
+  getFriendRequests,
+  getApiErrorMessage,
+  getMessageThreads,
+  getPodInvites,
 } from '../api';
 import { Ionicons } from '@expo/vector-icons';
-import { RootStackParamList } from '../../App';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MainTabParamList, RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
-import { CompactHeader, EmptyState, Entrance, Panel, PrimaryButton, Screen, SegmentedControl, SkeletonCard, Tap, UserAvatar } from '../components/ui';
-import { formatDateTime } from '../utils/format';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  AppBackdrop,
+  Avatar,
+  Banner,
+  Button,
+  Card,
+  Segmented,
+  EmptyState,
+  IconButton,
+  SkeletonCard,
+  Slab,
+  Sticker,
+} from '../components/ui';
+import { formatDateTime, relativeTime } from '../utils/format';
+import {
+  BORDER_W,
+  DOCK_CLEARANCE,
+  Theme,
+  createThemedStyles,
+  fonts,
+  motion,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 
 type Mode = 'messages' | 'invites' | 'friends';
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Inbox'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function InboxScreen() {
   const navigation = useNavigation<Nav>();
   const styles = useStyles();
-  const { colors } = useTheme();
-  const chevron = colors.faint;
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>('messages');
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
   const [invites, setInvites] = useState<PodInvite[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
-	  const [friends, setFriends] = useState<FriendUser[]>([]);
-	  const [busyId, setBusyId] = useState<string | null>(null);
-	  const [loaded, setLoaded] = useState(false);
-	  const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [threadResult, inviteResult, requestResult, friendResult] = await Promise.allSettled([
@@ -48,7 +77,11 @@ export default function InboxScreen() {
     ]);
 
     if (threadResult.status === 'fulfilled') {
-      setThreads(threadResult.value);
+      setThreads(
+        [...threadResult.value].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
+      );
     }
 
     if (inviteResult.status === 'fulfilled') {
@@ -64,34 +97,36 @@ export default function InboxScreen() {
       setFriends(friendResult.value);
     }
 
-	    if (
-	      threadResult.status === 'rejected' &&
-	      inviteResult.status === 'rejected' &&
-	      requestResult.status === 'rejected' &&
-	      friendResult.status === 'rejected'
-	    ) {
-	      Alert.alert('Could not load inbox', getApiErrorMessage(threadResult.reason));
-	      setLoadWarning(null);
-	    } else {
-	      const failedSections = [
-	        threadResult.status === 'rejected' ? 'messages' : null,
-	        inviteResult.status === 'rejected' ? 'invites' : null,
-	        requestResult.status === 'rejected' ? 'friend requests' : null,
-	        friendResult.status === 'rejected' ? 'friends' : null,
-	      ].filter((section): section is string => section != null);
-	      setLoadWarning(
-	        failedSections.length
-	          ? `Some inbox sections could not refresh: ${failedSections.join(', ')}.`
-	          : null
-	      );
-	    }
-	    setLoaded(true);
-	  }, []);
+    if (
+      threadResult.status === 'rejected' &&
+      inviteResult.status === 'rejected' &&
+      requestResult.status === 'rejected' &&
+      friendResult.status === 'rejected'
+    ) {
+      setLoadWarning("Couldn't refresh — pull to retry.");
+    } else {
+      const failedSections = [
+        threadResult.status === 'rejected' ? 'messages' : null,
+        inviteResult.status === 'rejected' ? 'invites' : null,
+        requestResult.status === 'rejected' ? 'friend requests' : null,
+        friendResult.status === 'rejected' ? 'friends' : null,
+      ].filter((section): section is string => section != null);
+      setLoadWarning(
+        failedSections.length
+          ? `Some inbox sections could not refresh: ${failedSections.join(', ')}.`
+          : null,
+      );
+    }
+    // Tab badge is owned by useInboxBadgeCount in App.tsx (app-wide polling),
+    // so the Inbox screen no longer sets it here.
+    setLoaded(true);
+    setRefreshing(false);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+    }, [load]),
   );
 
   const handleInvite = async (inviteId: string, accept: boolean) => {
@@ -149,43 +184,62 @@ export default function InboxScreen() {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+    <AppBackdrop>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <Entrance index={0}>
-          <CompactHeader
-            eyebrow="Inbox"
-            title="Stay in the loop."
-            subtitle="Your messages, pod invites, and friend requests — all in one place."
-          >
-            <View style={styles.headerAction}>
-              <PrimaryButton label="Find people" icon="search-outline" onPress={() => navigation.navigate('UserSearch')} kind="ghost" />
-              <PrimaryButton label="Settings" icon="settings-outline" onPress={() => navigation.navigate('Profile')} kind="ghost" />
+        keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* Masthead */}
+        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
+          <View style={styles.masthead}>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.kicker, { color: colors.primary }]}>THE LOOP</Text>
+              <Text style={styles.pageTitle}>Inbox</Text>
             </View>
-          </CompactHeader>
-        </Entrance>
+            <IconButton
+              icon="search"
+              onPress={() => navigation.navigate('UserSearch')}
+              accessibilityLabel="Find people"
+            />
+            <IconButton
+              icon="person-circle-outline"
+              onPress={() => navigation.navigate('Profile')}
+              accessibilityLabel="Open profile"
+            />
+          </View>
+        </Animated.View>
 
-	        <SegmentedControl
-          value={mode}
-          options={[
-            { value: 'messages', label: threads.length ? `Messages (${threads.length})` : 'Messages' },
-            { value: 'invites', label: invites.length ? `Invites (${invites.length})` : 'Invites' },
-            {
-              value: 'friends',
-              label: requests.length ? `Friends (${requests.length})` : 'Friends',
-            },
-          ]}
-          onChange={setMode}
-	        />
-	        {loadWarning ? (
-	          <Panel style={styles.warningPanel}>
-	            <Text style={styles.warningText}>{loadWarning}</Text>
-	            <TouchableOpacity onPress={() => void load()} style={styles.retryLink}>
-	              <Text style={styles.retryLinkText}>Try again</Text>
-	            </TouchableOpacity>
-	          </Panel>
-	        ) : null}
+        {/* Mode switch */}
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'messages', label: threads.length ? `Messages · ${threads.length}` : 'Messages' },
+              { value: 'invites', label: invites.length ? `Invites · ${invites.length}` : 'Invites' },
+              { value: 'friends', label: requests.length ? `Friends · ${requests.length}` : 'Friends' },
+            ]}
+          />
+        </Animated.View>
+
+        {loadWarning ? (
+          <View style={{ gap: spacing.sm }}>
+            <Banner message={loadWarning} kind="info" />
+            <Button label="Try again" size="sm" variant="secondary" onPress={() => void load()} />
+          </View>
+        ) : null}
 
         {mode === 'messages' ? (
           <View style={styles.section}>
@@ -194,22 +248,73 @@ export default function InboxScreen() {
                 <SkeletonCard compact />
                 <SkeletonCard compact />
               </>
-            ) : threads.length ? threads.map((thread, threadIndex) => (
-              <Entrance key={thread.id} index={Math.min(threadIndex, 6)}>
-                <Tap
-                  style={styles.row}
-                  onPress={() => navigation.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name })}
-                  accessibilityLabel={`Open conversation with ${thread.otherUser.name}`}
+            ) : threads.length ? (
+              threads.map((thread, threadIndex) => (
+                <Animated.View
+                  key={thread.id}
+                  entering={FadeInDown.delay(Math.min(threadIndex, 6) * motion.stagger).duration(
+                    motion.durBase,
+                  )}
                 >
-                  <UserAvatar name={thread.otherUser.name} avatarUrl={thread.otherUser.avatarUrl} size={46} />
-                  <View style={styles.copy}>
-                    <Text style={styles.title}>{thread.otherUser.name}</Text>
-                    <Text style={styles.body} numberOfLines={2}>{thread.lastMessage?.content ?? 'No messages yet'}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={chevron} />
-                </Tap>
-              </Entrance>
-            )) : <EmptyState icon="mail-open-outline" title="No messages yet" body="New DMs will land here once you start connecting through pods and profiles." />}
+                  <Slab
+                    onPress={() =>
+                      navigation.navigate('Thread', {
+                        threadId: thread.id,
+                        title: thread.otherUser.name,
+                      })
+                    }
+                    faceStyle={styles.rowFace}
+                    accessibilityLabel={`Open conversation with ${thread.otherUser.name}`}
+                  >
+                    <View>
+                      <Avatar
+                        name={thread.otherUser.name}
+                        uri={thread.otherUser.avatarUrl}
+                        size={46}
+                        tilt={threadIndex % 2 === 0 ? -2 : 2}
+                      />
+                      {thread.hasUnread ? (
+                        <View
+                          style={[
+                            styles.unreadDot,
+                            { backgroundColor: colors.primary, borderColor: colors.border },
+                          ]}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <View style={styles.threadTop}>
+                        <Text style={[typography.heading, { flex: 1 }]} numberOfLines={1}>
+                          {thread.otherUser.name}
+                        </Text>
+                        <Text style={typography.captionSmall}>
+                          {relativeTime(thread.lastMessage?.createdAt ?? thread.updatedAt)}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          typography.caption,
+                          thread.hasUnread && {
+                            fontFamily: fonts.semibold,
+                            color: colors.ink,
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {thread.lastMessage?.content ?? 'No messages yet'}
+                      </Text>
+                    </View>
+                    <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                  </Slab>
+                </Animated.View>
+              ))
+            ) : (
+              <EmptyState
+                icon="mail-open"
+                title="No messages yet"
+                body="New DMs land here once you start connecting through pods and profiles."
+              />
+            )}
           </View>
         ) : null}
 
@@ -220,46 +325,69 @@ export default function InboxScreen() {
                 <SkeletonCard />
                 <SkeletonCard compact />
               </>
-            ) : invites.length ? invites.map((invite) => (
-              <Panel key={invite.id} style={styles.inviteCard}>
-                <View style={styles.cardTopRow}>
-                  <View style={styles.copy}>
-                    <Text style={styles.title}>{invite.pod?.activity.title ?? 'Pod invite'}</Text>
-                    <Text style={styles.body}>
-                      From {invite.sender?.name ?? 'Someone'} • {formatDateTime(invite.createdAt)}
-                    </Text>
+            ) : invites.length ? (
+              invites.map((invite) => (
+                <Card key={invite.id} padded>
+                  <View style={styles.inviteTop}>
+                    <Sticker label="Pod invite" tint={colors.amberSoft} icon="flash" tilt={-2} small />
+                    {invite.sender ? (
+                      <Pressable
+                        onPress={() =>
+                          navigation.navigate('UserProfile', { userId: invite.senderId })
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${invite.sender.name}'s profile`}
+                      >
+                        <Avatar name={invite.sender.name} uri={invite.sender.avatarUrl} size={36} />
+                      </Pressable>
+                    ) : null}
                   </View>
-                  {invite.sender ? (
-                    <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: invite.senderId })}>
-                      <UserAvatar name={invite.sender.name} avatarUrl={invite.sender.avatarUrl} />
-                    </TouchableOpacity>
+                  <Text style={[typography.heading, { marginTop: spacing.sm }]}>
+                    {invite.pod?.activity.title ?? 'Pod invite'}
+                  </Text>
+                  <Text style={typography.captionSmall}>
+                    From {invite.sender?.name ?? 'Someone'} • {formatDateTime(invite.createdAt)}
+                  </Text>
+                  {invite.pod ? (
+                    <Pressable
+                      style={[
+                        styles.podPreview,
+                        { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                      ]}
+                      onPress={() => navigation.navigate('PodDetail', { podId: invite.podId })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open pod"
+                    >
+                      <Text style={typography.subheading}>
+                        {formatDateTime(invite.pod.meetupTime)}
+                      </Text>
+                      <Text style={typography.captionSmall}>{invite.pod.location}</Text>
+                    </Pressable>
                   ) : null}
-                </View>
-                {invite.pod ? (
-                  <TouchableOpacity
-                    activeOpacity={0.84}
-                    style={styles.podPreview}
-                    onPress={() => navigation.navigate('PodDetail', { podId: invite.podId })}
-                  >
-                    <Text style={styles.previewMeta}>{formatDateTime(invite.pod.meetupTime)}</Text>
-                    <Text style={styles.previewBody}>{invite.pod.location}</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <View style={styles.buttonRow}>
-                  <PrimaryButton
-                    label="Accept"
-                    onPress={() => void handleInvite(invite.id, true)}
-                    loading={busyId === `invite-${invite.id}`}
-                  />
-                  <PrimaryButton
-                    label="Decline"
-                    onPress={() => void handleInvite(invite.id, false)}
-                    disabled={busyId != null}
-                    kind="ghost"
-                  />
-                </View>
-              </Panel>
-            )) : <EmptyState icon="paper-plane-outline" title="No invites waiting" body="When pod creators invite you into something, it’ll show up here." />}
+                  <View style={styles.buttonRow}>
+                    <Button
+                      label="Accept"
+                      size="sm"
+                      onPress={() => void handleInvite(invite.id, true)}
+                      loading={busyId === `invite-${invite.id}`}
+                    />
+                    <Button
+                      label="Decline"
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => void handleInvite(invite.id, false)}
+                      disabled={busyId != null}
+                    />
+                  </View>
+                </Card>
+              ))
+            ) : (
+              <EmptyState
+                icon="paper-plane"
+                title="No invites waiting"
+                body="When pod creators invite you into something, it shows up here."
+              />
+            )}
           </View>
         ) : null}
 
@@ -273,207 +401,213 @@ export default function InboxScreen() {
             ) : null}
             {loaded && requests.length ? (
               <>
-                <Text style={styles.sectionLabel}>Requests</Text>
+                <Text style={typography.kicker}>REQUESTS</Text>
                 {requests.map((request) => (
-                  <Panel key={request.id}>
-                    <View style={styles.cardTopRow}>
-                      {request.sender ? (
-                        <TouchableOpacity
-                          style={styles.identity}
-                          onPress={() => navigation.navigate('UserProfile', { userId: request.senderId })}
-                        >
-                          <UserAvatar name={request.sender.name} avatarUrl={request.sender.avatarUrl} />
-                          <View style={styles.copy}>
-                            <Text style={styles.title}>{request.sender.name}</Text>
-                            <Text style={styles.body}>Sent {formatDateTime(request.createdAt)}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ) : (
-                        <View style={styles.copy}>
-                          <Text style={styles.title}>Friend request</Text>
-                          <Text style={styles.body}>Sent {formatDateTime(request.createdAt)}</Text>
+                  <Card key={request.id} padded>
+                    {request.sender ? (
+                      <Pressable
+                        style={styles.identity}
+                        onPress={() =>
+                          navigation.navigate('UserProfile', { userId: request.senderId })
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${request.sender.name}'s profile`}
+                      >
+                        <Avatar name={request.sender.name} uri={request.sender.avatarUrl} size={42} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={typography.heading} numberOfLines={1}>
+                            {request.sender.name}
+                          </Text>
+                          <Text style={typography.captionSmall}>
+                            Sent {formatDateTime(request.createdAt)}
+                          </Text>
                         </View>
-                      )}
-                    </View>
+                      </Pressable>
+                    ) : (
+                      <View>
+                        <Text style={typography.heading}>Friend request</Text>
+                        <Text style={typography.captionSmall}>
+                          Sent {formatDateTime(request.createdAt)}
+                        </Text>
+                      </View>
+                    )}
                     <View style={styles.buttonRow}>
-                      <PrimaryButton
+                      <Button
                         label="Accept"
+                        size="sm"
                         onPress={() => void handleRequest(request.id, true)}
                         loading={busyId === `request-${request.id}`}
                       />
-                      <PrimaryButton
+                      <Button
                         label="Decline"
+                        size="sm"
+                        variant="secondary"
                         onPress={() => void handleRequest(request.id, false)}
                         disabled={busyId != null}
-                        kind="ghost"
                       />
                     </View>
-                  </Panel>
+                  </Card>
                 ))}
               </>
             ) : null}
 
             {loaded && outgoingRequests.length ? (
               <>
-                <Text style={styles.sectionLabel}>Sent</Text>
+                <Text style={typography.kicker}>SENT</Text>
                 {outgoingRequests.map((request) => (
-                  <Panel key={request.id}>
-                    <View style={styles.cardTopRow}>
-                      {request.receiver ? (
-                        <TouchableOpacity
-                          style={styles.identity}
-                          onPress={() => navigation.navigate('UserProfile', { userId: request.receiverId })}
-                        >
-                          <UserAvatar name={request.receiver.name} avatarUrl={request.receiver.avatarUrl} />
-                          <View style={styles.copy}>
-                            <Text style={styles.title}>{request.receiver.name}</Text>
-                            <Text style={styles.body}>Waiting since {formatDateTime(request.createdAt)}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
+                  <Card key={request.id} padded>
+                    {request.receiver ? (
+                      <Pressable
+                        style={styles.identity}
+                        onPress={() =>
+                          navigation.navigate('UserProfile', { userId: request.receiverId })
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${request.receiver.name}'s profile`}
+                      >
+                        <Avatar
+                          name={request.receiver.name}
+                          uri={request.receiver.avatarUrl}
+                          size={42}
+                        />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={typography.heading} numberOfLines={1}>
+                            {request.receiver.name}
+                          </Text>
+                          <Text style={typography.captionSmall}>
+                            Waiting since {formatDateTime(request.createdAt)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ) : null}
                     <View style={styles.buttonRow}>
-                      <PrimaryButton
+                      <Button
                         label="Cancel"
+                        size="sm"
+                        variant="secondary"
                         onPress={() => void handleCancelRequest(request.id)}
                         loading={busyId === `request-${request.id}`}
-                        kind="ghost"
                       />
                     </View>
-                  </Panel>
+                  </Card>
                 ))}
               </>
             ) : null}
 
             {loaded && friends.length ? (
               <>
-                <Text style={styles.sectionLabel}>Friends</Text>
-                {friends.map((friend) => (
-                  <Tap
+                <Text style={typography.kicker}>FRIENDS</Text>
+                {friends.map((friend, index) => (
+                  <Slab
                     key={friend.id}
-                    style={styles.row}
                     onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+                    faceStyle={styles.rowFace}
                     accessibilityLabel={`View ${friend.name}'s profile`}
                   >
-                    <UserAvatar name={friend.name} avatarUrl={friend.avatarUrl} size={46} />
-                    <View style={styles.copy}>
-                      <Text style={styles.title}>{friend.name}</Text>
-                      <Text style={styles.body}>View profile</Text>
+                    <Avatar
+                      name={friend.name}
+                      uri={friend.avatarUrl}
+                      size={46}
+                      tilt={index % 2 === 0 ? -2 : 2}
+                    />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={typography.heading} numberOfLines={1}>
+                        {friend.name}
+                      </Text>
+                      <Text style={typography.captionSmall}>View profile</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={chevron} />
-                  </Tap>
+                    <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                  </Slab>
                 ))}
               </>
             ) : null}
 
             {loaded && !requests.length && !outgoingRequests.length && !friends.length ? (
-              <EmptyState icon="person-add-outline" title="No friend activity" body="Find people from pods, profiles, or search to start building your Bridge circle." />
+              <EmptyState
+                icon="person-add"
+                title="No friend activity"
+                body="Find people from pods, profiles, or search to start building your circle."
+                actionLabel="Find people"
+                onAction={() => navigation.navigate('UserSearch')}
+              />
             ) : null}
           </View>
         ) : null}
       </ScrollView>
-    </Screen>
+    </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: DOCK_CLEARANCE,
+    gap: spacing.lg,
+  },
+  masthead: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: spacing.sm,
+  },
+  pageTitle: {
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
+    color: t.colors.ink,
+    marginTop: 4,
+  },
+  modeRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
   },
   section: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  headerAction: {
+  rowFace: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row' as const,
-    gap: spacing.sm,
-    alignItems: 'center' as const,
-    backgroundColor: t.colors.surface,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    borderRadius: radii.md,
+    gap: spacing.md,
     padding: spacing.md,
-    ...t.shadows.subtle,
   },
-  inviteCard: {
+  threadTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
-  cardTopRow: {
+  unreadDot: {
+    position: 'absolute' as const,
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+  },
+  inviteTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-  },
-  identity: {
-    flex: 1,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-  },
-  copy: {
-    flex: 1,
-    gap: 4,
-  },
-  title: {
-    ...t.typography.title,
-  },
-  body: {
-    ...t.typography.body,
-  },
-  warningPanel: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-    borderColor: t.colors.warnText,
-    backgroundColor: t.colors.warnBg,
-  },
-  warningText: {
-    ...t.typography.body,
-    color: t.colors.warnText,
-    flex: 1,
-  },
-  retryLink: {
-    paddingVertical: 6,
-    paddingHorizontal: spacing.sm,
-  },
-  retryLinkText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: t.colors.primary,
-  },
-  sectionLabel: {
-    ...t.typography.label,
-    marginTop: spacing.sm,
   },
   podPreview: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    backgroundColor: t.colors.inputBg,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
     padding: spacing.md,
     gap: 2,
+    marginTop: spacing.md,
   },
-  previewMeta: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  previewBody: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+  identity: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    flex: 1,
+    minWidth: 0,
   },
   buttonRow: {
     flexDirection: 'row' as const,
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
 }));

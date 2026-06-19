@@ -37,6 +37,10 @@ model User {
   clubs                   String?
   instagramHandle         String?
   interestTags            String?
+  purpose                 String?
+  /// JSON array of campus zone names
+  campusZones             String?
+  clubInterests           String?
 
   podMembers             PodMember[]
   messages               Message[]
@@ -69,6 +73,7 @@ model User {
   clubAnnouncements      ClubAnnouncement[]
   clubMessages           ClubMessage[]
   clubOfficerMessages    ClubOfficerMessage[]
+  clubChannelReadStates  ClubChannelReadState[]
   analyticsEvents        AnalyticsEvent[]
 }
 
@@ -428,8 +433,43 @@ model Club {
   announcements   ClubAnnouncement[]
   messages        ClubMessage[]
   officerMessages ClubOfficerMessage[]
+  channels        ClubChannel[]
 
   @@index([isPublic, category])
+}
+
+model ClubChannel {
+  id             String   @id @default(uuid())
+  clubId         String
+  kind           String   @default("CUSTOM") // ANNOUNCEMENTS | GENERAL | OFFICERS | CUSTOM
+  name           String
+  description    String?
+  /// JSON array of ClubRole ids; null/[] = every member (CUSTOM channels only)
+  allowedRoleIds String?
+  position       Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  club       Club                   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  messages   ClubMessage[]
+  readStates ClubChannelReadState[]
+
+  @@unique([clubId, name])
+  @@index([clubId, position])
+}
+
+model ClubChannelReadState {
+  id         String   @id @default(uuid())
+  channelId  String
+  userId     String
+  lastReadAt DateTime @default(now())
+
+  channel ClubChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
 }
 
 model ClubMember {
@@ -449,13 +489,16 @@ model ClubMember {
 }
 
 model ClubRole {
-  id          String   @id @default(uuid())
-  clubId      String
-  name        String
-  permissions String   @default("[]")
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(uuid())
+  clubId           String
+  name             String
+  permissions      String   @default("[]")
+  /// Named accent from the app palette (e.g. "blue", "violet"); null = neutral
+  color            String?
+  isSelfAssignable Boolean  @default(false)
+  createdById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   club        Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
   createdBy   User             @relation("ClubRoleCreator", fields: [createdById], references: [id], onDelete: Restrict)
@@ -542,16 +585,22 @@ model ClubAnnouncement {
 }
 
 model ClubMessage {
-  id        String   @id @default(uuid())
-  clubId    String
-  userId    String
-  content   String
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  clubId         String
+  /// Null = the built-in General channel; otherwise a CUSTOM ClubChannel id
+  channelId      String?
+  userId         String
+  content        String
+  /// JSON array of ClubRole ids pinged in this message
+  mentionRoleIds String?
+  createdAt      DateTime @default(now())
 
-  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  channel ClubChannel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([clubId, createdAt])
+  @@index([channelId, createdAt])
   @@index([userId])
 }
 

@@ -26,6 +26,9 @@ export interface User {
   clubs?: string[];
   instagramHandle?: string | null;
   interestTags?: string[];
+  purpose?: string | null;
+  campusZones?: string[];
+  clubInterests?: string | null;
   termsVersion?: string | null;
   termsAcceptedAt?: string | null;
   ageAttestedAt?: string | null;
@@ -49,6 +52,8 @@ export interface PublicProfile {
   clubs?: string[];
   instagramHandle?: string | null;
   interestTags?: string[];
+  purpose?: string | null;
+  campusZones?: string[];
 }
 
 export type FriendRelationshipStatus =
@@ -168,15 +173,37 @@ export interface ClubMeetingToday {
   clubName: string;
   clubEmoji: string;
   attendeeCount: number;
+  /** Present on /clubs/week rows: whether the viewer belongs to this club. */
+  isMyClub?: boolean;
 }
 
 export interface ClubMessage {
   id: string;
   clubId: string;
+  channelId?: string | null;
   userId: string;
   content: string;
+  mentionRoleIds?: string[];
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
+}
+
+export type ClubChannelKind = 'ANNOUNCEMENTS' | 'GENERAL' | 'OFFICERS' | 'CUSTOM';
+
+/** Row from GET /clubs/:id/channels */
+export interface ClubChannelRow {
+  id: string;
+  clubId: string;
+  kind: ClubChannelKind;
+  name: string;
+  description: string | null;
+  allowedRoleIds: string[];
+  position: number;
+  createdAt: string;
+  unreadCount: number;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  canPost: boolean;
 }
 
 export interface ClubOfficerMessage {
@@ -247,11 +274,22 @@ export interface ClubMemberWithUser {
   }>;
 }
 
+export type ClubRoleColor =
+  | 'scarlet'
+  | 'blue'
+  | 'green'
+  | 'amber'
+  | 'pink'
+  | 'violet'
+  | 'teal';
+
 export interface ClubRole {
   id: string;
   clubId: string;
   name: string;
   permissions: string[];
+  color?: ClubRoleColor | null;
+  isSelfAssignable?: boolean;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -262,12 +300,14 @@ export interface MyClubMembershipRow {
   membershipId: string;
   role: string;
   joinedAt: string;
+  unreadCount?: number;
   club: {
     id: string;
     name: string;
     description: string;
     category: string;
     emoji: string;
+    avatarUrl?: string | null;
     isVerified: boolean;
     isPublic: boolean;
     university: string;
@@ -372,7 +412,7 @@ export interface Pod {
   locationType: 'public' | 'private';
   minMembers: number;
   maxMembers: number;
-  status: 'FORMING' | 'LOCKED' | 'COMPLETED' | 'EXPIRED';
+  status: 'FORMING' | 'LOCKED' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
   creatorId?: string | null;
   createdAt: string;
   activity?: Activity;

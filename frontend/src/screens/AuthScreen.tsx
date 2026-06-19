@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { Alert, Linking, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   login,
   register,
@@ -13,22 +25,50 @@ import {
   updateProfile,
 } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Chip, Entrance, Hero, Panel, PrimaryButton, Screen, SegmentedControl } from '../components/ui';
-import { Theme, createThemedStyles, fonts, radii, spacing, useTheme } from '../theme';
+import {
+  AppBackdrop,
+  Button,
+  Card,
+  Chip,
+  Field,
+  ProgressBar,
+  Slab,
+  Sticker,
+} from '../components/ui';
+import {
+  BORDER_W,
+  Theme,
+  createThemedStyles,
+  fonts,
+  motion,
+  radii,
+  spacing,
+  useTheme,
+} from '../theme';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 import { INTEREST_TAGS } from '../constants/interestTags';
+import {
+  CAMPUS_ZONE_OPTIONS,
+  MAX_CAMPUS_ZONES,
+  PURPOSE_OPTIONS,
+} from '../constants/profileOptions';
 
 type Mode = 'login' | 'register' | 'reset';
 
-const PURPOSE_OPTIONS = ['Find friends', 'Try activities', 'Join clubs', 'Study plans'];
-const CAMPUS_ZONE_OPTIONS = ['North campus', 'South campus', 'Oval', 'Libraries', 'RPAC'];
 const MIN_PASSWORD_LENGTH = 8;
 const SITE_URL = 'https://www.joinbridgeapp.com';
+
+const REGISTER_STEP_COPY: Record<1 | 2 | 3, { kicker: string; title: string }> = {
+  1: { kicker: 'Step 1 — The basics', title: 'Who are you?' },
+  2: { kicker: 'Step 2 — Your campus', title: 'Where are you at?' },
+  3: { kicker: 'Step 3 — Your thing', title: 'What do you like?' },
+};
 
 export default function AuthScreen() {
   const { signIn, acceptGuidelines } = useAuth();
   const styles = useStyles();
-  const { gradients } = useTheme();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>('login');
   const [registerStep, setRegisterStep] = useState<1 | 2 | 3>(1);
   const [busy, setBusy] = useState(false);
@@ -48,15 +88,29 @@ export default function AuthScreen() {
   const [clubInterests, setClubInterests] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const toggleListValue = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>, max = 5) => {
-    setter((current) => (
+  const clearError = (key: string) => {
+    setErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const toggleListValue = (
+    value: string,
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    max = 5,
+  ) => {
+    setter((current) =>
       current.includes(value)
         ? current.filter((item) => item !== value)
         : current.length >= max
           ? current
-          : [...current, value]
-    ));
+          : [...current, value],
+    );
   };
 
   const forgotPassword = () => {
@@ -68,33 +122,44 @@ export default function AuthScreen() {
 
   const changeMode = (nextMode: Mode) => {
     setMode(nextMode);
+    setErrors({});
     if (nextMode === 'register') setRegisterStep(1);
   };
 
   const advanceRegistration = () => {
     if (registerStep === 1) {
-      if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-        Alert.alert('Finish this step', 'Add your name, school email, and password to continue.');
+      const nextErrors: Record<string, string> = {};
+      if (!firstName.trim()) nextErrors.firstName = 'Enter your first name.';
+      if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
+      if (!email.trim()) nextErrors.email = 'Enter your school email.';
+      if (!password) nextErrors.password = 'Enter a password.';
+      else if (password.length < MIN_PASSWORD_LENGTH) {
+        nextErrors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+      }
+      if (Object.keys(nextErrors).length) {
+        setErrors(nextErrors);
         return;
       }
-      if (password.length < MIN_PASSWORD_LENGTH) {
-        Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
-        return;
-      }
+      setErrors({});
       setRegisterStep(2);
       return;
     }
 
-    if (!classYear || !major.trim() || !purpose) {
-      Alert.alert('Finish this step', 'Choose your class year, add your major, and tell us what brings you to Bridge.');
+    const nextErrors: Record<string, string> = {};
+    if (!classYear) nextErrors.classYear = 'Choose your class year.';
+    if (!major.trim()) nextErrors.major = 'Enter your major.';
+    if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
+    setErrors({});
     setRegisterStep(3);
   };
 
   const sendResetCode = async () => {
     if (!email.trim()) {
-      Alert.alert('Email needed', 'Enter your OSU email and we will send a reset code.');
+      setErrors({ email: 'Enter your OSU email to receive a reset code.' });
       return;
     }
 
@@ -112,18 +177,20 @@ export default function AuthScreen() {
   };
 
   const submitResetPassword = async () => {
-    if (!email.trim() || !resetCode.trim() || !newPassword.trim()) {
-      Alert.alert('Missing info', 'Enter your email, reset code, and new password.');
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!email.trim()) nextErrors.email = 'Enter your school email.';
+    if (!resetCode.trim()) nextErrors.resetCode = 'Enter the reset code.';
     if (!/^\d{6}$/.test(resetCode.trim())) {
-      Alert.alert('Check the code', 'Reset codes contain exactly 6 digits.');
-      return;
+      nextErrors.resetCode = 'Reset codes contain exactly 6 digits.';
     }
     if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+      nextErrors.newPassword = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
+    setErrors({});
 
     setBusy(true);
     try {
@@ -142,34 +209,29 @@ export default function AuthScreen() {
   };
 
   const submit = async () => {
-    if (
-      !email.trim() ||
-      !password.trim() ||
-      (mode === 'register' &&
-        (!firstName.trim() || !lastName.trim() || !classYear.trim() || !major.trim()))
-    ) {
-      Alert.alert('Missing info', 'Fill out the required fields so we can get you into campus mode.');
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!email.trim()) nextErrors.email = 'Enter your school email.';
+    if (!password.trim()) nextErrors.password = 'Enter your password.';
     if (password.length < MIN_PASSWORD_LENGTH) {
-      Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
+      nextErrors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
     }
 
-    if (mode === 'register' && (!purpose || interestTags.length === 0 || campusZones.length === 0)) {
-      Alert.alert('Finish setup', 'Choose what you are here for, at least one interest, and a preferred campus zone.');
+    if (mode === 'register') {
+      if (!firstName.trim()) nextErrors.firstName = 'Enter your first name.';
+      if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
+      if (!classYear.trim()) nextErrors.classYear = 'Choose your class year.';
+      if (!major.trim()) nextErrors.major = 'Enter your major.';
+      if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+      if (!interestTags.length) nextErrors.interestTags = 'Choose at least one interest.';
+      if (!campusZones.length) nextErrors.campusZones = 'Choose at least one campus zone.';
+      if (!ageConfirmed) nextErrors.ageConfirmed = 'Confirm that you are 18 or older.';
+      if (!termsAccepted) nextErrors.termsAccepted = 'Accept the terms to create an account.';
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
-
-    if (mode === 'register' && !ageConfirmed) {
-      Alert.alert('Age confirmation required', 'Bridge is for users who are 18 or older.');
-      return;
-    }
-
-    if (mode === 'register' && !termsAccepted) {
-      Alert.alert('Terms required', 'Accept the Bridge terms and community guidelines before creating an account.');
-      return;
-    }
+    setErrors({});
 
     setBusy(true);
     try {
@@ -186,546 +248,600 @@ export default function AuthScreen() {
         email.trim(),
         password,
         classYear.trim(),
-        major.trim()
+        major.trim(),
       );
       setToken(response.token);
-      const setupBio = [
-        `Here for: ${purpose}`,
-        campusZones.length ? `Preferred zones: ${campusZones.join(', ')}` : null,
-        clubInterests.trim() ? `Club interests: ${clubInterests.trim()}` : null,
-      ].filter(Boolean).join('\n');
-      const updatedUser = await updateProfile({
-        bio: setupBio,
-        interestTags,
-      });
-      await signIn(response.token, updatedUser);
-      await acceptGuidelines();
+
+      // The account now exists. Anything that fails past this point must NOT
+      // surface as "could not create account" — sign the user in regardless
+      // and let them finish profile setup later.
+      let finalUser = response.user;
+      let profileSaved = true;
+      try {
+        finalUser = await updateProfile({
+          purpose,
+          campusZones,
+          clubInterests: clubInterests.trim() || null,
+          interestTags,
+        });
+      } catch {
+        profileSaved = false;
+      }
+      await signIn(response.token, finalUser);
+      try {
+        await acceptGuidelines();
+      } catch {
+        // Terms were already recorded server-side during /auth/register;
+        // local flag sync can retry later without blocking onboarding.
+      }
+      if (!profileSaved) {
+        Alert.alert(
+          'Account created',
+          'We could not save your interests right now — you can add them any time from Edit Profile.',
+        );
+      }
       void trackEvent('auth.register', {
         classYear: classYear.trim(),
         purpose,
         interestCount: interestTags.length,
       });
     } catch (error) {
-      Alert.alert(mode === 'login' ? 'Sign-in issue' : 'Could not create account', getApiErrorMessage(error, API_USER_MESSAGE));
+      Alert.alert(
+        mode === 'login' ? 'Sign-in issue' : 'Could not create account',
+        getApiErrorMessage(error, API_USER_MESSAGE),
+      );
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag">
-        <Entrance index={0}>
-          <View style={styles.brandRow}>
-            <LinearGradient
-              colors={gradients.brand}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.brandMark}
-            >
-              <Text style={styles.brandMarkText}>B</Text>
-            </LinearGradient>
-            <Text style={styles.brandName}>Bridge</Text>
-          </View>
-        </Entrance>
-
-        <Entrance index={1}>
-        <Hero
-          eyebrow="Welcome"
-          title={
-            mode === 'login'
-              ? 'Turn campus into plans.'
-              : mode === 'register'
-                ? 'Build a profile people can trust.'
-                : 'Get back into Bridge.'
-          }
-          subtitle={
-            mode === 'login'
-              ? 'Find something to do, join a small group, and go from scrolling to showing up.'
-              : mode === 'register'
-                ? 'A few useful details make your first pods, clubs, and connections feel more human.'
-                : 'Use your school email to reset your password securely.'
-          }
+    <AppBackdrop>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          {mode === 'login' ? (
-            <View style={styles.heroChips}>
-              <Chip label="Plans today" active />
-              <Chip label="Small groups" />
-              <Chip label="Campus clubs" />
-            </View>
-          ) : null}
-        </Hero>
-        </Entrance>
+        {/* Wordmark — scarlet glass tile */}
+        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
+          <View style={styles.masthead}>
+            <Slab
+              color={colors.primary}
+              radius={radii.md}
+              faceStyle={styles.markFace}
+              accessibilityRole="none"
+            >
+              <Text style={styles.markText}>Bridge</Text>
+            </Slab>
+            <Sticker label="Ohio State only" tint={colors.warningSoft} icon="school" />
+          </View>
+        </Animated.View>
 
-        <Entrance index={2}>
-        <Panel>
-          <SegmentedControl
-            value={mode}
-            options={[
-              { value: 'login', label: 'Sign in' },
-              { value: 'register', label: 'Create account' },
-              { value: 'reset', label: 'Reset' },
-            ]}
-            onChange={changeMode}
-          />
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          <Text style={styles.heroTitle}>
+            {mode === 'login'
+              ? 'Your campus\nis waiting.'
+              : mode === 'register'
+                ? REGISTER_STEP_COPY[registerStep].title
+                : 'Locked out?\nNo stress.'}
+          </Text>
+          <Text style={[typography.body, styles.heroSub]}>
+            {mode === 'login'
+              ? 'Small groups. Real plans. Less scrolling, more showing up.'
+              : mode === 'register'
+                ? 'A couple of details and your first pods will actually fit you.'
+                : 'We will send a 6-digit code to your OSU email.'}
+          </Text>
+        </Animated.View>
 
-          {mode === 'register' ? (
-            <View style={styles.progress}>
-              <View style={styles.progressCopy}>
-                <Text style={styles.progressLabel}>Profile setup</Text>
-                <Text style={styles.progressStep}>Step {registerStep} of 3</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${(registerStep / 3) * 100}%` }]} />
-              </View>
-            </View>
-          ) : null}
+        {/* Mode switch */}
+        <Animated.View
+          entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
+          style={styles.modeRow}
+        >
+          <Chip label="Sign in" selected={mode === 'login'} onPress={() => changeMode('login')} />
+          <Chip label="New here" selected={mode === 'register'} onPress={() => changeMode('register')} />
+          <Chip label="Reset" selected={mode === 'reset'} onPress={() => changeMode('reset')} />
+        </Animated.View>
 
-          <View style={styles.form}>
-            {mode === 'reset' ? (
-              <>
-                <Field
-                  label="School email"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="name@osu.edu"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                  autoComplete="email"
-                />
-                {resetCodeSent ? (
-                  <>
-                    <Field
-                      label="Reset code"
-                      value={resetCode}
-                      onChangeText={(value) => setResetCode(value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="123456"
-                      autoCapitalize="none"
-                      keyboardType="number-pad"
-                      textContentType="oneTimeCode"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                    />
-                    <Field
-                      label="New password"
-                      value={newPassword}
-                      onChangeText={setNewPassword}
-                      placeholder="At least 8 characters"
-                      secureTextEntry
-                      textContentType="newPassword"
-                      autoComplete="new-password"
-                    />
-                    <PrimaryButton label="Update password" onPress={submitResetPassword} loading={busy} />
-                    <PrimaryButton label="Send a new code" onPress={sendResetCode} loading={busy} kind="ghost" />
-                  </>
-                ) : (
-                  <PrimaryButton label="Send reset code" onPress={sendResetCode} loading={busy} />
-                )}
-              </>
-            ) : (
-              <>
-                {mode === 'login' || registerStep === 1 ? (
-                  <>
-                    {mode === 'register' ? (
-                      <>
-                        <Field
-                          label="First name"
-                          value={firstName}
-                          onChangeText={setFirstName}
-                          placeholder="Avery"
-                          autoCapitalize="words"
-                          textContentType="givenName"
-                          autoComplete="given-name"
-                        />
-                        <Field
-                          label="Last name"
-                          value={lastName}
-                          onChangeText={setLastName}
-                          placeholder="Chen"
-                          autoCapitalize="words"
-                          textContentType="familyName"
-                          autoComplete="family-name"
-                        />
-                      </>
-                    ) : null}
-                    <Field
-                      label="School email"
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder="name@osu.edu"
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      textContentType="emailAddress"
-                      autoComplete="email"
-                    />
-                    <Field
-                      label="Password"
-                      value={password}
-                      onChangeText={setPassword}
-                      placeholder="At least 8 characters"
-                      secureTextEntry
-                      textContentType={mode === 'register' ? 'newPassword' : 'password'}
-                      autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                    />
-                  </>
-                ) : null}
-	            {mode === 'login' ? (
-	              <TouchableOpacity
-                  onPress={forgotPassword}
-                  style={styles.forgotButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Forgot password"
-                >
-	                <Text style={styles.forgotText}>Forgot password?</Text>
-	              </TouchableOpacity>
-	            ) : null}
-	            {mode === 'register' && registerStep === 2 ? (
-	              <>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Class year</Text>
-                  <View style={styles.chipWrap}>
-                    {CLASS_YEAR_OPTIONS.map((option) => (
-                      <Chip
-                        key={option}
-                        label={option}
-                        active={classYear === option}
-                        onPress={() => setClassYear(option)}
-                      />
-                    ))}
-                  </View>
-	                </View>
-	                <Field label="Major" value={major} onChangeText={setMajor} placeholder="Computer Science" />
-	                <View style={styles.field}>
-	                  <Text style={styles.fieldLabel}>What are you here for?</Text>
-	                  <View style={styles.chipWrap}>
-	                    {PURPOSE_OPTIONS.map((option) => (
-	                      <Chip key={option} label={option} active={purpose === option} onPress={() => setPurpose(option)} />
-	                    ))}
-	                  </View>
-	                </View>
-                  </>
-                ) : null}
-                {mode === 'register' && registerStep === 3 ? (
-                  <>
-                    <View style={styles.field}>
-                      <Text style={styles.fieldLabel}>Interests</Text>
-                      <Text style={styles.fieldHelp}>Choose up to five so Bridge can make the first feed useful.</Text>
-                      <View style={styles.chipWrap}>
-                        {INTEREST_TAGS.slice(0, 10).map((tag) => (
-                          <Chip
-                            key={tag}
-                            label={tag}
-                            active={interestTags.includes(tag)}
-                            onPress={() => toggleListValue(tag, setInterestTags)}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                    <View style={styles.field}>
-                      <Text style={styles.fieldLabel}>Preferred campus zones</Text>
-                      <Text style={styles.fieldHelp}>Pick up to three places you are usually willing to meet.</Text>
-                      <View style={styles.chipWrap}>
-                        {CAMPUS_ZONE_OPTIONS.map((zone) => (
-                          <Chip
-                            key={zone}
-                            label={zone}
-                            active={campusZones.includes(zone)}
-                            onPress={() => toggleListValue(zone, setCampusZones, 3)}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                    <Field label="Club interests (optional)" value={clubInterests} onChangeText={setClubInterests} placeholder="Design, robotics, service..." />
-                    <View style={styles.policyLinks}>
-                      <PolicyLink label="Terms" url={`${SITE_URL}/terms`} />
-                      <PolicyLink label="Privacy" url={`${SITE_URL}/privacy`} />
-                      <PolicyLink label="Guidelines" url={`${SITE_URL}/community-guidelines`} />
-                    </View>
-		                <TouchableOpacity
-                      style={styles.checkRow}
-                      onPress={() => setAgeConfirmed((value) => !value)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: ageConfirmed }}
-                      accessibilityLabel="I confirm I am 18 or older"
-		                >
-		                  <View style={[styles.checkbox, ageConfirmed && styles.checkboxActive]}>
-		                    {ageConfirmed ? <Text style={styles.checkboxMark}>18</Text> : null}
-		                  </View>
-		                  <Text style={styles.checkText}>I confirm I am 18 or older.</Text>
-		                </TouchableOpacity>
-		                <TouchableOpacity
-                      style={styles.checkRow}
-                      onPress={() => setTermsAccepted((value) => !value)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: termsAccepted }}
-                      accessibilityLabel="I accept the Terms, Privacy Policy, and Community Guidelines"
-                    >
-		                  <View style={[styles.checkbox, termsAccepted && styles.checkboxActive]}>
-		                    {termsAccepted ? <Text style={styles.checkboxMark}>✓</Text> : null}
-		                  </View>
-		                  <Text style={styles.checkText}>I accept the current Terms, Privacy Policy, and Community Guidelines.</Text>
-		                </TouchableOpacity>
-		              </>
-		            ) : null}
-              </>
-            )}
-            {mode === 'login' ? (
-              <PrimaryButton
-                label="Enter Bridge"
-                onPress={submit}
-                loading={busy}
-              />
-            ) : null}
+        <Animated.View entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}>
+          <Card padded>
             {mode === 'register' ? (
-              <View style={styles.registerActions}>
-                {registerStep > 1 ? (
-                  <View style={styles.registerAction}>
-                    <PrimaryButton
+              <View style={styles.progressBlock}>
+                <Text style={typography.kicker}>{REGISTER_STEP_COPY[registerStep].kicker}</Text>
+                <ProgressBar value={registerStep / 3} style={{ marginTop: 8 }} />
+              </View>
+            ) : null}
+
+            <View style={styles.form}>
+              {mode === 'reset' ? (
+                <>
+                  <Field
+                    label="School email"
+                    value={email}
+                    onChangeText={(value) => {
+                      setEmail(value);
+                      clearError('email');
+                    }}
+                    error={errors.email}
+                    placeholder="name@osu.edu"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    autoComplete="email"
+                  />
+                  {resetCodeSent ? (
+                    <>
+                      <Field
+                        label="Reset code"
+                        value={resetCode}
+                        onChangeText={(value) => {
+                          setResetCode(value.replace(/\D/g, '').slice(0, 6));
+                          clearError('resetCode');
+                        }}
+                        error={errors.resetCode}
+                        placeholder="123456"
+                        autoCapitalize="none"
+                        keyboardType="number-pad"
+                        textContentType="oneTimeCode"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                      />
+                      <Field
+                        label="New password"
+                        value={newPassword}
+                        onChangeText={(value) => {
+                          setNewPassword(value);
+                          clearError('newPassword');
+                        }}
+                        error={errors.newPassword}
+                        placeholder="At least 8 characters"
+                        secureTextEntry
+                        secureToggle
+                        textContentType="newPassword"
+                        autoComplete="new-password"
+                      />
+                      <Button label="Update password" onPress={submitResetPassword} loading={busy} size="lg" />
+                      <Button label="Send a new code" onPress={sendResetCode} loading={busy} variant="ghost" />
+                    </>
+                  ) : (
+                    <Button label="Send reset code" onPress={sendResetCode} loading={busy} size="lg" />
+                  )}
+                </>
+              ) : (
+                <>
+                  {mode === 'login' || registerStep === 1 ? (
+                    <>
+                      {mode === 'register' ? (
+                        <>
+                          <Field
+                            label="First name"
+                            value={firstName}
+                            onChangeText={(value) => {
+                              setFirstName(value);
+                              clearError('firstName');
+                            }}
+                            error={errors.firstName}
+                            placeholder="Avery"
+                            autoCapitalize="words"
+                            textContentType="givenName"
+                            autoComplete="given-name"
+                          />
+                          <Field
+                            label="Last name"
+                            value={lastName}
+                            onChangeText={(value) => {
+                              setLastName(value);
+                              clearError('lastName');
+                            }}
+                            error={errors.lastName}
+                            placeholder="Chen"
+                            autoCapitalize="words"
+                            textContentType="familyName"
+                            autoComplete="family-name"
+                          />
+                        </>
+                      ) : null}
+                      <Field
+                        label="School email"
+                        value={email}
+                        onChangeText={(value) => {
+                          setEmail(value);
+                          clearError('email');
+                        }}
+                        error={errors.email}
+                        placeholder="name@osu.edu"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        textContentType="emailAddress"
+                        autoComplete="email"
+                      />
+                      <Field
+                        label="Password"
+                        value={password}
+                        onChangeText={(value) => {
+                          setPassword(value);
+                          clearError('password');
+                        }}
+                        error={errors.password}
+                        placeholder="At least 8 characters"
+                        secureTextEntry
+                        secureToggle
+                        textContentType={mode === 'register' ? 'newPassword' : 'password'}
+                        autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                      />
+                    </>
+                  ) : null}
+
+                  {mode === 'login' ? (
+                    <Pressable
+                      onPress={forgotPassword}
+                      style={({ pressed }) => [styles.forgot, pressed && { opacity: 0.5 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Forgot password"
+                    >
+                      <Text style={[styles.forgotText, { color: colors.primary }]}>
+                        Forgot password? →
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  {mode === 'register' && registerStep === 2 ? (
+                    <>
+                      <View style={styles.fieldBlock}>
+                        <Text style={typography.kicker}>Class year</Text>
+                        <View style={styles.chipWrap}>
+                          {CLASS_YEAR_OPTIONS.map((option) => (
+                            <Chip
+                              key={option}
+                              label={option}
+                              selected={classYear === option}
+                              onPress={() => {
+                                setClassYear(option);
+                                clearError('classYear');
+                              }}
+                            />
+                          ))}
+                        </View>
+                        {errors.classYear ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.classYear}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Field
+                        label="Major"
+                        value={major}
+                        onChangeText={(value) => {
+                          setMajor(value);
+                          clearError('major');
+                        }}
+                        error={errors.major}
+                        placeholder="Computer Science"
+                      />
+                      <View style={styles.fieldBlock}>
+                        <Text style={typography.kicker}>What are you here for?</Text>
+                        <View style={styles.chipWrap}>
+                          {PURPOSE_OPTIONS.map((option) => (
+                            <Chip
+                              key={option}
+                              label={option}
+                              selected={purpose === option}
+                              tint={colors.amberSoft}
+                              onPress={() => {
+                                setPurpose(option);
+                                clearError('purpose');
+                              }}
+                            />
+                          ))}
+                        </View>
+                        {errors.purpose ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.purpose}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </>
+                  ) : null}
+
+                  {mode === 'register' && registerStep === 3 ? (
+                    <>
+                      <View style={styles.fieldBlock}>
+                        <Text style={typography.kicker}>Interests — pick up to 5</Text>
+                        <View style={styles.chipWrap}>
+                          {INTEREST_TAGS.map((tag) => (
+                            <Chip
+                              key={tag}
+                              label={tag}
+                              selected={interestTags.includes(tag)}
+                              tint={colors.pinkSoft}
+                              onPress={() => {
+                                toggleListValue(tag, setInterestTags);
+                                clearError('interestTags');
+                              }}
+                            />
+                          ))}
+                        </View>
+                        {errors.interestTags ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.interestTags}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.fieldBlock}>
+                        <Text style={typography.kicker}>Campus zones — pick up to 3</Text>
+                        <View style={styles.chipWrap}>
+                          {CAMPUS_ZONE_OPTIONS.map((zone) => (
+                            <Chip
+                              key={zone}
+                              label={zone}
+                              selected={campusZones.includes(zone)}
+                              tint={colors.tealSoft}
+                              onPress={() => {
+                                toggleListValue(zone, setCampusZones, MAX_CAMPUS_ZONES);
+                                clearError('campusZones');
+                              }}
+                            />
+                          ))}
+                        </View>
+                        {errors.campusZones ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.campusZones}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Field
+                        label="Club interests (optional)"
+                        value={clubInterests}
+                        onChangeText={setClubInterests}
+                        placeholder="Design, robotics, service…"
+                      />
+                      <View style={styles.policyRow}>
+                        <PolicyLink label="Terms" url={`${SITE_URL}/terms`} />
+                        <PolicyLink label="Privacy" url={`${SITE_URL}/privacy`} />
+                        <PolicyLink label="Guidelines" url={`${SITE_URL}/community-guidelines`} />
+                      </View>
+                      <CheckRow
+                        checked={ageConfirmed}
+                        onToggle={() => {
+                          setAgeConfirmed((value) => !value);
+                          clearError('ageConfirmed');
+                        }}
+                        mark="18"
+                        label="I confirm I am 18 or older."
+                        accessibilityLabel="I confirm I am 18 or older"
+                      />
+                      <CheckRow
+                        checked={termsAccepted}
+                        onToggle={() => {
+                          setTermsAccepted((value) => !value);
+                          clearError('termsAccepted');
+                        }}
+                        mark="✓"
+                        label="I accept the current Terms, Privacy Policy, and Community Guidelines."
+                        accessibilityLabel="I accept the Terms, Privacy Policy, and Community Guidelines"
+                      />
+                      {errors.ageConfirmed || errors.termsAccepted ? (
+                        <Text style={[styles.inlineError, { color: colors.danger }]}>
+                          {errors.ageConfirmed ?? errors.termsAccepted}
+                        </Text>
+                      ) : null}
+                    </>
+                  ) : null}
+                </>
+              )}
+
+              {mode === 'login' ? (
+                <Button label="Let's go" onPress={submit} loading={busy} size="lg" icon="flash" />
+              ) : null}
+              {mode === 'register' ? (
+                <View style={styles.registerActions}>
+                  {registerStep > 1 ? (
+                    <Button
                       label="Back"
                       onPress={() => setRegisterStep((step) => (step === 3 ? 2 : 1))}
-                      kind="ghost"
+                      variant="ghost"
                       disabled={busy}
                     />
+                  ) : null}
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label={registerStep === 3 ? 'Build my profile' : 'Continue'}
+                      onPress={registerStep === 3 ? submit : advanceRegistration}
+                      loading={busy}
+                      size="lg"
+                    />
                   </View>
-                ) : null}
-                <View style={styles.registerAction}>
-                  <PrimaryButton
-                    label={registerStep === 3 ? 'Build my profile' : 'Continue'}
-                    onPress={registerStep === 3 ? submit : advanceRegistration}
-                    loading={busy}
-                  />
                 </View>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.footnote}>
-            {mode === 'login'
-              ? 'Returning users land straight in the live campus feed.'
-              : mode === 'reset'
-                ? 'Reset codes are sent to your OSU email and expire quickly.'
-                : 'For students 18+. Bridge is independent and not affiliated with Ohio State.'}
-          </Text>
-        </Panel>
-        </Entrance>
-      </ScrollView>
-    </Screen>
+              ) : null}
+            </View>
+          </Card>
+        </Animated.View>
+
+        <Text style={[typography.captionSmall, styles.footnote]}>
+          {mode === 'login'
+            ? 'Returning users land straight in the live campus feed.'
+            : mode === 'reset'
+              ? 'Reset codes are sent to your OSU email and expire quickly.'
+              : 'For students 18+. Bridge is independent and not affiliated with Ohio State.'}
+        </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </AppBackdrop>
   );
 }
 
-function Field({
+function CheckRow({
+  checked,
+  onToggle,
+  mark,
   label,
-  ...props
+  accessibilityLabel,
 }: {
+  checked: boolean;
+  onToggle: () => void;
+  mark: string;
   label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  secureTextEntry?: boolean;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  keyboardType?: 'default' | 'email-address' | 'number-pad';
-  textContentType?: 'emailAddress' | 'givenName' | 'familyName' | 'password' | 'newPassword' | 'oneTimeCode';
-  autoComplete?: 'email' | 'given-name' | 'family-name' | 'current-password' | 'new-password' | 'one-time-code';
-  maxLength?: number;
+  accessibilityLabel: string;
 }) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const [focused, setFocused] = React.useState(false);
+  const { colors, typography } = useTheme();
   return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        {...props}
-        style={[styles.input, focused && styles.inputFocused]}
-        placeholderTextColor={colors.faint}
-        accessibilityLabel={label}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-      />
-    </View>
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [checkStyles.row, pressed && { opacity: 0.7 }]}
+    >
+      <View
+        style={[
+          checkStyles.box,
+          {
+            borderColor: colors.border,
+            backgroundColor: checked ? colors.primary : colors.surface,
+          },
+        ]}
+      >
+        {checked ? <Text style={[checkStyles.mark, { color: colors.onPrimary }]}>{mark}</Text> : null}
+      </View>
+      <Text style={[typography.body, { flex: 1, fontSize: 13.5, lineHeight: 19 }]}>{label}</Text>
+    </Pressable>
   );
 }
+
+const checkStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  box: {
+    width: 26,
+    height: 26,
+    borderRadius: radii.xs,
+    borderWidth: BORDER_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mark: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+  },
+});
 
 function PolicyLink({ label, url }: { label: string; url: string }) {
-  const styles = useStyles();
+  const { colors } = useTheme();
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="link"
       accessibilityLabel={`Open ${label}`}
       onPress={() => void Linking.openURL(url)}
-      style={styles.policyLink}
+      style={({ pressed }) => [policyStyles.link, pressed && { opacity: 0.5 }]}
     >
-      <Text style={styles.linkText}>{label}</Text>
-    </TouchableOpacity>
+      <Text style={[policyStyles.text, { color: colors.primary }]}>{label}</Text>
+      <Ionicons name="open-outline" size={12} color={colors.primary} />
+    </Pressable>
   );
 }
+
+const policyStyles = StyleSheet.create({
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 4,
+  },
+  text: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+});
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
+  },
+  masthead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.md,
   },
-  brandRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    paddingHorizontal: 2,
-    marginTop: spacing.sm,
+  markFace: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  brandMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    ...t.shadows.glow,
+  markText: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    letterSpacing: -0.2,
+    color: t.colors.onPrimary,
   },
-  brandMarkText: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 24,
-    color: '#FFFFFF',
-  },
-  brandName: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 26,
-    letterSpacing: -0.8,
+  heroTitle: {
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
     color: t.colors.ink,
-  },
-  heroChips: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
     marginTop: spacing.sm,
-    rowGap: spacing.xs,
+  },
+  heroSub: {
+    marginTop: spacing.sm,
+    color: t.colors.sub,
+    maxWidth: 300,
+  },
+  modeRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  },
+  progressBlock: {
+    marginBottom: spacing.lg,
   },
   form: {
-    marginTop: spacing.md,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
-  progress: {
-    marginTop: spacing.md,
-    gap: spacing.xs,
-  },
-  progressCopy: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  progressLabel: {
-    ...t.typography.label,
-    color: t.colors.primary,
-  },
-  progressStep: {
-    ...t.typography.bodyStrong,
-    fontSize: 13,
-  },
-  progressTrack: {
-    height: 6,
-    overflow: 'hidden' as const,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.inputBg,
-  },
-  progressFill: {
-    height: '100%' as const,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primary,
-  },
-  checkRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+  fieldBlock: {
     gap: spacing.sm,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: t.colors.borderStrong,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: t.colors.surface,
-  },
-  checkboxActive: {
-    backgroundColor: t.colors.primary,
-    borderColor: t.colors.primary,
-  },
-  checkboxMark: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: '#FFFFFF',
-    lineHeight: 16,
-  },
-  checkText: {
-    ...t.typography.body,
-    flex: 1,
-  },
-  linkText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: t.colors.primarySoftText,
-  },
-  policyLinks: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: spacing.sm,
-  },
-  policyLink: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: t.colors.primarySoft,
   },
   chipWrap: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    rowGap: spacing.sm,
+    gap: spacing.sm,
   },
-  forgotButton: {
+  forgot: {
     alignSelf: 'flex-start' as const,
-    paddingVertical: 2,
   },
   forgotText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: t.colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
   },
-  field: {
-    gap: spacing.xs,
-  },
-  fieldHelp: {
-    ...t.typography.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  fieldLabel: {
-    ...t.typography.label,
-  },
-  input: {
-    borderRadius: radii.md,
-    backgroundColor: t.colors.inputBg,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    color: t.colors.ink,
-  },
-  inputFocused: {
-    borderColor: t.colors.primary,
-    backgroundColor: t.colors.surface,
-  },
-  footnote: {
-    marginTop: spacing.md,
-    ...t.typography.caption,
+  policyRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.lg,
   },
   registerActions: {
     flexDirection: 'row' as const,
     gap: spacing.sm,
+    alignItems: 'center' as const,
   },
-  registerAction: {
-    flex: 1,
+  footnote: {
+    textAlign: 'center' as const,
+    paddingHorizontal: spacing.xl,
+  },
+  inlineError: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
   },
 }));
