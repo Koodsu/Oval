@@ -1,10 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   Share,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -15,10 +18,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  addPodMessageReaction,
-  blockUser,
+  cancelPod,
   confirmAttendance,
-  createReport,
+  editPod,
   getApiErrorMessage,
   getFriends,
   getMessages,
@@ -27,15 +29,13 @@ import {
   getPodShareUrl,
   joinPod,
   joinWaitlist,
+  kickPodMember,
   leavePod,
   leaveWaitlist,
   lockPod,
-  removePodMessageReaction,
   reportNoShow,
   sendFriendRequest,
-  sendMessage,
   sendPodInvite,
-  sendPodTyping,
   submitRecap,
   unlockPod,
   updatePodPrivacy,
@@ -48,10 +48,13 @@ import {
   Banner,
   Button,
   Card,
+  DateTimeField,
   EmptyState,
   IconButton,
+  ListRow,
   ScreenHeader,
   SectionHeader,
+  Sheet,
   SkeletonCard,
   Sticker,
   Tag,
@@ -72,14 +75,15 @@ import { INTEREST_TAG_META } from '../constants/interestTags';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
 
-const HEART_EMOJI = '❤️';
-
 const POD_STATUS_LABELS: Record<Pod['status'], string> = {
   FORMING: 'Open',
   LOCKED: 'Locked',
   COMPLETED: 'Completed',
   EXPIRED: 'Expired',
+  CANCELLED: 'Cancelled',
 };
+
+const CHAT_PREVIEW_COUNT = 2;
 
 function statusTint(status: Pod['status'], colors: ThemeColors) {
   switch (status) {
@@ -102,27 +106,31 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const [pod, setPod] = useState<Pod | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [peopleYouMet, setPeopleYouMet] = useState<PeopleYouMetUser[]>([]);
-  const [messageText, setMessageText] = useState('');
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(true);
-  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLocation, setEditLocation] = useState('');
+  const [editTime, setEditTime] = useState(new Date());
 
   const load = useCallback(
-    async (showAlert = true) => {
+    async (showAlert = false) => {
       try {
         const podResponse = await getPod(podId);
         const isMember = podResponse.members.some((member) => member.userId === user?.id);
         const myMember = podResponse.members.find((member) => member.userId === user?.id);
 
+        // Lightweight chat preview only — the full conversation lives in
+        // PodChatScreen, which handles realtime + pagination.
         const messageResponse = isMember
-          ? await getMessages(podId).catch(() => ({ messages: [], typingUserIds: [] }))
-          : { messages: [], typingUserIds: [] };
+          ? await getMessages(podId, { limit: CHAT_PREVIEW_COUNT }).catch(() => ({
+              messages: [],
+              typingUserIds: [],
+              hasMore: false,
+            }))
+          : { messages: [], typingUserIds: [], hasMore: false };
 
         const friendList = isMember ? await getFriends().catch(() => []) : [];
         const metUsers =
@@ -134,7 +142,6 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
         setPod(podResponse);
         setMessages(messageResponse.messages);
-        setTypingUserIds(messageResponse.typingUserIds);
         setFriends(friendList);
         setPeopleYouMet(metUsers);
         setLoadError(null);
@@ -151,26 +158,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load();
-      const interval = setInterval(() => {
-        void load(false);
-      }, 3500);
-      return () => {
-        clearInterval(interval);
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      };
     }, [load]),
-  );
-
-  const pingTyping = useCallback(
-    (draft: string) => {
-      if (!draft.trim()) return;
-      if (typingTimerRef.current) return;
-      typingTimerRef.current = setTimeout(() => {
-        typingTimerRef.current = null;
-      }, 2500);
-      void sendPodTyping(podId).catch(() => {});
-    },
-    [podId],
   );
 
   const meInPod = pod?.members.some((member) => member.userId === user?.id) ?? false;
@@ -267,78 +255,6 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleSend = async () => {
-    if (!messageText.trim()) return;
-    setSending(true);
-    try {
-      const sent = await sendMessage(podId, messageText.trim(), replyTo?.id);
-      setMessageText('');
-      setReplyTo(null);
-      setMessages((current) => [...current, sent]);
-    } catch (error) {
-      Alert.alert('Could not send message', getApiErrorMessage(error));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleHeart = async (message: Message) => {
-    const hasHeart = !!message.reactions?.some(
-      (reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI,
-    );
-    try {
-      const updated = hasHeart
-        ? await removePodMessageReaction(podId, message.id, HEART_EMOJI)
-        : await addPodMessageReaction(podId, message.id, HEART_EMOJI);
-      setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
-    } catch (error) {
-      Alert.alert('Could not update heart', getApiErrorMessage(error));
-    }
-  };
-
-  const handleMessageSafetyAction = (message: Message) => {
-    if (message.user.id === user?.id) {
-      setReplyTo(message);
-      return;
-    }
-
-    Alert.alert('Message safety', undefined, [
-      {
-        text: 'Report message',
-        onPress: async () => {
-          try {
-            await createReport({
-              podId,
-              messageId: message.id,
-              targetUserId: message.user.id,
-              reason: 'HARASSMENT',
-            });
-            Alert.alert('Report sent', 'Thanks. We logged this pod message for review.');
-          } catch (error) {
-            Alert.alert('Could not send report', getApiErrorMessage(error));
-          }
-        },
-      },
-      {
-        text: `Block ${message.user.name}`,
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await blockUser(message.user.id);
-            Alert.alert(
-              'User blocked',
-              'They can no longer message you. Shared pods are separated for safety.',
-            );
-            navigation.goBack();
-          } catch (error) {
-            Alert.alert('Could not block user', getApiErrorMessage(error));
-          }
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   const handleRecap = async (rating: 1 | 2 | 3) => {
     if (!pod) return;
     setActionBusy('recap');
@@ -391,17 +307,113 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleNoShow = async (userId: string) => {
+  const handleNoShow = (userId: string, name: string) => {
     if (!pod) return;
-    setActionBusy(`noshow-${userId}`);
+    Alert.alert(
+      `Report ${name} as a no-show?`,
+      'Only do this if they committed to the pod and did not turn up. No-show reports affect their reliability record and cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report no-show',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setActionBusy(`noshow-${userId}`);
+              try {
+                await reportNoShow(pod.id, userId);
+                await load(false);
+              } catch (error) {
+                Alert.alert('Could not report no-show', getApiErrorMessage(error));
+              } finally {
+                setActionBusy(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const openEditPod = () => {
+    if (!pod) return;
+    setEditLocation(pod.location);
+    setEditTime(new Date(pod.meetupTime));
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!pod) return;
+    if (!editLocation.trim()) {
+      Alert.alert('Add a meetup spot', 'The location cannot be empty.');
+      return;
+    }
+    setActionBusy('edit');
     try {
-      await reportNoShow(pod.id, userId);
-      await load(false);
+      const updated = await editPod(pod.id, {
+        location: editLocation.trim(),
+        meetupTime: editTime.toISOString(),
+      });
+      setPod(updated);
+      setEditOpen(false);
     } catch (error) {
-      Alert.alert('Could not report no-show', getApiErrorMessage(error));
+      Alert.alert('Could not update pod', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
+  };
+
+  const confirmCancelPod = () => {
+    if (!pod) return;
+    Alert.alert(
+      'Cancel this pod?',
+      'Everyone who joined will be notified that the plan is off. This cannot be undone.',
+      [
+        { text: 'Keep pod', style: 'cancel' },
+        {
+          text: 'Cancel pod',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setActionBusy('cancel');
+              try {
+                const updated = await cancelPod(pod.id);
+                setPod(updated);
+                setEditOpen(false);
+              } catch (error) {
+                Alert.alert('Could not cancel pod', getApiErrorMessage(error));
+              } finally {
+                setActionBusy(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmKickMember = (memberUserId: string, name: string) => {
+    if (!pod) return;
+    Alert.alert(`Remove ${name} from this pod?`, 'They can rejoin only if a spot is still open.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setActionBusy(`kick-${memberUserId}`);
+            try {
+              const updated = await kickPodMember(pod.id, memberUserId);
+              setPod(updated);
+            } catch (error) {
+              Alert.alert('Could not remove member', getApiErrorMessage(error));
+            } finally {
+              setActionBusy(null);
+            }
+          })();
+        },
+      },
+    ]);
   };
 
   if (!pod && loadError) {
@@ -426,6 +438,11 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
   return (
     <AppBackdrop>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
+      >
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -466,7 +483,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 </View>
               </View>
               <Text style={styles.podTitle}>
-                {(pod.activity?.title ?? 'Pod detail').toUpperCase()}
+                {pod.activity?.title ?? 'Pod detail'}
               </Text>
               <View style={styles.metaList}>
                 <View style={styles.metaItem}>
@@ -497,6 +514,14 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   accessibilityLabel="Share pod link"
                   size={48}
                 />
+                {isCreator && (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
+                  <IconButton
+                    icon="pencil"
+                    onPress={openEditPod}
+                    accessibilityLabel="Edit pod details"
+                    size={48}
+                  />
+                ) : null}
                 {isCreator ? (
                   <IconButton
                     icon={pod.status === 'LOCKED' ? 'lock-open' : 'lock-closed'}
@@ -553,234 +578,47 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               </View>
             ) : null}
 
-            {/* Chat */}
-            {meInPod ? (
-              <Card padded={false}>
-                <View style={[styles.chatHeader, { borderBottomColor: colors.borderSoft }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={typography.title}>The chat</Text>
-                    <Text style={typography.captionSmall}>
-                      {pod.members.length} {pod.members.length === 1 ? 'member' : 'members'} • tap a
-                      message to reply
-                    </Text>
-                  </View>
-                  <Sticker label="Live" tint={colors.successSoft} icon="radio" small tilt={2} />
+            {/* Chat preview — full conversation lives in PodChatScreen */}
+            <Card padded>
+              <View style={styles.chatPreviewHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={typography.title}>The chat</Text>
+                  <Text style={typography.captionSmall}>
+                    {meInPod
+                      ? `${pod.members.length} ${pod.members.length === 1 ? 'member' : 'members'} • live`
+                      : 'Join the pod to read and send messages.'}
+                  </Text>
                 </View>
-
-                <ScrollView
-                  style={styles.messageList}
-                  contentContainerStyle={styles.messageListContent}
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                >
-                  {messages.length ? (
-                    messages.map((message) => {
-                      const mine = message.user.id === user?.id;
-                      const heartCount =
-                        message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI)
-                          .length ?? 0;
-                      const hasHeart = !!message.reactions?.some(
-                        (reaction) =>
-                          reaction.userId === user?.id && reaction.emoji === HEART_EMOJI,
-                      );
-
-                      return (
-                        <View key={message.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
-                          {!mine ? (
-                            <Pressable
-                              onPress={() =>
-                                navigation.navigate('UserProfile', { userId: message.user.id })
-                              }
-                              accessibilityRole="button"
-                              accessibilityLabel={`Open ${message.user.name}'s profile`}
-                            >
-                              <Avatar name={message.user.name} uri={message.user.avatarUrl} size={32} />
-                            </Pressable>
-                          ) : null}
-                          <View style={[styles.messageStack, mine && styles.messageStackMine]}>
-                            <View style={[styles.messageMetaRow, mine && styles.messageMetaRowMine]}>
-                              <Text style={styles.messageName}>
-                                {mine ? 'You' : message.user.name}
-                              </Text>
-                              <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
-                            </View>
-                            <Pressable
-                              onLongPress={() => setReplyTo(message)}
-                              onPress={() => setReplyTo(message)}
-                              style={[
-                                styles.bubble,
-                                {
-                                  backgroundColor: mine ? colors.primary : colors.surfaceAlt,
-                                  borderColor: colors.border,
-                                },
-                                mine ? styles.bubbleMine : styles.bubbleTheirs,
-                              ]}
-                            >
-                              {message.replyTo ? (
-                                <View
-                                  style={[
-                                    styles.replyPreview,
-                                    {
-                                      borderLeftColor: mine
-                                        ? 'rgba(255,246,232,0.5)'
-                                        : colors.faint,
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.replyMeta,
-                                      { color: mine ? 'rgba(255,246,232,0.8)' : colors.faint },
-                                    ]}
-                                  >
-                                    Replying to {message.replyTo.user.name}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.replyBody,
-                                      { color: mine ? 'rgba(255,246,232,0.7)' : colors.faint },
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {message.replyTo.content}
-                                  </Text>
-                                </View>
-                              ) : null}
-                              <Text
-                                style={[
-                                  styles.messageBody,
-                                  { color: mine ? colors.onPrimary : colors.ink },
-                                ]}
-                              >
-                                {message.content}
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => void handleHeart(message)}
-                              style={[styles.heartButton, mine && styles.heartButtonMine]}
-                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              accessibilityRole="button"
-                              accessibilityLabel={
-                                hasHeart ? 'Remove heart from message' : 'Heart message'
-                              }
-                              accessibilityState={{ selected: hasHeart }}
-                            >
-                              <Ionicons
-                                name={hasHeart ? 'heart' : 'heart-outline'}
-                                size={15}
-                                color={hasHeart ? colors.pink : colors.faint}
-                              />
-                              {heartCount ? (
-                                <Text style={styles.heartCount}>{heartCount}</Text>
-                              ) : null}
-                            </Pressable>
-                          </View>
-                          {!mine ? (
-                            <Pressable
-                              onPress={() => handleMessageSafetyAction(message)}
-                              style={styles.safetyButton}
-                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Safety actions for ${message.user.name}'s message`}
-                            >
-                              <Ionicons
-                                name="ellipsis-horizontal-circle-outline"
-                                size={20}
-                                color={colors.faint}
-                              />
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <View style={styles.emptyChat}>
-                      <Sticker label="Crickets" tint={colors.amberSoft} tilt={-3} icon="chatbubble" />
-                      <Text style={[typography.subheading, { marginTop: spacing.sm }]}>
-                        No messages yet
-                      </Text>
-                      <Text style={[typography.caption, { textAlign: 'center' }]}>
-                        Start with an ETA, meetup note, or quick check-in.
+                <Sticker label="Live" tint={colors.successSoft} icon="radio" small tilt={2} />
+              </View>
+              {meInPod && messages.length ? (
+                <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+                  {messages.slice(-CHAT_PREVIEW_COUNT).map((message) => (
+                    <View key={message.id} style={styles.chatPreviewRow}>
+                      <Avatar name={message.user.name} uri={message.user.avatarUrl} size={28} />
+                      <Text style={[typography.caption, { flex: 1 }]} numberOfLines={2}>
+                        <Text style={{ fontFamily: fonts.bold }}>
+                          {message.user.id === user?.id ? 'You' : message.user.name.split(' ')[0]}:
+                        </Text>{' '}
+                        {message.content}
                       </Text>
                     </View>
-                  )}
-                  {typingUserIds.length ? (
-                    <Text style={[typography.caption, { color: colors.primary }]}>
-                      Someone is typing…
-                    </Text>
-                  ) : null}
-                </ScrollView>
-
-                {replyTo ? (
-                  <View
-                    style={[
-                      styles.replyComposer,
-                      { backgroundColor: colors.surfaceAlt, borderTopColor: colors.borderSoft },
-                    ]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.replyMeta}>Replying to {replyTo.user.name}</Text>
-                      <Text style={[styles.replyBody, { color: colors.sub }]} numberOfLines={1}>
-                        {replyTo.content}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => setReplyTo(null)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Cancel reply"
-                      hitSlop={8}
-                    >
-                      <Ionicons name="close-circle" size={20} color={colors.sub} />
-                    </Pressable>
-                  </View>
-                ) : null}
-                <View style={[styles.composerRow, { borderTopColor: colors.border }]}>
-                  <TextInput
-                    value={messageText}
-                    onChangeText={(value) => {
-                      setMessageText(value);
-                      pingTyping(value);
-                    }}
-                    placeholder="Message the pod"
-                    placeholderTextColor={colors.faint}
-                    style={[
-                      styles.input,
-                      { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.ink },
-                    ]}
-                    returnKeyType="send"
-                    onSubmitEditing={() => void handleSend()}
-                  />
-                  <Pressable
-                    onPress={() => void handleSend()}
-                    disabled={sending || !messageText.trim()}
-                    style={[
-                      styles.sendButton,
-                      {
-                        backgroundColor: !messageText.trim() || sending ? colors.faint : colors.primary,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Send pod message"
-                    accessibilityState={{ disabled: sending || !messageText.trim() }}
-                  >
-                    {sending ? (
-                      <ActivityIndicator size="small" color={colors.onPrimary} />
-                    ) : (
-                      <Ionicons name="arrow-up" size={18} color={colors.onPrimary} />
-                    )}
-                  </Pressable>
+                  ))}
                 </View>
-              </Card>
-            ) : (
-              <EmptyState
-                icon="lock-closed"
-                title="Join to open the chat"
-                body="Pod conversation, recaps, and member coordination unlock once you join."
-              />
-            )}
+              ) : meInPod ? (
+                <Text style={[typography.caption, { marginTop: spacing.md }]}>
+                  No messages yet — start with an ETA or a quick check-in.
+                </Text>
+              ) : null}
+              {meInPod ? (
+                <Button
+                  label="Open chat"
+                  icon="chatbubbles"
+                  onPress={() => navigation.navigate('PodChat', { podId: pod.id })}
+                  style={{ marginTop: spacing.md }}
+                />
+              ) : null}
+            </Card>
 
             {/* Details */}
             <Card padded={false}>
@@ -832,6 +670,21 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             <Text style={[typography.captionSmall, { color: colors.success }]}>
                               Confirmed
                             </Text>
+                          ) : null}
+                          {isCreator &&
+                          member.userId !== user?.id &&
+                          (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
+                            <Pressable
+                              onPress={() => confirmKickMember(member.userId, member.user.name)}
+                              disabled={actionBusy === `kick-${member.userId}`}
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Remove ${member.user.name} from pod`}
+                            >
+                              <Text style={[typography.captionSmall, { color: colors.danger }]}>
+                                {actionBusy === `kick-${member.userId}` ? 'Removing…' : 'Remove'}
+                              </Text>
+                            </Pressable>
                           ) : null}
                         </Pressable>
                       ))}
@@ -1082,7 +935,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                               label="Report no-show"
                               size="sm"
                               variant="secondary"
-                              onPress={() => void handleNoShow(member.userId)}
+                              onPress={() => handleNoShow(member.userId, member.user.name)}
                               loading={actionBusy === `noshow-${member.userId}`}
                             />
                           </View>
@@ -1107,6 +960,58 @@ export default function PodDetailScreen({ route, navigation }: Props) {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
+      <Sheet
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit pod details"
+        kicker="CREATOR TOOLS"
+      >
+        <View style={{ gap: spacing.lg }}>
+          <View style={{ gap: 6 }}>
+            <Text style={typography.kicker}>Location</Text>
+            <TextInput
+              value={editLocation}
+              onChangeText={setEditLocation}
+              placeholder="Where are you meeting?"
+              placeholderTextColor={colors.faint}
+              multiline
+              style={[
+                styles.editLocationInput,
+                {
+                  backgroundColor: colors.surfaceAlt,
+                  borderColor: colors.border,
+                  color: colors.ink,
+                },
+              ]}
+            />
+          </View>
+          <View style={{ gap: 6 }}>
+            <Text style={typography.kicker}>Meetup time</Text>
+            <DateTimeField
+              value={editTime}
+              minimumDate={new Date()}
+              maximumDate={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
+              onChange={setEditTime}
+            />
+          </View>
+          <Text style={typography.captionSmall}>
+            Everyone in the pod is notified when the plan changes.
+          </Text>
+          <Button
+            label="Save changes"
+            onPress={() => void handleEditSave()}
+            loading={actionBusy === 'edit'}
+            size="lg"
+          />
+          <Button
+            label="Cancel pod"
+            variant="ghost"
+            onPress={confirmCancelPod}
+            loading={actionBusy === 'cancel'}
+          />
+        </View>
+      </Sheet>
     </AppBackdrop>
   );
 }
@@ -1175,16 +1080,24 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   messageList: {
-    minHeight: 236,
-    maxHeight: 360,
+    minHeight: 280,
+    maxHeight: 520,
   },
   messageListContent: {
-    gap: spacing.md,
     padding: spacing.lg,
+  },
+  messageGroup: {
+    marginTop: spacing.md,
+  },
+  messageGroupTight: {
+    marginTop: 2,
+  },
+  messageDay: {
+    alignItems: 'center' as const,
+    marginVertical: spacing.md,
   },
   messageRow: {
     flexDirection: 'row' as const,
@@ -1288,8 +1201,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderTopWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   composerRow: {
     flexDirection: 'row' as const,
@@ -1324,8 +1236,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   detailsBody: {
     gap: spacing.lg,
-    borderTopWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderTopWidth: StyleSheet.hairlineWidth,
     padding: spacing.lg,
   },
   detailSection: {
@@ -1409,5 +1320,42 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flex: 1,
     justifyContent: 'center' as const,
     gap: spacing.md,
+  },
+  chatPreviewHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  chatPreviewRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  reactionRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  reactionOption: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingVertical: 10,
+  },
+  reactionEmoji: {
+    fontSize: 22,
+  },
+  editLocationInput: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 48,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    textAlignVertical: 'top' as const,
   },
 }));

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
@@ -91,6 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
+  // Refs mirror the latest auth state so callbacks created in an earlier
+  // render (e.g. acceptGuidelines called right after signIn during
+  // registration) don't read stale null values from a closed-over state.
+  const userRef = useRef<User | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  userRef.current = user;
+  tokenRef.current = token;
 
   const signOut = useCallback(async () => {
     await Promise.all([
@@ -214,14 +221,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw err;
     }
     setApiToken(newToken);
+    tokenRef.current = newToken;
+    userRef.current = newUser;
     setTokenState(newToken);
     setUser(newUser);
   };
 
   const acceptGuidelines = async () => {
-    if (token && user) {
+    if (tokenRef.current && userRef.current) {
       const response = await acceptCurrentTerms();
       await AsyncStorage.setItem('user', JSON.stringify(response.user));
+      userRef.current = response.user;
       setUser(response.user);
     }
     await AsyncStorage.setItem(HAS_ACCEPTED_POD_TERMS_KEY, 'true');
@@ -229,9 +239,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUser = async (partial: Partial<User>) => {
-    if (!user) return;
-    const updated = { ...user, ...partial };
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    const updated = { ...currentUser, ...partial };
     await AsyncStorage.setItem('user', JSON.stringify(updated));
+    userRef.current = updated;
     setUser(updated);
   };
 

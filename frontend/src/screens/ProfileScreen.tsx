@@ -4,12 +4,13 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getApiErrorMessage, getFriends, getMyClubs } from '../api';
+import { getApiErrorMessage, getFriends, getMyClubs, getUserProfile } from '../api';
 import { RootStackParamList } from '../../App';
-import { FriendUser, MyClubMembershipRow } from '../types';
+import { FriendUser, MyClubMembershipRow, PublicProfile } from '../types';
 import {
   AppBackdrop,
   Avatar,
+  Banner,
   Button,
   Card,
   EmptyState,
@@ -17,6 +18,7 @@ import {
   ScreenHeader,
   SectionHeader,
   Slab,
+  StatSlab,
   Tag,
   accentForSeed,
 } from '../components/ui';
@@ -42,18 +44,28 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [myClubs, setMyClubs] = useState<MyClubMembershipRow[]>([]);
+  const [publicProfile, setPublicProfile] = useState<PublicProfile | null>(null);
   const [showAllClubs, setShowAllClubs] = useState(false);
   const [showAllFriends, setShowAllFriends] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [friendList, clubRows] = await Promise.all([getFriends(), getMyClubs()]);
+      const [friendList, clubRows, profile] = await Promise.all([
+        getFriends(),
+        getMyClubs(),
+        user?.id && typeof getUserProfile === 'function'
+          ? getUserProfile(user.id)
+          : Promise.resolve(null),
+      ]);
       setFriends(friendList);
       setMyClubs(clubRows);
-    } catch (error) {
-      Alert.alert('Could not load profile', getApiErrorMessage(error));
+      setPublicProfile(profile);
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — your saved profile is still available.");
     }
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,6 +85,7 @@ export default function ProfileScreen() {
         keyboardDismissMode="on-drag"
       >
         <ScreenHeader title="Profile" kicker="YOU" onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         {/* Identity card */}
         <Card padded>
@@ -85,6 +98,16 @@ export default function ProfileScreen() {
             <Text style={typography.captionSmall}>{user?.email}</Text>
             {user?.bio ? (
               <Text style={[typography.body, styles.identityBio]}>{user.bio}</Text>
+            ) : null}
+            {user?.purpose || user?.campusZones?.length ? (
+              <Text style={typography.captionSmall}>
+                {[
+                  user?.purpose ? `Here for: ${user.purpose}` : null,
+                  user?.campusZones?.length ? `Usually around ${user.campusZones.join(', ')}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' • ')}
+              </Text>
             ) : null}
             {user?.interestTags?.length ? (
               <View style={styles.tagRow}>
@@ -107,6 +130,30 @@ export default function ProfileScreen() {
                 <Text style={styles.statValue}>{myClubs.length}</Text>
                 <Text style={styles.statLabel}>CLUBS</Text>
               </View>
+            </View>
+            <View style={styles.trustStats}>
+              <StatSlab
+                label="PODS JOINED"
+                value={String(publicProfile?.podsJoined ?? 0)}
+                icon="flash"
+                tint={colors.amberSoft}
+              />
+              <StatSlab
+                label="ATTENDED"
+                value={String(publicProfile?.podsAttended ?? 0)}
+                icon="checkmark-circle"
+                tint={colors.greenSoft}
+              />
+              <StatSlab
+                label="RELIABILITY"
+                value={
+                  publicProfile?.reliabilityScore == null
+                    ? 'N/A'
+                    : `${publicProfile.reliabilityScore}%`
+                }
+                icon="shield-checkmark"
+                tint={colors.tealSoft}
+              />
             </View>
             <Button
               label="Edit profile"
@@ -296,6 +343,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     width: 2,
     height: 30,
   },
+  trustStats: {
+    alignSelf: 'stretch' as const,
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  },
   section: {
     gap: spacing.md,
   },
@@ -312,6 +364,5 @@ const useStyles = createThemedStyles((t: Theme) => ({
     borderWidth: BORDER_W,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    transform: [{ rotate: '-2deg' }],
   },
 }));

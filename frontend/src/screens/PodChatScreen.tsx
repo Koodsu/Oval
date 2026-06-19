@@ -16,23 +16,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  addDMReaction,
+  addPodMessageReaction,
   blockUser,
   createReport,
-  deleteDMMessage,
+  deletePodMessage,
   getApiErrorMessage,
-  getThreadMessages,
-  markDMThreadRead,
-  removeDMReaction,
-  sendDirectMessage,
-  sendDMTyping,
+  getMessages,
+  getPod,
+  removePodMessageReaction,
+  sendMessage,
+  sendPodTyping,
 } from '../api';
-import { REACTION_EMOJIS } from '../constants/reactions';
-import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
-import { mergeLatestPage } from '../utils/chat';
-import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
 import { RootStackParamList } from '../../App';
-import { DirectMessage } from '../types';
+import { Message, Pod } from '../types';
 import {
   AppBackdrop,
   Avatar,
@@ -54,8 +50,12 @@ import {
 } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { formatTime } from '../utils/format';
+import { mergeLatestPage } from '../utils/chat';
+import { REACTION_EMOJIS } from '../constants/reactions';
+import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
+import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'PodChat'>;
 
 const HEART_EMOJI = '❤️';
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -66,57 +66,79 @@ const POLL_FALLBACK_MS = 3500;
 
 function dayLabel(iso: string) {
   const date = new Date(iso);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return 'TODAY';
+  if (date.toDateString() === new Date().toDateString()) return 'TODAY';
   return date
     .toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
     .toUpperCase();
 }
 
-export default function ThreadScreen({ route, navigation }: Props) {
+export default function PodChatScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { threadId, title } = route.params;
+  const { podId } = route.params;
   const { user } = useAuth();
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const [pod, setPod] = useState<Pod | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [messageText, setMessageText] = useState('');
-  const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeSheet, setActiveSheet] = useState<DirectMessage | null>(null);
-  const [reportTarget, setReportTarget] = useState<DirectMessage | null>(null);
+  const [activeMessage, setActiveMessage] = useState<Message | null>(null);
+  const [reportTarget, setReportTarget] = useState<Message | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastReadMessageIdRef = useRef<string | null>(null);
-  const messagesRef = useRef<DirectMessage[]>([]);
+  const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
+  const isMemberRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
-  const load = useCallback(
-    async (showAlert = false) => {
-      try {
-        const response = await getThreadMessages(threadId, { limit: MESSAGE_PAGE_SIZE });
-        setMessages((current) => mergeLatestPage(current, response.messages));
-        if (!messagesRef.current.length) setHasMore(!!response.hasMore);
-        setTypingUserIds(response.typingUserIds);
-        setLoadError(null);
-        // Only mark read when something new actually arrived — avoids a
-        // write request on every poll tick.
-        const lastId = response.messages[response.messages.length - 1]?.id ?? null;
-        if (lastId && lastId !== lastReadMessageIdRef.current) {
-          lastReadMessageIdRef.current = lastId;
-          await markDMThreadRead(threadId);
-        }
-      } catch (error) {
-        setLoadError(getApiErrorMessage(error));
-        if (showAlert) {
-          Alert.alert('Could not load thread', getApiErrorMessage(error));
-        }
+  const refreshMessages = useCallback(async () => {
+    if (!isMemberRef.current) return;
+    try {
+      const response = await getMessages(podId, { limit: MESSAGE_PAGE_SIZE });
+      setMessages((current) => mergeLatestPage(current, response.messages));
+      if (!initialLoadDoneRef.current) {
+        setHasMore(!!response.hasMore);
+        initialLoadDoneRef.current = true;
       }
-    },
-    [threadId],
+      setTypingUserIds(response.typingUserIds);
+      setLoadError(null);
+    } catch {
+      // Keep stale chat visible until the next successful refresh.
+    }
+  }, [podId]);
+
+  const load = useCallback(async () => {
+    try {
+      const podResponse = await getPod(podId);
+      isMemberRef.current = podResponse.members.some((member) => member.userId === user?.id);
+      setPod(podResponse);
+      setLoadError(null);
+      await refreshMessages();
+    } catch (error) {
+      setLoadError(getApiErrorMessage(error));
+    }
+  }, [podId, refreshMessages, user?.id]);
+
+  const realtimeConnected = useRealtimeChannel(`pod-${podId}`, REALTIME_CHAT_EVENTS, () => {
+    void refreshMessages();
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      const interval = setInterval(
+        () => void refreshMessages(),
+        realtimeConnected ? POLL_REALTIME_MS : POLL_FALLBACK_MS,
+      );
+      return () => {
+        clearInterval(interval);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      };
+    }, [load, realtimeConnected, refreshMessages]),
   );
 
   const loadEarlier = useCallback(async () => {
@@ -124,7 +146,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
     if (!oldest || loadingEarlier) return;
     setLoadingEarlier(true);
     try {
-      const response = await getThreadMessages(threadId, {
+      const response = await getMessages(podId, {
         limit: MESSAGE_PAGE_SIZE,
         before: oldest.id,
       });
@@ -139,27 +161,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
     } finally {
       setLoadingEarlier(false);
     }
-  }, [loadingEarlier, threadId]);
-
-  const realtimeConnected = useRealtimeChannel(`dm-${threadId}`, REALTIME_CHAT_EVENTS, () => {
-    void load(false);
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-      const interval = setInterval(
-        () => {
-          void load(false);
-        },
-        realtimeConnected ? POLL_REALTIME_MS : POLL_FALLBACK_MS,
-      );
-      return () => {
-        clearInterval(interval);
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      };
-    }, [load, realtimeConnected]),
-  );
+  }, [loadingEarlier, podId]);
 
   const pingTyping = useCallback(
     (draft: string) => {
@@ -168,16 +170,16 @@ export default function ThreadScreen({ route, navigation }: Props) {
       typingTimerRef.current = setTimeout(() => {
         typingTimerRef.current = null;
       }, 2500);
-      void sendDMTyping(threadId).catch(() => {});
+      void sendPodTyping(podId).catch(() => {});
     },
-    [threadId],
+    [podId],
   );
 
   const handleSend = async () => {
     if (!messageText.trim()) return;
     setSending(true);
     try {
-      const sent = await sendDirectMessage(threadId, messageText.trim(), replyTo?.id);
+      const sent = await sendMessage(podId, messageText.trim(), replyTo?.id);
       setMessageText('');
       setReplyTo(null);
       setMessages((current) => [...current, sent]);
@@ -188,45 +190,40 @@ export default function ThreadScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleReaction = async (message: DirectMessage, emoji: string) => {
+  const handleReaction = async (message: Message, emoji: string) => {
     const hasReaction = !!message.reactions?.some(
       (reaction) => reaction.userId === user?.id && reaction.emoji === emoji,
     );
     try {
       const updated = hasReaction
-        ? await removeDMReaction(threadId, message.id, emoji)
-        : await addDMReaction(threadId, message.id, emoji);
+        ? await removePodMessageReaction(podId, message.id, emoji)
+        : await addPodMessageReaction(podId, message.id, emoji);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
     } catch (error) {
       Alert.alert('Could not update reaction', getApiErrorMessage(error));
     }
   };
 
-  const handleHeart = (message: DirectMessage) => handleReaction(message, HEART_EMOJI);
-
-  const openMessageActions = (message: DirectMessage) => {
-    setActiveSheet(message);
-  };
-
-  const submitReport = async (message: DirectMessage, reason: string) => {
+  const submitReport = async (message: Message, reason: string) => {
     setReportTarget(null);
     try {
       await createReport({
-        directMessageId: message.id,
-        targetUserId: message.sender.id,
+        podId,
+        messageId: message.id,
+        targetUserId: message.user.id,
         reason,
       });
-      Alert.alert('Report sent', 'Thanks. We logged this message for review.');
+      Alert.alert('Report sent', 'Thanks. We logged this pod message for review.');
     } catch (error) {
       Alert.alert('Could not send report', getApiErrorMessage(error));
     }
   };
 
-  const confirmBlockSender = (message: DirectMessage) => {
-    setActiveSheet(null);
+  const confirmBlockSender = (message: Message) => {
+    setActiveMessage(null);
     Alert.alert(
-      `Block ${message.sender.name}?`,
-      'They will no longer be able to message you. You can unblock them later from Settings.',
+      `Block ${message.user.name}?`,
+      'They will no longer be able to message you, and shared pods are separated. You can unblock them later from Settings.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -235,8 +232,11 @@ export default function ThreadScreen({ route, navigation }: Props) {
           onPress: () => {
             void (async () => {
               try {
-                await blockUser(message.sender.id);
-                Alert.alert('User blocked', 'They can no longer message you.');
+                await blockUser(message.user.id);
+                Alert.alert(
+                  'User blocked',
+                  'They can no longer message you. Shared pods are separated for safety.',
+                );
                 navigation.goBack();
               } catch (error) {
                 Alert.alert('Could not block user', getApiErrorMessage(error));
@@ -248,9 +248,9 @@ export default function ThreadScreen({ route, navigation }: Props) {
     );
   };
 
-  const confirmDeleteMessage = (message: DirectMessage) => {
-    setActiveSheet(null);
-    Alert.alert('Delete this message?', 'It will be removed for both of you.', [
+  const confirmDeleteMessage = (message: Message) => {
+    setActiveMessage(null);
+    Alert.alert('Delete this message?', 'It will be removed for everyone in the pod.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -258,7 +258,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
         onPress: () => {
           void (async () => {
             try {
-              await deleteDMMessage(threadId, message.id);
+              await deletePodMessage(podId, message.id);
               setMessages((current) => current.filter((item) => item.id !== message.id));
             } catch (error) {
               Alert.alert('Could not delete message', getApiErrorMessage(error));
@@ -271,6 +271,18 @@ export default function ThreadScreen({ route, navigation }: Props) {
 
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
+  const typingLabel = useMemo(() => {
+    if (!typingUserIds.length || !pod) return null;
+    const names = typingUserIds
+      .map((id) => pod.members.find((member) => member.userId === id)?.user.name?.split(' ')[0])
+      .filter((name): name is string => !!name);
+    if (!names.length) return 'Someone is typing…';
+    if (names.length === 1) return `${names[0]} is typing…`;
+    return `${names.slice(0, 2).join(' and ')}${names.length > 2 ? ' and others' : ''} are typing…`;
+  }, [pod, typingUserIds]);
+
+  const isMember = pod?.members.some((member) => member.userId === user?.id) ?? false;
+
   return (
     <AppBackdrop>
       <KeyboardAvoidingView
@@ -280,8 +292,21 @@ export default function ThreadScreen({ route, navigation }: Props) {
       >
         <View style={[styles.screen, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.header}>
-            <ScreenHeader title={title} kicker="DIRECT MESSAGE" onBack={() => navigation.goBack()} />
-            {loadError ? <Banner message="Couldn't refresh — messages may be stale." kind="error" /> : null}
+            <ScreenHeader
+              title={pod?.activity?.title ?? 'Pod chat'}
+              kicker={
+                pod
+                  ? `${pod.members.length} ${pod.members.length === 1 ? 'MEMBER' : 'MEMBERS'}${realtimeConnected ? ' • LIVE' : ''}`
+                  : 'POD CHAT'
+              }
+              onBack={() => navigation.goBack()}
+            />
+            {loadError ? (
+              <Banner message="Couldn't refresh — messages may be stale." kind="error" />
+            ) : null}
+            {pod && !isMember ? (
+              <Banner message="Join this pod to read and send messages." kind="info" />
+            ) : null}
           </View>
 
           <FlatList
@@ -293,21 +318,17 @@ export default function ThreadScreen({ route, navigation }: Props) {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             ListEmptyComponent={
-              <EmptyState
-                icon="chatbubble-ellipses"
-                title="No messages yet"
-                body="This conversation is ready whenever you are."
-              />
+              <View style={styles.emptyWrap}>
+                <EmptyState
+                  icon="chatbubble-ellipses"
+                  title="No messages yet"
+                  body="Start with an ETA, meetup note, or quick check-in."
+                />
+              </View>
             }
             ListHeaderComponent={
-              typingUserIds.length ? (
-                <Sticker
-                  label="typing…"
-                  tint={colors.successSoft}
-                  icon="ellipsis-horizontal"
-                  tilt={-2}
-                  small
-                />
+              typingLabel ? (
+                <Text style={[typography.caption, { color: colors.primary }]}>{typingLabel}</Text>
               ) : null
             }
             ListFooterComponent={
@@ -327,18 +348,18 @@ export default function ThreadScreen({ route, navigation }: Props) {
             }
             renderItem={({ item: message, index }) => {
               const previous = reversedMessages[index + 1];
-              const mine = message.sender.id === user?.id;
+              const mine = message.user.id === user?.id;
               const grouped =
-                previous?.sender.id === message.sender.id &&
-                new Date(message.createdAt).getTime() -
-                  new Date(previous.createdAt).getTime() <
+                previous?.user.id === message.user.id &&
+                new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
                   GROUP_WINDOW_MS;
               const startsDay =
                 !previous ||
                 new Date(previous.createdAt).toDateString() !==
                   new Date(message.createdAt).toDateString();
               const heartCount =
-                message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ?? 0;
+                message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ??
+                0;
               const hasHeart = !!message.reactions?.some(
                 (reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI,
               );
@@ -346,7 +367,12 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 <View style={[styles.messageCell, grouped && styles.groupedCell]}>
                   {startsDay ? (
                     <View style={styles.daySeparator}>
-                      <Sticker label={dayLabel(message.createdAt)} tint={colors.surfaceAlt} small tilt={0} />
+                      <Sticker
+                        label={dayLabel(message.createdAt)}
+                        tint={colors.surfaceAlt}
+                        small
+                        tilt={0}
+                      />
                     </View>
                   ) : null}
                   <View style={[styles.messageRow, mine && styles.messageRowMine]}>
@@ -354,19 +380,31 @@ export default function ThreadScreen({ route, navigation }: Props) {
                       grouped ? (
                         <View style={{ width: 32 }} />
                       ) : (
-                        <Avatar name={message.sender.name} uri={message.sender.avatarUrl} size={32} />
+                        <Pressable
+                          onPress={() =>
+                            navigation.navigate('UserProfile', { userId: message.user.id })
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${message.user.name}'s profile`}
+                        >
+                          <Avatar
+                            name={message.user.name}
+                            uri={message.user.avatarUrl}
+                            size={32}
+                          />
+                        </Pressable>
                       )
                     ) : null}
                     <View style={[styles.messageStack, mine && { alignItems: 'flex-end' }]}>
                       {!grouped ? (
                         <View style={styles.metaRow}>
-                          <Text style={styles.metaName}>{mine ? 'You' : message.sender.name}</Text>
+                          <Text style={styles.metaName}>{mine ? 'You' : message.user.name}</Text>
                           <Text style={styles.metaTime}>{formatTime(message.createdAt)}</Text>
                         </View>
                       ) : null}
                       <Pressable
-                        onLongPress={() => openMessageActions(message)}
-                        onPress={() => openMessageActions(message)}
+                        onLongPress={() => setActiveMessage(message)}
+                        onPress={() => setActiveMessage(message)}
                         style={[
                           styles.bubble,
                           {
@@ -389,7 +427,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                                 { color: mine ? 'rgba(255,246,232,0.8)' : colors.faint },
                               ]}
                             >
-                              Replying to {message.replyTo.sender.name}
+                              Replying to {message.replyTo.user.name}
                             </Text>
                             <Text
                               style={[
@@ -413,7 +451,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                       </Pressable>
                       <View style={[styles.bubbleActions, mine && { justifyContent: 'flex-end' }]}>
                         <Pressable
-                          onPress={() => void handleHeart(message)}
+                          onPress={() => void handleReaction(message, HEART_EMOJI)}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                           style={styles.heartButton}
                           accessibilityRole="button"
@@ -429,10 +467,10 @@ export default function ThreadScreen({ route, navigation }: Props) {
                         </Pressable>
                         {!mine ? (
                           <Pressable
-                            onPress={() => openMessageActions(message)}
+                            onPress={() => setActiveMessage(message)}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             accessibilityRole="button"
-                            accessibilityLabel={`Safety actions for ${message.sender.name}'s message`}
+                            accessibilityLabel={`Actions for ${message.user.name}'s message`}
                           >
                             <Ionicons
                               name="ellipsis-horizontal-circle-outline"
@@ -449,95 +487,102 @@ export default function ThreadScreen({ route, navigation }: Props) {
             }}
           />
 
-          <View
-            style={[
-              styles.composer,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                marginBottom: Math.max(insets.bottom, spacing.md),
-              },
-            ]}
-          >
-            {replyTo ? (
-              <View style={[styles.replyComposer, { borderBottomColor: colors.borderSoft }]}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[styles.replyMeta, { color: colors.sub }]}>
-                    Replying to {replyTo.sender.name}
-                  </Text>
-                  <Text style={[styles.replyBody, { color: colors.sub }]} numberOfLines={1}>
-                    {replyTo.content}
-                  </Text>
+          {isMember ? (
+            <View
+              style={[
+                styles.composer,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  marginBottom: Math.max(insets.bottom, spacing.md),
+                },
+              ]}
+            >
+              {replyTo ? (
+                <View style={[styles.replyComposer, { borderBottomColor: colors.borderSoft }]}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.replyMeta, { color: colors.sub }]}>
+                      Replying to {replyTo.user.name}
+                    </Text>
+                    <Text style={[styles.replyBody, { color: colors.sub }]} numberOfLines={1}>
+                      {replyTo.content}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setReplyTo(null)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel reply"
+                  >
+                    <Ionicons name="close-circle" size={20} color={colors.sub} />
+                  </Pressable>
                 </View>
+              ) : null}
+              <View style={styles.composerRow}>
+                <TextInput
+                  value={messageText}
+                  onChangeText={(value) => {
+                    setMessageText(value);
+                    pingTyping(value);
+                  }}
+                  placeholder="Message the pod"
+                  placeholderTextColor={colors.faint}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.surfaceAlt,
+                      borderColor: colors.border,
+                      color: colors.ink,
+                    },
+                  ]}
+                  multiline
+                />
                 <Pressable
-                  onPress={() => setReplyTo(null)}
-                  hitSlop={8}
+                  onPress={() => void handleSend()}
+                  disabled={sending || !messageText.trim()}
+                  style={[
+                    styles.sendButton,
+                    {
+                      backgroundColor:
+                        !messageText.trim() || sending ? colors.faint : colors.primary,
+                      borderColor: colors.border,
+                    },
+                  ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Cancel reply"
+                  accessibilityLabel="Send pod message"
+                  accessibilityState={{ disabled: sending || !messageText.trim() }}
                 >
-                  <Ionicons name="close-circle" size={20} color={colors.sub} />
+                  {sending ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : (
+                    <Ionicons name="arrow-up" size={18} color={colors.onPrimary} />
+                  )}
                 </Pressable>
               </View>
-            ) : null}
-            <View style={styles.composerRow}>
-              <TextInput
-                value={messageText}
-                onChangeText={(value) => {
-                  setMessageText(value);
-                  pingTyping(value);
-                }}
-                placeholder="Write a message…"
-                placeholderTextColor={colors.faint}
-                style={[
-                  styles.input,
-                  { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.ink },
-                ]}
-                multiline
-              />
-              <Pressable
-                onPress={() => void handleSend()}
-                disabled={sending || !messageText.trim()}
-                style={[
-                  styles.sendButton,
-                  {
-                    backgroundColor: !messageText.trim() || sending ? colors.faint : colors.primary,
-                    borderColor: colors.border,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                accessibilityState={{ disabled: sending || !messageText.trim() }}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color={colors.onPrimary} />
-                ) : (
-                  <Ionicons name="arrow-up" size={18} color={colors.onPrimary} />
-                )}
-              </Pressable>
             </View>
-          </View>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
 
       <Sheet
-        visible={activeSheet != null}
-        onClose={() => setActiveSheet(null)}
-        title={activeSheet?.sender.id === user?.id ? 'Your message' : activeSheet?.sender.name}
+        visible={activeMessage != null}
+        onClose={() => setActiveMessage(null)}
+        title={activeMessage?.user.id === user?.id ? 'Your message' : activeMessage?.user.name}
         kicker="MESSAGE ACTIONS"
       >
-        {activeSheet ? (
+        {activeMessage ? (
           <>
             <View style={styles.reactionRow}>
               {REACTION_EMOJIS.map((emoji) => {
-                const selected = !!activeSheet.reactions?.some(
+                const selected = !!activeMessage.reactions?.some(
                   (reaction) => reaction.userId === user?.id && reaction.emoji === emoji,
                 );
                 return (
                   <Pressable
                     key={emoji}
                     onPress={() => {
-                      const target = activeSheet;
-                      setActiveSheet(null);
+                      const target = activeMessage;
+                      setActiveMessage(null);
                       void handleReaction(target, emoji);
                     }}
                     style={[
@@ -560,17 +605,17 @@ export default function ThreadScreen({ route, navigation }: Props) {
               icon="return-up-back"
               title="Reply"
               onPress={() => {
-                setReplyTo(activeSheet);
-                setActiveSheet(null);
+                setReplyTo(activeMessage);
+                setActiveMessage(null);
               }}
             />
-            {activeSheet.sender.id === user?.id ? (
+            {activeMessage.user.id === user?.id ? (
               <ListRow
                 icon="trash-outline"
                 title="Delete message"
                 destructive
                 last
-                onPress={() => confirmDeleteMessage(activeSheet)}
+                onPress={() => confirmDeleteMessage(activeMessage)}
               />
             ) : (
               <>
@@ -579,16 +624,16 @@ export default function ThreadScreen({ route, navigation }: Props) {
                   title="Report message"
                   destructive
                   onPress={() => {
-                    setReportTarget(activeSheet);
-                    setActiveSheet(null);
+                    setReportTarget(activeMessage);
+                    setActiveMessage(null);
                   }}
                 />
                 <ListRow
                   icon="ban-outline"
-                  title={`Block ${activeSheet.sender.name}`}
+                  title={`Block ${activeMessage.user.name}`}
                   destructive
                   last
-                  onPress={() => confirmBlockSender(activeSheet)}
+                  onPress={() => confirmBlockSender(activeMessage)}
                 />
               </>
             )}
@@ -630,6 +675,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     justifyContent: 'flex-end' as const,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
+  },
+  emptyWrap: {
+    // Inverted FlatList renders the empty state upside down without this.
+    transform: [{ scaleY: -1 }],
   },
   messageCell: {
     marginTop: spacing.md,

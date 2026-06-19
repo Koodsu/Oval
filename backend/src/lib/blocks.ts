@@ -22,6 +22,29 @@ export async function hasBlockingRelationship(
 }
 
 /**
+ * Returns true if the user has a blocking relationship (either direction)
+ * with ANY of the given user IDs. Single query — use this instead of calling
+ * hasBlockingRelationship in a loop.
+ */
+export async function hasBlockingRelationshipWithAny(
+  userId: string,
+  otherUserIds: string[]
+): Promise<boolean> {
+  const others = otherUserIds.filter((id) => id !== userId);
+  if (others.length === 0) return false;
+
+  const count = await prisma.block.count({
+    where: {
+      OR: [
+        { blockerId: userId, blockedId: { in: others } },
+        { blockedId: userId, blockerId: { in: others } },
+      ],
+    },
+  });
+  return count > 0;
+}
+
+/**
  * Returns user IDs that have a blocking relationship with the given user.
  */
 export async function getBlockedUserIds(userId: string): Promise<Set<string>> {

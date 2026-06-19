@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Linking, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,6 +13,7 @@ import { RootStackParamList } from '../../App';
 import {
   AppBackdrop,
   Avatar,
+  Banner,
   Button,
   Card,
   Chip,
@@ -48,7 +49,7 @@ function greetingForNow(): string {
   if (hour < 5) return 'UP LATE';
   if (hour < 12) return 'MORNING';
   if (hour < 17) return 'AFTERNOON';
-  return 'TONIGHT';
+  return 'EVENING';
 }
 
 function datelineForNow(): string {
@@ -77,6 +78,7 @@ export default function HomeScreen() {
   const [clubsToday, setClubsToday] = useState<ClubMeetingToday[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -100,8 +102,9 @@ export default function HomeScreen() {
       setMyPods(mine);
       setActivities(activityList);
       setClubsToday(clubList);
-    } catch (error) {
-      Alert.alert('Could not load home', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — pull to retry.");
     } finally {
       setLoaded(true);
       setRefreshing(false);
@@ -208,7 +211,11 @@ export default function HomeScreen() {
       title: meeting.title,
       detail: `${meeting.clubName} • ${meeting.location}`,
       kind: 'club' as const,
-      onPress: () => navigation.navigate('ClubDetail', { clubId: meeting.clubId }),
+      onPress: () =>
+        navigation.navigate('ClubMeeting', {
+          clubId: meeting.clubId,
+          meetingId: meeting.id,
+        }),
     }));
 
     return [...podItems, ...clubItems]
@@ -257,36 +264,41 @@ export default function HomeScreen() {
             </Slab>
           </View>
         </Animated.View>
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        {/* Pulse — two loud stat slabs */}
+        {/* Pulse — a single calm glass stat strip */}
         <Animated.View
           entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
           style={styles.pulseRow}
         >
-          <Slab
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-            color={colors.primary}
-            style={{ flex: 1 }}
-            faceStyle={styles.pulseFace}
-            accessibilityLabel={`${openPodCount} pods open now`}
-          >
-            <Text style={[styles.pulseNumber, { color: colors.onPrimary }]}>
-              {loaded ? openPodCount : '–'}
-            </Text>
-            <Text style={[styles.pulseLabel, { color: colors.onPrimary }]}>PODS OPEN{'\n'}RIGHT NOW</Text>
-          </Slab>
-          <Slab
-            onPress={() => navigation.navigate('ClubMeetingsTonight')}
-            color={colors.surface}
-            style={{ flex: 1 }}
-            faceStyle={styles.pulseFace}
-            accessibilityLabel={`${clubsToday.length} club meetings today`}
-          >
-            <Text style={[styles.pulseNumber, { color: colors.ink }]}>
-              {loaded ? clubsToday.length : '–'}
-            </Text>
-            <Text style={[styles.pulseLabel, { color: colors.sub }]}>CLUB MEETINGS{'\n'}TODAY</Text>
-          </Slab>
+          <Card padded faceStyle={styles.pulseStrip}>
+            <Pressable
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
+              accessibilityRole="button"
+              accessibilityLabel={`${openPodCount} pods open now`}
+              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
+            >
+              <View style={styles.pulseValueRow}>
+                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+                <Text style={[styles.pulseNumber, { color: colors.primary }]}>
+                  {loaded ? openPodCount : '–'}
+                </Text>
+              </View>
+              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Pods open now</Text>
+            </Pressable>
+            <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
+            <Pressable
+              onPress={() => navigation.navigate('ClubMeetingsTonight')}
+              accessibilityRole="button"
+              accessibilityLabel={`${clubsToday.length} club meetings today`}
+              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={[styles.pulseNumber, { color: colors.ink }]}>
+                {loaded ? clubsToday.length : '–'}
+              </Text>
+              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Meetings today</Text>
+            </Pressable>
+          </Card>
         </Animated.View>
 
         {/* Permission nudges */}
@@ -586,7 +598,12 @@ export default function HomeScreen() {
             clubsToday.slice(0, 4).map((meeting) => (
               <Slab
                 key={meeting.id}
-                onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
+                onPress={() =>
+                  navigation.navigate('ClubMeeting', {
+                    clubId: meeting.clubId,
+                    meetingId: meeting.id,
+                  })
+                }
                 faceStyle={styles.podRowFace}
                 accessibilityLabel={meeting.title}
               >
@@ -630,31 +647,44 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.lg,
   },
   greeting: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 30,
-    lineHeight: 35,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
     color: t.colors.ink,
     marginTop: 4,
   },
   pulseRow: {
-    flexDirection: 'row' as const,
-    gap: spacing.md,
+    alignSelf: 'stretch' as const,
   },
-  pulseFace: {
-    padding: spacing.lg,
-    gap: 6,
+  pulseStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  pulseCol: {
+    flex: 1,
+    gap: 4,
+  },
+  pulseValueRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+  },
+  pulseDivide: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch' as const,
+    marginHorizontal: spacing.lg,
   },
   pulseNumber: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 34,
-    lineHeight: 38,
+    fontFamily: fonts.display,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.5,
   },
   pulseLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    lineHeight: 14,
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   nudgeRow: {
     flexDirection: 'row' as const,
@@ -685,8 +715,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     color: t.colors.ink,
   },
   agendaDivider: {
-    borderBottomWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     marginVertical: 2,
   },
   map: {
@@ -713,6 +742,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+    flexShrink: 1,
   },
   nextPodCount: {
     flexDirection: 'row' as const,

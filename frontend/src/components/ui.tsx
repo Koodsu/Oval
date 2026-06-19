@@ -1,7 +1,9 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -12,8 +14,11 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -25,21 +30,29 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BORDER_W,
+  GLASS_BLUR,
   SLAB_OFFSET,
   ThemeColors,
+  backdropEnd,
+  backdropStart,
+  darkBackdrop,
+  elevation,
   fonts,
+  lightBackdrop,
   motion,
   radii,
   spacing,
   useTheme,
 } from '../theme';
+import { resolveAvatarUrl } from '../api';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * SCARLET PRESS COMPONENT KIT
+ * LUMEN COMPONENT KIT
  *
- * Everything tappable is a "slab": a hard-bordered surface sitting on a flat
- * offset shadow. Pressing physically pushes the face down into its shadow.
+ * Surfaces are frosted glass: a translucent fill over a real backdrop blur,
+ * outlined by a hairline highlight and lifted on a soft, diffuse shadow.
+ * Pressing gently scales the surface instead of pushing it into a hard offset.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -95,6 +108,7 @@ export type SlabProps = {
   faceStyle?: StyleProp<ViewStyle>;
   accessibilityRole?: 'button' | 'link' | 'tab' | 'none';
   accessibilityLabel?: string;
+  hitSlop?: React.ComponentProps<typeof Pressable>['hitSlop'];
   testID?: string;
 };
 
@@ -113,27 +127,28 @@ export function Slab({
   faceStyle,
   accessibilityRole = 'button',
   accessibilityLabel,
+  hitSlop,
   testID,
 }: SlabProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const press = useSharedValue(0);
   const interactive = Boolean(onPress || onLongPress) && !disabled;
-  const depth = raised ? SLAB_OFFSET : 0;
+
+  // A solid `color` (a button fill, a tinted chip) opts out of frosted glass —
+  // it gets a clean opaque face. Surfaces left to the theme stay translucent
+  // and let the backdrop blur read through.
+  const isGlass = color == null || color === colors.surface || color === colors.surfaceAlt;
+  const faceFill = color ?? colors.surface;
 
   const faceAnimated = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: press.value * depth * 0.85 },
-      { translateY: press.value * depth * 0.85 },
-    ],
+    transform: [{ scale: 1 - press.value * 0.025 }],
+    opacity: 1 - press.value * 0.06,
   }));
 
-  // The face is the touchable itself, so the outer wrap stays a plain flex
-  // child — consumer `style` (flex: 1, width, etc.) participates in layout
-  // and grids/rows stretch correctly.
   const faceStyles = [
     slabStyles.face,
     {
-      backgroundColor: color ?? colors.surface,
+      backgroundColor: faceFill,
       borderColor: borderColor ?? colors.border,
       borderRadius: radius,
     },
@@ -141,30 +156,29 @@ export function Slab({
     faceStyle,
   ];
 
+  const content = (
+    <>
+      {isGlass ? (
+        <BlurView
+          tint={isDark ? 'dark' : 'light'}
+          intensity={GLASS_BLUR}
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      ) : null}
+      {children}
+    </>
+  );
+
   return (
     <View
       style={[
         slabStyles.wrap,
-        { paddingRight: depth, paddingBottom: depth },
-        tilt !== 0 && { transform: [{ rotate: `${tilt}deg` }] },
+        raised && { borderRadius: radius, ...elevation.card, shadowColor: colors.shadow },
         disabled && slabStyles.disabled,
         style,
       ]}
     >
-      {raised ? (
-        <View
-          pointerEvents="none"
-          style={[
-            slabStyles.shadow,
-            {
-              top: depth,
-              left: depth,
-              borderRadius: radius,
-              backgroundColor: borderColor ?? colors.shadow,
-            },
-          ]}
-        />
-      ) : null}
       {interactive ? (
         <AnimatedPressable
           onPress={() => {
@@ -173,21 +187,22 @@ export function Slab({
           }}
           onLongPress={onLongPress}
           onPressIn={() => {
-            press.value = withSpring(1, motion.springPress);
+            press.value = withSpring(1, motion.springSnappy);
           }}
           onPressOut={() => {
-            press.value = withSpring(0, motion.springPress);
+            press.value = withSpring(0, motion.springSnappy);
           }}
           disabled={disabled}
           accessibilityRole={accessibilityRole}
           accessibilityLabel={accessibilityLabel}
+          hitSlop={hitSlop}
           testID={testID}
           style={faceStyles}
         >
-          {children}
+          {content}
         </AnimatedPressable>
       ) : (
-        <Animated.View style={faceStyles}>{children}</Animated.View>
+        <Animated.View style={faceStyles}>{content}</Animated.View>
       )}
     </View>
   );
@@ -199,17 +214,9 @@ const slabStyles = StyleSheet.create({
   wrap: {
     position: 'relative',
   },
-  shadow: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-  },
   face: {
     borderWidth: BORDER_W,
     overflow: 'hidden',
-    // Fill the wrap when the consumer constrains the slab (flex: 1, fixed
-    // height); hugs content otherwise since flexBasis stays auto.
-    flexGrow: 1,
   },
   disabled: {
     opacity: 0.45,
@@ -316,16 +323,21 @@ export function Button({
       accessibilityLabel={label}
       testID={testID}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={labelColor} />
-      ) : (
-        <View style={buttonStyles.inner}>
+      <View style={buttonStyles.loadingFrame}>
+        <View style={[buttonStyles.inner, loading && buttonStyles.loadingLabel]}>
           {icon ? <Ionicons name={icon} size={size === 'sm' ? 15 : 18} color={labelColor} /> : null}
           <Text style={[buttonStyles.label, { color: labelColor, fontSize }]} numberOfLines={1}>
             {label}
           </Text>
         </View>
-      )}
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={labelColor}
+            style={buttonStyles.spinner}
+          />
+        ) : null}
+      </View>
     </Slab>
   );
 }
@@ -340,6 +352,20 @@ const buttonStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  loadingFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLabel: {
+    opacity: 0,
+  },
+  spinner: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
   label: {
     fontFamily: fonts.bold,
@@ -432,6 +458,7 @@ export function Chip({
       raised={Boolean(selected)}
       style={style}
       faceStyle={chipStyles.face}
+      hitSlop={{ top: 6, bottom: 6 }}
       accessibilityLabel={label}
       testID={testID}
     >
@@ -463,13 +490,95 @@ const chipStyles = StyleSheet.create({
   },
 });
 
-/** Tilted sticker badge — category tags, counts, "NEW" flashes. */
+/**
+ * Segmented control — a glass track with a sliding scarlet thumb. The Lumen
+ * replacement for rows of mode-switch chips.
+ */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  style,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        segmentedStyles.track,
+        { backgroundColor: colors.sunken, borderColor: colors.border },
+        style,
+      ]}
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => {
+              if (!active) {
+                tick();
+                onChange(opt.value);
+              }
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={opt.label}
+            style={[
+              segmentedStyles.segment,
+              active && { backgroundColor: colors.primary },
+            ]}
+          >
+            <Text
+              style={[
+                segmentedStyles.label,
+                { color: active ? colors.onPrimary : colors.sub },
+              ]}
+              numberOfLines={1}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const segmentedStyles = StyleSheet.create({
+  track: {
+    flexDirection: 'row',
+    borderRadius: radii.pill,
+    borderWidth: BORDER_W,
+    padding: 4,
+    gap: 4,
+  },
+  segment: {
+    flex: 1,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 13.5,
+  },
+});
+
+/**
+ * Soft status pill — category tags, counts, live flags. The `tilt` prop is
+ * retained for call-site compatibility but Lumen pills sit flat.
+ */
 export function Sticker({
   label,
   tint,
   textColor,
   icon,
-  tilt = -2,
   small,
   style,
 }: {
@@ -477,6 +586,7 @@ export function Sticker({
   tint?: string;
   textColor?: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** @deprecated Lumen pills sit flat; kept for call-site compatibility. */
   tilt?: number;
   small?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -489,17 +599,15 @@ export function Sticker({
         stickerStyles.base,
         {
           backgroundColor: tint ?? colors.warningSoft,
-          borderColor: colors.border,
-          transform: [{ rotate: `${tilt}deg` }],
-          paddingHorizontal: small ? 8 : 10,
-          paddingVertical: small ? 3 : 5,
+          paddingHorizontal: small ? 9 : 11,
+          paddingVertical: small ? 4 : 6,
         },
         style,
       ]}
     >
       {icon ? <Ionicons name={icon} size={small ? 11 : 13} color={fg} /> : null}
       <Text
-        style={[stickerStyles.label, { color: fg, fontSize: small ? 10 : 11.5 }]}
+        style={[stickerStyles.label, { color: fg, fontSize: small ? 10.5 : 12 }]}
         numberOfLines={1}
       >
         {label}
@@ -512,15 +620,15 @@ const stickerStyles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderWidth: BORDER_W,
-    borderRadius: radii.xs,
+    gap: 5,
+    borderRadius: radii.pill,
     alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   label: {
-    fontFamily: fonts.bold,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontFamily: fonts.semibold,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
 });
 
@@ -568,6 +676,56 @@ export function CountBubble({ count, style }: { count: number; style?: StyleProp
   );
 }
 
+export function StatSlab({
+  label,
+  value,
+  icon,
+  tint,
+  style,
+}: {
+  label: string;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Slab
+      accessibilityRole="none"
+      color={tint}
+      style={[{ flex: 1 }, style]}
+      faceStyle={statSlabStyles.face}
+    >
+      <Ionicons name={icon} size={16} color={colors.ink} />
+      <Text style={[statSlabStyles.value, { color: colors.ink }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[statSlabStyles.label, { color: colors.sub }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Slab>
+  );
+}
+
+const statSlabStyles = StyleSheet.create({
+  face: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: 6,
+    gap: 3,
+  },
+  value: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 8.5,
+    letterSpacing: 1,
+  },
+});
+
 const bubbleStyles = StyleSheet.create({
   base: {
     minWidth: 22,
@@ -600,6 +758,7 @@ export function Avatar({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
+  const resolved = resolveAvatarUrl(uri);
   const seed = name?.trim() || '?';
   const accent = accentForSeed(colors, seed);
   const initials = seed
@@ -615,17 +774,16 @@ export function Avatar({
         {
           width: size,
           height: size,
-          borderRadius: size * 0.32,
+          borderRadius: size * 0.34,
           backgroundColor: accent.soft,
           borderColor: colors.border,
-          transform: tilt ? [{ rotate: `${tilt}deg` }] : undefined,
         },
         style,
       ]}
     >
-      {uri ? (
+      {resolved ? (
         <Animated.Image
-          source={{ uri }}
+          source={{ uri: resolved }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
         />
@@ -675,6 +833,7 @@ export function ClubMark({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
+  const resolved = resolveAvatarUrl(uri);
   const seed = name?.trim() || '?';
   const accent = accentForSeed(colors, seed);
   const cleanEmoji = emoji?.trim();
@@ -700,9 +859,9 @@ export function ClubMark({
         style,
       ]}
     >
-      {uri ? (
+      {resolved ? (
         <Animated.Image
-          source={{ uri }}
+          source={{ uri: resolved }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
         />
@@ -786,20 +945,30 @@ export function AvatarStack({
 // ── Layout primitives ────────────────────────────────────────────────────────
 
 export function AppBackdrop({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  const { colors } = useTheme();
-  return <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>{children}</View>;
+  const { colors, isDark } = useTheme();
+  return (
+    <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>
+      <LinearGradient
+        colors={[...(isDark ? darkBackdrop : lightBackdrop)] as [string, string, string]}
+        start={backdropStart}
+        end={backdropEnd}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {children}
+    </View>
+  );
 }
 
-/** Dashed zine rule. */
+/** Hairline rule. */
 export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
   const { colors } = useTheme();
   return (
     <View
       style={[
         {
-          borderBottomWidth: 2,
-          borderStyle: 'dashed',
-          borderColor: colors.borderSoft,
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: colors.border,
         },
         style,
       ]}
@@ -906,6 +1075,7 @@ export function Field({
   style,
   inputStyle,
   multiline,
+  secureToggle,
   ...inputProps
 }: TextInputProps & {
   label?: string;
@@ -913,9 +1083,11 @@ export function Field({
   hint?: string;
   style?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
+  secureToggle?: boolean;
 }) {
   const { colors, typography } = useTheme();
   const [focused, setFocused] = React.useState(false);
+  const [secureVisible, setSecureVisible] = React.useState(false);
 
   return (
     <View style={style}>
@@ -933,6 +1105,9 @@ export function Field({
         <TextInput
           {...inputProps}
           multiline={multiline}
+          secureTextEntry={
+            secureToggle ? !secureVisible : inputProps.secureTextEntry
+          }
           onFocus={(event) => {
             setFocused(true);
             inputProps.onFocus?.(event);
@@ -949,6 +1124,20 @@ export function Field({
             inputStyle,
           ]}
         />
+        {secureToggle ? (
+          <Pressable
+            onPress={() => setSecureVisible((visible) => !visible)}
+            accessibilityRole="button"
+            accessibilityLabel={secureVisible ? 'Hide password' : 'Show password'}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={secureVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={colors.sub}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {error ? (
         <Text style={[fieldStyles.meta, { color: colors.danger }]}>{error}</Text>
@@ -987,6 +1176,7 @@ export function SearchBar({
   placeholder = 'Search…',
   onClear,
   autoFocus,
+  onSubmitEditing,
   style,
   testID,
 }: {
@@ -995,11 +1185,13 @@ export function SearchBar({
   placeholder?: string;
   onClear?: () => void;
   autoFocus?: boolean;
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const { colors } = useTheme();
   const [focused, setFocused] = React.useState(false);
+  const inputRef = React.useRef<TextInput>(null);
   return (
     <View
       style={[
@@ -1014,6 +1206,7 @@ export function SearchBar({
     >
       <Ionicons name="search" size={18} color={colors.sub} />
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -1022,6 +1215,10 @@ export function SearchBar({
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        onSubmitEditing={(event) => {
+          onSubmitEditing?.(event);
+          inputRef.current?.blur();
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[fieldStyles.input, { color: colors.ink }]}
@@ -1044,6 +1241,103 @@ export function SearchBar({
     </View>
   );
 }
+
+export function DateTimeField({
+  value,
+  onChange,
+  minimumDate,
+  maximumDate,
+}: {
+  value: Date;
+  onChange: (value: Date) => void;
+  minimumDate?: Date;
+  maximumDate?: Date;
+}) {
+  const { colors, typography } = useTheme();
+  const [androidMode, setAndroidMode] = React.useState<'date' | 'time' | null>(null);
+
+  if (Platform.OS === 'ios') {
+    return (
+      <DateTimePicker
+        value={value}
+        mode="datetime"
+        minimumDate={minimumDate}
+        maximumDate={maximumDate}
+        onChange={(_, nextValue) => {
+          if (nextValue) onChange(nextValue);
+        }}
+        display="default"
+      />
+    );
+  }
+
+  const updatePart = (mode: 'date' | 'time', nextValue?: Date) => {
+    setAndroidMode(null);
+    if (!nextValue) return;
+    const next = new Date(value);
+    if (mode === 'date') {
+      next.setFullYear(nextValue.getFullYear(), nextValue.getMonth(), nextValue.getDate());
+    } else {
+      next.setHours(nextValue.getHours(), nextValue.getMinutes(), 0, 0);
+    }
+    onChange(next);
+  };
+
+  return (
+    <View style={dateTimeStyles.androidRow}>
+      <Pressable
+        onPress={() => setAndroidMode('date')}
+        accessibilityRole="button"
+        accessibilityLabel="Choose date"
+        style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
+      >
+        <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+        <Text style={typography.caption}>
+          {value.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setAndroidMode('time')}
+        accessibilityRole="button"
+        accessibilityLabel="Choose time"
+        style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
+      >
+        <Ionicons name="time-outline" size={17} color={colors.primary} />
+        <Text style={typography.caption}>
+          {value.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+        </Text>
+      </Pressable>
+      {androidMode ? (
+        <DateTimePicker
+          value={value}
+          mode={androidMode}
+          minimumDate={androidMode === 'date' ? minimumDate : undefined}
+          maximumDate={androidMode === 'date' ? maximumDate : undefined}
+          onChange={(_, nextValue) => updatePart(androidMode, nextValue)}
+          display="default"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const dateTimeStyles = StyleSheet.create({
+  androidRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  androidButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+  },
+});
 
 // ── Feedback ─────────────────────────────────────────────────────────────────
 
@@ -1147,7 +1441,6 @@ const emptyStyles = StyleSheet.create({
     borderWidth: BORDER_W,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '-4deg' }],
     marginBottom: spacing.lg,
   },
   title: {
@@ -1231,41 +1524,47 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[sheetStyles.scrim, { backgroundColor: colors.overlay }]}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
-        <View
-          style={[
-            sheetStyles.sheet,
-            {
-              backgroundColor: colors.bg,
-              borderColor: colors.border,
-              paddingBottom: Math.max(insets.bottom, spacing.xl),
-            },
-          ]}
-        >
-          <View style={[sheetStyles.grabber, { backgroundColor: colors.borderSoft }]} />
-          {(title || kicker) ? (
-            <View style={sheetStyles.header}>
-              <View style={{ flex: 1 }}>
-                {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
-                {title ? <Text style={typography.display}>{title}</Text> : null}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[sheetStyles.scrim, { backgroundColor: colors.overlay }]}>
+          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+          <View
+            style={[
+              sheetStyles.sheet,
+              {
+                backgroundColor: colors.bg,
+                borderColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, spacing.xl),
+              },
+            ]}
+          >
+            <View style={[sheetStyles.grabber, { backgroundColor: colors.borderSoft }]} />
+            {(title || kicker) ? (
+              <View style={sheetStyles.header}>
+                <View style={{ flex: 1 }}>
+                  {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
+                  {title ? <Text style={typography.display}>{title}</Text> : null}
+                </View>
+                <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" size={38} />
               </View>
-              <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" size={38} />
-            </View>
-          ) : null}
-          {scrollable ? (
-            <Animated.ScrollView
-              showsVerticalScrollIndicator={false}
-              style={{ maxHeight: 520 }}
-              contentContainerStyle={{ paddingBottom: spacing.md }}
-            >
-              {children}
-            </Animated.ScrollView>
-          ) : (
-            children
-          )}
+            ) : null}
+            {scrollable ? (
+              <Animated.ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 520 }}
+                contentContainerStyle={{ paddingBottom: spacing.md }}
+              >
+                {children}
+              </Animated.ScrollView>
+            ) : (
+              children
+            )}
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1340,7 +1639,7 @@ export function ListRow({
       testID={testID}
       style={({ pressed }) => [
         rowStyles.row,
-        !last && { borderBottomWidth: 2, borderStyle: 'dashed', borderColor: colors.borderSoft },
+        !last && { borderBottomWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft },
         pressed && { opacity: 0.6 },
       ]}
     >

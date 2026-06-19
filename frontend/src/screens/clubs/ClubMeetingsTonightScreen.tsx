@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getApiErrorMessage, getClubsToday } from '../api';
-import type { RootStackParamList } from '../../App';
-import { ClubMeetingToday } from '../types';
+import { getApiErrorMessage, getClubsWeek } from '../../api';
+import type { RootStackParamList } from '../../../App';
+import { ClubMeetingToday } from '../../types';
 import {
   AppBackdrop,
   ClubMark,
@@ -15,8 +15,8 @@ import {
   ScreenHeader,
   Slab,
   Sticker,
-} from '../components/ui';
-import { formatTime } from '../utils/format';
+} from '../../components/ui';
+import { formatTime } from '../../utils/format';
 import {
   BORDER_W,
   Theme,
@@ -26,11 +26,11 @@ import {
   radii,
   spacing,
   useTheme,
-} from '../theme';
+} from '../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMeetingsTonight'>;
 
-type MeetingStatus = 'live' | 'soon' | 'upcoming';
+type MeetingStatus = 'live' | 'soon' | 'upcoming' | 'past';
 
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const SOON_WINDOW_MS = 60 * 60 * 1000;
@@ -44,14 +44,34 @@ function sortMeetings(items: ClubMeetingToday[]) {
 function meetingStatus(iso: string, now: number): MeetingStatus {
   const time = new Date(iso).getTime();
   if (now >= time && now - time <= LIVE_WINDOW_MS) return 'live';
-  if (time > now && time - now <= SOON_WINDOW_MS) return 'soon';
+  if (now > time) return 'past';
+  if (time - now <= SOON_WINDOW_MS) return 'soon';
   return 'upcoming';
 }
 
-function tonightDateLabel() {
-  return new Date()
+function dayKey(date: Date): string {
+  return date.toDateString();
+}
+
+function buildWeek(): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const day = new Date(today);
+    day.setDate(day.getDate() + offset);
+    days.push(day);
+  }
+  return days;
+}
+
+function headerDateLabel(day: Date): string {
+  const today = new Date();
+  const isToday = day.toDateString() === today.toDateString();
+  const label = day
     .toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
     .toUpperCase();
+  return isToday ? `TONIGHT · ${label}` : label;
 }
 
 export default function ClubMeetingsTonightScreen({ navigation }: Props) {
@@ -59,13 +79,15 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const [meetings, setMeetings] = useState<ClubMeetingToday[]>([]);
+  const week = useMemo(buildWeek, []);
+  const [selectedDay, setSelectedDay] = useState<string>(dayKey(week[0]));
 
   const load = useCallback(async () => {
     try {
-      const rows = await getClubsToday();
+      const rows = await getClubsWeek();
       setMeetings(sortMeetings(rows));
     } catch (error) {
-      Alert.alert("Could not load tonight's meetings", getApiErrorMessage(error));
+      Alert.alert("Could not load this week's meetings", getApiErrorMessage(error));
     }
   }, []);
 
@@ -75,9 +97,25 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
     }, [load]),
   );
 
-  const items = useMemo(() => sortMeetings(meetings), [meetings]);
+  const byDay = useMemo(() => {
+    const map = new Map<string, ClubMeetingToday[]>();
+    for (const meeting of meetings) {
+      const key = dayKey(new Date(meeting.meetingTime));
+      map.set(key, [...(map.get(key) ?? []), meeting]);
+    }
+    return map;
+  }, [meetings]);
+
+  const items = useMemo(
+    () => sortMeetings(byDay.get(selectedDay) ?? []),
+    [byDay, selectedDay],
+  );
+  const selectedDate = week.find((day) => dayKey(day) === selectedDay) ?? week[0];
+  const isToday = dayKey(week[0]) === selectedDay;
   const now = Date.now();
-  const liveCount = items.filter((item) => meetingStatus(item.meetingTime, now) === 'live').length;
+  const liveCount = isToday
+    ? items.filter((item) => meetingStatus(item.meetingTime, now) === 'live').length
+    : 0;
 
   return (
     <AppBackdrop>
@@ -90,10 +128,16 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        <ScreenHeader title="Tonight" kicker={tonightDateLabel()} onBack={() => navigation.goBack()} />
+        <ScreenHeader
+          title={isToday ? 'Tonight' : 'This week'}
+          kicker={headerDateLabel(selectedDate)}
+          onBack={() => navigation.goBack()}
+        />
 
         <View style={styles.headerBlock}>
-          <Text style={styles.headerTitle}>TONIGHT{'\n'}ON CAMPUS.</Text>
+          <Text style={styles.headerTitle}>
+            {isToday ? 'Tonight\non campus' : 'This week\non campus'}
+          </Text>
           <Text style={[typography.body, { color: colors.sub }]}>
             {items.length
               ? `${items.length} club meeting${items.length === 1 ? '' : 's'} on the schedule${liveCount ? ` • ${liveCount} live now` : ''}`
@@ -101,10 +145,56 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
           </Text>
         </View>
 
+        {/* ── Day rail ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+          <View style={styles.dayRail}>
+            {week.map((day) => {
+              const key = dayKey(day);
+              const selected = key === selectedDay;
+              const count = byDay.get(key)?.length ?? 0;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setSelectedDay(key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, ${count} meetings`}
+                  style={[
+                    styles.dayItem,
+                    {
+                      backgroundColor: selected ? colors.ink : colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dayName, { color: selected ? colors.surface : colors.sub }]}>
+                    {day.toLocaleDateString([], { weekday: 'short' }).toUpperCase()}
+                  </Text>
+                  <Text style={[styles.dayNum, { color: selected ? colors.surface : colors.ink }]}>
+                    {day.getDate()}
+                  </Text>
+                  <View
+                    style={[
+                      styles.dayDot,
+                      {
+                        backgroundColor: count
+                          ? selected
+                            ? colors.surface
+                            : colors.primary
+                          : 'transparent',
+                      },
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+
         {items.length ? (
           <View style={styles.timeline}>
             {items.map((meeting, index) => {
-              const status = meetingStatus(meeting.meetingTime, now);
+              const status = isToday ? meetingStatus(meeting.meetingTime, now) : 'upcoming';
               return (
                 <Animated.View
                   key={meeting.id}
@@ -145,7 +235,12 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
                     </View>
 
                     <Slab
-                      onPress={() => navigation.navigate('ClubDetail', { clubId: meeting.clubId })}
+                      onPress={() =>
+                        navigation.navigate('ClubMeeting', {
+                          clubId: meeting.clubId,
+                          meetingId: meeting.id,
+                        })
+                      }
                       style={{ flex: 1 }}
                       faceStyle={styles.meetingFace}
                       accessibilityLabel={`${meeting.clubName}, ${meeting.title}, at ${formatTime(meeting.meetingTime)}`}
@@ -176,6 +271,8 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
                           />
                         ) : status === 'soon' ? (
                           <Sticker label="Soon" tint={colors.warningSoft} small tilt={-3} />
+                        ) : meeting.isMyClub ? (
+                          <Sticker label="My club" tint={colors.blueSoft} small tilt={-3} />
                         ) : null}
                       </View>
 
@@ -200,8 +297,8 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
         ) : (
           <EmptyState
             icon="calendar"
-            title="No club meetings tonight"
-            body="Tonight's club schedule will show up here once meetings are posted."
+            title={isToday ? 'No club meetings tonight' : 'No meetings this day'}
+            body="Club meetings will show up here once they're posted."
           />
         )}
       </ScrollView>
@@ -219,11 +316,39 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
   },
   headerTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 28,
-    lineHeight: 33,
-    letterSpacing: -0.8,
+    fontFamily: fonts.display,
+    fontSize: 27,
+    lineHeight: 32,
+    letterSpacing: -0.6,
     color: t.colors.ink,
+  },
+  dayRail: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+    paddingRight: spacing.xl,
+    paddingVertical: 3,
+  },
+  dayItem: {
+    width: 52,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    alignItems: 'center' as const,
+    paddingVertical: spacing.sm,
+    gap: 2,
+  },
+  dayName: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    letterSpacing: 1,
+  },
+  dayNum: {
+    fontFamily: fonts.display,
+    fontSize: 17,
+  },
+  dayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   timeline: {
     gap: spacing.md,
@@ -269,19 +394,6 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.sm,
-  },
-  emojiTile: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
-    borderWidth: BORDER_W,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    transform: [{ rotate: '-2deg' }],
-  },
-  emojiText: {
-    fontSize: 21,
-    lineHeight: 27,
   },
   metaRow: {
     flexDirection: 'row' as const,

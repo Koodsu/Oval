@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deleteAvatar, updateProfile, uploadAvatar } from '../api';
@@ -15,6 +22,11 @@ import {
   accentForSeed,
 } from '../components/ui';
 import { INTEREST_TAGS } from '../constants/interestTags';
+import {
+  CAMPUS_ZONE_OPTIONS,
+  MAX_CAMPUS_ZONES,
+  PURPOSE_OPTIONS,
+} from '../constants/profileOptions';
 import { Theme, createThemedStyles, spacing, useTheme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -32,8 +44,22 @@ export default function EditProfileScreen({ navigation }: Props) {
   const [bio, setBio] = useState(user?.bio ?? '');
   const [instagramHandle, setInstagramHandle] = useState(user?.instagramHandle ?? '');
   const [interestTags, setInterestTags] = useState<string[]>(user?.interestTags ?? []);
+  const [purpose, setPurpose] = useState(user?.purpose ?? '');
+  const [campusZones, setCampusZones] = useState<string[]>(user?.campusZones ?? []);
+  const [clubInterests, setClubInterests] = useState(user?.clubInterests ?? '');
   const [busy, setBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+
+  const toggleZone = (zone: string) => {
+    setCampusZones((current) => {
+      if (current.includes(zone)) return current.filter((item) => item !== zone);
+      if (current.length >= MAX_CAMPUS_ZONES) {
+        Alert.alert('Zone limit', `You can pick up to ${MAX_CAMPUS_ZONES} campus zones.`);
+        return current;
+      }
+      return [...current, zone];
+    });
+  };
 
   const toggleTag = (tag: string) => {
     setInterestTags((current) => {
@@ -53,8 +79,11 @@ export default function EditProfileScreen({ navigation }: Props) {
         classYear,
         major,
         bio,
-        instagramHandle,
+        instagramHandle: instagramHandle.trim().replace(/^@+/, ''),
         interestTags,
+        purpose: purpose || null,
+        campusZones,
+        clubInterests: clubInterests.trim() || null,
       });
       await updateUser(updated);
       Alert.alert('Saved', 'Your profile now matches the new experience.');
@@ -117,15 +146,20 @@ export default function EditProfileScreen({ navigation }: Props) {
 
   return (
     <AppBackdrop>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
       >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         <ScreenHeader title="Edit profile" kicker="YOUR LOOK" onBack={() => navigation.goBack()} />
 
         <Card padded>
@@ -187,10 +221,43 @@ export default function EditProfileScreen({ navigation }: Props) {
                 ))}
               </View>
             </View>
+            <View style={{ gap: spacing.sm }}>
+              <Text style={typography.kicker}>What are you here for?</Text>
+              <View style={styles.tagWrap}>
+                {PURPOSE_OPTIONS.map((option) => (
+                  <Chip
+                    key={option}
+                    label={option}
+                    selected={purpose === option}
+                    onPress={() => setPurpose((current) => (current === option ? '' : option))}
+                  />
+                ))}
+              </View>
+            </View>
+            <View style={{ gap: spacing.sm }}>
+              <Text style={typography.kicker}>Campus zones — pick up to {MAX_CAMPUS_ZONES}</Text>
+              <View style={styles.tagWrap}>
+                {CAMPUS_ZONE_OPTIONS.map((zone) => (
+                  <Chip
+                    key={zone}
+                    label={zone}
+                    selected={campusZones.includes(zone)}
+                    onPress={() => toggleZone(zone)}
+                  />
+                ))}
+              </View>
+            </View>
+            <Field
+              label="Club interests (optional)"
+              value={clubInterests}
+              onChangeText={setClubInterests}
+              placeholder="Design, robotics, service…"
+            />
             <Button label="Save profile" onPress={save} loading={busy} size="lg" icon="checkmark" />
           </View>
         </Card>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppBackdrop>
   );
 }

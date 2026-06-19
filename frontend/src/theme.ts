@@ -4,34 +4,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * BRIDGE DESIGN SYSTEM — "Scarlet Press"
+ * BRIDGE DESIGN SYSTEM — "Lumen"
  *
- * A neo-brutalist campus-zine language built for OSU students:
- *  - Warm paper surfaces with hard ink borders
- *  - Flat offset "slab" shadows that surfaces physically press down into
- *  - OSU scarlet as the loud anchor + a crayon box of category accents
- *  - Unbounded for display type, Space Grotesk for everything else
- *  - Sticker-tilt details, uppercase kickers, chunky radii
+ * A premium liquid-glass language built for OSU students:
+ *  - A soft tinted gradient backdrop (warm cream → lilac → cool blue)
+ *  - Frosted translucent surfaces with hairline highlight borders
+ *  - Soft, diffuse elevation — no hard ink borders, no offset slab shadows
+ *  - OSU scarlet kept as a focused accent (primary actions, live state)
+ *  - Sora for quiet geometric display type, Inter for clean body copy
+ *  - Generous radii, calm spacing, depth instead of decoration
+ *
+ * Restraint is the system: let the gradient + glass carry mood, and spend
+ * scarlet only where the user should act or where something is live.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 // ── Fonts ────────────────────────────────────────────────────────────────────
 
 export const fonts = {
-  /** Unbounded 800 — hero numerals, splash moments */
-  displayHeavy: 'Unbounded-ExtraBold',
-  /** Unbounded 700 — screen titles */
-  display: 'Unbounded-Bold',
-  /** Unbounded 600 — card titles, medium display */
-  displayMedium: 'Unbounded-SemiBold',
-  /** Space Grotesk 400 — body copy */
-  body: 'SpaceGrotesk-Regular',
-  /** Space Grotesk 500 */
-  medium: 'SpaceGrotesk-Medium',
-  /** Space Grotesk 600 */
-  semibold: 'SpaceGrotesk-SemiBold',
-  /** Space Grotesk 700 — buttons, labels, kickers */
-  bold: 'SpaceGrotesk-Bold',
+  /** Sora 800 — hero numerals, splash moments */
+  displayHeavy: 'Sora-ExtraBold',
+  /** Sora 700 — screen titles */
+  display: 'Sora-Bold',
+  /** Sora 600 — card titles, medium display */
+  displayMedium: 'Sora-SemiBold',
+  /** Inter 400 — body copy */
+  body: 'Inter-Regular',
+  /** Inter 500 */
+  medium: 'Inter-Medium',
+  /** Inter 600 */
+  semibold: 'Inter-SemiBold',
+  /** Inter 700 — buttons, labels, kickers */
+  bold: 'Inter-Bold',
 } as const;
 
 // ── Colors ───────────────────────────────────────────────────────────────────
@@ -93,86 +97,115 @@ export type ThemeColors = {
 };
 
 export const lightColors: ThemeColors = {
-  bg: '#F5EDDD',
-  surface: '#FFFCF2',
-  surfaceAlt: '#EFE5CF',
-  sunken: '#E7DBC1',
-  ink: '#1D1408',
-  sub: '#70614A',
-  faint: '#A6967D',
-  border: '#1D1408',
-  borderSoft: '#DCCFAF',
-  shadow: '#1D1408',
-  glass: 'rgba(29, 20, 8, 0.10)',
-  overlay: 'rgba(29, 20, 8, 0.55)',
-  tabBar: '#FFFCF2',
+  bg: '#F3EEF6',
+  surface: 'rgba(255, 255, 255, 0.72)',
+  surfaceAlt: 'rgba(255, 255, 255, 0.46)',
+  sunken: 'rgba(108, 96, 122, 0.10)',
+  ink: '#241F2B',
+  sub: '#6C6476',
+  faint: '#A39BAD',
+  border: 'rgba(120, 108, 134, 0.16)',
+  borderSoft: 'rgba(120, 108, 134, 0.09)',
+  shadow: '#36283F',
+  glass: 'rgba(255, 255, 255, 0.50)',
+  overlay: 'rgba(28, 22, 38, 0.40)',
+  tabBar: 'rgba(255, 255, 255, 0.70)',
 
   primary: '#C8102E',
   primaryPress: '#9C0A22',
-  primarySoft: '#F8D6CC',
-  onPrimary: '#FFF6E8',
+  primarySoft: 'rgba(200, 16, 46, 0.12)',
+  onPrimary: '#FFFFFF',
 
-  danger: '#B00D26',
-  dangerSoft: '#F8D6CC',
-  success: '#15833E',
-  successSoft: '#D6EFD4',
-  warning: '#D98E04',
-  warningSoft: '#FAEBC4',
+  danger: '#C01731',
+  dangerSoft: 'rgba(192, 23, 49, 0.12)',
+  success: '#1A8C49',
+  successSoft: 'rgba(26, 140, 73, 0.14)',
+  warning: '#C2810C',
+  warningSoft: 'rgba(194, 129, 12, 0.16)',
 
-  blue: '#2459D9',
-  blueSoft: '#D9E4FA',
-  green: '#15833E',
-  greenSoft: '#D6EFD4',
-  amber: '#D98E04',
-  amberSoft: '#FAEBC4',
+  blue: '#2E63D9',
+  blueSoft: 'rgba(46, 99, 217, 0.14)',
+  green: '#1A8C49',
+  greenSoft: 'rgba(26, 140, 73, 0.14)',
+  amber: '#C2810C',
+  amberSoft: 'rgba(194, 129, 12, 0.16)',
   pink: '#D6336C',
-  pinkSoft: '#FAD9E4',
+  pinkSoft: 'rgba(214, 51, 108, 0.14)',
   violet: '#6D3FD4',
-  violetSoft: '#E6DCFA',
-  teal: '#0E7E8A',
-  tealSoft: '#D2EEF0',
+  violetSoft: 'rgba(109, 63, 212, 0.14)',
+  teal: '#0E8A97',
+  tealSoft: 'rgba(14, 138, 151, 0.14)',
 };
 
 export const darkColors: ThemeColors = {
-  bg: '#181210',
-  surface: '#241C16',
-  surfaceAlt: '#2F251C',
-  sunken: '#120D0A',
-  ink: '#F6EBD5',
-  sub: '#BFAE90',
-  faint: '#85765F',
-  border: '#EFE2C5',
-  borderSoft: '#3D3226',
+  bg: '#15121C',
+  surface: 'rgba(255, 255, 255, 0.075)',
+  surfaceAlt: 'rgba(255, 255, 255, 0.05)',
+  sunken: 'rgba(0, 0, 0, 0.26)',
+  ink: '#F2EDF8',
+  sub: '#B6AEC4',
+  faint: '#7C7389',
+  border: 'rgba(255, 255, 255, 0.14)',
+  borderSoft: 'rgba(255, 255, 255, 0.08)',
   shadow: '#000000',
-  glass: 'rgba(246, 235, 213, 0.10)',
-  overlay: 'rgba(0, 0, 0, 0.65)',
-  tabBar: '#241C16',
+  glass: 'rgba(255, 255, 255, 0.08)',
+  overlay: 'rgba(0, 0, 0, 0.55)',
+  tabBar: 'rgba(26, 22, 34, 0.70)',
 
-  primary: '#F23A47',
-  primaryPress: '#C61F30',
-  primarySoft: '#46191A',
-  onPrimary: '#FFF6E8',
+  primary: '#FF566A',
+  primaryPress: '#E33B50',
+  primarySoft: 'rgba(255, 86, 106, 0.18)',
+  onPrimary: '#FFFFFF',
 
-  danger: '#FF5A66',
-  dangerSoft: '#46191A',
-  success: '#4CC878',
-  successSoft: '#16301E',
-  warning: '#FFC14D',
-  warningSoft: '#3A2D12',
+  danger: '#FF6275',
+  dangerSoft: 'rgba(255, 98, 117, 0.18)',
+  success: '#46CC7E',
+  successSoft: 'rgba(70, 204, 126, 0.16)',
+  warning: '#F2B753',
+  warningSoft: 'rgba(242, 183, 83, 0.16)',
 
-  blue: '#6E9CFF',
-  blueSoft: '#1C2A4A',
-  green: '#4CC878',
-  greenSoft: '#16301E',
-  amber: '#FFC14D',
-  amberSoft: '#3A2D12',
-  pink: '#FF7CAB',
-  pinkSoft: '#3D1826',
-  violet: '#AE8BFF',
-  violetSoft: '#2A1F44',
-  teal: '#4FD0DC',
-  tealSoft: '#103238',
+  blue: '#7CA2FF',
+  blueSoft: 'rgba(124, 162, 255, 0.16)',
+  green: '#46CC7E',
+  greenSoft: 'rgba(70, 204, 126, 0.16)',
+  amber: '#F2B753',
+  amberSoft: 'rgba(242, 183, 83, 0.16)',
+  pink: '#FF8AB6',
+  pinkSoft: 'rgba(255, 138, 182, 0.16)',
+  violet: '#B79BFF',
+  violetSoft: 'rgba(183, 155, 255, 0.18)',
+  teal: '#54D4E0',
+  tealSoft: 'rgba(84, 212, 224, 0.16)',
 };
+
+// ── Backdrop gradients (consumed by AppBackdrop) ─────────────────────────────
+
+/** Soft tinted wash behind every screen. Warm cream → lilac → cool blue. */
+export const lightBackdrop = ['#FCEAE1', '#F3EDF8', '#E9F0F8'] as const;
+export const darkBackdrop = ['#1E1726', '#15121C', '#121521'] as const;
+export const backdropStart = { x: 0.1, y: 0 } as const;
+export const backdropEnd = { x: 0.9, y: 1 } as const;
+
+// ── Elevation — soft, diffuse shadows (replaces the hard slab offset) ────────
+
+export const elevation = {
+  /** Resting glass card. */
+  card: {
+    shadowColor: '#2A1F36',
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  /** Floating chrome (docks, FABs, sheets). */
+  floating: {
+    shadowColor: '#241A30',
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+} as const;
 
 // ── Layout tokens ────────────────────────────────────────────────────────────
 
@@ -187,18 +220,29 @@ export const spacing = {
 } as const;
 
 export const radii = {
-  xs: 8,
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 26,
+  xs: 10,
+  sm: 14,
+  md: 18,
+  lg: 22,
+  xl: 28,
   pill: 999,
 } as const;
 
-/** Hard offset for the signature slab shadow. */
-export const SLAB_OFFSET = 4;
-/** Standard hard border width. */
-export const BORDER_W = 2;
+export const density = {
+  compactRow: 56,
+  regularRow: 68,
+  metaLine: 15,
+} as const;
+
+/**
+ * Retained for API stability. Lumen has no offset slab; surfaces sit on soft
+ * diffuse shadows instead, so the offset is zero everywhere.
+ */
+export const SLAB_OFFSET = 0;
+/** Hairline highlight border on glass surfaces. */
+export const BORDER_W = 1;
+/** Default blur strength for frosted surfaces. */
+export const GLASS_BLUR = 24;
 /** Space screens must reserve above the bottom dock. */
 export const DOCK_CLEARANCE = 104;
 
@@ -289,7 +333,7 @@ export function getTypography(colors: ThemeColors): Record<string, TextStyle> {
       fontFamily: fonts.bold,
       fontSize: 11,
       lineHeight: 14,
-      letterSpacing: 1.6,
+      letterSpacing: 0.8,
       textTransform: 'uppercase',
       color: colors.sub,
     },
@@ -393,7 +437,3 @@ export function createThemedStyles<T extends StyleSheet.NamedStyles<T>>(
     return React.useMemo(() => StyleSheet.create(factory(theme)), [theme]);
   };
 }
-
-// ── Static conveniences (non-reactive; prefer useTheme in components) ───────
-
-export const typography = getTypography(lightColors);

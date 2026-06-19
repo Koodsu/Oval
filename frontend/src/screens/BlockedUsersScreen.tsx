@@ -7,6 +7,7 @@ import { RootStackParamList } from '../../App';
 import {
   AppBackdrop,
   Avatar,
+  Banner,
   Button,
   Card,
   EmptyState,
@@ -26,13 +27,15 @@ export default function BlockedUsersScreen({ navigation }: Props) {
   const [users, setUsers] = useState<BlockedUser[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const rows = await getBlockedUsers();
       setUsers(rows);
-    } catch (error) {
-      Alert.alert('Could not load blocked users', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — pull back and reopen to retry.");
     } finally {
       setLoaded(true);
     }
@@ -74,6 +77,7 @@ export default function BlockedUsersScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader title="Blocked users" kicker="SAFETY" onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
         <Text style={typography.caption}>
           People you block cannot message you, appear in search for you, or stay in shared pods with
           you.

@@ -12,17 +12,18 @@ import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
+import { BlurView } from 'expo-blur';
 import {
-  Unbounded_600SemiBold,
-  Unbounded_700Bold,
-  Unbounded_800ExtraBold,
-} from '@expo-google-fonts/unbounded';
+  Sora_600SemiBold,
+  Sora_700Bold,
+  Sora_800ExtraBold,
+} from '@expo-google-fonts/sora';
 import {
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_600SemiBold,
-  SpaceGrotesk_700Bold,
-} from '@expo-google-fonts/space-grotesk';
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -36,13 +37,19 @@ import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import PodsScreen from './src/screens/PodsScreen';
-import ClubsScreen from './src/screens/ClubsScreen';
-import ClubMeetingsTonightScreen from './src/screens/ClubMeetingsTonightScreen';
+import ClubsHomeScreen from './src/screens/clubs/ClubsHomeScreen';
+import ClubMeetingsTonightScreen from './src/screens/clubs/ClubMeetingsTonightScreen';
 import InboxScreen from './src/screens/InboxScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ActivityPodsScreen from './src/screens/ActivityPodsScreen';
 import PodDetailScreen from './src/screens/PodDetailScreen';
-import ClubDetailScreen from './src/screens/ClubDetailScreen';
+import PodChatScreen from './src/screens/PodChatScreen';
+import ClubHomeScreen from './src/screens/clubs/ClubHomeScreen';
+import ClubChatScreen from './src/screens/clubs/ClubChatScreen';
+import ClubEventsScreen from './src/screens/clubs/ClubEventsScreen';
+import MeetingDetailScreen from './src/screens/clubs/MeetingDetailScreen';
+import ClubMembersScreen from './src/screens/clubs/ClubMembersScreen';
+import ClubManageScreen from './src/screens/clubs/ClubManageScreen';
 import ThreadScreen from './src/screens/ThreadScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
@@ -52,8 +59,9 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
 import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
 import { Activity } from './src/types';
-import { BORDER_W, ThemeProvider, fonts, motion, radii, useTheme } from './src/theme';
-import { AppBackdrop, SkeletonBlock, SkeletonCard } from './src/components/ui';
+import { getFriendRequests, getMessageThreads, getPodInvites } from './src/api';
+import { BORDER_W, ThemeProvider, elevation, fonts, motion, radii, useTheme } from './src/theme';
+import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -70,7 +78,13 @@ export type RootStackParamList = {
   MainTabs: { screen?: keyof MainTabParamList } | undefined;
   ActivityPods: { activity: Activity; startCreate?: boolean };
   PodDetail: { podId: string };
+  PodChat: { podId: string };
   ClubDetail: { clubId: string };
+  ClubChat: { clubId: string; channelId: string };
+  ClubEvents: { clubId: string; startCreate?: boolean };
+  ClubMeeting: { clubId: string; meetingId: string };
+  ClubMembers: { clubId: string };
+  ClubManage: { clubId: string };
   ClubMeetingsTonight: undefined;
   Thread: { threadId: string; title: string };
   Profile: undefined;
@@ -91,6 +105,11 @@ const linking: LinkingOptions<RootStackParamList> = {
     screens: {
       PodDetail: 'pod/:podId',
       ClubDetail: 'clubs/:clubId',
+      ClubChat: 'clubs/:clubId/chat/:channelId',
+      ClubEvents: 'clubs/:clubId/events',
+      ClubMeeting: 'clubs/:clubId/events/:meetingId',
+      ClubMembers: 'clubs/:clubId/members',
+      ClubManage: 'clubs/:clubId/manage',
       UserProfile: 'users/:userId',
     },
   },
@@ -119,26 +138,20 @@ function tabIcon(
   }
 }
 
-const TAB_TILTS: Record<keyof MainTabParamList, number> = {
-  Home: -3,
-  Explore: 2.5,
-  Pods: -2,
-  Clubs: 3,
-  Inbox: -2.5,
-};
-
 function TabItem({
   routeName,
   label,
   focused,
   onPress,
   onLongPress,
+  badge,
 }: {
   routeName: keyof MainTabParamList;
   label: string;
   focused: boolean;
   onPress: () => void;
   onLongPress: () => void;
+  badge?: number | string;
 }) {
   const { colors } = useTheme();
   const pop = useSharedValue(focused ? 1 : 0);
@@ -148,10 +161,7 @@ function TabItem({
   }, [focused, pop]);
 
   const stickerStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: 0.85 + pop.value * 0.15 },
-      { rotate: `${pop.value * TAB_TILTS[routeName]}deg` },
-    ],
+    transform: [{ scale: 0.92 + pop.value * 0.08 }],
   }));
 
   return (
@@ -169,49 +179,50 @@ function TabItem({
       <Animated.View
         style={[
           styles.tabSticker,
-          focused && {
-            backgroundColor: colors.primary,
-            borderColor: colors.border,
-            borderWidth: BORDER_W,
-          },
+          focused && { backgroundColor: colors.primarySoft },
           stickerStyle,
         ]}
       >
         <Ionicons
           name={tabIcon(routeName, focused)}
-          size={21}
-          color={focused ? colors.onPrimary : colors.faint}
+          size={22}
+          color={focused ? colors.primary : colors.faint}
         />
+        {typeof badge === 'number' ? (
+          <CountBubble count={badge} style={styles.tabBadge} />
+        ) : null}
       </Animated.View>
       <Text
         style={[
           styles.tabLabel,
-          { color: focused ? colors.ink : colors.faint },
+          { color: focused ? colors.primary : colors.faint },
         ]}
         numberOfLines={1}
       >
-        {label.toUpperCase()}
+        {label}
       </Text>
     </Pressable>
   );
 }
 
 function BridgeDock({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <View
-      style={[
-        styles.dock,
-        {
-          backgroundColor: colors.tabBar,
-          borderTopColor: colors.border,
-          paddingBottom: Math.max(insets.bottom, 10),
-        },
-      ]}
+      pointerEvents="box-none"
+      style={[styles.dockWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      {state.routes.map((route, index) => {
+      <View style={[styles.dock, { ...elevation.floating, shadowColor: colors.shadow }]}>
+        <BlurView
+          tint={isDark ? 'dark' : 'light'}
+          intensity={40}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]} />
+        <View style={[StyleSheet.absoluteFill, styles.dockBorder, { borderColor: colors.border }]} />
+        {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const label =
           typeof options.tabBarLabel === 'string'
@@ -238,14 +249,63 @@ function BridgeDock({ state, descriptors, navigation }: BottomTabBarProps) {
             onLongPress={() =>
               navigation.emit({ type: 'tabLongPress', target: route.key })
             }
+            badge={options.tabBarBadge}
           />
         );
       })}
+      </View>
     </View>
   );
 }
 
+const INBOX_BADGE_POLL_MS = 60 * 1000;
+
+/**
+ * Keeps the Inbox tab badge fresh app-wide instead of only updating when the
+ * Inbox tab itself loads.
+ */
+function useInboxBadgeCount(): number | undefined {
+  const { token, user } = useAuth();
+  const [count, setCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!token || !user?.verifiedUniversity) {
+      setCount(0);
+      return;
+    }
+    let active = true;
+
+    const refresh = async () => {
+      try {
+        const [threads, invites, requests] = await Promise.all([
+          getMessageThreads(),
+          getPodInvites(),
+          getFriendRequests(),
+        ]);
+        if (!active) return;
+        setCount(
+          threads.filter((thread) => thread.hasUnread).length +
+            invites.length +
+            requests.incoming.length,
+        );
+      } catch {
+        // Keep the previous badge on transient errors.
+      }
+    };
+
+    void refresh();
+    const interval = setInterval(() => void refresh(), INBOX_BADGE_POLL_MS);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [token, user?.verifiedUniversity]);
+
+  return count || undefined;
+}
+
 function MainTabs() {
+  const inboxBadge = useInboxBadgeCount();
   return (
     <Tab.Navigator
       tabBar={(props) => <BridgeDock {...props} />}
@@ -254,8 +314,8 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
       <Tab.Screen name="Pods" component={PodsScreen} />
-      <Tab.Screen name="Clubs" component={ClubsScreen} />
-      <Tab.Screen name="Inbox" component={InboxScreen} />
+      <Tab.Screen name="Clubs" component={ClubsHomeScreen} />
+      <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarBadge: inboxBadge }} />
     </Tab.Navigator>
   );
 }
@@ -272,7 +332,13 @@ function AuthedApp() {
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
       <Stack.Screen name="PodDetail" component={PodDetailScreen} />
-      <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <Stack.Screen name="PodChat" component={PodChatScreen} />
+      <Stack.Screen name="ClubDetail" component={ClubHomeScreen} />
+      <Stack.Screen name="ClubChat" component={ClubChatScreen} />
+      <Stack.Screen name="ClubEvents" component={ClubEventsScreen} />
+      <Stack.Screen name="ClubMeeting" component={MeetingDetailScreen} />
+      <Stack.Screen name="ClubMembers" component={ClubMembersScreen} />
+      <Stack.Screen name="ClubManage" component={ClubManageScreen} />
       <Stack.Screen name="ClubMeetingsTonight" component={ClubMeetingsTonightScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
@@ -345,13 +411,13 @@ function ThemedApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    [fonts.displayMedium]: Unbounded_600SemiBold,
-    [fonts.display]: Unbounded_700Bold,
-    [fonts.displayHeavy]: Unbounded_800ExtraBold,
-    [fonts.body]: SpaceGrotesk_400Regular,
-    [fonts.medium]: SpaceGrotesk_500Medium,
-    [fonts.semibold]: SpaceGrotesk_600SemiBold,
-    [fonts.bold]: SpaceGrotesk_700Bold,
+    [fonts.displayMedium]: Sora_600SemiBold,
+    [fonts.display]: Sora_700Bold,
+    [fonts.displayHeavy]: Sora_800ExtraBold,
+    [fonts.body]: Inter_400Regular,
+    [fonts.medium]: Inter_500Medium,
+    [fonts.semibold]: Inter_600SemiBold,
+    [fonts.bold]: Inter_700Bold,
   });
 
   const onReady = React.useCallback(() => {
@@ -365,48 +431,77 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={styles.flex} onLayout={onReady}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <ThemedApp />
-          </AuthProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+    <GestureHandlerRootView
+      style={[styles.flex, Platform.OS === 'web' && styles.webStage]}
+      onLayout={onReady}
+    >
+      <View style={[styles.flex, Platform.OS === 'web' && styles.webShell]}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <ThemedApp />
+            </AuthProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </View>
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  dock: {
+  webStage: {
+    alignItems: 'center',
+    backgroundColor: '#0F0B09',
+  },
+  webShell: {
+    width: '100%',
+    maxWidth: 480,
+    overflow: 'hidden',
+  },
+  dockWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
+    paddingHorizontal: 16,
+    alignItems: 'stretch',
+  },
+  dock: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderTopWidth: BORDER_W + 1,
-    paddingTop: 8,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderRadius: radii.xl,
+    paddingVertical: 10,
     paddingHorizontal: 6,
+    overflow: 'hidden',
+  },
+  dockBorder: {
+    borderRadius: radii.xl,
+    borderWidth: BORDER_W,
   },
   tabSlot: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     paddingVertical: 2,
   },
   tabSticker: {
-    width: 44,
-    height: 38,
-    borderRadius: radii.sm,
+    width: 46,
+    height: 32,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  tabBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -2,
+  },
   tabLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 9,
-    letterSpacing: 1.2,
+    fontFamily: fonts.semibold,
+    fontSize: 10.5,
+    letterSpacing: 0.2,
   },
   loading: {
     flex: 1,

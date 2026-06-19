@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
 import {
   deleteMyAccount,
@@ -14,6 +15,7 @@ import {
 } from '../api';
 import {
   AppBackdrop,
+  Banner,
   Button,
   Card,
   ScreenHeader,
@@ -67,12 +69,16 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   const [socialBusy, setSocialBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       void getNotificationPreferences()
-        .then((response) => setPrefs(response.preferences))
-        .catch((error) => Alert.alert('Could not load preferences', getApiErrorMessage(error)));
+        .then((response) => {
+          setPrefs(response.preferences);
+          setLoadWarning(null);
+        })
+        .catch(() => setLoadWarning("Couldn't refresh preferences — reopen to retry."));
     }, []),
   );
 
@@ -92,7 +98,8 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   const saveInstagram = async () => {
     setSocialBusy(true);
     try {
-      const updated = await updateProfile({ instagramHandle: instagram.trim() || null });
+      const normalizedInstagram = instagram.trim().replace(/^@+/, '');
+      const updated = await updateProfile({ instagramHandle: normalizedInstagram || null });
       await updateUser(updated);
       setInstagram(updated.instagramHandle ?? '');
       Alert.alert(
@@ -176,13 +183,15 @@ export default function PrivacyDataScreen({ navigation }: Props) {
 
   return (
     <AppBackdrop>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         <ScreenHeader title="Privacy & Data" kicker="YOUR CONTROL" onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         <View style={styles.section}>
           <SectionHeader kicker="Export" title="Your data" />
@@ -212,9 +221,8 @@ export default function PrivacyDataScreen({ navigation }: Props) {
                   style={[
                     styles.preferenceRow,
                     index < PREFERENCE_ROWS.length - 1 && {
-                      borderBottomWidth: 2,
-                      borderStyle: 'dashed',
-                      borderColor: colors.borderSoft,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderColor: colors.border,
                     },
                   ]}
                 >
@@ -295,7 +303,8 @@ export default function PrivacyDataScreen({ navigation }: Props) {
             />
           </Card>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
     </AppBackdrop>
   );
 }

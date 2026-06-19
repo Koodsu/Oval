@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   LayoutAnimation,
+  Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -12,7 +15,6 @@ import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/Campus
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import type { MapPressEvent } from '../components/CampusMap';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,9 +30,11 @@ import { RootStackParamList } from '../../App';
 import { Pod } from '../types';
 import {
   AppBackdrop,
+  Banner,
   Button,
   Card,
   Chip,
+  DateTimeField,
   EmptyState,
   ScreenHeader,
   SectionHeader,
@@ -85,6 +89,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const latestLocationRef = useRef(location);
 
   useEffect(() => {
@@ -95,8 +100,9 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     try {
       const response = await getPodsByActivity(activity.id);
       setPods(response);
-    } catch (error) {
-      Alert.alert('Could not load pods', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — return to this screen to retry.");
     } finally {
       setLoaded(true);
     }
@@ -240,19 +246,25 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   return (
     <AppBackdrop>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
       >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         <ScreenHeader title="Pods" kicker={activity.category} onBack={() => navigation.goBack()} />
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         <View style={styles.heroBlock}>
-          <Text style={styles.heroTitle}>{activity.title.toUpperCase()}</Text>
+          <Text style={styles.heroTitle}>{activity.title}</Text>
           {activity.description ? (
             <Text style={[typography.body, { color: colors.sub }]}>{activity.description}</Text>
           ) : null}
@@ -348,15 +360,11 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                     { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
                   ]}
                 >
-                  <DateTimePicker
+                  <DateTimeField
                     value={meetupTime}
-                    mode="datetime"
                     minimumDate={new Date()}
                     maximumDate={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
-                    onChange={(_, value) => {
-                      if (value) setMeetupTime(value);
-                    }}
-                    display="default"
+                    onChange={setMeetupTime}
                   />
                 </View>
               </View>
@@ -517,7 +525,8 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
             />
           )}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppBackdrop>
   );
 }
@@ -532,10 +541,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
   },
   heroTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.8,
+    fontFamily: fonts.display,
+    fontSize: 25,
+    lineHeight: 31,
+    letterSpacing: -0.6,
     color: t.colors.ink,
   },
   composerToggle: {
@@ -548,15 +557,13 @@ const useStyles = createThemedStyles((t: Theme) => ({
   toggleBadge: {
     width: 34,
     height: 34,
-    borderRadius: radii.xs,
+    borderRadius: radii.sm,
     borderWidth: BORDER_W,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    transform: [{ rotate: '-3deg' }],
   },
   composerBody: {
-    borderTopWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderTopWidth: StyleSheet.hairlineWidth,
     padding: spacing.lg,
     gap: spacing.lg,
   },

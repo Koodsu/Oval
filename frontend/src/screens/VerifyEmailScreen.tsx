@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
@@ -23,6 +23,7 @@ export default function VerifyEmailScreen() {
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const submittedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -30,7 +31,7 @@ export default function VerifyEmailScreen() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  const submit = async () => {
+  const submit = useCallback(async () => {
     if (!/^\d{6}$/.test(code.trim())) {
       Alert.alert('Verification code needed', 'Enter the 6-digit code from your school email.');
       return;
@@ -45,7 +46,13 @@ export default function VerifyEmailScreen() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [code, updateUser]);
+
+  useEffect(() => {
+    if (code.length !== 6 || busy || submittedCodeRef.current === code) return;
+    submittedCodeRef.current = code;
+    void submit();
+  }, [busy, code, submit]);
 
   const resend = async () => {
     if (resendCooldown > 0) return;
@@ -70,7 +77,7 @@ export default function VerifyEmailScreen() {
         ]}
       >
         <Sticker label="Almost in" tint={colors.greenSoft} tilt={-2} icon="mail-unread" />
-        <Text style={styles.title}>CHECK YOUR{'\n'}INBOX.</Text>
+        <Text style={styles.title}>Check your{'\n'}inbox.</Text>
         <Text style={[typography.body, styles.sub]}>
           We sent a 6-digit code to{' '}
           <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>{' '}
@@ -123,10 +130,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.lg,
   },
   title: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
     color: t.colors.ink,
   },
   sub: {

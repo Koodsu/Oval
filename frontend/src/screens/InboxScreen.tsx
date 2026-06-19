@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   acceptFriendRequest,
@@ -17,7 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RootStackParamList } from '../../App';
+import { MainTabParamList, RootStackParamList } from '../../App';
 import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
 import {
   AppBackdrop,
@@ -25,14 +26,14 @@ import {
   Banner,
   Button,
   Card,
-  Chip,
+  Segmented,
   EmptyState,
   IconButton,
   SkeletonCard,
   Slab,
   Sticker,
 } from '../components/ui';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, relativeTime } from '../utils/format';
 import {
   BORDER_W,
   DOCK_CLEARANCE,
@@ -46,7 +47,10 @@ import {
 } from '../theme';
 
 type Mode = 'messages' | 'invites' | 'friends';
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Inbox'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function InboxScreen() {
   const navigation = useNavigation<Nav>();
@@ -61,6 +65,7 @@ export default function InboxScreen() {
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -72,7 +77,11 @@ export default function InboxScreen() {
     ]);
 
     if (threadResult.status === 'fulfilled') {
-      setThreads(threadResult.value);
+      setThreads(
+        [...threadResult.value].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
+      );
     }
 
     if (inviteResult.status === 'fulfilled') {
@@ -94,8 +103,7 @@ export default function InboxScreen() {
       requestResult.status === 'rejected' &&
       friendResult.status === 'rejected'
     ) {
-      Alert.alert('Could not load inbox', getApiErrorMessage(threadResult.reason));
-      setLoadWarning(null);
+      setLoadWarning("Couldn't refresh — pull to retry.");
     } else {
       const failedSections = [
         threadResult.status === 'rejected' ? 'messages' : null,
@@ -109,7 +117,10 @@ export default function InboxScreen() {
           : null,
       );
     }
+    // Tab badge is owned by useInboxBadgeCount in App.tsx (app-wide polling),
+    // so the Inbox screen no longer sets it here.
     setLoaded(true);
+    setRefreshing(false);
   }, []);
 
   useFocusEffect(
@@ -179,13 +190,23 @@ export default function InboxScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* Masthead */}
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.kicker, { color: colors.primary }]}>THE LOOP</Text>
-              <Text style={styles.pageTitle}>INBOX.</Text>
+              <Text style={styles.pageTitle}>Inbox</Text>
             </View>
             <IconButton
               icon="search"
@@ -193,7 +214,7 @@ export default function InboxScreen() {
               accessibilityLabel="Find people"
             />
             <IconButton
-              icon="person"
+              icon="person-circle-outline"
               onPress={() => navigation.navigate('Profile')}
               accessibilityLabel="Open profile"
             />
@@ -201,24 +222,15 @@ export default function InboxScreen() {
         </Animated.View>
 
         {/* Mode switch */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
-          style={styles.modeRow}
-        >
-          <Chip
-            label={threads.length ? `Messages (${threads.length})` : 'Messages'}
-            selected={mode === 'messages'}
-            onPress={() => setMode('messages')}
-          />
-          <Chip
-            label={invites.length ? `Invites (${invites.length})` : 'Invites'}
-            selected={mode === 'invites'}
-            onPress={() => setMode('invites')}
-          />
-          <Chip
-            label={requests.length ? `Friends (${requests.length})` : 'Friends'}
-            selected={mode === 'friends'}
-            onPress={() => setMode('friends')}
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'messages', label: threads.length ? `Messages · ${threads.length}` : 'Messages' },
+              { value: 'invites', label: invites.length ? `Invites · ${invites.length}` : 'Invites' },
+              { value: 'friends', label: requests.length ? `Friends · ${requests.length}` : 'Friends' },
+            ]}
           />
         </Animated.View>
 
@@ -254,17 +266,41 @@ export default function InboxScreen() {
                     faceStyle={styles.rowFace}
                     accessibilityLabel={`Open conversation with ${thread.otherUser.name}`}
                   >
-                    <Avatar
-                      name={thread.otherUser.name}
-                      uri={thread.otherUser.avatarUrl}
-                      size={46}
-                      tilt={threadIndex % 2 === 0 ? -2 : 2}
-                    />
+                    <View>
+                      <Avatar
+                        name={thread.otherUser.name}
+                        uri={thread.otherUser.avatarUrl}
+                        size={46}
+                        tilt={threadIndex % 2 === 0 ? -2 : 2}
+                      />
+                      {thread.hasUnread ? (
+                        <View
+                          style={[
+                            styles.unreadDot,
+                            { backgroundColor: colors.primary, borderColor: colors.border },
+                          ]}
+                        />
+                      ) : null}
+                    </View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Text style={typography.heading} numberOfLines={1}>
-                        {thread.otherUser.name}
-                      </Text>
-                      <Text style={typography.caption} numberOfLines={2}>
+                      <View style={styles.threadTop}>
+                        <Text style={[typography.heading, { flex: 1 }]} numberOfLines={1}>
+                          {thread.otherUser.name}
+                        </Text>
+                        <Text style={typography.captionSmall}>
+                          {relativeTime(thread.lastMessage?.createdAt ?? thread.updatedAt)}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          typography.caption,
+                          thread.hasUnread && {
+                            fontFamily: fonts.semibold,
+                            color: colors.ink,
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
                         {thread.lastMessage?.content ?? 'No messages yet'}
                       </Text>
                     </View>
@@ -491,6 +527,8 @@ export default function InboxScreen() {
                 icon="person-add"
                 title="No friend activity"
                 body="Find people from pods, profiles, or search to start building your circle."
+                actionLabel="Find people"
+                onAction={() => navigation.navigate('UserSearch')}
               />
             ) : null}
           </View>
@@ -513,10 +551,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
   },
   pageTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 30,
-    lineHeight: 35,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
     color: t.colors.ink,
     marginTop: 4,
   },
@@ -533,6 +571,20 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     padding: spacing.md,
+  },
+  threadTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  unreadDot: {
+    position: 'absolute' as const,
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
   },
   inviteTop: {
     flexDirection: 'row' as const,

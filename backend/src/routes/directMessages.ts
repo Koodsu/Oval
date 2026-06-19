@@ -5,6 +5,7 @@ import { hasBlockingRelationship, getBlockedUserIds } from '../lib/blocks';
 import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
+import { broadcast, dmTopic, REALTIME_EVENTS } from '../lib/realtime';
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
 
@@ -112,22 +113,65 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const messages = await prisma.directMessage.findMany({
-      where: { threadId },
-      include: {
-        sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
-        reactions: { select: { emoji: true, userId: true } },
-        replyTo: {
-          select: {
-            id: true,
-            content: true,
-            senderId: true,
-            sender: { select: { id: true, name: true, firstName: true, lastName: true } },
-          },
+    const DM_INCLUDE = {
+      sender: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
+      reactions: { select: { emoji: true, userId: true } },
+      replyTo: {
+        select: {
+          id: true,
+          content: true,
+          senderId: true,
+          sender: { select: { id: true, name: true, firstName: true, lastName: true } },
         },
       },
-      orderBy: { createdAt: 'asc' },
-    });
+    } as const;
+
+    // Pagination: ?limit (default 50, max 200), ?after=<msgId> for new
+    // messages only (polling), ?before=<msgId> for older history.
+    const rawLimit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : NaN;
+    const limit = isNaN(rawLimit) || rawLimit <= 0 ? 50 : Math.min(rawLimit, 200);
+    const after = typeof req.query.after === 'string' ? req.query.after : null;
+    const before = typeof req.query.before === 'string' ? req.query.before : null;
+    const cursorId = after ?? before;
+    const cursorExists = cursorId
+      ? (await prisma.directMessage.findUnique({
+          where: { id: cursorId, threadId },
+          select: { id: true },
+        })) != null
+      : false;
+
+    let messages;
+    let hasMore = false;
+    if (after && cursorExists) {
+      messages = await prisma.directMessage.findMany({
+        where: { threadId },
+        include: DM_INCLUDE,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        cursor: { id: after },
+        skip: 1,
+        take: 200,
+      });
+    } else if (before && cursorExists) {
+      const older = await prisma.directMessage.findMany({
+        where: { threadId },
+        include: DM_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        cursor: { id: before },
+        skip: 1,
+        take: limit + 1,
+      });
+      hasMore = older.length > limit;
+      messages = older.slice(0, limit).reverse();
+    } else {
+      const latest = await prisma.directMessage.findMany({
+        where: { threadId },
+        include: DM_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      });
+      hasMore = latest.length > limit;
+      messages = latest.slice(0, limit).reverse();
+    }
 
     const typingUserIds = getTypingUserIds('dm', threadId, userId);
     const otherLastReadAt =
@@ -137,6 +181,7 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
       messages: messages.map(formatDmMessage),
       typingUserIds,
       otherLastReadAt: otherLastReadAt?.toISOString() ?? null,
+      hasMore,
     });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -192,6 +237,7 @@ router.post('/threads/:id/typing', async (req: AuthRequest, res: Response): Prom
       return;
     }
     setTyping('dm', threadId, userId);
+    void broadcast(dmTopic(threadId), REALTIME_EVENTS.TYPING);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -246,6 +292,7 @@ router.post('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest, r
       create: { directMessageId: msgId, userId, emoji },
       update: {},
     });
+    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
 
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
@@ -299,6 +346,7 @@ router.delete('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest,
     await prisma.directMessageReaction.deleteMany({
       where: { directMessageId: msgId, userId, emoji },
     });
+    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
 
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
@@ -341,6 +389,7 @@ router.delete('/threads/:id/messages/:msgId', async (req: AuthRequest, res: Resp
       return;
     }
     await prisma.directMessage.delete({ where: { id: msgId } });
+    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
     res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -430,6 +479,8 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
         data: { updatedAt: new Date() },
       }),
     ]);
+
+    void broadcast(dmTopic(threadId), REALTIME_EVENTS.NEW_MESSAGE);
 
     res.status(201).json(formatDmMessage(message));
   } catch {

@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,11 +47,14 @@ import {
 } from '../theme';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 import { INTEREST_TAGS } from '../constants/interestTags';
+import {
+  CAMPUS_ZONE_OPTIONS,
+  MAX_CAMPUS_ZONES,
+  PURPOSE_OPTIONS,
+} from '../constants/profileOptions';
 
 type Mode = 'login' | 'register' | 'reset';
 
-const PURPOSE_OPTIONS = ['Find friends', 'Try activities', 'Join clubs', 'Study plans'];
-const CAMPUS_ZONE_OPTIONS = ['North campus', 'South campus', 'Oval', 'Libraries', 'RPAC'];
 const MIN_PASSWORD_LENGTH = 8;
 const SITE_URL = 'https://www.joinbridgeapp.com';
 
@@ -75,6 +88,16 @@ export default function AuthScreen() {
   const [clubInterests, setClubInterests] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const clearError = (key: string) => {
+    setErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
 
   const toggleListValue = (
     value: string,
@@ -99,36 +122,44 @@ export default function AuthScreen() {
 
   const changeMode = (nextMode: Mode) => {
     setMode(nextMode);
+    setErrors({});
     if (nextMode === 'register') setRegisterStep(1);
   };
 
   const advanceRegistration = () => {
     if (registerStep === 1) {
-      if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-        Alert.alert('Finish this step', 'Add your name, school email, and password to continue.');
+      const nextErrors: Record<string, string> = {};
+      if (!firstName.trim()) nextErrors.firstName = 'Enter your first name.';
+      if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
+      if (!email.trim()) nextErrors.email = 'Enter your school email.';
+      if (!password) nextErrors.password = 'Enter a password.';
+      else if (password.length < MIN_PASSWORD_LENGTH) {
+        nextErrors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+      }
+      if (Object.keys(nextErrors).length) {
+        setErrors(nextErrors);
         return;
       }
-      if (password.length < MIN_PASSWORD_LENGTH) {
-        Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
-        return;
-      }
+      setErrors({});
       setRegisterStep(2);
       return;
     }
 
-    if (!classYear || !major.trim() || !purpose) {
-      Alert.alert(
-        'Finish this step',
-        'Choose your class year, add your major, and tell us what brings you to Bridge.',
-      );
+    const nextErrors: Record<string, string> = {};
+    if (!classYear) nextErrors.classYear = 'Choose your class year.';
+    if (!major.trim()) nextErrors.major = 'Enter your major.';
+    if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
+    setErrors({});
     setRegisterStep(3);
   };
 
   const sendResetCode = async () => {
     if (!email.trim()) {
-      Alert.alert('Email needed', 'Enter your OSU email and we will send a reset code.');
+      setErrors({ email: 'Enter your OSU email to receive a reset code.' });
       return;
     }
 
@@ -146,18 +177,20 @@ export default function AuthScreen() {
   };
 
   const submitResetPassword = async () => {
-    if (!email.trim() || !resetCode.trim() || !newPassword.trim()) {
-      Alert.alert('Missing info', 'Enter your email, reset code, and new password.');
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!email.trim()) nextErrors.email = 'Enter your school email.';
+    if (!resetCode.trim()) nextErrors.resetCode = 'Enter the reset code.';
     if (!/^\d{6}$/.test(resetCode.trim())) {
-      Alert.alert('Check the code', 'Reset codes contain exactly 6 digits.');
-      return;
+      nextErrors.resetCode = 'Reset codes contain exactly 6 digits.';
     }
     if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+      nextErrors.newPassword = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
+    setErrors({});
 
     setBusy(true);
     try {
@@ -176,40 +209,29 @@ export default function AuthScreen() {
   };
 
   const submit = async () => {
-    if (
-      !email.trim() ||
-      !password.trim() ||
-      (mode === 'register' &&
-        (!firstName.trim() || !lastName.trim() || !classYear.trim() || !major.trim()))
-    ) {
-      Alert.alert('Missing info', 'Fill out the required fields so we can get you into campus mode.');
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!email.trim()) nextErrors.email = 'Enter your school email.';
+    if (!password.trim()) nextErrors.password = 'Enter your password.';
     if (password.length < MIN_PASSWORD_LENGTH) {
-      Alert.alert('Password too short', `Use at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
+      nextErrors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
     }
 
-    if (mode === 'register' && (!purpose || interestTags.length === 0 || campusZones.length === 0)) {
-      Alert.alert(
-        'Finish setup',
-        'Choose what you are here for, at least one interest, and a preferred campus zone.',
-      );
+    if (mode === 'register') {
+      if (!firstName.trim()) nextErrors.firstName = 'Enter your first name.';
+      if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
+      if (!classYear.trim()) nextErrors.classYear = 'Choose your class year.';
+      if (!major.trim()) nextErrors.major = 'Enter your major.';
+      if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+      if (!interestTags.length) nextErrors.interestTags = 'Choose at least one interest.';
+      if (!campusZones.length) nextErrors.campusZones = 'Choose at least one campus zone.';
+      if (!ageConfirmed) nextErrors.ageConfirmed = 'Confirm that you are 18 or older.';
+      if (!termsAccepted) nextErrors.termsAccepted = 'Accept the terms to create an account.';
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
-
-    if (mode === 'register' && !ageConfirmed) {
-      Alert.alert('Age confirmation required', 'Bridge is for users who are 18 or older.');
-      return;
-    }
-
-    if (mode === 'register' && !termsAccepted) {
-      Alert.alert(
-        'Terms required',
-        'Accept the Bridge terms and community guidelines before creating an account.',
-      );
-      return;
-    }
+    setErrors({});
 
     setBusy(true);
     try {
@@ -229,19 +251,35 @@ export default function AuthScreen() {
         major.trim(),
       );
       setToken(response.token);
-      const setupBio = [
-        `Here for: ${purpose}`,
-        campusZones.length ? `Preferred zones: ${campusZones.join(', ')}` : null,
-        clubInterests.trim() ? `Club interests: ${clubInterests.trim()}` : null,
-      ]
-        .filter(Boolean)
-        .join('\n');
-      const updatedUser = await updateProfile({
-        bio: setupBio,
-        interestTags,
-      });
-      await signIn(response.token, updatedUser);
-      await acceptGuidelines();
+
+      // The account now exists. Anything that fails past this point must NOT
+      // surface as "could not create account" — sign the user in regardless
+      // and let them finish profile setup later.
+      let finalUser = response.user;
+      let profileSaved = true;
+      try {
+        finalUser = await updateProfile({
+          purpose,
+          campusZones,
+          clubInterests: clubInterests.trim() || null,
+          interestTags,
+        });
+      } catch {
+        profileSaved = false;
+      }
+      await signIn(response.token, finalUser);
+      try {
+        await acceptGuidelines();
+      } catch {
+        // Terms were already recorded server-side during /auth/register;
+        // local flag sync can retry later without blocking onboarding.
+      }
+      if (!profileSaved) {
+        Alert.alert(
+          'Account created',
+          'We could not save your interests right now — you can add them any time from Edit Profile.',
+        );
+      }
       void trackEvent('auth.register', {
         classYear: classYear.trim(),
         purpose,
@@ -259,38 +297,42 @@ export default function AuthScreen() {
 
   return (
     <AppBackdrop>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xxl },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
       >
-        {/* Wordmark — tilted scarlet slab, zine masthead energy */}
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+        {/* Wordmark — scarlet glass tile */}
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <Slab
               color={colors.primary}
-              tilt={-2}
-              radius={radii.sm}
+              radius={radii.md}
               faceStyle={styles.markFace}
               accessibilityRole="none"
             >
-              <Text style={styles.markText}>BRIDGE</Text>
+              <Text style={styles.markText}>Bridge</Text>
             </Slab>
-            <Sticker label="Ohio State only" tint={colors.warningSoft} tilt={2} icon="school" />
+            <Sticker label="Ohio State only" tint={colors.warningSoft} icon="school" />
           </View>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
           <Text style={styles.heroTitle}>
             {mode === 'login'
-              ? 'YOUR CAMPUS\nIS WAITING.'
+              ? 'Your campus\nis waiting.'
               : mode === 'register'
-                ? REGISTER_STEP_COPY[registerStep].title.toUpperCase()
-                : 'LOCKED OUT?\nNO STRESS.'}
+                ? REGISTER_STEP_COPY[registerStep].title
+                : 'Locked out?\nNo stress.'}
           </Text>
           <Text style={[typography.body, styles.heroSub]}>
             {mode === 'login'
@@ -326,7 +368,11 @@ export default function AuthScreen() {
                   <Field
                     label="School email"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(value) => {
+                      setEmail(value);
+                      clearError('email');
+                    }}
+                    error={errors.email}
                     placeholder="name@osu.edu"
                     autoCapitalize="none"
                     keyboardType="email-address"
@@ -338,7 +384,11 @@ export default function AuthScreen() {
                       <Field
                         label="Reset code"
                         value={resetCode}
-                        onChangeText={(value) => setResetCode(value.replace(/\D/g, '').slice(0, 6))}
+                        onChangeText={(value) => {
+                          setResetCode(value.replace(/\D/g, '').slice(0, 6));
+                          clearError('resetCode');
+                        }}
+                        error={errors.resetCode}
                         placeholder="123456"
                         autoCapitalize="none"
                         keyboardType="number-pad"
@@ -349,9 +399,14 @@ export default function AuthScreen() {
                       <Field
                         label="New password"
                         value={newPassword}
-                        onChangeText={setNewPassword}
+                        onChangeText={(value) => {
+                          setNewPassword(value);
+                          clearError('newPassword');
+                        }}
+                        error={errors.newPassword}
                         placeholder="At least 8 characters"
                         secureTextEntry
+                        secureToggle
                         textContentType="newPassword"
                         autoComplete="new-password"
                       />
@@ -371,7 +426,11 @@ export default function AuthScreen() {
                           <Field
                             label="First name"
                             value={firstName}
-                            onChangeText={setFirstName}
+                            onChangeText={(value) => {
+                              setFirstName(value);
+                              clearError('firstName');
+                            }}
+                            error={errors.firstName}
                             placeholder="Avery"
                             autoCapitalize="words"
                             textContentType="givenName"
@@ -380,7 +439,11 @@ export default function AuthScreen() {
                           <Field
                             label="Last name"
                             value={lastName}
-                            onChangeText={setLastName}
+                            onChangeText={(value) => {
+                              setLastName(value);
+                              clearError('lastName');
+                            }}
+                            error={errors.lastName}
                             placeholder="Chen"
                             autoCapitalize="words"
                             textContentType="familyName"
@@ -391,7 +454,11 @@ export default function AuthScreen() {
                       <Field
                         label="School email"
                         value={email}
-                        onChangeText={setEmail}
+                        onChangeText={(value) => {
+                          setEmail(value);
+                          clearError('email');
+                        }}
+                        error={errors.email}
                         placeholder="name@osu.edu"
                         autoCapitalize="none"
                         keyboardType="email-address"
@@ -401,9 +468,14 @@ export default function AuthScreen() {
                       <Field
                         label="Password"
                         value={password}
-                        onChangeText={setPassword}
+                        onChangeText={(value) => {
+                          setPassword(value);
+                          clearError('password');
+                        }}
+                        error={errors.password}
                         placeholder="At least 8 characters"
                         secureTextEntry
+                        secureToggle
                         textContentType={mode === 'register' ? 'newPassword' : 'password'}
                         autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                       />
@@ -433,12 +505,29 @@ export default function AuthScreen() {
                               key={option}
                               label={option}
                               selected={classYear === option}
-                              onPress={() => setClassYear(option)}
+                              onPress={() => {
+                                setClassYear(option);
+                                clearError('classYear');
+                              }}
                             />
                           ))}
                         </View>
+                        {errors.classYear ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.classYear}
+                          </Text>
+                        ) : null}
                       </View>
-                      <Field label="Major" value={major} onChangeText={setMajor} placeholder="Computer Science" />
+                      <Field
+                        label="Major"
+                        value={major}
+                        onChangeText={(value) => {
+                          setMajor(value);
+                          clearError('major');
+                        }}
+                        error={errors.major}
+                        placeholder="Computer Science"
+                      />
                       <View style={styles.fieldBlock}>
                         <Text style={typography.kicker}>What are you here for?</Text>
                         <View style={styles.chipWrap}>
@@ -448,10 +537,18 @@ export default function AuthScreen() {
                               label={option}
                               selected={purpose === option}
                               tint={colors.amberSoft}
-                              onPress={() => setPurpose(option)}
+                              onPress={() => {
+                                setPurpose(option);
+                                clearError('purpose');
+                              }}
                             />
                           ))}
                         </View>
+                        {errors.purpose ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.purpose}
+                          </Text>
+                        ) : null}
                       </View>
                     </>
                   ) : null}
@@ -461,16 +558,24 @@ export default function AuthScreen() {
                       <View style={styles.fieldBlock}>
                         <Text style={typography.kicker}>Interests — pick up to 5</Text>
                         <View style={styles.chipWrap}>
-                          {INTEREST_TAGS.slice(0, 10).map((tag) => (
+                          {INTEREST_TAGS.map((tag) => (
                             <Chip
                               key={tag}
                               label={tag}
                               selected={interestTags.includes(tag)}
                               tint={colors.pinkSoft}
-                              onPress={() => toggleListValue(tag, setInterestTags)}
+                              onPress={() => {
+                                toggleListValue(tag, setInterestTags);
+                                clearError('interestTags');
+                              }}
                             />
                           ))}
                         </View>
+                        {errors.interestTags ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.interestTags}
+                          </Text>
+                        ) : null}
                       </View>
                       <View style={styles.fieldBlock}>
                         <Text style={typography.kicker}>Campus zones — pick up to 3</Text>
@@ -481,10 +586,18 @@ export default function AuthScreen() {
                               label={zone}
                               selected={campusZones.includes(zone)}
                               tint={colors.tealSoft}
-                              onPress={() => toggleListValue(zone, setCampusZones, 3)}
+                              onPress={() => {
+                                toggleListValue(zone, setCampusZones, MAX_CAMPUS_ZONES);
+                                clearError('campusZones');
+                              }}
                             />
                           ))}
                         </View>
+                        {errors.campusZones ? (
+                          <Text style={[styles.inlineError, { color: colors.danger }]}>
+                            {errors.campusZones}
+                          </Text>
+                        ) : null}
                       </View>
                       <Field
                         label="Club interests (optional)"
@@ -499,18 +612,29 @@ export default function AuthScreen() {
                       </View>
                       <CheckRow
                         checked={ageConfirmed}
-                        onToggle={() => setAgeConfirmed((value) => !value)}
+                        onToggle={() => {
+                          setAgeConfirmed((value) => !value);
+                          clearError('ageConfirmed');
+                        }}
                         mark="18"
                         label="I confirm I am 18 or older."
                         accessibilityLabel="I confirm I am 18 or older"
                       />
                       <CheckRow
                         checked={termsAccepted}
-                        onToggle={() => setTermsAccepted((value) => !value)}
+                        onToggle={() => {
+                          setTermsAccepted((value) => !value);
+                          clearError('termsAccepted');
+                        }}
                         mark="✓"
                         label="I accept the current Terms, Privacy Policy, and Community Guidelines."
                         accessibilityLabel="I accept the Terms, Privacy Policy, and Community Guidelines"
                       />
+                      {errors.ageConfirmed || errors.termsAccepted ? (
+                        <Text style={[styles.inlineError, { color: colors.danger }]}>
+                          {errors.ageConfirmed ?? errors.termsAccepted}
+                        </Text>
+                      ) : null}
                     </>
                   ) : null}
                 </>
@@ -550,7 +674,8 @@ export default function AuthScreen() {
               ? 'Reset codes are sent to your OSU email and expire quickly.'
               : 'For students 18+. Bridge is independent and not affiliated with Ohio State.'}
         </Text>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppBackdrop>
   );
 }
@@ -606,7 +731,6 @@ const checkStyles = StyleSheet.create({
     borderWidth: BORDER_W,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '-3deg' }],
   },
   mark: {
     fontFamily: fonts.bold,
@@ -659,16 +783,16 @@ const useStyles = createThemedStyles((t: Theme) => ({
     paddingVertical: 8,
   },
   markText: {
-    fontFamily: fonts.displayHeavy,
+    fontFamily: fonts.display,
     fontSize: 18,
-    letterSpacing: 1,
+    letterSpacing: -0.2,
     color: t.colors.onPrimary,
   },
   heroTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
     color: t.colors.ink,
     marginTop: spacing.sm,
   },
@@ -715,5 +839,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
   footnote: {
     textAlign: 'center' as const,
     paddingHorizontal: spacing.xl,
+  },
+  inlineError: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
   },
 }));

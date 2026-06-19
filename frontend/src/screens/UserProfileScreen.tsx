@@ -35,6 +35,7 @@ import {
   ScreenHeader,
   SkeletonCard,
   Slab,
+  StatSlab,
   Sticker,
   Tag,
   accentForSeed,
@@ -69,7 +70,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
   const [reportDetails, setReportDetails] = useState('');
 
   const load = useCallback(
-    async (showAlert = true) => {
+    async (showAlert = false) => {
       try {
         const [profileResponse, relationshipResponse] = await Promise.all([
           getUserProfile(userId),
@@ -307,6 +308,18 @@ export default function UserProfileScreen({ route, navigation }: Props) {
                   {profile.bio}
                 </Text>
               ) : null}
+              {profile.purpose || profile.campusZones?.length ? (
+                <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
+                  {[
+                    profile.purpose ? `Here for: ${profile.purpose}` : null,
+                    profile.campusZones?.length
+                      ? `Usually around ${profile.campusZones.join(', ')}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' • ')}
+                </Text>
+              ) : null}
             </Card>
 
             {relationshipActions()}
@@ -422,56 +435,6 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     </AppBackdrop>
   );
 }
-
-function StatSlab({
-  label,
-  value,
-  icon,
-  tint,
-}: {
-  label: string;
-  value: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  tint: string;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Slab
-      accessibilityRole="none"
-      color={tint}
-      style={{ flex: 1 }}
-      faceStyle={statStyles.face}
-    >
-      <Ionicons name={icon} size={16} color={colors.ink} />
-      <Text style={[statStyles.value, { color: colors.ink }]} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={[statStyles.label, { color: colors.sub }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Slab>
-  );
-}
-
-import { StyleSheet } from 'react-native';
-
-const statStyles = StyleSheet.create({
-  face: {
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: 6,
-    gap: 3,
-  },
-  value: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 17,
-  },
-  label: {
-    fontFamily: fonts.bold,
-    fontSize: 8.5,
-    letterSpacing: 1,
-  },
-});
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {

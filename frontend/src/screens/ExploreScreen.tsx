@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
 import {
   AppBackdrop,
+  Banner,
   Button,
   Chip,
   EmptyState,
@@ -145,6 +146,8 @@ export default function ExploreScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [feed, setFeed] = useState<Pod[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(12);
   const deferredQuery = useDeferredValue(query);
 
@@ -156,10 +159,12 @@ export default function ExploreScreen() {
       ]);
       setActivities(activityList);
       setFeed(podFeed);
-    } catch (error) {
-      Alert.alert('Could not load explore', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — pull to retry.");
     } finally {
       setLoaded(true);
+      setRefreshing(false);
     }
   }, [category]);
 
@@ -233,13 +238,23 @@ export default function ExploreScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* Masthead */}
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.kicker, { color: colors.primary }]}>FIND YOUR PEOPLE</Text>
-              <Text style={styles.pageTitle}>EXPLORE.</Text>
+              <Text style={styles.pageTitle}>Explore</Text>
               <View style={styles.liveSummary}>
                 <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
                 <Text style={typography.caption}>
@@ -262,6 +277,7 @@ export default function ExploreScreen() {
             ) : null}
           </View>
         </Animated.View>
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
           <SearchBar
@@ -440,7 +456,7 @@ export default function ExploreScreen() {
                             { color: hasActivePods ? colors.primary : colors.sub },
                           ]}
                         >
-                          {ctaLabel(item.liveCount).toUpperCase()}
+                          {ctaLabel(item.liveCount)}
                         </Text>
                         <Ionicons
                           name="arrow-forward"
@@ -458,6 +474,11 @@ export default function ExploreScreen() {
               icon="telescope"
               title="Nothing matches that view"
               body="Try another category or search for a different place."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setCategory(null);
+                setQuery('');
+              }}
             />
           )}
           {visibleCount < cards.length ? (
@@ -486,10 +507,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.md,
   },
   pageTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 30,
-    lineHeight: 35,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
     color: t.colors.ink,
     marginTop: 4,
   },
@@ -557,8 +578,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.md,
   },
   gridSlot: {
-    flexBasis: '46%' as const,
-    flexGrow: 1,
+    flexBasis: '47%' as const,
+    flexGrow: 0,
+    maxWidth: '48%' as const,
   },
   tileFace: {
     flex: 1,
@@ -603,12 +625,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: 4,
     paddingTop: 8,
-    borderTopWidth: 2,
-    borderStyle: 'dashed' as const,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   tileCta: {
-    fontFamily: fonts.bold,
-    fontSize: 11.5,
-    letterSpacing: 0.8,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    letterSpacing: 0.1,
   },
 }));

@@ -54,7 +54,7 @@ export default function TermsAcceptanceScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Sticker label="House rules" tint={colors.amberSoft} tilt={2} icon="document-text" />
-        <Text style={styles.title}>THE FINE{'\n'}PRINT.</Text>
+        <Text style={styles.title}>The fine{'\n'}print.</Text>
         <Text style={[typography.body, styles.sub]}>
           Bridge coordinates real-world meetups with real students. Skim the rules, confirm you're
           eligible, and you're in.
@@ -146,16 +146,13 @@ function CheckRow({
           height: 28,
           borderRadius: radii.xs,
           borderWidth: BORDER_W,
-          borderColor: colors.border,
+          borderColor: checked ? colors.primary : colors.border,
           backgroundColor: checked ? colors.primary : colors.surface,
           alignItems: 'center',
           justifyContent: 'center',
-          transform: [{ rotate: '-3deg' }],
         }}
       >
-        {checked ? (
-          <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.onPrimary }}>✓</Text>
-        ) : null}
+        {checked ? <Ionicons name="checkmark" size={18} color={colors.onPrimary} /> : null}
       </View>
       <Text style={[typography.body, { flex: 1, fontSize: 14, lineHeight: 19 }]}>{label}</Text>
     </Pressable>
@@ -170,10 +167,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.lg,
   },
   title: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 31,
+    lineHeight: 37,
+    letterSpacing: -0.7,
     color: t.colors.ink,
   },
   sub: {

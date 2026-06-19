@@ -142,6 +142,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
       clubs: parseJsonArray(user.clubs),
       instagramHandle: user.instagramHandle ?? null,
       interestTags: parseJsonArray(user.interestTags),
+      purpose: user.purpose ?? null,
+      campusZones: parseJsonArray(user.campusZones),
+      clubInterests: user.clubInterests ?? null,
     });
   } catch (err) {
     console.error(err);
@@ -153,7 +156,8 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
 
 router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
-  const { classYear, major, bio, clubs, instagramHandle, interestTags } = req.body ?? {};
+  const { classYear, major, bio, clubs, instagramHandle, interestTags, purpose, campusZones, clubInterests } =
+    req.body ?? {};
 
   const updateData: Record<string, unknown> = {};
 
@@ -229,6 +233,11 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
   const moderation = await moderateTextContent([
     typeof bio === 'string' ? bio : null,
     typeof major === 'string' ? major : null,
+    typeof purpose === 'string' ? purpose : null,
+    typeof clubInterests === 'string' ? clubInterests : null,
+    ...(Array.isArray(campusZones)
+      ? campusZones.filter((zone): zone is string => typeof zone === 'string')
+      : []),
     ...(Array.isArray(clubs) ? clubs.filter((club): club is string => typeof club === 'string') : []),
   ]);
   if (moderation) {
@@ -272,6 +281,50 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
     updateData.interestTags = JSON.stringify(interestTags);
   }
 
+  if (purpose !== undefined) {
+    if (purpose !== null && typeof purpose !== 'string') {
+      res.status(400).json({ error: 'purpose must be a string or null' });
+      return;
+    }
+    const trimmed = purpose === null ? null : purpose.trim();
+    if (trimmed !== null && trimmed.length > 40) {
+      res.status(400).json({ error: 'purpose must be 40 characters or fewer' });
+      return;
+    }
+    updateData.purpose = trimmed || null;
+  }
+
+  if (campusZones !== undefined) {
+    if (!Array.isArray(campusZones)) {
+      res.status(400).json({ error: 'campusZones must be an array' });
+      return;
+    }
+    if (campusZones.length > 3) {
+      res.status(400).json({ error: 'You can pick up to 3 campus zones' });
+      return;
+    }
+    for (const zone of campusZones) {
+      if (typeof zone !== 'string' || zone.trim().length < 2 || zone.trim().length > 40) {
+        res.status(400).json({ error: 'Each campus zone must be 2–40 characters' });
+        return;
+      }
+    }
+    updateData.campusZones = JSON.stringify(campusZones.map((z: string) => z.trim()));
+  }
+
+  if (clubInterests !== undefined) {
+    if (clubInterests !== null && typeof clubInterests !== 'string') {
+      res.status(400).json({ error: 'clubInterests must be a string or null' });
+      return;
+    }
+    const trimmed = clubInterests === null ? null : clubInterests.trim();
+    if (trimmed !== null && trimmed.length > 120) {
+      res.status(400).json({ error: 'clubInterests must be 120 characters or fewer' });
+      return;
+    }
+    updateData.clubInterests = trimmed || null;
+  }
+
   if (Object.keys(updateData).length === 0) {
     res.status(400).json({ error: 'No valid fields provided' });
     return;
@@ -297,6 +350,9 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
       clubs: parseJsonArray(updated.clubs),
       instagramHandle: updated.instagramHandle ?? null,
       interestTags: parseJsonArray(updated.interestTags),
+      purpose: updated.purpose ?? null,
+      campusZones: parseJsonArray(updated.campusZones),
+      clubInterests: updated.clubInterests ?? null,
     });
   } catch (err) {
     console.error(err);
@@ -406,6 +462,9 @@ router.get('/me/export', requireAuth, async (req: AuthRequest, res: Response): P
         clubs: true,
         instagramHandle: true,
         interestTags: true,
+        purpose: true,
+        campusZones: true,
+        clubInterests: true,
         notificationPreferences: true,
         pushToken: true,
         accountStatus: true,
@@ -631,6 +690,9 @@ router.get('/me/export', requireAuth, async (req: AuthRequest, res: Response): P
         clubs: parseJsonArray(user.clubs),
         instagramHandle: user.instagramHandle,
         interestTags: parseJsonArray(user.interestTags),
+        purpose: user.purpose,
+        campusZones: parseJsonArray(user.campusZones),
+        clubInterests: user.clubInterests,
       },
       notificationPreferences: parseNotificationPreferences(user.notificationPreferences),
       podMemberships,
@@ -1008,6 +1070,8 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
       clubs: parseJsonArray(user.clubs),
       instagramHandle: user.instagramHandle ?? null,
       interestTags: parseJsonArray(user.interestTags),
+      purpose: user.purpose ?? null,
+      campusZones: parseJsonArray(user.campusZones),
     });
   } catch (err) {
     console.error(err);

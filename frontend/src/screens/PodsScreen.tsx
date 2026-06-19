@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,6 @@ import {
   getFriends,
   getMyPodHistory,
   getMyPods,
-  resolveAvatarUrl,
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { FriendUser, Pod } from '../types';
@@ -19,8 +18,9 @@ import {
   AppBackdrop,
   Avatar,
   AvatarStack,
+  Banner,
   Button,
-  Chip,
+  Segmented,
   EmptyState,
   IconButton,
   ProgressBar,
@@ -51,6 +51,9 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 function podStatusMeta(pod: Pod, colors: ThemeColors) {
   if (pod.status === 'COMPLETED') {
     return { label: 'Finished', tint: colors.blueSoft, icon: 'checkmark-circle' as const };
+  }
+  if (pod.status === 'CANCELLED') {
+    return { label: 'Cancelled', tint: colors.surfaceAlt, icon: 'close-circle' as const };
   }
   if (pod.status === 'LOCKED') {
     return { label: 'Locked in', tint: colors.successSoft, icon: 'sparkles' as const };
@@ -115,11 +118,13 @@ export default function PodsScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>('active');
+  const [refreshing, setRefreshing] = useState(false);
   const [activePods, setActivePods] = useState<Pod[]>([]);
   const [historyPods, setHistoryPods] = useState<Pod[]>([]);
   const [feedPods, setFeedPods] = useState<Pod[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -133,10 +138,12 @@ export default function PodsScreen() {
       setHistoryPods(history);
       setFeedPods(feed);
       setFriends(friendRows);
-    } catch (error) {
-      Alert.alert('Could not load your pods', getApiErrorMessage(error));
+      setLoadWarning(null);
+    } catch {
+      setLoadWarning("Couldn't refresh — pull to retry.");
     } finally {
       setLoaded(true);
+      setRefreshing(false);
     }
   }, []);
 
@@ -167,16 +174,21 @@ export default function PodsScreen() {
     [friends, currentPods, suggestedPods],
   );
   const pastItems = mode === 'past' ? pastPods : [];
-  const quickStartActivity =
-    suggestedPods.find((pod) => pod.activity)?.activity ??
-    currentPods.find((pod) => pod.activity)?.activity ??
-    null;
-
   return (
     <AppBackdrop>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.primary}
+          />
+        }
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
@@ -185,7 +197,7 @@ export default function PodsScreen() {
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.kicker, { color: colors.primary }]}>YOUR PLANS</Text>
-              <Text style={styles.pageTitle}>PODS.</Text>
+              <Text style={styles.pageTitle}>Pods</Text>
             </View>
             <IconButton
               icon="add"
@@ -193,25 +205,22 @@ export default function PodsScreen() {
               color={colors.primary}
               iconColor={colors.onPrimary}
               accessibilityLabel="Start a pod"
-              onPress={() =>
-                quickStartActivity
-                  ? navigation.navigate('ActivityPods', {
-                      activity: quickStartActivity,
-                      startCreate: true,
-                    })
-                  : navigation.navigate('MainTabs', { screen: 'Explore' })
-              }
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
             />
           </View>
         </Animated.View>
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         {/* Active / Past switch */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
-          style={styles.modeRow}
-        >
-          <Chip label="Active" selected={mode === 'active'} onPress={() => setMode('active')} />
-          <Chip label="Past" selected={mode === 'past'} onPress={() => setMode('past')} />
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'past', label: 'Past' },
+            ]}
+          />
         </Animated.View>
 
         {mode === 'active' ? (
@@ -237,12 +246,15 @@ export default function PodsScreen() {
                     >
                       <View style={styles.primaryTop}>
                         <Sticker label={status.label} tint={status.tint} icon={status.icon} tilt={-2} />
-                        <Text style={styles.primaryCount}>
-                          {primaryPod.members.length}/{primaryPod.maxMembers}
-                        </Text>
+                        <View style={styles.primaryTopRight}>
+                          <Text style={styles.primaryCount}>
+                            {primaryPod.members.length}/{primaryPod.maxMembers}
+                          </Text>
+                          <Ionicons name="arrow-forward" size={18} color={colors.ink} />
+                        </View>
                       </View>
                       <Text style={styles.primaryTitle} numberOfLines={2}>
-                        {displayPodTitle(primaryPod).toUpperCase()}
+                        {displayPodTitle(primaryPod)}
                       </Text>
                       <ProgressBar
                         value={primaryPod.members.length / Math.max(1, primaryPod.maxMembers)}
@@ -264,7 +276,7 @@ export default function PodsScreen() {
                         <AvatarStack
                           names={primaryPod.members.slice(0, 4).map((member) => ({
                             name: member.user.name,
-                            uri: resolveAvatarUrl(member.user.avatarUrl),
+                            uri: member.user.avatarUrl,
                           }))}
                           size={32}
                         />
@@ -278,11 +290,6 @@ export default function PodsScreen() {
                             </Text>
                           ) : null}
                         </View>
-                        <Button
-                          label="Open"
-                          size="sm"
-                          onPress={() => navigation.navigate('PodDetail', { podId: primaryPod.id })}
-                        />
                       </View>
                     </Slab>
                   );
@@ -391,7 +398,7 @@ export default function PodsScreen() {
                             <AvatarStack
                               names={pod.members.slice(0, 3).map((member) => ({
                                 name: member.user.name,
-                                uri: resolveAvatarUrl(member.user.avatarUrl),
+                            uri: member.user.avatarUrl,
                               }))}
                               size={24}
                             />
@@ -429,7 +436,7 @@ export default function PodsScreen() {
                       >
                         <Avatar
                           name={item.friend.name}
-                          uri={resolveAvatarUrl(item.friend.avatarUrl)}
+                          uri={item.friend.avatarUrl}
                           size={42}
                           tilt={-2}
                         />
@@ -526,7 +533,13 @@ export default function PodsScreen() {
                     </Text>
                   </View>
                   <Sticker
-                    label={pod.status === 'COMPLETED' ? 'Done' : 'Closed'}
+                    label={
+                      pod.status === 'COMPLETED'
+                        ? 'Done'
+                        : pod.status === 'CANCELLED'
+                          ? 'Cancelled'
+                          : 'Closed'
+                    }
                     tint={colors.blueSoft}
                     tilt={2}
                     small
@@ -560,10 +573,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.md,
   },
   pageTitle: {
-    fontFamily: fonts.displayHeavy,
-    fontSize: 30,
-    lineHeight: 35,
-    letterSpacing: -1,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.6,
     color: t.colors.ink,
     marginTop: 4,
   },
@@ -587,6 +600,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontFamily: fonts.displayMedium,
     fontSize: 17,
     color: t.colors.ink,
+  },
+  primaryTopRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
   },
   primaryTitle: {
     fontFamily: fonts.display,

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bridge — Clubs Redesign Wireframes</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5EDDD; --surface:#FFFCF2; --surface-alt:#EFE5CF; --sunken:#E7DBC1;
+    --ink:#1D1408; --sub:#70614A; --faint:#A6967D;
+    --border:#1D1408; --border-soft:#DCCFAF;
+    --scarlet:#C8102E; --scarlet-soft:#F8D6CC; --on-scarlet:#FFF6E8;
+    --success:#15833E; --success-soft:#D6EFD4;
+    --amber-soft:#FAEBC4; --violet-soft:#E6DAF6; --blue-soft:#D7E6F8; --teal-soft:#D2EEEA;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#E9DFC8;font-family:'Space Grotesk',sans-serif;color:var(--ink);padding:40px 24px}
+  h1{font-family:'Unbounded',sans-serif;font-weight:800;font-size:26px;letter-spacing:-1px}
+  .sub{color:var(--sub);margin-top:6px;max-width:760px;font-size:14px;line-height:1.5}
+  .row{display:flex;gap:36px;flex-wrap:wrap;margin-top:36px;align-items:flex-start}
+  .frame{width:320px;flex-shrink:0}
+  .frame h2{font-family:'Unbounded';font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .frame .note{font-size:11.5px;color:var(--sub);line-height:1.45;margin-bottom:12px;min-height:48px}
+  .phone{background:var(--bg);border:3px solid var(--border);border-radius:28px;box-shadow:6px 6px 0 var(--border);overflow:hidden;height:660px;display:flex;flex-direction:column}
+  .screen{flex:1;overflow:hidden;padding:18px 16px 0;display:flex;flex-direction:column;gap:12px}
+  /* primitives */
+  .kicker{font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--scarlet);text-transform:uppercase}
+  .display{font-family:'Unbounded';font-weight:800;font-size:24px;letter-spacing:-1px}
+  .cap{font-size:11px;color:var(--sub)}
+  .capxs{font-size:10px;color:var(--faint)}
+  .card{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:12px}
+  .slab{background:var(--surface);border:2px solid var(--border);border-radius:16px;box-shadow:4px 4px 0 var(--border);padding:14px}
+  .listrow{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+  .mark{width:38px;height:38px;border:2px solid var(--border);border-radius:10px;background:var(--surface-alt);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+  .grow{flex:1;min-width:0}
+  .name{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{font-size:10.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{border:2px solid var(--border);border-radius:999px;padding:4px 11px;font-size:11px;font-weight:700;background:var(--surface);white-space:nowrap}
+  .pill.on{background:var(--ink);color:var(--on-scarlet)}
+  .btn{background:var(--scarlet);color:var(--on-scarlet);border:2px solid var(--border);border-radius:11px;padding:7px 14px;font-weight:700;font-size:12px;text-align:center;box-shadow:2px 2px 0 var(--border)}
+  .btn.ghost{background:var(--surface);color:var(--ink);box-shadow:none}
+  .badge{background:var(--scarlet);color:var(--on-scarlet);border:2px solid var(--border);border-radius:999px;font-size:10px;font-weight:700;padding:1px 7px}
+  .chev{color:var(--faint);font-size:14px}
+  .sticker{display:inline-block;border:2px solid var(--border);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;transform:rotate(-2deg);background:var(--success-soft)}
+  .search{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:9px 12px;font-size:12px;color:var(--faint)}
+  .chips{display:flex;gap:6px;overflow:hidden}
+  .sechead{display:flex;align-items:baseline;justify-content:space-between;margin-top:2px}
+  .sechead .t{font-family:'Unbounded';font-weight:700;font-size:14px;letter-spacing:-.3px}
+  .sechead .a{font-size:11px;font-weight:700;color:var(--scarlet)}
+  .tab{display:flex;justify-content:space-around;border-top:3px solid var(--border);background:var(--surface);padding:10px 0 14px;font-size:9.5px;font-weight:700;color:var(--faint)}
+  .tab .on{color:var(--scarlet)}
+  .hdr{display:flex;align-items:center;gap:10px}
+  .back{width:34px;height:34px;border:2px solid var(--border);border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+  .seg{display:flex;border:2px solid var(--border);border-radius:11px;overflow:hidden;background:var(--surface)}
+  .seg div{flex:1;text-align:center;padding:6px 0;font-size:11px;font-weight:700;border-right:2px solid var(--border)}
+  .seg div:last-child{border-right:0}
+  .seg .on{background:var(--success-soft)}
+  .datebadge{width:44px;border:2px solid var(--border);border-radius:10px;background:var(--surface);text-align:center;overflow:hidden;flex-shrink:0}
+  .datebadge .m{background:var(--scarlet);color:var(--on-scarlet);font-size:9px;font-weight:700;padding:2px 0}
+  .datebadge .d{font-family:'Unbounded';font-weight:700;font-size:16px;padding:2px 0}
+  .bubble{max-width:78%;border:2px solid var(--border);border-radius:13px;padding:8px 11px;font-size:12px;background:var(--surface)}
+  .bubble.me{align-self:flex-end;background:var(--scarlet-soft)}
+  .composer{display:flex;gap:8px;padding:10px 14px 16px;border-top:3px solid var(--border);background:var(--surface)}
+  .composer .in{flex:1;border:2px solid var(--border);border-radius:11px;padding:9px 12px;font-size:12px;color:var(--faint);background:var(--bg)}
+  .composer .send{width:40px;height:40px;border:2px solid var(--border);border-radius:11px;background:var(--scarlet);color:var(--on-scarlet);display:flex;align-items:center;justify-content:center;font-weight:700}
+  .avstack{display:flex}
+  .avstack span{width:20px;height:20px;border-radius:50%;border:2px solid var(--surface);background:var(--sunken);margin-left:-7px}
+  .avstack span:first-child{margin-left:0}
+  .mansec{font-size:10px;font-weight:700;letter-spacing:1.2px;color:var(--faint);text-transform:uppercase;margin-top:4px}
+</style>
+</head>
+<body>
+
+<h1>CLUBS — REDESIGN WIREFRAMES.</h1>
+<p class="sub">Hub-and-spoke IA replacing the single mega-screen. Scarlet Press evolved: same paper/ink/scarlet language, tilt &amp; sticker budget of one hero moment per screen, flat cards for repeated rows. Companion to <code>docs/clubs-redesign-plan.md</code>.</p>
+
+<div class="row">
+
+  <!-- 1. CLUBS HOME -->
+  <div class="frame">
+    <h2>1 · Clubs Home</h2>
+    <p class="note">My Clubs first (new), Tonight rail second, then Discover with search + chips directly above the list they filter. Spotlight cut; grid → single-column rows.</p>
+    <div class="phone"><div class="screen">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="kicker">Campus Orgs</div><div class="display">CLUBS.</div><div class="cap">42 orgs · 5 meeting tonight</div></div>
+        <div class="back" style="background:var(--scarlet);color:var(--on-scarlet)">+</div>
+      </div>
+      <div class="sechead"><span class="t">My clubs</span><span class="a">2</span></div>
+      <div class="listrow"><div class="mark">🤖</div><div class="grow"><div class="name">OSU Robotics</div><div class="meta">Meets tonight 7:00 PM · 2 new posts</div></div><span class="badge">2</span><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark">🎬</div><div class="grow"><div class="name">Film Society</div><div class="meta">Next: Fri · quiet this week</div></div><span class="chev">›</span></div>
+      <div class="sechead"><span class="t">Tonight</span><span class="a">See all</span></div>
+      <div style="display:flex;gap:10px;overflow:hidden">
+        <div class="slab" style="min-width:140px;padding:10px"><span class="sticker">7:00 PM</span><div class="name" style="margin-top:6px">Chess Club</div><div class="capxs">Enarson 240</div></div>
+        <div class="slab" style="min-width:140px;padding:10px"><span class="sticker" style="background:var(--amber-soft)">8:30 PM</span><div class="name" style="margin-top:6px">A cappella</div><div class="capxs">Hughes Hall</div></div>
+      </div>
+      <div class="sechead"><span class="t">Discover</span></div>
+      <div class="search">Search clubs and communities</div>
+      <div class="chips"><span class="pill on">All</span><span class="pill">Academic</span><span class="pill">Arts</span><span class="pill">Sports</span></div>
+      <div class="listrow"><div class="mark">♟️</div><div class="grow"><div class="name">Chess Club</div><div class="meta">Academic · 214 members · tonight 7 PM</div></div><span class="btn" style="padding:5px 12px">Join</span></div>
+      <div class="listrow"><div class="mark">🥏</div><div class="grow"><div class="name">Ultimate Frisbee</div><div class="meta">Sports · 180 members · 2 upcoming</div></div><span class="btn" style="padding:5px 12px">Join</span></div>
+    </div>
+    <div class="tab"><span>Home</span><span>Explore</span><span>Pods</span><span class="on">Clubs</span><span>Inbox</span></div>
+    </div>
+  </div>
+
+  <!-- 2. CLUB HOME (HUB) -->
+  <div class="frame">
+    <h2>2 · Club Home (hub)</h2>
+    <p class="note">Compact identity header (~120pt vs ~40% of viewport today). One hero: Next meeting. Spaces replace the chat tab/hub. Manage row is the only leader-facing element.</p>
+    <div class="phone"><div class="screen">
+      <div class="hdr"><div class="back">‹</div><div class="grow"><div class="kicker">Academic · Verified ✓</div></div><div class="back">···</div></div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="mark" style="width:52px;height:52px;font-size:24px;transform:rotate(-3deg)">🤖</div>
+        <div class="grow"><div style="font-family:'Unbounded';font-weight:700;font-size:17px;letter-spacing:-.5px">OSU Robotics</div><div class="cap">Ohio State · 96 members · 3 upcoming</div></div>
+      </div>
+      <div class="cap" style="line-height:1.45">We build combat and research robots, compete nationally, and… <b style="color:var(--scarlet)">more</b></div>
+      <div class="sechead"><span class="t">Next meeting</span><span class="a">All events</span></div>
+      <div class="slab" style="display:flex;gap:12px">
+        <div class="datebadge"><div class="m">JUN</div><div class="d">10</div></div>
+        <div class="grow">
+          <div class="kicker">Tonight · 7:00 PM</div>
+          <div class="name" style="font-size:14px">Combat bot build night</div>
+          <div class="capxs">Scott Lab E040</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px"><div class="avstack"><span></span><span></span><span></span></div><span class="capxs">18 going</span></div>
+          <div class="seg" style="margin-top:8px"><div class="on">Going</div><div>Maybe</div><div>Can't</div></div>
+        </div>
+      </div>
+      <div class="sechead"><span class="t">Spaces</span></div>
+      <div class="listrow"><div class="mark" style="background:var(--amber-soft)">📣</div><div class="grow"><div class="name">Announcements</div><div class="meta">Pizza confirmed for tonight</div></div><span class="badge">2</span><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark" style="background:var(--blue-soft)">💬</div><div class="grow"><div class="name">General Chat</div><div class="meta">Sam: who has the 3D printer key?</div></div><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark" style="background:var(--violet-soft)">🛡️</div><div class="grow"><div class="name">Officers</div><div class="meta">Leadership only</div></div><span class="chev">›</span></div>
+      <div class="listrow" style="border-style:dashed"><div class="mark" style="background:var(--scarlet-soft)">⚙️</div><div class="grow"><div class="name" style="color:var(--scarlet)">Manage club</div><div class="meta">Roles, outreach, analytics, settings</div></div><span class="chev">›</span></div>
+    </div></div>
+  </div>
+
+  <!-- 3. CHAT -->
+  <div class="frame">
+    <h2>3 · Club Chat</h2>
+    <p class="note">A real chat screen per channel: inverted list, docked keyboard-aware composer, OS back gesture. Report/delete via long-press. Announcements variant swaps composer for a gated "New announcement" → Sheet.</p>
+    <div class="phone">
+      <div class="screen" style="gap:10px">
+        <div class="hdr"><div class="back">‹</div><div class="grow"><div class="name" style="font-size:15px">General Chat</div><div class="capxs">96 members · members only</div></div><div class="back">···</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding-bottom:8px">
+          <div class="capxs" style="text-align:center">— Today —</div>
+          <div class="bubble"><b style="font-size:10.5px">Sam</b><br>Who has the 3D printer key?</div>
+          <div class="bubble"><b style="font-size:10.5px">Priya</b><br>I do — bringing it at 6:45</div>
+          <div class="bubble me">Can someone grab the spare ESCs from the locker?</div>
+          <div class="bubble"><b style="font-size:10.5px">Sam</b><br>On it 👍</div>
+          <div class="capxs" style="color:var(--scarlet)">Priya is typing…</div>
+        </div>
+      </div>
+      <div class="composer"><div class="in">Message members…</div><div class="send">↑</div></div>
+    </div>
+  </div>
+
+  <!-- 4. MEETING DETAIL -->
+  <div class="frame">
+    <h2>4 · Meeting Detail (new)</h2>
+    <p class="note">Per-meeting destination for the Tonight rail and deep links. RSVP + check-in for members; the attendance console (code, copy, close, remind) appears only for leaders.</p>
+    <div class="phone"><div class="screen">
+      <div class="hdr"><div class="back">‹</div><div class="grow"><div class="kicker">OSU Robotics</div></div><div class="back">···</div></div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="datebadge" style="width:52px"><div class="m">JUN</div><div class="d" style="font-size:19px">10</div></div>
+        <div class="grow"><div style="font-family:'Unbounded';font-weight:700;font-size:16px;letter-spacing:-.5px">Combat bot build night</div><div class="cap">Tonight · 7:00–9:00 PM · Scott Lab E040</div></div>
+      </div>
+      <div class="cap" style="line-height:1.45">Final assembly before regionals. Bring safety glasses; pizza at 8.</div>
+      <div class="seg"><div class="on">Going</div><div>Maybe</div><div>Can't go</div></div>
+      <div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="name" style="font-size:13px">Who's going</div><span class="capxs">18 going · 4 maybe</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px"><div class="avstack"><span></span><span></span><span></span><span></span><span></span></div><span class="capxs">+13 more</span></div>
+      </div>
+      <div class="card" style="background:var(--surface-alt)"><div class="name" style="font-size:13px">Check in</div><div class="capxs" style="margin-top:2px">Have the attendance code from tonight?</div>
+        <div style="display:flex;gap:8px;margin-top:8px"><div class="in" style="flex:1;border:2px solid var(--border);border-radius:10px;background:var(--surface);padding:8px 10px;font-size:12px;color:var(--faint)">Enter code</div><span class="btn" style="padding:8px 12px">Check in</span></div>
+      </div>
+      <div class="mansec">Leaders only</div>
+      <div class="card" style="border-style:dashed"><div style="display:flex;justify-content:space-between;align-items:center"><div class="name" style="font-size:13px">Attendance console</div><span class="sticker" style="transform:none;background:var(--success-soft)">OPEN</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><div style="font-family:'Unbounded';font-weight:800;font-size:20px;letter-spacing:2px">4 8 2 1</div><span class="btn ghost" style="padding:5px 10px">Copy</span><span class="btn ghost" style="padding:5px 10px">Close</span></div>
+        <div class="capxs" style="margin-top:8px">11 checked in · <b style="color:var(--scarlet)">Remind 23 non-RSVPs</b></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 5. EVENTS LIST -->
+  <div class="frame">
+    <h2>5 · Club Events</h2>
+    <p class="note">Month-grouped rows; composer opens as a Sheet instead of an inline card. Each row → Meeting Detail. Export stays in the header.</p>
+    <div class="phone"><div class="screen">
+      <div class="hdr"><div class="back">‹</div><div class="grow"><div class="name" style="font-size:15px">Events</div><div class="capxs">3 upcoming</div></div><span class="btn ghost" style="padding:5px 10px;font-size:11px">⤓ .ics</span><span class="btn" style="padding:5px 10px;font-size:11px">+ New</span></div>
+      <div class="mansec">June</div>
+      <div class="listrow"><div class="datebadge"><div class="m">JUN</div><div class="d">10</div></div><div class="grow"><div class="name">Combat bot build night</div><div class="meta">7:00 PM · Scott Lab E040 · 18 going</div></div><span class="chev">›</span></div>
+      <div class="listrow"><div class="datebadge"><div class="m">JUN</div><div class="d">17</div></div><div class="grow"><div class="name">Regionals prep + dry run</div><div class="meta">6:30 PM · Scott Lab E040 · 9 going</div></div><span class="chev">›</span></div>
+      <div class="mansec">July</div>
+      <div class="listrow"><div class="datebadge"><div class="m">JUL</div><div class="d">02</div></div><div class="grow"><div class="name">Summer kickoff social</div><div class="meta">5:00 PM · The Oval · 4 going</div></div><span class="chev">›</span></div>
+      <div style="margin-top:auto;margin-bottom:14px">
+        <div class="slab" style="border-radius:18px 18px 0 0;box-shadow:0 -4px 0 var(--border);border-bottom:0">
+          <div style="width:36px;height:4px;background:var(--border-soft);border-radius:2px;margin:0 auto 10px"></div>
+          <div class="name" style="font-size:14px">New meeting</div>
+          <div class="in" style="border:2px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 10px;font-size:12px;color:var(--faint);margin-top:8px">Title</div>
+          <div style="display:flex;gap:8px;margin-top:8px"><div class="in" style="flex:1;border:2px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 10px;font-size:12px;color:var(--faint)">Date &amp; time</div><div class="in" style="flex:1;border:2px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 10px;font-size:12px;color:var(--faint)">Location</div></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 6. MANAGE -->
+  <div class="frame">
+    <h2>6 · Manage Club (new)</h2>
+    <p class="note">The leader console: everything currently scattered across Members/Analytics tabs and the header camera icon. Members screen becomes member-facing only; Analytics demotes to a sub-screen here.</p>
+    <div class="phone"><div class="screen">
+      <div class="hdr"><div class="back">‹</div><div class="grow"><div class="name" style="font-size:15px">Manage club</div><div class="capxs">OSU Robotics · Owner</div></div></div>
+      <div class="mansec">Profile</div>
+      <div class="listrow"><div class="mark">🖼️</div><div class="grow"><div class="name">Name, photo &amp; description</div></div><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark">🔗</div><div class="grow"><div class="name">Share link &amp; visibility</div></div><span class="chev">›</span></div>
+      <div class="mansec">People</div>
+      <div class="listrow"><div class="mark" style="background:var(--violet-soft)">🏷️</div><div class="grow"><div class="name">Roles &amp; member tags</div><div class="meta">4 roles</div></div><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark" style="background:var(--violet-soft)">🛡️</div><div class="grow"><div class="name">Officer permissions</div></div><span class="chev">›</span></div>
+      <div class="mansec">Engage</div>
+      <div class="listrow"><div class="mark" style="background:var(--amber-soft)">📨</div><div class="grow"><div class="name">Bulk outreach</div><div class="meta">Message by audience or role</div></div><span class="chev">›</span></div>
+      <div class="listrow"><div class="mark" style="background:var(--teal-soft)">📊</div><div class="grow"><div class="name">Analytics</div><div class="meta">RSVP rate 64% · 96 members</div></div><span class="chev">›</span></div>
+      <div class="mansec">Danger zone</div>
+      <div class="listrow" style="border-color:var(--scarlet)"><div class="grow"><div class="name" style="color:var(--scarlet)">Delete club</div></div></div>
+    </div></div>
+  </div>
+
+</div>
+</body>
+</html>

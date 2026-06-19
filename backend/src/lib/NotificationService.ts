@@ -17,6 +17,7 @@ interface NotificationPreferences {
   clubAttendanceOpen: boolean;
   clubRsvpReminder: boolean;
   clubOutreach: boolean;
+  clubRolePing: boolean;
 }
 
 export const DEFAULT_PREFS: NotificationPreferences = {
@@ -32,6 +33,7 @@ export const DEFAULT_PREFS: NotificationPreferences = {
   clubAttendanceOpen: true,
   clubRsvpReminder: true,
   clubOutreach: true,
+  clubRolePing: true,
 };
 
 export function parsePreferences(raw: string | null | undefined): NotificationPreferences {
@@ -127,6 +129,68 @@ export const NotificationService = {
       ]);
     } catch (err) {
       console.error('[NotificationService] notifyPodJoin error:', err);
+    }
+  },
+
+  /**
+   * Notify all pod members except the actor that the pod's plan changed
+   * (details edited) or the pod was cancelled. Uses the meetupReminder
+   * preference since both are plan-critical updates.
+   */
+  async notifyPodPlanChange(
+    podId: string,
+    actorId: string,
+    kind: 'updated' | 'cancelled',
+    memberUserIds?: string[]
+  ): Promise<void> {
+    try {
+      const pod = await prisma.pod.findUnique({
+        where: { id: podId },
+        include: {
+          activity: { select: { title: true } },
+          members: {
+            include: {
+              user: {
+                select: { id: true, pushToken: true, notificationPreferences: true },
+              },
+            },
+          },
+        },
+      });
+      if (!pod) return;
+
+      // For cancellations the members may already be detached — allow callers
+      // to pass the recipient list captured before the write.
+      const recipients = memberUserIds?.length
+        ? await prisma.user.findMany({
+            where: { id: { in: memberUserIds } },
+            select: { id: true, pushToken: true, notificationPreferences: true },
+          })
+        : pod.members.map((m) => m.user);
+
+      const title = pod.activity?.title ?? 'Your pod';
+      const body =
+        kind === 'cancelled'
+          ? 'This pod was cancelled by its creator.'
+          : 'The meetup time or location changed — check the new plan.';
+
+      const messages: ExpoPushMessage[] = [];
+      for (const user of recipients) {
+        if (user.id === actorId) continue;
+        if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) continue;
+        const prefs = parsePreferences(user.notificationPreferences);
+        if (!prefs.meetupReminder) continue;
+        messages.push({
+          to: user.pushToken,
+          title,
+          body,
+          data: { type: kind === 'cancelled' ? 'pod_cancelled' : 'pod_updated', podId },
+          sound: 'default',
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyPodPlanChange error:', err);
     }
   },
 
@@ -441,6 +505,66 @@ export const NotificationService = {
       await send(messages);
     } catch (err) {
       console.error('[NotificationService] notifyClubAnnouncementCreated error:', err);
+    }
+  },
+
+  /** Notify members holding any of the pinged roles that they were mentioned in club chat. */
+  async notifyClubRolePing(
+    clubId: string,
+    senderId: string,
+    roleIds: string[],
+    channelName: string,
+    preview: string
+  ): Promise<void> {
+    if (roleIds.length === 0) return;
+    try {
+      const [club, sender, holders] = await Promise.all([
+        prisma.club.findUnique({ where: { id: clubId }, select: { name: true } }),
+        prisma.user.findUnique({
+          where: { id: senderId },
+          select: { id: true, name: true, firstName: true, lastName: true },
+        }),
+        prisma.clubMemberRole.findMany({
+          where: { clubId, roleId: { in: roleIds } },
+          include: {
+            role: { select: { name: true } },
+            member: {
+              include: {
+                user: { select: { id: true, pushToken: true, notificationPreferences: true } },
+              },
+            },
+          },
+        }),
+      ]);
+      if (!club) return;
+
+      const senderName = sender ? getPublicName(sender) : 'Someone';
+      const roleNames = Array.from(new Set(holders.map((row) => row.role.name)));
+      const mentionLabel = roleNames.length === 1 ? `@${roleNames[0]}` : `${roleIds.length} roles`;
+      const body = `${senderName} pinged ${mentionLabel} in #${channelName}: ${
+        preview.length > 90 ? `${preview.slice(0, 87)}...` : preview
+      }`;
+
+      const seen = new Set<string>();
+      const messages: ExpoPushMessage[] = [];
+      for (const row of holders) {
+        const user = row.member.user;
+        if (user.id === senderId || seen.has(user.id)) continue;
+        seen.add(user.id);
+        if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) continue;
+        const prefs = parsePreferences(user.notificationPreferences);
+        if (!prefs.clubRolePing) continue;
+        messages.push({
+          to: user.pushToken,
+          title: club.name,
+          body,
+          data: { type: 'club_role_ping', clubId },
+          sound: 'default',
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubRolePing error:', err);
     }
   },
 
