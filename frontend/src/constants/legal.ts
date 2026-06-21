@@ -1,1 +1,1 @@
-export const CURRENT_TERMS_VERSION = '2026-06-08';
+export const CURRENT_TERMS_VERSION = '2026-06-20';

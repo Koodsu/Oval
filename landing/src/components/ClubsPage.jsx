@@ -471,7 +471,7 @@ export default function ClubsPage() {
               <a href="#club-registration" className="inline-flex items-center gap-2 bg-scarlet px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white no-underline transition-colors hover:bg-scarlet-bright">
                 Register your club
               </a>
-              <span className="text-sm text-white/45">Free at launch. OSU-only. We help founding clubs get set up personally.</span>
+              <span className="text-sm text-white/45">Free for clubs. OSU-only. We help founding clubs get set up personally.</span>
             </div>
           </div>
 
@@ -607,7 +607,7 @@ export default function ClubsPage() {
             </p>
             <div className="mt-8 grid gap-3">
               {[
-                'Free at launch for clubs',
+                'Free for clubs',
                 'Eligible OSU email required',
                 'Direct onboarding from the Oval team',
                 'Input into how club tools evolve',

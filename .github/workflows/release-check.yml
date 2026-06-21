@@ -26,7 +26,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bridge_test
       EXPO_PUBLIC_API_URL: https://bridge-phi-plum.vercel.app
-      EXPO_PUBLIC_APP_SITE_URL: https://www.joinbridgeapp.com
+      EXPO_PUBLIC_APP_SITE_URL: https://www.theovalapp.com
 
     steps:
       - uses: actions/checkout@v4

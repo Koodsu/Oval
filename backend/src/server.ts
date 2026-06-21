@@ -171,8 +171,16 @@ app.use('/pods/:id/messages', apiLimiter, messagesRoutes);
 //Waitlist
 app.use('/waitlist', waitlistLimiter, waitlistRoutes);
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (_req, res) => {
+  try {
+    // Actually touch the database — a bare "ok" hid a paused/unreachable DB and
+    // made login hangs hard to diagnose.
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'ok' });
+  } catch (err) {
+    console.error('[health] database check failed:', err);
+    res.status(503).json({ status: 'error', database: 'unreachable' });
+  }
 });
 
 // 404 — no route matched
