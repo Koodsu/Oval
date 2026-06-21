@@ -15,10 +15,19 @@
     },
     "production": {
       "node": "22.14.0",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.theovalapp.com"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "brady.vanbibber@icloud.com",
+        "ascAppId": "6782521990",
+        "appleTeamId": "687FPU46UV"
+      }
+    }
   }
 }

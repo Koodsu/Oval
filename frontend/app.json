@@ -81,8 +81,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "9253c09e-c729-4b63-8c86-692c17cc9919"
+        "projectId": "8080880f-a229-46db-853e-88035b0b7c9f"
       }
-    }
+    },
+    "owner": "bradyv"
   }
 }
