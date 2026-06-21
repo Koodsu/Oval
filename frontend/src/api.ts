@@ -16,6 +16,12 @@ export const API_BASE =
       : 'https://ovalapp.vercel.app';
 export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://www.theovalapp.com').replace(/\/$/, '');
 
+// Logged once at startup so you can confirm which backend the app is actually
+// talking to. If this prints http://localhost:3000 in your Metro logs while you
+// expect ovalapp.vercel.app, your EXPO_PUBLIC_API_URL didn't load — restart with
+// `npx expo start -c` to clear the cache.
+console.log('[api] API_BASE =', API_BASE);
+
 /** Fallback alert copy when an error has no safer or more specific message. */
 export const API_USER_MESSAGE = 'We could not finish that. Please try again.';
 
@@ -65,6 +71,7 @@ export function getApiErrorMessage(error: unknown, fallback = API_USER_MESSAGE) 
 
 const RETRY_BACKOFF_MS = [250, 500, 1000] as const;
 const MAX_RETRY_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 15_000;
 const GET_CACHE_TTL_MS = 45_000;
 
 type CacheEntry = {
@@ -171,8 +178,18 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
 
     let res: Response;
     let data: unknown;
+    // Per-attempt timeout so a hung connection surfaces a real error instead of
+    // spinning forever. We abort via our own controller and chain any external
+    // signal into it, so callers can still cancel.
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', onExternalAbort);
+    }
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
+      res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal: controller.signal });
       if (res.status === 204) {
         data = {};
       } else {
@@ -184,11 +201,26 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
         }
       }
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') throw err;
+      // External cancellation by the caller — propagate as an abort.
+      if (signal?.aborted) {
+        const e = new Error('Aborted');
+        e.name = 'AbortError';
+        throw e;
+      }
+      // Our timeout fired.
+      if (controller.signal.aborted) {
+        throw new ApiError(
+          `Request timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          'Oval could not reach the server. Check your connection and try again.'
+        );
+      }
       throw new ApiError(
         err instanceof Error ? err.message : 'Network request failed',
         'Oval could not reach the server. Check your connection and try again.'
       );
+    } finally {
+      clearTimeout(timeoutId);
+      if (signal) signal.removeEventListener('abort', onExternalAbort);
     }
 
     if (res.status === 401) {
