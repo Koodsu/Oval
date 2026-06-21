@@ -173,6 +173,15 @@ export default function TermsOfUse() {
           </p>
         </Section>
 
+        <Section id="fees" title="Fees">
+          <p>
+            Oval is currently free to use. We may introduce fees or paid features in the future. Any
+            fees will apply prospectively, we will give reasonable advance notice, and we will not
+            charge you for paid features without your express consent. Continued use of free features
+            will remain free unless we notify you otherwise.
+          </p>
+        </Section>
+
         <Section id="changes" title="Changes">
           <p>
             We may update these Terms. For material changes, we will provide reasonable notice and
