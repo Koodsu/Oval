@@ -5,7 +5,7 @@ Connect; do not invent answers to fields that depend on the seller account.
 
 ## Metadata
 
-- App name: `Oval`
+- App name: `Oval - Campus Life`
 - Subtitle: `Find plans and campus clubs`
 - Primary category: Social Networking
 - Secondary category: Lifestyle
@@ -18,11 +18,10 @@ Connect; do not invent answers to fields that depend on the seller account.
 - Price: Free
 - In-app purchases: None
 
-NAME CHANGE TODO: this app was renamed from "Bridge" to "Oval." Re-run an App
-Store search and a basic trademark check on "Oval" before spending on screenshots
-or promotion — the prior crowding research was for "Bridge" and does not apply.
-Treat the name as unverified, not cleared, until that check and App Store review
-are complete.
+App Store listing name is "Oval - Campus Life" (plain "Oval" was already taken).
+The on-device name stays "Oval" (app.json). The listing name was accepted as
+available in App Store Connect. Trademark clearance on "Oval" is still worth an
+attorney's look before any paid promotion, but the App Store name is set.
 
 EAS iOS build 21 completed successfully with Node 22, but it predates the June 9,
 2026 product-polish pass. Do not submit it; create the final binary from the release

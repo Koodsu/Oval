@@ -144,6 +144,25 @@ const waitlistLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test',
 });
 
+// Generous app-wide backstop: every endpoint past this point — including
+// /health and any route without its own limiter — gets some abuse protection.
+// Real volumetric DDoS mitigation lives at the Vercel edge firewall; this only
+// caps per-key bursts, and on serverless the in-memory count is per-instance,
+// so treat it as best-effort rather than a hard guarantee. The stricter
+// per-route limiters below still apply on top of this. Mounted AFTER the public
+// webRoutes and /uploads so .well-known files (Apple AASA) and avatars stay
+// unthrottled.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+app.use(globalLimiter);
+
 app.use('/auth', authLimiter, authRoutes);
 app.use('/activities', apiLimiter, activitiesRoutes);
 // Pod invites: /pods/invites and /pods/:id/invite
