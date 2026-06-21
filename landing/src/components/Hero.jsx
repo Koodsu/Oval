@@ -172,7 +172,7 @@ export default function Hero() {
             className="mt-6 max-w-[34rem] text-[clamp(16px,1.6vw,19px)] font-normal leading-relaxed text-white/55"
             style={enter(560)}
           >
-            Bridge shows you what's forming around you — pickup games, study pods,
+            Oval shows you what's forming around you — pickup games, study pods,
             late-night food runs, clubs that are actually alive.
             <span className="text-white/85"> See it. Tap in. Show up.</span>
           </p>
@@ -202,7 +202,7 @@ export default function Hero() {
               className="group inline-flex items-center gap-2 text-[13px] font-semibold text-white/45 no-underline transition-colors hover:text-white"
             >
               Running a club?
-              <span className="text-amber">See Bridge for clubs</span>
+              <span className="text-amber">See Oval for clubs</span>
               <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
             </Link>
           </div>

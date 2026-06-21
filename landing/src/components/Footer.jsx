@@ -13,7 +13,7 @@ export default function Footer() {
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-flame to-scarlet shadow-[0_0_16px_rgba(187,0,0,0.4)]">
               <span className="font-display text-[15px] font-bold leading-none text-white">B</span>
             </div>
-            <span className="font-display text-lg font-bold tracking-tight text-white">bridge</span>
+            <span className="font-display text-lg font-bold tracking-tight text-white">oval</span>
           </div>
           <p className="text-[12px] text-white/30">
             Campus is happening <span className="font-serif italic text-flame/80">right now.</span> Made for Buckeyes.
@@ -31,7 +31,7 @@ export default function Footer() {
       </div>
 
       <div className="relative mx-auto mt-10 flex max-w-[1280px] flex-col gap-2 border-t border-white/[0.06] pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[11px] text-white/25">© 2026 Bridge. Made for Buckeyes.</p>
+        <p className="text-[11px] text-white/25">© 2026 Oval. Made for Buckeyes.</p>
         <p className="text-[11px] text-white/25">Not affiliated with The Ohio State University.</p>
       </div>
     </footer>

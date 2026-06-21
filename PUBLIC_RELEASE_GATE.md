@@ -96,7 +96,7 @@ The live sites are currently older than the audited code.
       Pro or an external scheduler.
 - [ ] Verify the live health endpoint, registration, verification, login, password
       reset, uploads, push notifications, pod expiry, and reminder cron.
-- [ ] Verify `https://www.joinbridgeapp.com/.well-known/apple-app-site-association`
+- [ ] Verify `https://www.theovalapp.com/.well-known/apple-app-site-association`
       returns the JSON file, not the landing HTML.
 - [ ] Test every universal link from Mail, Messages, and Safari on a physical iPhone.
 - [x] Hide dead store links until real listing URLs are configured.

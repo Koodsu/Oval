@@ -1,7 +1,7 @@
 {
-  "name": "bridge-backend",
+  "name": "oval-backend",
   "version": "0.1.0",
-  "description": "Bridge backend - Express, Prisma, and PostgreSQL",
+  "description": "Oval backend - Express, Prisma, and PostgreSQL",
   "main": "dist/server.js",
   "engines": {
     "node": ">=22 <23",

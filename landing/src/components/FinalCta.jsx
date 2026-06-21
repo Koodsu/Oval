@@ -55,7 +55,7 @@ export default function FinalCta() {
 
         <p className="reveal mt-7 max-w-[32rem] text-[16px] leading-relaxed text-white/50">
           Not in the group chat. Not in your camera roll of screenshots. Out there —
-          and Bridge is how you find them. Join the waitlist and be first in when we launch at OSU.
+          and Oval is how you find them. Join the waitlist and be first in when we launch at OSU.
         </p>
 
         <div className="reveal mt-10 w-full max-w-[480px]">

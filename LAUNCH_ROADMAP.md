@@ -1,4 +1,4 @@
-# Bridge — Bare Minimum to Public
+# Oval — Bare Minimum to Public
 
 Goal: app live on the App Store for waitlist users ASAP. Everything not required by Apple or basic function is deferred to July, ahead of the distributed August launch.
 

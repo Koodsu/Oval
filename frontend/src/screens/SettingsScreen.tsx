@@ -14,7 +14,7 @@ import {
 } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
-const SITE_URL = 'https://www.joinbridgeapp.com';
+const SITE_URL = 'https://www.theovalapp.com';
 
 const APPEARANCE_OPTIONS: Array<{ value: AppearancePreference; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { value: 'system', label: 'Auto', icon: 'contrast' },
@@ -107,7 +107,7 @@ export default function SettingsScreen({ navigation }: Props) {
             title="Contact support"
             tint={colors.pinkSoft}
             last
-            onPress={() => void Linking.openURL('mailto:contactus@joinbridgeapp.com')}
+            onPress={() => void Linking.openURL('mailto:contactus@theovalapp.com')}
           />
         </Card>
       </ScrollView>

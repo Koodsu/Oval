@@ -197,7 +197,7 @@ export default function EditProfileScreen({ navigation }: Props) {
               label="Instagram"
               value={instagramHandle}
               onChangeText={setInstagramHandle}
-              placeholder="@bridgeperson"
+              placeholder="@ovalperson"
               autoCapitalize="none"
             />
             <Field

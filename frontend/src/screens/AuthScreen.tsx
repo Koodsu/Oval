@@ -56,7 +56,7 @@ import {
 type Mode = 'login' | 'register' | 'reset';
 
 const MIN_PASSWORD_LENGTH = 8;
-const SITE_URL = 'https://www.joinbridgeapp.com';
+const SITE_URL = 'https://www.theovalapp.com';
 
 const REGISTER_STEP_COPY: Record<1 | 2 | 3, { kicker: string; title: string }> = {
   1: { kicker: 'Step 1 — The basics', title: 'Who are you?' },
@@ -148,7 +148,7 @@ export default function AuthScreen() {
     const nextErrors: Record<string, string> = {};
     if (!classYear) nextErrors.classYear = 'Choose your class year.';
     if (!major.trim()) nextErrors.major = 'Enter your major.';
-    if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+    if (!purpose) nextErrors.purpose = 'Choose what brings you to Oval.';
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
@@ -168,7 +168,7 @@ export default function AuthScreen() {
       await requestPasswordReset(email.trim());
       setResetCodeSent(true);
       void trackEvent('auth.password_reset_requested');
-      Alert.alert('Check your email', 'If that email is on Bridge, a reset code is on the way.');
+      Alert.alert('Check your email', 'If that email is on Oval, a reset code is on the way.');
     } catch (error) {
       Alert.alert('Reset issue', getApiErrorMessage(error, API_USER_MESSAGE));
     } finally {
@@ -221,7 +221,7 @@ export default function AuthScreen() {
       if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
       if (!classYear.trim()) nextErrors.classYear = 'Choose your class year.';
       if (!major.trim()) nextErrors.major = 'Enter your major.';
-      if (!purpose) nextErrors.purpose = 'Choose what brings you to Bridge.';
+      if (!purpose) nextErrors.purpose = 'Choose what brings you to Oval.';
       if (!interestTags.length) nextErrors.interestTags = 'Choose at least one interest.';
       if (!campusZones.length) nextErrors.campusZones = 'Choose at least one campus zone.';
       if (!ageConfirmed) nextErrors.ageConfirmed = 'Confirm that you are 18 or older.';
@@ -320,7 +320,7 @@ export default function AuthScreen() {
               faceStyle={styles.markFace}
               accessibilityRole="none"
             >
-              <Text style={styles.markText}>Bridge</Text>
+              <Text style={styles.markText}>Oval</Text>
             </Slab>
             <Sticker label="Ohio State only" tint={colors.warningSoft} icon="school" />
           </View>
@@ -672,7 +672,7 @@ export default function AuthScreen() {
             ? 'Returning users land straight in the live campus feed.'
             : mode === 'reset'
               ? 'Reset codes are sent to your OSU email and expire quickly.'
-              : 'For students 18+. Bridge is independent and not affiliated with Ohio State.'}
+              : 'For students 18+. Oval is independent and not affiliated with Ohio State.'}
         </Text>
         </ScrollView>
       </KeyboardAvoidingView>

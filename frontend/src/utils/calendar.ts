@@ -17,11 +17,11 @@ export function buildClubCalendarIcs(
   meetings: ClubMeetingWithMeta[]
 ): string {
   const generatedAt = formatCalendarDate(new Date());
-  const calendarName = `${club.name} - Bridge`;
+  const calendarName = `${club.name} - Oval`;
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Bridge//Club Calendar//EN',
+    'PRODID:-//Oval//Club Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeCalendarText(calendarName)}`,
@@ -33,19 +33,19 @@ export function buildClubCalendarIcs(
     const description = [
       meeting.description,
       `Club: ${club.name}`,
-      `View in Bridge: https://www.joinbridgeapp.com/clubs/${encodeURIComponent(club.id)}`,
+      `View in Oval: https://www.theovalapp.com/clubs/${encodeURIComponent(club.id)}`,
     ].filter(Boolean).join('\n\n');
 
     lines.push(
       'BEGIN:VEVENT',
-      `UID:${meeting.id}@joinbridgeapp.com`,
+      `UID:${meeting.id}@theovalapp.com`,
       `DTSTAMP:${generatedAt}`,
       `DTSTART:${formatCalendarDate(start)}`,
       `DTEND:${formatCalendarDate(end)}`,
       `SUMMARY:${escapeCalendarText(meeting.title)}`,
       `DESCRIPTION:${escapeCalendarText(description)}`,
       `LOCATION:${escapeCalendarText(meeting.location)}`,
-      `URL:https://www.joinbridgeapp.com/clubs/${encodeURIComponent(club.id)}`,
+      `URL:https://www.theovalapp.com/clubs/${encodeURIComponent(club.id)}`,
       'END:VEVENT'
     );
   }

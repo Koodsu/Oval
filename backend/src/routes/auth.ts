@@ -180,7 +180,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       select: { id: true },
     });
     if (bannedIdentity) {
-      res.status(403).json({ error: 'This account cannot be created. Contact Bridge support for help.' });
+      res.status(403).json({ error: 'This account cannot be created. Contact Oval support for help.' });
       return;
     }
 
@@ -269,7 +269,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     if (user.accountStatus !== 'ACTIVE') {
-      res.status(403).json({ error: 'This account is unavailable. Contact Bridge support for help.' });
+      res.status(403).json({ error: 'This account is unavailable. Contact Oval support for help.' });
       return;
     }
 
@@ -328,7 +328,7 @@ router.post('/request-password-reset', async (req: Request, res: Response): Prom
       );
     }
 
-    res.json({ message: 'If that email is on Bridge, a reset code is on the way.' });
+    res.json({ message: 'If that email is on Oval, a reset code is on the way.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

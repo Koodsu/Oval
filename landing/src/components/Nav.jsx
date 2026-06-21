@@ -54,7 +54,7 @@ export default function Nav() {
           >
             <span className="font-display text-[15px] font-bold leading-none text-white">B</span>
           </div>
-          <span className="font-display text-lg font-bold tracking-tight text-white">bridge</span>
+          <span className="font-display text-lg font-bold tracking-tight text-white">oval</span>
         </a>
 
         <div className="flex items-center gap-1.5 md:gap-3">

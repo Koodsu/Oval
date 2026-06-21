@@ -332,7 +332,7 @@ See [`backend/.env.example`](./backend/.env.example).
 | `CRON_SECRET` | Prod | Authenticates Vercel Cron maintenance requests |
 | `RESEND_API_KEY` | For email | Verification email and waitlist integration |
 | `RESEND_FROM_EMAIL` | For email | Sender address for verification email |
-| `CONTACT_EMAIL` | No | Support and moderation-report inbox, defaults to `contactus@joinbridgeapp.com` |
+| `CONTACT_EMAIL` | No | Support and moderation-report inbox, defaults to `contactus@theovalapp.com` |
 | `ADMIN_REPORTS_URL` | Prod moderation | Backend URL for signed report review links |
 | `ADMIN_REVIEW_SECRET` | Prod moderation | Signs expiring report-specific review links |
 | `REPORT_RETENTION_DAYS` | No | Closed safety-report retention, defaults to 730 days |
@@ -465,7 +465,7 @@ npx prisma migrate deploy
 
 - Target: Vercel static deployment
 - Set `VITE_BRIDGE_API_URL`
-- Attach `www.joinbridgeapp.com` directly to this project; the checked-in AASA file is served from that no-redirect host
+- Attach `www.theovalapp.com` directly to this project; the checked-in AASA file is served from that no-redirect host
 
 ## Recommended Reading
 

@@ -37,7 +37,7 @@ jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'user-1',
-      name: 'Bridge User',
+      name: 'Oval User',
       email: 'bridge@osu.edu',
       instagramHandle: 'bridgeuser',
     },

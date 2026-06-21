@@ -193,7 +193,7 @@ const PORT = process.env.PORT ?? 3000;
 
 if (require.main === module) {
   const server = app.listen(PORT, () => {
-    console.log(`Bridge backend running on port ${PORT}`);
+    console.log(`Oval backend running on port ${PORT}`);
   });
 
   const gracefulShutdown = () => {

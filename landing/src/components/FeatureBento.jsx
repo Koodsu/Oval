@@ -18,7 +18,7 @@ export default function FeatureBento() {
 
       <div className="relative mx-auto max-w-[1280px]">
         <div className="mb-16 max-w-[760px]">
-          <p className="reveal mb-5 text-[12px] font-bold uppercase tracking-[0.24em] text-flame">Why Bridge</p>
+          <p className="reveal mb-5 text-[12px] font-bold uppercase tracking-[0.24em] text-flame">Why Oval</p>
           <h2 className="reveal font-display text-[clamp(38px,6vw,72px)] font-bold leading-[1.02] tracking-[-0.03em]">
             Built for showing up,
             <br />
@@ -40,7 +40,7 @@ export default function FeatureBento() {
               No planning paralysis.
             </h3>
             <p className="mt-3 max-w-[30rem] text-[14px] leading-relaxed text-white/45">
-              Bridge shows what's forming right now — so instead of "we should hang sometime,"
+              Oval shows what's forming right now — so instead of "we should hang sometime,"
               you're actually doing it. Spots fill fast, which is exactly the point.
             </p>
             <div className="mt-6 flex flex-col gap-2.5">

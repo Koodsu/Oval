@@ -41,7 +41,7 @@ describe('Web / invite-link routes (public)', () => {
       expect(res.body.applinks.details).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            appID: '687FPU46UV.com.bradyvb.bridgeapp',
+            appID: '687FPU46UV.com.bradyvb.ovalapp',
           }),
         ])
       );
@@ -80,7 +80,7 @@ describe('Web / invite-link routes (public)', () => {
       const packageNames: string[] = res.body.map(
         (entry: { target: { package_name: string } }) => entry.target.package_name
       );
-      expect(packageNames).toContain('com.bradyvb.bridgeapp');
+      expect(packageNames).toContain('com.bradyvb.ovalapp');
     });
 
     it('requires no auth token', async () => {
@@ -101,12 +101,12 @@ describe('Web / invite-link routes (public)', () => {
       expect(res.headers['content-type']).toMatch(/text\/html/);
     });
 
-    it('includes the bridge:// deep link for the given podId', async () => {
+    it('includes the oval:// deep link for the given podId', async () => {
       const res = await request(app)
         .get(`/pod/${podId}`)
         .expect(200);
 
-      expect(res.text).toContain(`bridge://pod/${podId}`);
+      expect(res.text).toContain(`oval://pod/${podId}`);
     });
 
     it('does not expose placeholder store links before listings exist', async () => {
@@ -114,7 +114,7 @@ describe('Web / invite-link routes (public)', () => {
         .get(`/pod/${podId}`)
         .expect(200);
 
-      expect(res.text).toContain('Bridge is coming soon to the App Store.');
+      expect(res.text).toContain('Oval is coming soon to the App Store.');
       expect(res.text).not.toContain('id0000000000');
       expect(res.text).not.toContain('com.bridge.app');
     });
@@ -124,7 +124,7 @@ describe('Web / invite-link routes (public)', () => {
         .get(`/pod/${podId}`)
         .expect(200);
 
-      expect(res.text).toContain('Open in Bridge');
+      expect(res.text).toContain('Open in Oval');
     });
 
     it('requires no auth token', async () => {
@@ -139,7 +139,7 @@ describe('Web / invite-link routes (public)', () => {
         .get(`/pod/${otherId}`)
         .expect(200);
 
-      expect(res.text).toContain(`bridge://pod/${otherId}`);
+      expect(res.text).toContain(`oval://pod/${otherId}`);
     });
 
     it('rejects non-UUID pod IDs', async () => {

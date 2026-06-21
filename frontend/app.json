@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Bridge - Campus Life",
-    "slug": "bridge",
+    "name": "Oval",
+    "slug": "oval",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/brand/oval-app-icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "bridge",
+    "scheme": "oval",
     "plugins": [
       [
         "expo-notifications",
@@ -31,18 +31,18 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.bradyvb.bridgeapp",
+      "bundleIdentifier": "com.bradyvb.ovalapp",
       "associatedDomains": [
-        "applinks:www.joinbridgeapp.com"
+        "applinks:www.theovalapp.com"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Bridge uses your location to show pods forming near you on campus.",
-        "NSPhotoLibraryUsageDescription": "Bridge lets you choose a photo from your library for your profile or club avatar."
+        "NSLocationWhenInUseUsageDescription": "Oval uses your location to show pods forming near you on campus.",
+        "NSPhotoLibraryUsageDescription": "Oval lets you choose a photo from your library for your profile or club avatar."
       }
     },
     "android": {
-      "package": "com.bradyvb.bridgeapp",
+      "package": "com.bradyvb.ovalapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/oval-app-icon.png",
         "backgroundColor": "#C73B22"
@@ -55,17 +55,17 @@
           "data": [
             {
               "scheme": "https",
-              "host": "www.joinbridgeapp.com",
+              "host": "www.theovalapp.com",
               "pathPrefix": "/pod"
             },
             {
               "scheme": "https",
-              "host": "www.joinbridgeapp.com",
+              "host": "www.theovalapp.com",
               "pathPrefix": "/clubs"
             },
             {
               "scheme": "https",
-              "host": "www.joinbridgeapp.com",
+              "host": "www.theovalapp.com",
               "pathPrefix": "/users"
             }
           ],

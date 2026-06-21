@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oval — Concept 2 · Daylight (Bold Reinvention)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#F5EFE4; --paper2:#EDE6D8; --ink:#1A1612; --scarlet:#BB0000;
+    --flame:#FF4B26; --amber:#F59E0B; --line:rgba(26,22,18,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(255,75,38,.25)}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 30px}
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(245,239,228,.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+  .navrow{display:flex;align-items:center;justify-content:space-between;height:72px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Instrument Serif';font-style:italic;font-size:30px;letter-spacing:-.01em}
+  .navlinks{display:flex;gap:30px;font-size:14px;color:rgba(26,22,18,.6)}
+  .navlinks a{color:inherit;text-decoration:none}.navlinks a:hover{color:var(--ink)}
+  .btn{font-family:'Space Grotesk';font-weight:500;font-size:14px;border:none;border-radius:10px;padding:12px 22px;cursor:pointer;background:var(--ink);color:var(--paper);transition:transform .2s,background .2s}
+  .btn:hover{transform:translateY(-2px);background:var(--scarlet)}
+  .btn.flame{background:linear-gradient(100deg,var(--flame),var(--scarlet))}
+  /* hero */
+  .hero{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center;padding:70px 0 40px}
+  .kick{display:inline-flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--scarlet)}
+  .kick .sun{width:18px;height:18px;animation:spin 14s linear infinite}
+  h1{font-family:'Instrument Serif';font-weight:400;letter-spacing:-.01em;line-height:.96;margin:22px 0 0;font-size:clamp(54px,8vw,104px)}
+  h1 em{font-style:italic;color:var(--scarlet)}
+  h1 .grot{font-family:'Space Grotesk';font-weight:700;font-style:normal;font-size:clamp(40px,6vw,76px);letter-spacing:-.03em;display:block}
+  .sub{margin-top:26px;max-width:30rem;font-size:18px;line-height:1.65;color:rgba(26,22,18,.66)}
+  .cta{margin-top:32px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .field{display:flex;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 10px 30px rgba(26,22,18,.06)}
+  .field input{border:none;outline:none;background:none;padding:10px 14px;font-size:15px;font-family:'Inter';width:220px;color:var(--ink)}
+  .micro{margin-top:18px;font-size:13px;color:rgba(26,22,18,.5)}
+  .micro b{color:var(--scarlet)}
+  /* map scene */
+  .scene{position:relative}
+  .scene svg{width:100%;overflow:visible;filter:drop-shadow(0 24px 50px rgba(26,22,18,.14))}
+  /* marquee strip */
+  .strip{background:var(--ink);color:var(--paper);overflow:hidden;border-top:1px solid var(--line)}
+  .marq{display:flex;width:max-content;animation:marq 24s linear infinite}
+  .marq span{font-family:'Instrument Serif';font-style:italic;font-size:30px;padding:18px 0;white-space:nowrap;display:flex;align-items:center;opacity:.92}
+  .marq span::after{content:"✦";font-size:14px;margin:0 34px;color:var(--amber)}
+  @keyframes marq{to{transform:translateX(-50%)}}
+  /* sections */
+  section.band{padding:100px 0}
+  .h2{font-family:'Instrument Serif';font-size:clamp(34px,5vw,58px);line-height:1.02;letter-spacing:-.01em;max-width:18ch}
+  .h2 em{font-style:italic;color:var(--scarlet)}
+  .lead{margin-top:18px;max-width:40rem;color:rgba(26,22,18,.62);font-size:18px;line-height:1.6}
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:54px}
+  .fc{background:#fff;border:1px solid var(--line);border-radius:20px;padding:32px;transition:transform .3s,box-shadow .3s}
+  .fc:hover{transform:translateY(-6px);box-shadow:0 24px 50px rgba(26,22,18,.1)}
+  .fc .em{font-size:30px}
+  .fc h3{font-family:'Space Grotesk';font-weight:700;font-size:20px;margin-top:16px}
+  .fc p{margin-top:10px;font-size:15px;line-height:1.6;color:rgba(26,22,18,.6)}
+  .fc .num{font-family:'Instrument Serif';font-style:italic;font-size:15px;color:var(--scarlet);margin-top:18px;display:block}
+  /* big numbers */
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:24px;overflow:hidden;margin-top:50px;background:#fff}
+  .nb{padding:42px 22px;text-align:center;border-right:1px solid var(--line)}
+  .nb:last-child{border-right:none}
+  .nb .n{font-family:'Instrument Serif';font-style:italic;font-size:clamp(42px,5vw,66px);color:var(--scarlet);line-height:1}
+  .nb .l{margin-top:12px;font-size:13px;color:rgba(26,22,18,.55);line-height:1.4}
+  /* quote */
+  .quotes{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:54px}
+  .q{background:var(--paper2);border-radius:20px;padding:30px}
+  .q p{font-family:'Instrument Serif';font-size:21px;line-height:1.4;font-style:italic}
+  .q .who{margin-top:20px;display:flex;align-items:center;gap:12px}
+  .q .av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--flame),var(--amber));display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';font-weight:700;font-size:14px;color:#fff}
+  .q .nm{font-weight:600;font-size:14px}.q .rl{font-size:12.5px;color:rgba(26,22,18,.5)}
+  /* final */
+  .final{background:var(--ink);color:var(--paper);border-radius:30px;padding:90px 40px;text-align:center;margin:0 30px}
+  .final h2{font-family:'Instrument Serif';font-size:clamp(40px,6vw,78px);line-height:1}
+  .final h2 em{font-style:italic;color:var(--amber)}
+  .final .field{margin:30px auto 0;width:max-content;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
+  .final .field input{color:#fff}
+  footer{padding:56px 0;font-size:14px;color:rgba(26,22,18,.55)}
+  .footrow{display:flex;justify-content:space-between;flex-wrap:wrap;gap:20px;align-items:center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media(max-width:860px){.hero{grid-template-columns:1fr}.feat,.quotes{grid-template-columns:1fr}.nums{grid-template-columns:repeat(2,1fr)}.nb:nth-child(2){border-right:none}.navlinks{display:none}.scene{order:-1}}
+</style>
+</head>
+<body>
+<nav><div class="wrap navrow">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="20" rx="16" ry="11" stroke="#BB0000" stroke-width="3"/><circle cx="20" cy="20" r="3.2" fill="#FF4B26"/></svg>
+    Oval
+  </div>
+  <div class="navlinks"><a href="#how">How it works</a><a href="#explore">Explore</a><a href="#why">Why Oval</a><a href="#voices">Students</a></div>
+  <button class="btn">Join the waitlist</button>
+</div></nav>
+
+<header class="hero wrap">
+  <div>
+    <span class="kick"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="#BB0000" stroke-width="2"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19" stroke-linecap="round"/></svg> A brighter way to do campus</span>
+    <h1><span class="grot">Sunny days,</span>real <em>plans.</em></h1>
+    <p class="sub">Oval is the daytime social map of Ohio State. See the pickup games, study pods, food runs, and clubs forming around you — then actually go.</p>
+    <div class="cta">
+      <div class="field"><input placeholder="name@osu.edu" /><button class="btn flame">Get access</button></div>
+    </div>
+    <p class="micro"><b>OSU students only</b> · small groups of 2–10 · free, no ads</p>
+  </div>
+  <div class="scene">
+    <svg viewBox="0 0 480 440" role="img" aria-label="Animated campus map of the Oval with live pins">
+      <defs>
+        <radialGradient id="grass" cx="50%" cy="45%" r="60%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#EDE6D8"/></radialGradient>
+        <linearGradient id="path" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF4B26"/><stop offset="1" stop-color="#F59E0B"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="480" height="440" rx="26" fill="url(#grass)" stroke="rgba(26,22,18,.1)"/>
+      <!-- grid streets -->
+      <g stroke="rgba(26,22,18,.07)" stroke-width="1">
+        <path d="M0 110H480M0 230H480M0 350H480M120 0V440M250 0V440M370 0V440"/>
+      </g>
+      <!-- the oval green -->
+      <ellipse cx="240" cy="220" rx="150" ry="98" fill="rgba(99,153,34,.14)" stroke="rgba(99,153,34,.4)" stroke-width="1.5"/>
+      <ellipse cx="240" cy="220" rx="150" ry="98" fill="none" stroke="rgba(255,75,38,.35)" stroke-width="2" stroke-dasharray="6 10" style="animation:dash 22s linear infinite"/>
+      <!-- crisscross paths on the oval -->
+      <g stroke="rgba(26,22,18,.18)" stroke-width="2" fill="none" stroke-linecap="round"><path d="M110 150 L370 290M110 290 L370 150M240 122 L240 318"/></g>
+      <text x="240" y="225" text-anchor="middle" font-family="Instrument Serif" font-style="italic" font-size="22" fill="rgba(26,22,18,.35)">the Oval</text>
+      <!-- animated person dots traveling paths -->
+      <g><circle r="5" fill="url(#path)"><animateMotion dur="6s" repeatCount="indefinite" path="M110 150 L370 290"/></circle></g>
+      <g><circle r="5" fill="#BB0000"><animateMotion dur="7.5s" repeatCount="indefinite" path="M370 150 L110 290"/></circle></g>
+      <g><circle r="4.5" fill="#F59E0B"><animateMotion dur="5.5s" repeatCount="indefinite" path="M240 318 L240 122"/></circle></g>
+      <!-- live pins (drop + pulse) -->
+      <g font-family="Inter" font-size="11" font-weight="600">
+        <g style="transform-origin:150px 130px;animation:drop 4s ease-in-out infinite">
+          <circle cx="150" cy="130" r="14" fill="#FF4B26"/><text x="150" y="134" text-anchor="middle" font-size="13">🏐</text>
+          <rect x="92" y="86" rx="9" width="120" height="30" fill="#fff" stroke="rgba(26,22,18,.12)"/><text x="104" y="105" fill="#1A1612">Spikeball · 3 spots</text>
+        </g>
+        <g style="transform-origin:350px 150px;animation:drop 4s ease-in-out .8s infinite">
+          <circle cx="350" cy="150" r="14" fill="#BB0000"/><text x="350" y="154" text-anchor="middle" font-size="13">📚</text>
+          <rect x="300" y="106" rx="9" width="118" height="30" fill="#fff" stroke="rgba(26,22,18,.12)"/><text x="312" y="125" fill="#1A1612">Study pod · now</text>
+        </g>
+        <g style="transform-origin:330px 320px;animation:drop 4s ease-in-out 1.6s infinite">
+          <circle cx="330" cy="320" r="14" fill="#F59E0B"/><text x="330" y="324" text-anchor="middle" font-size="13">🍗</text>
+          <rect x="286" y="338" rx="9" width="132" height="30" fill="#fff" stroke="rgba(26,22,18,.12)"/><text x="298" y="357" fill="#1A1612">Cane's · leaving 11:15</text>
+        </g>
+        <g style="transform-origin:130px 320px;animation:drop 4s ease-in-out 2.4s infinite">
+          <circle cx="130" cy="320" r="14" fill="#639922"/><text x="130" y="324" text-anchor="middle" font-size="12">♟️</text>
+          <rect x="78" y="338" rx="9" width="120" height="30" fill="#fff" stroke="rgba(26,22,18,.12)"/><text x="90" y="357" fill="#1A1612">Chess · 28 RSVPs</text>
+        </g>
+      </g>
+    </svg>
+  </div>
+</header>
+
+<div class="strip"><div class="marq" id="mq"></div></div>
+
+<section class="band wrap" id="how">
+  <h2 class="h2">From "we should hang out" to <em>actually hanging out.</em></h2>
+  <p class="lead">Oval collapses the whole flaky middle. See what's live, claim your spot, and walk out the door — no endless coordinating required.</p>
+  <div class="feat">
+    <div class="fc"><div class="em">👀</div><h3>See what's live</h3><p>A daytime map and feed of every pod forming near you — sorted by what's happening soonest.</p><span class="num">01 / look around</span></div>
+    <div class="fc"><div class="em">⚡</div><h3>Tap in</h3><p>Join in one tap or start your own pod with a time, a place, and a size. Full pods open a waitlist.</p><span class="num">02 / claim a spot</span></div>
+    <div class="fc"><div class="em">🤝</div><h3>Show up &amp; meet</h3><p>Confirm attendance, meet in person, and turn strangers into your campus people.</p><span class="num">03 / show up</span></div>
+  </div>
+</section>
+
+<section class="band wrap" id="explore">
+  <h2 class="h2">Ten ways to <em>find your people.</em></h2>
+  <div class="feat" style="grid-template-columns:repeat(5,1fr);gap:14px;margin-top:40px">
+    <div class="fc" style="padding:22px;text-align:center"><div class="em">🏈</div><h3 style="font-size:14px;margin-top:10px">Sports</h3></div>
+    <div class="fc" style="padding:22px;text-align:center"><div class="em">🍕</div><h3 style="font-size:14px;margin-top:10px">Food</h3></div>
+    <div class="fc" style="padding:22px;text-align:center"><div class="em">📚</div><h3 style="font-size:14px;margin-top:10px">Academic</h3></div>
+    <div class="fc" style="padding:22px;text-align:center"><div class="em">🎨</div><h3 style="font-size:14px;margin-top:10px">Arts</h3></div>
+    <div class="fc" style="padding:22px;text-align:center"><div class="em">🌳</div><h3 style="font-size:14px;margin-top:10px">Outdoors</h3></div>
+  </div>
+</section>
+
+<section class="band wrap" id="why">
+  <h2 class="h2">Small, real, and <em>built for OSU.</em></h2>
+  <div class="nums">
+    <div class="nb"><div class="n">50</div><div class="l">Activities across 10 categories</div></div>
+    <div class="nb"><div class="n">2–10</div><div class="l">People per pod, small on purpose</div></div>
+    <div class="nb"><div class="n">OSU</div><div class="l">Verified email to join</div></div>
+    <div class="nb"><div class="n">0</div><div class="l">Third-party ads, ever</div></div>
+  </div>
+</section>
+
+<section class="band wrap" id="voices">
+  <h2 class="h2">What students <em>are saying.</em></h2>
+  <div class="quotes">
+    <div class="q"><p>"This is literally what I've wished existed since freshman year. GroupMe is chaos — Oval is how you actually find people."</p><div class="who"><div class="av">CL</div><div><div class="nm">Chase L.</div><div class="rl">Computer Science · Junior</div></div></div></div>
+    <div class="q"><p>"I'm a transfer and making friends was so hard. This gets you off your phone and into the real world."</p><div class="who"><div class="av">SC</div><div><div class="nm">Sofia C.</div><div class="rl">Marketing · Sophomore</div></div></div></div>
+    <div class="q"><p>"Showed up to a study pod knowing nobody. Two hours later we were all getting food. Different vibe entirely."</p><div class="who"><div class="av">MJ</div><div><div class="nm">Marcus J.</div><div class="rl">Pre-Med · Freshman</div></div></div></div>
+  </div>
+</section>
+
+<section style="padding:30px 0 90px">
+  <div class="final">
+    <h2>The Oval is<br/>busy <em>right now.</em></h2>
+    <div class="field"><input placeholder="name@osu.edu" /><button class="btn flame">Join the waitlist</button></div>
+  </div>
+</section>
+
+<footer class="wrap"><div class="footrow">
+  <div class="brand" style="font-size:24px">Oval</div>
+  <div>© 2026 Oval · Made for Ohio State · Privacy · Terms · Support</div>
+</div></footer>
+
+<script>
+  const lines=["pickup games","study pods","late-night food","club nights","sunset walks","intramurals","open mics","trivia teams"];
+  document.getElementById('mq').innerHTML=[...lines,...lines].map(t=>`<span>${t}</span>`).join('');
+  const css=document.createElement('style');
+  css.textContent="@keyframes dash{to{stroke-dashoffset:-160}}@keyframes drop{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}";
+  document.head.appendChild(css);
+</script>
+</body>
+</html>

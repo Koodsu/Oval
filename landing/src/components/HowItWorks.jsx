@@ -3,7 +3,7 @@ const STEPS = [
     step: '1',
     word: 'see',
     title: 'See what’s forming',
-    desc: 'Open Bridge and the feed is alive — pickup games, food runs, study pods, club nights. Filter by right now, today, or this week.',
+    desc: 'Open Oval and the feed is alive — pickup games, food runs, study pods, club nights. Filter by right now, today, or this week.',
     visual: (
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5">

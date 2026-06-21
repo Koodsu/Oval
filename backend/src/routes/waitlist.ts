@@ -5,8 +5,8 @@ import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 
 const router = Router();
 const WAITLIST_SEGMENT_ID = process.env.RESEND_WAITLIST_SEGMENT_ID?.trim() || undefined;
-const CONTACT_EMAIL = process.env.CONTACT_EMAIL?.trim() || 'contactus@joinbridgeapp.com';
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || 'noreply@joinbridgeapp.com';
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL?.trim() || 'contactus@theovalapp.com';
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || 'noreply@theovalapp.com';
 
 const OSU_EMAIL_RE = /@(osu\.edu|buckeyemail\.osu\.edu)$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -172,21 +172,21 @@ router.post('/club-registration', asyncHandler(async (req: Request, res: Respons
   const confirmResult = await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: 'Your club registration was received by Bridge',
+    subject: 'Your club registration was received by Oval',
     html: `
       <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #F5EFE4; padding: 0;">
         <div style="background: #0D0D0B; padding: 24px 32px; display: flex; align-items: center; gap: 12px;">
           <div style="width: 28px; height: 28px; background: #BB0000; display: inline-flex; align-items: center; justify-content: center;">
             <span style="color: white; font-size: 16px; font-weight: 900; font-family: Impact, sans-serif;">B</span>
           </div>
-          <span style="color: white; font-size: 22px; font-weight: 900; letter-spacing: 0.12em; font-family: Impact, 'Arial Narrow', sans-serif;">BRIDGE</span>
+          <span style="color: white; font-size: 22px; font-weight: 900; letter-spacing: 0.12em; font-family: Impact, 'Arial Narrow', sans-serif;">OVAL</span>
         </div>
         <div style="padding: 40px 32px;">
           <h1 style="margin: 0 0 8px; font-size: 28px; font-weight: 900; letter-spacing: 0.05em; color: #0D0D0B; font-family: Impact, 'Arial Narrow', sans-serif; text-transform: uppercase;">
             ${safe.clubName} is registered.
           </h1>
           <p style="margin: 0 0 24px; font-size: 16px; color: #666666; line-height: 1.6;">
-            Hey ${safe.yourName} - thanks for registering <strong>${safe.clubName}</strong> with Bridge. We will use this information to prepare club onboarding and launch updates.
+            Hey ${safe.yourName} - thanks for registering <strong>${safe.clubName}</strong> with Oval. We will use this information to prepare club onboarding and launch updates.
           </p>
           <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
             <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #BB0000;">What's next</p>
@@ -199,7 +199,7 @@ router.post('/club-registration', asyncHandler(async (req: Request, res: Respons
           </p>
         </div>
         <div style="background: #0D0D0B; padding: 20px 32px; text-align: center;">
-          <p style="margin: 0; font-size: 12px; color: rgba(255,255,255,0.35);">&copy; 2026 Bridge. Independent and not affiliated with The Ohio State University.</p>
+          <p style="margin: 0; font-size: 12px; color: rgba(255,255,255,0.35);">&copy; 2026 Oval. Independent and not affiliated with The Ohio State University.</p>
         </div>
       </div>
     `,

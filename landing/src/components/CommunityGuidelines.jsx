@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const EMAIL = 'contactus@joinbridgeapp.com'
+const EMAIL = 'contactus@theovalapp.com'
 
 function Section({ title, children }) {
   return (
@@ -24,7 +24,7 @@ function List({ items }) {
 export default function CommunityGuidelines() {
   useEffect(() => {
     const previousTitle = document.title
-    document.title = 'Community Guidelines | Bridge'
+    document.title = 'Community Guidelines | Oval'
     window.scrollTo(0, 0)
     return () => {
       document.title = previousTitle
@@ -43,7 +43,7 @@ export default function CommunityGuidelines() {
 
         <Section title="The Short Version">
           <p>
-            Bridge is for adults with eligible OSU email addresses making real plans. Treat people like classmates,
+            Oval is for adults with eligible OSU email addresses making real plans. Treat people like classmates,
             keep meetups lawful and safe, and use reports or blocks when something feels off.
           </p>
         </Section>
@@ -71,13 +71,13 @@ export default function CommunityGuidelines() {
             'Use public campus locations for first meetups whenever possible.',
             'Do not pressure anyone to share private contact details, housing information, or live location.',
             'If a meetup feels unsafe, leave and report it in the app.',
-            'Bridge is not an emergency service. For emergencies, call 911 or local campus safety resources.',
+            'Oval is not an emergency service. For emergencies, call 911 or local campus safety resources.',
           ]} />
         </Section>
 
         <Section title="Reports, Blocks, And Enforcement">
           <p>
-            You can report users, messages, clubs, announcements, and pod behavior inside Bridge.
+            You can report users, messages, clubs, announcements, and pod behavior inside Oval.
             Blocking separates you from the blocked user across messaging and shared pods where possible.
           </p>
           <p>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oval — Concept 3 · Pulse (Experimental)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{--void:#050404;--flame:#FF4B26;--scarlet:#BB0000;--amber:#F59E0B;--cyan:#16e0c8;--line:rgba(255,255,255,.07)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--void);color:#fff;font-family:'Inter',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(255,75,38,.5)}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 28px}
+  .mono{font-family:'JetBrains Mono',monospace}
+  nav{position:fixed;top:0;left:0;right:0;z-index:60;backdrop-filter:blur(20px);background:rgba(5,4,4,.45);border-bottom:1px solid var(--line)}
+  .navrow{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:20px;letter-spacing:.02em}
+  .navlinks{display:flex;gap:26px;font-size:13px;color:rgba(255,255,255,.5)}
+  .navlinks a{color:inherit;text-decoration:none}.navlinks a:hover{color:#fff}
+  .btn{font-family:'Space Grotesk';font-weight:500;font-size:13px;border:1px solid var(--flame);border-radius:8px;padding:10px 20px;cursor:pointer;background:rgba(255,75,38,.12);color:#fff;transition:background .2s,box-shadow .2s}
+  .btn:hover{background:rgba(255,75,38,.25);box-shadow:0 0 30px rgba(255,75,38,.4)}
+  /* hero: full-bleed living radar */
+  .hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden}
+  .radar{position:absolute;inset:0;z-index:0;display:flex;align-items:center;justify-content:center}
+  .radar svg{width:min(120vh,1100px);height:auto;opacity:.95}
+  .vignette{position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse 90% 80% at 70% 50%,transparent 30%,var(--void) 78%),linear-gradient(90deg,var(--void) 8%,transparent 45%)}
+  .hcontent{position:relative;z-index:2;max-width:600px;padding-top:60px}
+  .tag{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(22,224,200,.3);background:rgba(22,224,200,.08);color:var(--cyan);border-radius:999px;padding:7px 15px;font-size:12px;font-weight:500;letter-spacing:.04em}
+  .tag .lv{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:blink 1.4s infinite}
+  @keyframes blink{50%{opacity:.3}}
+  h1{font-family:'Space Grotesk';font-weight:700;letter-spacing:-.03em;line-height:.95;margin-top:24px;font-size:clamp(48px,7.5vw,96px)}
+  h1 .glow{color:var(--flame);text-shadow:0 0 40px rgba(255,75,38,.6)}
+  h1 .serif{font-family:'Instrument Serif';font-style:italic;font-weight:400}
+  .sub{margin-top:24px;max-width:30rem;font-size:18px;line-height:1.6;color:rgba(255,255,255,.6)}
+  .readout{margin-top:22px;font-size:13px;color:var(--cyan)}
+  .readout .n{color:#fff;font-weight:500}
+  .cta{margin-top:32px;display:flex;gap:14px;flex-wrap:wrap}
+  .btn.big{font-size:15px;padding:14px 28px;background:linear-gradient(100deg,var(--flame),var(--scarlet));border:none;box-shadow:0 0 40px rgba(255,75,38,.45)}
+  .ghost{font-family:'Space Grotesk';font-weight:500;font-size:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:#fff;border-radius:8px;padding:14px 26px;cursor:pointer}
+  /* live feed rail bottom of hero */
+  .rail{position:absolute;bottom:0;left:0;right:0;z-index:3;border-top:1px solid var(--line);background:rgba(5,4,4,.6);backdrop-filter:blur(14px);overflow:hidden}
+  .railrow{display:flex;width:max-content;animation:rail 28s linear infinite}
+  .chip{display:flex;align-items:center;gap:10px;padding:14px 26px;white-space:nowrap;border-right:1px solid var(--line)}
+  .chip .e{font-size:16px}.chip .t{font-size:13px;font-weight:500}.chip .m{font-size:11px;color:rgba(255,255,255,.45)}
+  @keyframes rail{to{transform:translateX(-50%)}}
+  /* sections */
+  section.band{padding:110px 0;position:relative}
+  .eyebrow{font-family:'JetBrains Mono';font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+  h2{font-family:'Space Grotesk';font-weight:700;letter-spacing:-.02em;font-size:clamp(32px,4.6vw,54px);margin-top:14px;line-height:1.02}
+  h2 .glow{color:var(--flame)}
+  .lead{margin-top:18px;max-width:42rem;color:rgba(255,255,255,.55);font-size:17px;line-height:1.6}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:54px}
+  .panel{position:relative;border:1px solid var(--line);background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.01));border-radius:18px;padding:30px;overflow:hidden}
+  .panel::before{content:"";position:absolute;top:0;left:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--flame),transparent);opacity:.6}
+  .panel .k{font-family:'JetBrains Mono';font-size:12px;color:var(--cyan)}
+  .panel h3{font-family:'Space Grotesk';font-weight:700;font-size:20px;margin-top:14px}
+  .panel p{margin-top:10px;color:rgba(255,255,255,.5);font-size:14.5px;line-height:1.6}
+  /* stat bar */
+  .statbar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-top:50px}
+  .sb{background:var(--void);padding:38px 18px;text-align:center}
+  .sb .n{font-family:'Space Grotesk';font-weight:700;font-size:clamp(34px,5vw,52px);color:var(--flame);text-shadow:0 0 30px rgba(255,75,38,.4)}
+  .sb .l{margin-top:10px;font-size:12.5px;color:rgba(255,255,255,.45);line-height:1.4}
+  .final{position:relative;text-align:center;border:1px solid rgba(255,75,38,.3);border-radius:28px;padding:90px 30px;overflow:hidden;background:radial-gradient(ellipse 80% 130% at 50% 0%,rgba(255,75,38,.22),transparent 60%)}
+  .final h2{font-size:clamp(38px,6vw,72px)}
+  footer{border-top:1px solid var(--line);padding:48px 0 66px;color:rgba(255,255,255,.4);font-size:13px}
+  .footrow{display:flex;justify-content:space-between;flex-wrap:wrap;gap:20px;align-items:center}
+  @media(max-width:860px){.grid3{grid-template-columns:1fr}.statbar{grid-template-columns:repeat(2,1fr)}.navlinks{display:none}.vignette{background:radial-gradient(ellipse 120% 90% at 50% 40%,transparent 20%,var(--void) 75%)}.radar svg{opacity:.35}}
+</style>
+</head>
+<body>
+<nav><div class="wrap navrow">
+  <div class="brand"><svg width="26" height="26" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="20" rx="16" ry="11" stroke="#FF4B26" stroke-width="3"/><circle cx="20" cy="20" r="3.4" fill="#16e0c8"/></svg>OVAL</div>
+  <div class="navlinks"><a href="#how">System</a><a href="#why">Signal</a><a href="#join">Access</a></div>
+  <button class="btn">Request access</button>
+</div></nav>
+
+<header class="hero">
+  <div class="radar">
+    <svg viewBox="0 0 700 700" role="img" aria-label="Live radar of campus activity over the Oval">
+      <defs>
+        <radialGradient id="sweep" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(255,75,38,.55)"/><stop offset="100%" stop-color="rgba(255,75,38,0)"/></radialGradient>
+        <radialGradient id="cglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FF4B26"/><stop offset="100%" stop-color="rgba(187,0,0,0)"/></radialGradient>
+      </defs>
+      <!-- topographic oval contours -->
+      <g fill="none" stroke="rgba(255,75,38,.13)" stroke-width="1">
+        <ellipse cx="350" cy="350" rx="300" ry="210"/>
+        <ellipse cx="350" cy="350" rx="250" ry="175"/>
+        <ellipse cx="350" cy="350" rx="200" ry="140"/>
+        <ellipse cx="350" cy="350" rx="150" ry="105"/>
+        <ellipse cx="350" cy="350" rx="100" ry="70"/>
+      </g>
+      <g stroke="rgba(22,224,200,.1)" stroke-width="1"><path d="M50 350H650M350 50V650M140 140L560 560M560 140L140 560"/></g>
+      <!-- radar sweep -->
+      <g style="transform-origin:350px 350px;animation:spin 6s linear infinite"><path d="M350 350 L650 350 A300 210 0 0 0 520 175 Z" fill="url(#sweep)"/></g>
+      <!-- core -->
+      <circle cx="350" cy="350" r="120" fill="url(#cglow)" opacity=".5"/>
+      <circle cx="350" cy="350" r="46" fill="none" stroke="#FF4B26" stroke-width="1.5" style="transform-origin:350px 350px;animation:rip 3s ease-out infinite"/>
+      <circle cx="350" cy="350" r="46" fill="none" stroke="#16e0c8" stroke-width="1.5" style="transform-origin:350px 350px;animation:rip 3s ease-out 1.5s infinite"/>
+      <circle cx="350" cy="350" r="8" fill="#fff"/>
+      <!-- blips -->
+      <g>
+        <g style="transform-origin:520px 250px"><circle cx="520" cy="250" r="6" fill="#FF4B26"><animate attributeName="r" values="3;7;3" dur="2s" repeatCount="indefinite"/></circle></g>
+        <g><circle cx="200" cy="430" r="6" fill="#F59E0B"><animate attributeName="r" values="3;7;3" dur="2.4s" begin=".4s" repeatCount="indefinite"/></circle></g>
+        <g><circle cx="470" cy="470" r="6" fill="#16e0c8"><animate attributeName="r" values="3;7;3" dur="2.2s" begin=".9s" repeatCount="indefinite"/></circle></g>
+        <g><circle cx="250" cy="240" r="5" fill="#fff"><animate attributeName="r" values="2;6;2" dur="2.6s" begin=".2s" repeatCount="indefinite"/></circle></g>
+        <g><circle cx="560" cy="380" r="5" fill="#FF4B26"><animate attributeName="r" values="2;6;2" dur="2.1s" begin="1.1s" repeatCount="indefinite"/></circle></g>
+        <g><circle cx="300" cy="540" r="5" fill="#F59E0B"><animate attributeName="r" values="2;6;2" dur="2.3s" begin=".6s" repeatCount="indefinite"/></circle></g>
+      </g>
+      <!-- connecting signal lines -->
+      <g stroke="rgba(255,75,38,.3)" stroke-width="1" fill="none">
+        <path d="M350 350 L520 250"><animate attributeName="opacity" values=".1;.7;.1" dur="3s" repeatCount="indefinite"/></path>
+        <path d="M350 350 L200 430"><animate attributeName="opacity" values=".1;.7;.1" dur="3.4s" repeatCount="indefinite"/></path>
+        <path d="M350 350 L470 470"><animate attributeName="opacity" values=".1;.7;.1" dur="2.8s" repeatCount="indefinite"/></path>
+      </g>
+    </svg>
+  </div>
+  <div class="vignette"></div>
+  <div class="wrap"><div class="hcontent">
+    <span class="tag"><span class="lv"></span> LIVE · scanning campus</span>
+    <h1>Campus has a<br/><span class="glow">pulse.</span> <span class="serif">Feel it.</span></h1>
+    <p class="sub">Oval is the real-time radar of Ohio State. Every game, study pod, food run, and club meeting forming around you — mapped, live, the second it happens.</p>
+    <p class="readout mono">// <span class="n">37</span> pods forming · <span class="n">12</span> clubs active · <span class="n">4</span> within 500ft</p>
+    <div class="cta">
+      <button class="btn big">Request access →</button>
+      <button class="ghost">Watch the signal</button>
+    </div>
+  </div></div>
+  <div class="rail"><div class="railrow" id="rail"></div></div>
+</header>
+
+<section class="band wrap" id="how" style="padding-top:130px">
+  <div class="eyebrow">// how the signal works</div>
+  <h2>Tune in. Lock on. <span class="glow">Show up.</span></h2>
+  <p class="lead">Oval reads the live state of campus and routes you to the pod that's actually happening — before the moment's gone.</p>
+  <div class="grid3">
+    <div class="panel"><div class="k">01 — DETECT</div><h3>See the live map</h3><p>A real-time radar of pods forming near you. Filter by activity, distance, and how soon it kicks off.</p></div>
+    <div class="panel"><div class="k">02 — LOCK</div><h3>Tap into a pod</h3><p>One tap to join, or broadcast your own with a time, place, and size. Full pods open a waitlist instantly.</p></div>
+    <div class="panel"><div class="k">03 — CONNECT</div><h3>Meet in real life</h3><p>Confirm attendance, show up, and convert the people you met into your campus crew.</p></div>
+  </div>
+</section>
+
+<section class="band wrap" id="why">
+  <div class="eyebrow">// signal strength</div>
+  <h2>Small groups. Real campus. <span class="glow">Zero noise.</span></h2>
+  <div class="statbar">
+    <div class="sb"><div class="n">50</div><div class="l">Activities · 10 categories</div></div>
+    <div class="sb"><div class="n">2–10</div><div class="l">People per pod</div></div>
+    <div class="sb"><div class="n">OSU</div><div class="l">Verified email required</div></div>
+    <div class="sb"><div class="n">0</div><div class="l">Third-party ads</div></div>
+  </div>
+</section>
+
+<section class="band wrap" id="join">
+  <div class="final">
+    <div class="eyebrow">// the Oval is live right now</div>
+    <h2>Don't watch campus<br/>happen. <span class="glow">Be on it.</span></h2>
+    <p class="lead" style="margin:18px auto 0;text-align:center">Request access to the Ohio State beta and get on the radar.</p>
+    <div class="cta" style="justify-content:center"><button class="btn big">Request access →</button></div>
+  </div>
+</section>
+
+<footer class="wrap"><div class="footrow">
+  <div class="brand" style="font-size:17px"><svg width="22" height="22" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="20" rx="16" ry="11" stroke="#FF4B26" stroke-width="3"/><circle cx="20" cy="20" r="3.4" fill="#16e0c8"/></svg>OVAL</div>
+  <div>© 2026 Oval · Made for Ohio State · Privacy · Terms · Support</div>
+</div></footer>
+
+<script>
+  const feed=[["🏀","3v3 at the RPAC","2 spots · 6:30"],["🍗","Cane's run","leaving 11:15"],["♟️","Chess Club","28 RSVPs tonight"],["📚","Study reset · Thompson","floor 2 · now"],["🏐","Spikeball","3 spots · 12 min"],["🌅","Sunset walk","starts in 22 min"],["🎮","Smash bracket","12 in · 8 PM"],["🧗","Climbing trip","6 seats left"]];
+  document.getElementById('rail').innerHTML=[...feed,...feed].map(([e,t,m])=>`<div class="chip"><span class="e">${e}</span><div><div class="t">${t}</div><div class="m">${m}</div></div></div>`).join('');
+  const css=document.createElement('style');
+  css.textContent="@keyframes spin{to{transform:rotate(360deg)}}@keyframes rip{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2.6);opacity:0}}";
+  document.head.appendChild(css);
+</script>
+</body>
+</html>

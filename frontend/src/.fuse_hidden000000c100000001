@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * OVAL DESIGN SYSTEM — "Lumen"
+ * BRIDGE DESIGN SYSTEM — "Lumen"
  *
  * A premium liquid-glass language built for OSU students:
  *  - A soft tinted gradient backdrop (warm cream → lilac → cool blue)

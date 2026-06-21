@@ -100,7 +100,7 @@ export default function PodInvitePage() {
           >
             B
           </div>
-          <span className="font-display text-ink text-3xl tracking-[0.12em] leading-none">OVAL</span>
+          <span className="font-display text-ink text-3xl tracking-[0.12em] leading-none">BRIDGE</span>
         </header>
 
         {status === 'loading' && (

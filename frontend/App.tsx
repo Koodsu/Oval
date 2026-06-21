@@ -100,7 +100,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: ['bridge://', 'https://www.joinbridgeapp.com'],
+  prefixes: ['oval://', 'https://www.theovalapp.com'],
   config: {
     screens: {
       PodDetail: 'pod/:podId',
@@ -205,7 +205,7 @@ function TabItem({
   );
 }
 
-function BridgeDock({ state, descriptors, navigation }: BottomTabBarProps) {
+function OvalDock({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -308,7 +308,7 @@ function MainTabs() {
   const inboxBadge = useInboxBadgeCount();
   return (
     <Tab.Navigator
-      tabBar={(props) => <BridgeDock {...props} />}
+      tabBar={(props) => <OvalDock {...props} />}
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

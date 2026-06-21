@@ -21,7 +21,7 @@ describe('buildClubCalendarIcs', () => {
     } satisfies ClubMeetingWithMeta;
 
     const result = buildClubCalendarIcs(
-      { id: 'club-1', name: 'Bridge Club' },
+      { id: 'club-1', name: 'Oval Club' },
       [meeting]
     );
 

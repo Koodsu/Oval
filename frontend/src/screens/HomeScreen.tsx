@@ -114,7 +114,7 @@ export default function HomeScreen() {
   const explainAndRequestLocation = useCallback(() => {
     Alert.alert(
       'Use campus location?',
-      'Bridge uses your location only to sort nearby pods and show useful distances on campus.',
+      'Oval uses your location only to sort nearby pods and show useful distances on campus.',
       [
         { text: 'Not now', style: 'cancel' },
         {
@@ -124,7 +124,7 @@ export default function HomeScreen() {
               if (!allowed) {
                 Alert.alert(
                   'Location is off',
-                  'You can still use Bridge. Turn on location later if you want nearby pod sorting.',
+                  'You can still use Oval. Turn on location later if you want nearby pod sorting.',
                 );
               }
             });
@@ -137,10 +137,10 @@ export default function HomeScreen() {
   const explainAndRequestNotifications = useCallback(() => {
     const needsSettings = !canAskForNotifications;
     Alert.alert(
-      needsSettings ? 'Turn on Bridge alerts' : 'Stay ahead of plans?',
+      needsSettings ? 'Turn on Oval alerts' : 'Stay ahead of plans?',
       needsSettings
-        ? 'Notifications are off for Bridge. Open Settings to turn on meetup reminders, messages, and waitlist updates.'
-        : 'Bridge can alert you about meetup reminders, new messages, and waitlist openings. You can change each category later in Privacy & Data.',
+        ? 'Notifications are off for Oval. Open Settings to turn on meetup reminders, messages, and waitlist updates.'
+        : 'Oval can alert you about meetup reminders, new messages, and waitlist openings. You can change each category later in Privacy & Data.',
       [
         { text: 'Not now', style: 'cancel' },
         {
@@ -154,7 +154,7 @@ export default function HomeScreen() {
               if (!allowed) {
                 Alert.alert(
                   'Alerts are off',
-                  'No problem. Bridge still works normally without notifications.',
+                  'No problem. Oval still works normally without notifications.',
                 );
               }
             });
