@@ -338,7 +338,7 @@ export default function ClubsPage() {
               <span className="font-display text-base leading-none text-white">B</span>
             </div>
             <div className="flex flex-col">
-              <span className="font-display text-2xl leading-none tracking-[0.12em] text-white">OVAL</span>
+              <span className="font-display text-2xl leading-none tracking-[0.12em] text-white">BRIDGE</span>
               <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-white/35 md:block">
                 Club launch console
               </span>
@@ -643,7 +643,7 @@ export default function ClubsPage() {
               <div className="grid h-6 w-6 place-items-center bg-scarlet">
                 <span className="font-display text-sm leading-none text-white">B</span>
               </div>
-              <span className="font-display text-xl tracking-[0.12em] text-white">OVAL</span>
+              <span className="font-display text-xl tracking-[0.12em] text-white">BRIDGE</span>
             </div>
             <p className="mt-2 text-xs tracking-wide text-white/30">Clubs work better when discovery and turnout are visible.</p>
           </div>

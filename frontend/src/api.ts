@@ -13,8 +13,8 @@ export const API_BASE =
     ? configuredApiBase
     : __DEV__
       ? 'http://localhost:3000'
-      : 'https://bridge-phi-plum.vercel.app';
-export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://www.joinbridgeapp.com').replace(/\/$/, '');
+      : 'https://ovalapp.vercel.app';
+export const PUBLIC_SITE_URL = (process.env.EXPO_PUBLIC_APP_SITE_URL ?? 'https://www.theovalapp.com').replace(/\/$/, '');
 
 /** Fallback alert copy when an error has no safer or more specific message. */
 export const API_USER_MESSAGE = 'We could not finish that. Please try again.';
@@ -45,9 +45,9 @@ function friendlyFailureMessage(status?: number, serverMessage?: string) {
   if (status === 403) return serverMessage ?? 'You do not have permission to do that.';
   if (status === 404) return serverMessage ?? 'We could not find that item. It may have changed or been removed.';
   if (status === 409) return serverMessage ?? 'That conflicts with the latest data. Refresh and try again.';
-  if (status === 429) return 'Bridge is getting a lot of requests. Wait a moment, then try again.';
-  if (status === 503) return 'Bridge is temporarily unavailable. Try again in a minute.';
-  if (status && status >= 500) return 'Bridge hit a server error while trying that. Please try again in a minute.';
+  if (status === 429) return 'Oval is getting a lot of requests. Wait a moment, then try again.';
+  if (status === 503) return 'Oval is temporarily unavailable. Try again in a minute.';
+  if (status && status >= 500) return 'Oval hit a server error while trying that. Please try again in a minute.';
   return serverMessage ?? API_USER_MESSAGE;
 }
 
@@ -56,7 +56,7 @@ export function getApiErrorMessage(error: unknown, fallback = API_USER_MESSAGE) 
   if (error instanceof Error) {
     if (error.name === 'AbortError') return fallback;
     if (/network request failed|failed to fetch|load failed/i.test(error.message)) {
-      return 'Bridge could not reach the server. Check your connection and try again.';
+      return 'Oval could not reach the server. Check your connection and try again.';
     }
     return error.message || fallback;
   }
@@ -187,7 +187,7 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
       if (err instanceof Error && err.name === 'AbortError') throw err;
       throw new ApiError(
         err instanceof Error ? err.message : 'Network request failed',
-        'Bridge could not reach the server. Check your connection and try again.'
+        'Oval could not reach the server. Check your connection and try again.'
       );
     }
 

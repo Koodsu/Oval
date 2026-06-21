@@ -171,7 +171,7 @@ export default function ExploreScreen() {
   const explainAndRequestLocation = useCallback(() => {
     Alert.alert(
       'Use campus location?',
-      'Bridge uses your location to sort nearby pods and show distance hints. Your exact location is not posted to pods.',
+      'Oval uses your location to sort nearby pods and show distance hints. Your exact location is not posted to pods.',
       [
         { text: 'Not now', style: 'cancel' },
         {

@@ -94,7 +94,7 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
     if (!club) return;
     const safeName = club.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club';
     await exportTextFile({
-      filename: `${safeName}-bridge-calendar.ics`,
+      filename: `${safeName}-oval-calendar.ics`,
       contents: buildClubCalendarIcs(club, meetings),
       mimeType: 'text/calendar',
       uti: 'com.apple.ical.ics',

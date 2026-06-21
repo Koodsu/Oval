@@ -1,7 +1,7 @@
 export const TESTIMONIALS = [
   {
     quote:
-      "This is literally what I've been wishing existed since freshman year. GroupMe is chaos. Bridge is actually how you find people to do stuff with.",
+      "This is literally what I've been wishing existed since freshman year. GroupMe is chaos. Oval is actually how you find people to do stuff with.",
     name: 'Chase L.',
     role: 'Computer Science · Junior',
     initials: 'CL',

@@ -25,8 +25,8 @@ import app from '../server';
 describe('public waitlist routes', () => {
   beforeEach(() => {
     process.env.RESEND_API_KEY = 're_test_key';
-    process.env.RESEND_FROM_EMAIL = 'noreply@joinbridgeapp.com';
-    process.env.CONTACT_EMAIL = 'contactus@joinbridgeapp.com';
+    process.env.RESEND_FROM_EMAIL = 'noreply@theovalapp.com';
+    process.env.CONTACT_EMAIL = 'contactus@theovalapp.com';
     resendMocks.createContact.mockReset().mockResolvedValue({ data: { id: 'contact' }, error: null });
     resendMocks.listContacts.mockReset().mockResolvedValue({
       data: { data: [], has_more: false },
@@ -66,6 +66,6 @@ describe('public waitlist routes', () => {
     expect(confirmation.html).toContain('&lt;img src=x onerror=alert(1)&gt; Club');
     expect(notification.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(notification.html).not.toContain('<script>alert(1)</script>');
-    expect(notification.to).toBe('contactus@joinbridgeapp.com');
+    expect(notification.to).toBe('contactus@theovalapp.com');
   });
 });

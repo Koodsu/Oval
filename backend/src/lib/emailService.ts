@@ -8,11 +8,11 @@ function getResendClient(): Resend | null {
 }
 
 function getFromEmail(): string {
-  return process.env.RESEND_FROM_EMAIL ?? 'noreply@joinbridgeapp.com';
+  return process.env.RESEND_FROM_EMAIL ?? 'noreply@theovalapp.com';
 }
 
 export function getContactEmail(): string {
-  return process.env.CONTACT_EMAIL ?? 'contactus@joinbridgeapp.com';
+  return process.env.CONTACT_EMAIL ?? 'contactus@theovalapp.com';
 }
 
 function escapeHtml(value: string | null | undefined): string {
@@ -26,7 +26,7 @@ function escapeHtml(value: string | null | undefined): string {
 
 export async function sendVerificationEmail(to: string, code: string): Promise<void> {
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`[Bridge] Verification code for ${to}: ${code}`);
+    console.log(`[Oval] Verification code for ${to}: ${code}`);
   }
 
   if (process.env.NODE_ENV === 'test') {
@@ -47,15 +47,15 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
   const result = await resend.emails.send({
     from,
     to,
-    subject: 'Your Bridge verification code',
+    subject: 'Your Oval verification code',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-        <h2 style="color: #6d28d9;">Verify your Bridge account</h2>
+        <h2 style="color: #6d28d9;">Verify your Oval account</h2>
         <p>Enter this code in the app to confirm your OSU email:</p>
         <div style="background: #f3f4f6; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
           <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #111827;">${code}</span>
         </div>
-        <p style="color: #6b7280; font-size: 14px;">This code expires in 10 minutes. If you didn't create a Bridge account, you can safely ignore this email.</p>
+        <p style="color: #6b7280; font-size: 14px;">This code expires in 10 minutes. If you didn't create a Oval account, you can safely ignore this email.</p>
       </div>
     `,
   });
@@ -69,7 +69,7 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
 
 export async function sendPasswordResetEmail(to: string, code: string): Promise<void> {
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`[Bridge] Password reset code for ${to}: ${code}`);
+    console.log(`[Oval] Password reset code for ${to}: ${code}`);
   }
 
   if (process.env.NODE_ENV === 'test') {
@@ -87,11 +87,11 @@ export async function sendPasswordResetEmail(to: string, code: string): Promise<
   const result = await resend.emails.send({
     from,
     to,
-    subject: 'Reset your Bridge password',
+    subject: 'Reset your Oval password',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-        <h2 style="color: #6d28d9;">Reset your Bridge password</h2>
-        <p>Enter this code in the Bridge app to choose a new password:</p>
+        <h2 style="color: #6d28d9;">Reset your Oval password</h2>
+        <p>Enter this code in the Oval app to choose a new password:</p>
         <div style="background: #f3f4f6; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
           <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #111827;">${escapeHtml(code)}</span>
         </div>
@@ -129,7 +129,7 @@ export interface ModerationReportEmailPayload {
 
 export async function sendModerationReportEmail(report: ModerationReportEmailPayload): Promise<void> {
   const to = getContactEmail();
-  const subject = `[Bridge ${report.severity}] New ${report.reason} report`;
+  const subject = `[Oval ${report.severity}] New ${report.reason} report`;
   const adminBase = process.env.ADMIN_REPORTS_URL?.trim().replace(/\/$/, '');
   const signedReview = createAdminReviewToken(report.id);
   const reviewUrl = adminBase && signedReview
@@ -140,7 +140,7 @@ export async function sendModerationReportEmail(report: ModerationReportEmailPay
     report.severity === 'P1' ? 'Review within 24 hours' :
     'Review within 72 hours';
 
-  console.log(`[Bridge] Moderation report ${report.id} (${report.severity}/${report.reason}) should go to ${to}`);
+  console.log(`[Oval] Moderation report ${report.id} (${report.severity}/${report.reason}) should go to ${to}`);
 
   if (process.env.NODE_ENV === 'test') {
     console.log('[emailService] Test environment detected — moderation report email not sent.');
@@ -180,7 +180,7 @@ export async function sendModerationReportEmail(report: ModerationReportEmailPay
     html: `
       <div style="font-family: sans-serif; max-width: 680px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #111827;">${escapeHtml(subject)}</h2>
-        <p style="color: #4b5563;">A Bridge user submitted a report. Review the evidence and record the response after action.</p>
+        <p style="color: #4b5563;">A Oval user submitted a report. Review the evidence and record the response after action.</p>
         ${reviewUrl
           ? `<p><a href="${escapeHtml(reviewUrl)}" style="color: #6d28d9;">Open this report securely</a></p>`
           : '<p style="color: #b45309;">Secure review links are not configured. Use the authenticated admin reports API or reply to this email.</p>'}

@@ -1,5 +1,5 @@
 const BLOCKED_CONTENT_MESSAGE =
-  'This content appears to violate Bridge safety rules. Please revise it before posting.';
+  'This content appears to violate Oval safety rules. Please revise it before posting.';
 const MODERATION_UNAVAILABLE_MESSAGE =
   'Safety checks are temporarily unavailable. Please try again shortly.';
 

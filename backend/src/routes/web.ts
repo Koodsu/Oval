@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 
 const router = Router();
-const APP_HOST = 'www.joinbridgeapp.com';
-const IOS_APP_ID = process.env.IOS_APP_ID?.trim() || 'com.bradyvb.bridgeapp';
-const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.bradyvb.bridgeapp';
+const APP_HOST = 'www.theovalapp.com';
+const IOS_APP_ID = process.env.IOS_APP_ID?.trim() || 'com.bradyvb.ovalapp';
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.bradyvb.ovalapp';
 const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID?.trim() || '687FPU46UV';
 const ANDROID_SHA256 = process.env.ANDROID_SHA256_CERT_FINGERPRINT?.trim();
 
@@ -68,7 +68,7 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
     return;
   }
 
-  const deepLink = `bridge://pod/${podId}`;
+  const deepLink = `oval://pod/${podId}`;
   const universalLink = `https://${APP_HOST}/pod/${podId}`;
   const iosStoreButton = IOS_APP_STORE_URL
     ? `<a href="${IOS_APP_STORE_URL}" class="store-btn" id="iosBtn">
@@ -85,14 +85,14 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
   const storePrompt =
     iosStoreButton || androidStoreButton
       ? `${iosStoreButton}${androidStoreButton}`
-      : '<span class="stores-label">Bridge is coming soon to the App Store.</span>';
+      : '<span class="stores-label">Oval is coming soon to the App Store.</span>';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Join a Pod on Bridge</title>
+  <title>Join a Pod on Oval</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -396,7 +396,7 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
 
       <div class="logo-mark reveal reveal-1">
         <span class="icon">🌉</span>
-        Bridge
+        Oval
       </div>
 
       <h1 class="headline reveal reveal-2">
@@ -405,18 +405,18 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
 
       <p class="sub reveal reveal-3">
         A friend invited you to a pod&mdash;a small group getting together in real life.
-        Open Bridge to see who&rsquo;s in and claim your&nbsp;spot.
+        Open Oval to see who&rsquo;s in and claim your&nbsp;spot.
       </p>
 
       <div class="reveal reveal-4">
         <button class="cta" id="openBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-          Open in Bridge
+          Open in Oval
         </button>
       </div>
 
       <div class="stores-section reveal reveal-5">
-        <p class="stores-label">Don&rsquo;t have Bridge yet?</p>
+        <p class="stores-label">Don&rsquo;t have Oval yet?</p>
         <div class="stores">
           ${storePrompt}
         </div>

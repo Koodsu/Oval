@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const EMAIL = 'contactus@joinbridgeapp.com'
+const EMAIL = 'contactus@theovalapp.com'
 
 function Section({ title, children }) {
   return (
@@ -16,7 +16,7 @@ function Section({ title, children }) {
 export default function Support() {
   useEffect(() => {
     const previousTitle = document.title
-    document.title = 'Support | Bridge'
+    document.title = 'Support | Oval'
     window.scrollTo(0, 0)
     return () => {
       document.title = previousTitle
@@ -28,7 +28,7 @@ export default function Support() {
       <main className="mx-auto max-w-3xl px-6 py-12 md:px-10">
         <div className="mb-12">
           <h1 className="mb-2 font-display text-3xl uppercase tracking-widest text-white">
-            Bridge Support
+            Oval Support
           </h1>
           <p className="text-sm text-white/35">Account, safety, and privacy help</p>
         </div>
@@ -36,7 +36,7 @@ export default function Support() {
         <Section title="Contact Us">
           <p>
             Email <a className="text-scarlet underline underline-offset-2" href={`mailto:${EMAIL}`}>{EMAIL}</a>{' '}
-            from the address connected to your Bridge account. Include a short description and any relevant
+            from the address connected to your Oval account. Include a short description and any relevant
             pod, club, message, or report details. Do not email passwords or verification codes.
           </p>
         </Section>
@@ -47,7 +47,7 @@ export default function Support() {
             immediate safety concerns, then harassment and other serious violations.
           </p>
           <p>
-            Bridge is not an emergency service. Call 911 for an emergency. For non-emergency campus safety
+            Oval is not an emergency service. Call 911 for an emergency. For non-emergency campus safety
             resources, contact the appropriate university or local service directly.
           </p>
         </Section>
@@ -61,7 +61,7 @@ export default function Support() {
 
         <Section title="Export Or Delete Your Data">
           <p>
-            In Bridge, open Settings, then Privacy &amp; Data. You can export a copy of your account data or
+            In Oval, open Settings, then Privacy &amp; Data. You can export a copy of your account data or
             permanently delete your account without contacting support.
           </p>
           <p>
@@ -77,7 +77,7 @@ export default function Support() {
         </Section>
 
         <Section title="Independent Service">
-          <p>Bridge is not affiliated with or endorsed by The Ohio State University.</p>
+          <p>Oval is not affiliated with or endorsed by The Ohio State University.</p>
         </Section>
       </main>
     </div>

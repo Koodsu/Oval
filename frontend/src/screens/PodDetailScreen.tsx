@@ -272,8 +272,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     if (!pod) return;
     try {
       await Share.share({
-        title: `Join my ${pod.activity?.title ?? 'Bridge'} pod`,
-        message: `Join my ${pod.activity?.title ?? 'Bridge'} pod on Bridge: ${getPodShareUrl(pod.id)}`,
+        title: `Join my ${pod.activity?.title ?? 'Oval'} pod`,
+        message: `Join my ${pod.activity?.title ?? 'Oval'} pod on Oval: ${getPodShareUrl(pod.id)}`,
         url: getPodShareUrl(pod.id),
       });
     } catch (error) {

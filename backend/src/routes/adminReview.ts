@@ -40,7 +40,7 @@ function renderReport(report: NonNullable<Awaited<ReturnType<typeof adminGetRepo
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bridge report ${escapeHtml(report.id)}</title>
+  <title>Oval report ${escapeHtml(report.id)}</title>
 </head>
 <body style="font-family: sans-serif; max-width: 760px; margin: 0 auto; padding: 32px 20px; color: #111827;">
   <h1>Moderation report</h1>

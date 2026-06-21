@@ -40,7 +40,7 @@ export default function VerifyEmailScreen() {
     try {
       const response = await verifyEmail(code.trim());
       await updateUser(response.user);
-      Alert.alert('Verified', 'Your account is now cleared for the full Bridge experience.');
+      Alert.alert('Verified', 'Your account is now cleared for the full Oval experience.');
     } catch (error) {
       Alert.alert('Verification failed', getApiErrorMessage(error));
     } finally {
@@ -81,7 +81,7 @@ export default function VerifyEmailScreen() {
         <Text style={[typography.body, styles.sub]}>
           We sent a 6-digit code to{' '}
           <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>{' '}
-          — it keeps Bridge students-only.
+          — it keeps Oval students-only.
         </Text>
 
         <Card padded>

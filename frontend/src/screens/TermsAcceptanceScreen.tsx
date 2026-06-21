@@ -15,7 +15,7 @@ import {
   useTheme,
 } from '../theme';
 
-const SITE_URL = 'https://www.joinbridgeapp.com';
+const SITE_URL = 'https://www.theovalapp.com';
 
 export default function TermsAcceptanceScreen() {
   const styles = useStyles();
@@ -56,7 +56,7 @@ export default function TermsAcceptanceScreen() {
         <Sticker label="House rules" tint={colors.amberSoft} tilt={2} icon="document-text" />
         <Text style={styles.title}>The fine{'\n'}print.</Text>
         <Text style={[typography.body, styles.sub]}>
-          Bridge coordinates real-world meetups with real students. Skim the rules, confirm you're
+          Oval coordinates real-world meetups with real students. Skim the rules, confirm you're
           eligible, and you're in.
         </Text>
 

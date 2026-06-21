@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const EMAIL = 'contactus@joinbridgeapp.com'
+const EMAIL = 'contactus@theovalapp.com'
 
 function Section({ id, title, children }) {
   return (
@@ -37,7 +37,7 @@ function Link({ href, children }) {
 export default function PrivacyPolicy() {
   useEffect(() => {
     const previousTitle = document.title
-    document.title = 'Privacy Policy | Bridge'
+    document.title = 'Privacy Policy | Oval'
     window.scrollTo(0, 0)
     return () => {
       document.title = previousTitle
@@ -56,12 +56,12 @@ export default function PrivacyPolicy() {
 
         <Section id="scope" title="Scope And Operator">
           <p>
-            This policy explains how Brady Van Bibber, doing business as Bridge ("Bridge," "we,"
-            "us"), handles personal information through the Bridge mobile app, joinbridgeapp.com,
+            This policy explains how Brady Van Bibber, doing business as Oval ("Oval," "we,"
+            "us"), handles personal information through the Oval mobile app, theovalapp.com,
             waitlists, and related support and moderation services.
           </p>
           <p>
-            Bridge is an independent service and is not affiliated with or endorsed by The Ohio
+            Oval is an independent service and is not affiliated with or endorsed by The Ohio
             State University.
           </p>
         </Section>
@@ -72,7 +72,7 @@ export default function PrivacyPolicy() {
             'Profile data you choose to provide: class year, major, biography, interests, clubs, Instagram handle, and profile image.',
             'Content and social activity: pods, meetup details, club information, announcements, messages, reactions, invitations, friendships, blocks, reports, attendance, recaps, and reliability information.',
             'Location data: meetup locations you enter and, only with device permission, coordinates used to help create or find nearby plans. You can enter a location manually instead.',
-            'Device and service data: push-notification token and preferences, basic first-party feature-use events, request security records, and technical logs needed to operate and protect Bridge.',
+            'Device and service data: push-notification token and preferences, basic first-party feature-use events, request security records, and technical logs needed to operate and protect Oval.',
             'Website submissions: waitlist email addresses and club-registration details such as club name, leader name, role, description, category, and website or social link.',
             'Support and safety communications you send to us.',
           ]} />
@@ -88,19 +88,19 @@ export default function PrivacyPolicy() {
             'Provide profiles, pods, clubs, messaging, invitations, notifications, attendance, and reliability features.',
             'Moderate text and images, investigate reports, remove content, block abuse, and suspend or ban accounts.',
             'Send service messages, verification codes, password-reset codes, safety notices, and waitlist or launch updates you requested.',
-            'Diagnose failures, measure use of Bridge features, prevent fraud and rate-limit abuse, and improve the service.',
-            'Comply with law, enforce our terms, and protect users, Bridge, and the public.',
+            'Diagnose failures, measure use of Oval features, prevent fraud and rate-limit abuse, and improve the service.',
+            'Comply with law, enforce our terms, and protect users, Oval, and the public.',
           ]} />
           <p>We do not sell personal information, run third-party advertising, or track users across other companies' apps and websites.</p>
         </Section>
 
         <Section id="sharing" title="When We Share Information">
           <p>
-            Other Bridge users can see information needed for the social features you use, such as
+            Other Oval users can see information needed for the social features you use, such as
             your display name, profile, pod or club participation, messages, and reliability
             information. Visibility depends on the feature and your relationship to the viewer.
           </p>
-          <p>We use service providers only to operate Bridge:</p>
+          <p>We use service providers only to operate Oval:</p>
           <List items={[
             'Supabase for PostgreSQL database and image storage infrastructure.',
             'Vercel for backend and website hosting.',
@@ -133,7 +133,7 @@ export default function PrivacyPolicy() {
           <List items={[
             'Edit profile and notification settings in the app.',
             'Decline location or push-notification permission in iOS settings; core app access does not require either permission.',
-            'Export your Bridge account data from Settings.',
+            'Export your Oval account data from Settings.',
             'Delete your account and active account data from Settings.',
             'Unsubscribe from promotional email using the email link or contact us.',
             'Ask to access, correct, or delete information by emailing us. Applicable law may provide additional rights.',
@@ -154,14 +154,14 @@ export default function PrivacyPolicy() {
 
         <Section id="age" title="Age Limit">
           <p>
-            Bridge is for people age 18 or older. We do not knowingly collect personal information
+            Oval is for people age 18 or older. We do not knowingly collect personal information
             from anyone under 18. Contact us if you believe a minor has created an account.
           </p>
         </Section>
 
         <Section id="changes" title="Policy Changes">
           <p>
-            We may update this policy as Bridge changes. We will change the effective date and, for
+            We may update this policy as Oval changes. We will change the effective date and, for
             material changes, provide notice in the app, by email, or on the website as appropriate.
           </p>
         </Section>

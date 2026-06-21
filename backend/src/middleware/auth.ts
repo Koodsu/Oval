@@ -103,7 +103,7 @@ export async function optionalAuth(
 export async function requireVerifiedAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   await requireAuth(req, res, () => {
     if (!req.user!.verifiedUniversity) {
-      res.status(403).json({ error: 'Verify your university email before using Bridge.' });
+      res.status(403).json({ error: 'Verify your university email before using Oval.' });
       return;
     }
     next();

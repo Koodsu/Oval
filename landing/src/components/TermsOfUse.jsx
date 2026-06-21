@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const EMAIL = 'contactus@joinbridgeapp.com'
+const EMAIL = 'contactus@theovalapp.com'
 
 function Section({ id, title, children }) {
   return (
@@ -24,7 +24,7 @@ function List({ items }) {
 export default function TermsOfUse() {
   useEffect(() => {
     const previousTitle = document.title
-    document.title = 'Terms of Use | Bridge'
+    document.title = 'Terms of Use | Oval'
     window.scrollTo(0, 0)
     return () => {
       document.title = previousTitle
@@ -43,34 +43,34 @@ export default function TermsOfUse() {
 
         <Section id="agreement" title="Agreement">
           <p>
-            These Terms govern your use of the Bridge mobile app, joinbridgeapp.com, and related
-            services operated by Brady Van Bibber, doing business as Bridge ("Bridge," "we," "us").
-            By creating an account or using Bridge, you agree to these Terms, the Privacy Policy,
-            and the Community Guidelines. If you do not agree, do not use Bridge.
+            These Terms govern your use of the Oval mobile app, theovalapp.com, and related
+            services operated by Brady Van Bibber, doing business as Oval ("Oval," "we," "us").
+            By creating an account or using Oval, you agree to these Terms, the Privacy Policy,
+            and the Community Guidelines. If you do not agree, do not use Oval.
           </p>
         </Section>
 
         <Section id="eligibility" title="Eligibility And Accounts">
           <List items={[
             'You must be at least 18 years old and legally able to agree to these Terms.',
-            'A Bridge account requires an eligible OSU email address. Email verification confirms control of that address, not identity, current enrollment, character, or background.',
+            'A Oval account requires an eligible OSU email address. Email verification confirms control of that address, not identity, current enrollment, character, or background.',
             'Provide accurate information, keep your credentials secure, and promptly tell us about unauthorized account use.',
-            'You may not impersonate another person, create an account for someone else, evade a suspension or ban, or use Bridge for unlawful activity.',
+            'You may not impersonate another person, create an account for someone else, evade a suspension or ban, or use Oval for unlawful activity.',
           ]} />
         </Section>
 
         <Section id="service" title="The Service">
           <p>
-            Bridge provides tools for campus profiles, activity pods, clubs, messaging, invitations,
+            Oval provides tools for campus profiles, activity pods, clubs, messaging, invitations,
             attendance, notifications, and in-person plans. Features may change, be limited, or be
-            discontinued. Bridge is independent and is not affiliated with, endorsed by, or officially
+            discontinued. Oval is independent and is not affiliated with, endorsed by, or officially
             connected to The Ohio State University.
           </p>
         </Section>
 
         <Section id="content" title="Your Content">
           <p>
-            You keep ownership of content you submit. You give Bridge a nonexclusive, worldwide,
+            You keep ownership of content you submit. You give Oval a nonexclusive, worldwide,
             royalty-free license to host, copy, display, transmit, format, moderate, and remove that
             content only as reasonably needed to provide, improve, secure, and promote the service.
             This license ends when the content is deleted, except for limited backups, legal
@@ -87,7 +87,7 @@ export default function TermsOfUse() {
           <List items={[
             'Harass, threaten, exploit, discriminate against, stalk, or expose private information about another person.',
             'Post illegal, infringing, deceptive, sexually exploitative, hateful, violent, or malicious content.',
-            'Spam, scrape, probe, reverse engineer, disrupt, overload, or gain unauthorized access to Bridge or another account.',
+            'Spam, scrape, probe, reverse engineer, disrupt, overload, or gain unauthorized access to Oval or another account.',
             'Use automated systems to create accounts, collect data, send messages, or manipulate attendance, reports, or reliability information.',
             'Misrepresent a meetup, club, affiliation, identity, location, or safety condition.',
           ]} />
@@ -95,13 +95,13 @@ export default function TermsOfUse() {
 
         <Section id="meetups" title="In-Person Plans And Safety">
           <p>
-            Bridge helps users coordinate; it does not organize, supervise, endorse, insure, or
+            Oval helps users coordinate; it does not organize, supervise, endorse, insure, or
             conduct meetups. We do not perform background checks or guarantee another user's identity,
             conduct, attendance, or statements. Use judgment, meet in public, tell someone your plans,
             and leave if a situation feels unsafe.
           </p>
           <p>
-            You are responsible for your own interactions and participation. Bridge is not an emergency
+            You are responsible for your own interactions and participation. Oval is not an emergency
             service. Call 911 or the appropriate local authority in an emergency.
           </p>
         </Section>
@@ -124,30 +124,30 @@ export default function TermsOfUse() {
             You agree to receive transactional messages needed to operate your account, including
             verification, password reset, security, moderation, and service notices. Waitlist and
             launch marketing email may be unsubscribed from at any time. You can manage optional push
-            notifications in Bridge and iOS settings.
+            notifications in Oval and iOS settings.
           </p>
         </Section>
 
-        <Section id="ip" title="Bridge Property">
+        <Section id="ip" title="Oval Property">
           <p>
-            Bridge's software, branding, design, and service content, excluding user content, are
-            owned by Bridge or its licensors and protected by law. These Terms give you a limited,
+            Oval's software, branding, design, and service content, excluding user content, are
+            owned by Oval or its licensors and protected by law. These Terms give you a limited,
             personal, revocable, nontransferable license to use the service as intended.
           </p>
         </Section>
 
         <Section id="termination" title="Termination">
           <p>
-            You may stop using Bridge and delete your account in the app. We may suspend or terminate
+            You may stop using Oval and delete your account in the app. We may suspend or terminate
             access for violations, safety risks, legal requirements, prolonged service shutdown, or
-            conduct that materially harms Bridge or its users. Provisions that logically survive
+            conduct that materially harms Oval or its users. Provisions that logically survive
             termination, including ownership, disclaimers, liability limits, and dispute terms, remain effective.
           </p>
         </Section>
 
         <Section id="disclaimers" title="Disclaimers">
           <p>
-            To the fullest extent permitted by law, Bridge is provided "as is" and "as available."
+            To the fullest extent permitted by law, Oval is provided "as is" and "as available."
             We disclaim implied warranties, including merchantability, fitness for a particular
             purpose, and noninfringement. We do not guarantee uninterrupted service, error-free
             features, successful meetups, user conduct, or the accuracy of user content.
@@ -156,11 +156,11 @@ export default function TermsOfUse() {
 
         <Section id="liability" title="Limitation Of Liability">
           <p>
-            To the fullest extent permitted by law, Bridge and its operator will not be liable for
+            To the fullest extent permitted by law, Oval and its operator will not be liable for
             indirect, incidental, special, consequential, exemplary, or punitive damages, lost data,
             lost profits, personal interactions, or reliance on user content arising from the service.
             Where liability cannot be excluded, total liability will not exceed the greater of $100
-            or the amount you paid Bridge during the 12 months before the claim.
+            or the amount you paid Oval during the 12 months before the claim.
           </p>
           <p>Some jurisdictions do not allow certain exclusions, so parts of this section may not apply to you.</p>
         </Section>
@@ -185,7 +185,7 @@ export default function TermsOfUse() {
           <p>
             If one provision is unenforceable, the rest remain effective. A failure to enforce a
             provision is not a waiver. You may not transfer these Terms without our consent. These
-            Terms, the Privacy Policy, and the Community Guidelines are the entire agreement about Bridge.
+            Terms, the Privacy Policy, and the Community Guidelines are the entire agreement about Oval.
           </p>
         </Section>
 

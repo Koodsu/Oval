@@ -116,7 +116,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   };
 
   const unlinkInstagram = () => {
-    Alert.alert('Unlink Instagram?', 'The handle will be removed from your Bridge profile.', [
+    Alert.alert('Unlink Instagram?', 'The handle will be removed from your Oval profile.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Unlink',
@@ -144,11 +144,11 @@ export default function PrivacyDataScreen({ navigation }: Props) {
       const data = await downloadMyData();
       const date = new Date().toISOString().slice(0, 10);
       await exportTextFile({
-        filename: `bridge-data-${date}.json`,
+        filename: `oval-data-${date}.json`,
         contents: JSON.stringify(data, null, 2),
         mimeType: 'application/json',
         uti: 'public.json',
-        title: 'Download my Bridge data',
+        title: 'Download my Oval data',
       });
     } catch (error) {
       Alert.alert('Could not download your data', getApiErrorMessage(error));
@@ -199,7 +199,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
             <Text style={typography.title}>Download my data</Text>
             <Text style={[typography.caption, { marginTop: 4 }]}>
               Export the account, profile, content, memberships, connections, reports, and activity
-              data Bridge stores about you.
+              data Oval stores about you.
             </Text>
             <Button
               label="Download JSON export"
@@ -251,7 +251,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
           <Card padded>
             <Text style={typography.title}>Instagram</Text>
             <Text style={[typography.caption, { marginTop: 4 }]}>
-              Link the Instagram handle shown on your Bridge profile, or remove it at any time.
+              Link the Instagram handle shown on your Oval profile, or remove it at any time.
             </Text>
             <TextInput
               value={instagram}

@@ -134,7 +134,7 @@ export default function CampusLife() {
               <span className="text-gradient-fire">people.</span>
             </h2>
             <p className="reveal mt-6 max-w-[26rem] text-[15px] leading-relaxed text-white/50">
-              Bridge runs on two layers. <span className="text-white/85">Activities</span> are quick plans
+              Oval runs on two layers. <span className="text-white/85">Activities</span> are quick plans
               forming right now — claim a spot before it fills. <span className="text-white/85">Clubs</span> stay
               discoverable all semester, so you can see which ones are actually alive before you commit.
             </p>

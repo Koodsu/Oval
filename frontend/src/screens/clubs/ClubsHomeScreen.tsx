@@ -195,7 +195,7 @@ export default function ClubsHomeScreen() {
                 size={48}
                 color={colors.primary}
                 iconColor={colors.onPrimary}
-                onPress={() => void Linking.openURL('https://www.joinbridgeapp.com/clubs')}
+                onPress={() => void Linking.openURL('https://www.theovalapp.com/clubs')}
                 accessibilityLabel="List your club"
               />
             </View>

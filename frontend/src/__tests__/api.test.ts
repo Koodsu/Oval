@@ -97,7 +97,7 @@ describe('request — 401 handling', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('FUNCTION_INVOCATION_FAILED');
     expect(getApiErrorMessage(error)).toBe(
-      'Bridge hit a server error while trying that. Please try again in a minute.'
+      'Oval hit a server error while trying that. Please try again in a minute.'
     );
   });
 });
