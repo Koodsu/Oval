@@ -93,7 +93,7 @@ export default function ProfileScreen() {
             <Avatar name={user?.name ?? 'User'} uri={user?.avatarUrl} size={84} tilt={-3} />
             <Text style={styles.identityName}>{user?.name ?? 'Your profile'}</Text>
             <Text style={typography.subheading}>
-              {user?.major ?? 'Major not set'} • Class of {user?.classYear ?? 'TBD'}
+              {user?.major ?? 'Major not set'} • {user?.classYear ?? 'Year not set'}
             </Text>
             <Text style={typography.captionSmall}>{user?.email}</Text>
             {user?.bio ? (

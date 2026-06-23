@@ -4,15 +4,15 @@
     "slug": "oval",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/brand/oval-app-icon.png",
+    "icon": "./assets/brand/oval-open-1024.png",
     "userInterfaceStyle": "automatic",
     "scheme": "oval",
     "plugins": [
       [
         "expo-notifications",
         {
-          "icon": "./assets/brand/oval-app-icon.png",
-          "color": "#C73B22",
+          "icon": "./assets/brand/oval-open-1024-transparent.png",
+          "color": "#EF5A63",
           "sounds": []
         }
       ],
@@ -23,9 +23,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/brand/oval-app-icon.png",
+          "image": "./assets/brand/oval-open-1024-transparent.png",
           "resizeMode": "contain",
-          "backgroundColor": "#C73B22"
+          "backgroundColor": "#251018"
         }
       ]
     ],
@@ -44,8 +44,8 @@
     "android": {
       "package": "com.bradyvb.ovalapp",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/brand/oval-app-icon.png",
-        "backgroundColor": "#C73B22"
+        "foregroundImage": "./assets/brand/oval-open-1024-transparent.png",
+        "backgroundColor": "#251018"
       },
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
@@ -77,7 +77,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/brand/oval-app-icon.png"
+      "favicon": "./assets/brand/oval-open-1024.png"
     },
     "extra": {
       "eas": {

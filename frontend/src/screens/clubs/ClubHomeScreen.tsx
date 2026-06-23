@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -30,7 +29,6 @@ import {
   Sheet,
   SkeletonCard,
   Slab,
-  accentForSeed,
 } from '../../components/ui';
 import { MeetingCard, MemberRow, roleAccent } from '../../components/clubs';
 import { useClub } from '../../hooks/useClub';
@@ -175,7 +173,6 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
     channels.find((channel) => channel.kind === 'GENERAL') ??
     channels.find((channel) => club.isMember || channel.kind === 'ANNOUNCEMENTS') ??
     null;
-  const accent = accentForSeed(colors, club.name);
 
   const primaryAction: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void } =
     !club.isMember
@@ -216,12 +213,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       >
         {/* ── Cover + identity ── */}
         <View style={[styles.coverWrap, { marginTop: -(insets.top + spacing.md) }]}>
-          <LinearGradient
-            colors={[accent.tint, colors.bg] as [string, string]}
-            start={{ x: 0.1, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={[styles.cover, { paddingTop: insets.top + spacing.xs }]}
-          >
+          <View style={[styles.cover, { paddingTop: insets.top + spacing.xs }]}>
             <View style={styles.coverChrome}>
               <IconButton
                 icon="arrow-back"
@@ -234,7 +226,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                 onPress={() => setActionsOpen(true)}
               />
             </View>
-          </LinearGradient>
+          </View>
           <View style={styles.identity}>
             <ClubMark
               name={club.name}

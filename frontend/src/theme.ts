@@ -371,7 +371,10 @@ const ThemeContext = React.createContext<Theme | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useColorScheme();
-  const [preference, setPreferenceState] = React.useState<AppearancePreference>('system');
+  // Oval is dark-first by design, so new users default to the dark theme.
+  // Returning users' saved choice (loaded below) still takes precedence, and
+  // anyone can switch to Light or System in Settings.
+  const [preference, setPreferenceState] = React.useState<AppearancePreference>('dark');
 
   React.useEffect(() => {
     AsyncStorage.getItem(APPEARANCE_KEY)

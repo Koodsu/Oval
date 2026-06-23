@@ -455,7 +455,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         {pod ? (
           <>
             <ScreenHeader
-              title="Pod"
+              title={pod.activity?.title ?? 'Pod'}
               kicker={pod.activity?.category}
               onBack={() => navigation.goBack()}
               right={
@@ -482,9 +482,6 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.podTitle}>
-                {pod.activity?.title ?? 'Pod detail'}
-              </Text>
               <View style={styles.metaList}>
                 <View style={styles.metaItem}>
                   <Ionicons name="calendar" size={15} color={colors.sub} />

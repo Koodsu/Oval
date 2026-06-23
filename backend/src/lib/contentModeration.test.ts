@@ -1,55 +1,61 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { moderateImageContent, moderateTextContent } from './contentModeration';
 
-const originalNodeEnv = process.env.NODE_ENV;
-const originalApiKey = process.env.OPENAI_API_KEY;
-const originalEnforcement = process.env.MODERATION_ENFORCEMENT;
-const originalTestRemote = process.env.MODERATION_TEST_REMOTE;
+const blocked = async (text: string, opts = {}) =>
+  (await moderateTextContent([text], opts))?.status === 400;
+const clean = async (text: string, opts = {}) =>
+  (await moderateTextContent([text], opts)) === null;
 
-afterEach(() => {
-  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-  else process.env.NODE_ENV = originalNodeEnv;
-  if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
-  else process.env.OPENAI_API_KEY = originalApiKey;
-  if (originalEnforcement === undefined) delete process.env.MODERATION_ENFORCEMENT;
-  else process.env.MODERATION_ENFORCEMENT = originalEnforcement;
-  if (originalTestRemote === undefined) delete process.env.MODERATION_TEST_REMOTE;
-  else process.env.MODERATION_TEST_REMOTE = originalTestRemote;
-  vi.unstubAllGlobals();
-});
-
-describe('content moderation', () => {
-  it('blocks normalized local safety violations without a provider call', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await moderateTextContent(['k1ll yourself']);
-
-    expect(result?.status).toBe(400);
-    expect(fetchMock).not.toHaveBeenCalled();
+describe('content moderation (local, no provider)', () => {
+  it('blocks harmful content, including evasions', async () => {
+    expect(await blocked('kill yourself')).toBe(true);
+    expect(await blocked('k1ll your5elf')).toBe(true);      // leetspeak
+    expect(await blocked('n-i-g-g-e-r')).toBe(true);        // separators
+    expect(await blocked('f@ggot')).toBe(true);             // homoglyph
+    expect(await blocked('niggerrr')).toBe(true);           // repeats
+    expect(await blocked('child porn')).toBe(true);
+    expect(await blocked('school shooting')).toBe(true);
+    expect(await blocked('selling adderall')).toBe(true);
+    expect(await blocked('kys')).toBe(true);
   });
 
-  it('fails closed in production when provider credentials are missing', async () => {
-    process.env.NODE_ENV = 'production';
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.MODERATION_ENFORCEMENT;
-
-    const result = await moderateImageContent(Buffer.from('image'), 'image/png');
-
-    expect(result?.status).toBe(503);
+  it('harmful content is blocked even in chat (allowProfanity)', async () => {
+    expect(await blocked('n1gger', { allowProfanity: true })).toBe(true);
+    expect(await blocked('kill yourself', { allowProfanity: true })).toBe(true);
   });
 
-  it('uses the multimodal provider result for image moderation', async () => {
-    process.env.NODE_ENV = 'production';
-    process.env.OPENAI_API_KEY = 'test-key';
-    process.env.MODERATION_TEST_REMOTE = 'true';
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ results: [{ flagged: true }] }),
-    }));
+  it('blocks profanity in labels (default) but allows it in chat', async () => {
+    expect(await blocked('fuck this club')).toBe(true);           // default = label
+    expect(await blocked('shitty')).toBe(true);
+    expect(await clean('fuck this club', { allowProfanity: true })).toBe(true); // chat
+    expect(await clean('this is so shitty lol', { allowProfanity: true })).toBe(true);
+  });
 
-    const result = await moderateImageContent(Buffer.from('image'), 'image/png');
+  it('catches profanity evasions in labels', async () => {
+    expect(await blocked('fuuuck')).toBe(true);
+    expect(await blocked('sh1t')).toBe(true);
+    expect(await blocked('a$$hole')).toBe(true);
+  });
 
-    expect(result?.status).toBe(400);
+  it('does NOT flag innocent words (false-positive guards)', async () => {
+    for (const word of [
+      'class', 'classic', 'assassin', 'Scunthorpe', 'grape', 'scrape',
+      'therapy', 'therapist', 'Niger', 'Nigeria', 'shiitake', 'peacock',
+      'Hancock', 'cockpit', 'raccoon', 'analysis', 'Richard',
+      'Computer Science', 'Pre-Med', 'Sociology major', 'Ava Chen',
+    ]) {
+      expect(await clean(word)).toBe(true);
+      expect(await clean(word, { allowProfanity: true })).toBe(true);
+    }
+  });
+
+  it('returns null for empty/clean input', async () => {
+    expect(await moderateTextContent([])).toBeNull();
+    expect(await moderateTextContent([null, undefined, ''])).toBeNull();
+    expect(await clean('Frisbee on the Oval')).toBe(true);
+  });
+
+  it('image moderation is a no-op pass-through (provider removed)', async () => {
+    expect(await moderateImageContent(Buffer.from('anything'), 'image/png')).toBeNull();
   });
 });

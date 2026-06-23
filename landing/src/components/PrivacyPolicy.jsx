@@ -171,9 +171,6 @@ export default function PrivacyPolicy() {
             Questions, privacy requests, or complaints can be sent to{' '}
             <Link href={`mailto:${EMAIL}`}>{EMAIL}</Link>.
           </p>
-          <p>
-            Brady Van Bibber, 10058 Cartgate Ct, Dublin, Ohio 43017, United States.
-          </p>
         </Section>
       </article>
     </div>

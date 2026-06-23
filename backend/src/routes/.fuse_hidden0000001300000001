@@ -1280,7 +1280,7 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
     res.status(400).json({ error: 'content is required' });
     return;
   }
-  const announcementModeration = await moderateTextContent([content], { allowProfanity: true });
+  const announcementModeration = await moderateTextContent([content]);
   if (announcementModeration) {
     res.status(announcementModeration.status).json({ error: announcementModeration.message });
     return;
@@ -1421,7 +1421,7 @@ router.post('/:id/outreach/send', requireAuth, async (req: AuthRequest, res: Res
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_OUTREACH_LENGTH} characters` });
     return;
   }
-  const outreachModeration = await moderateTextContent([trimmed], { allowProfanity: true });
+  const outreachModeration = await moderateTextContent([trimmed]);
   if (outreachModeration) {
     res.status(outreachModeration.status).json({ error: outreachModeration.message });
     return;
@@ -2080,7 +2080,7 @@ router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
     return;
   }
-  const clubMessageModeration = await moderateTextContent([trimmed], { allowProfanity: true });
+  const clubMessageModeration = await moderateTextContent([trimmed]);
   if (clubMessageModeration) {
     res.status(clubMessageModeration.status).json({ error: clubMessageModeration.message });
     return;
@@ -2202,7 +2202,7 @@ router.post('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: 
     res.status(400).json({ error: `Message too long (max ${MAX_CLUB_MESSAGE_LENGTH} characters)` });
     return;
   }
-  const officerMessageModeration = await moderateTextContent([content], { allowProfanity: true });
+  const officerMessageModeration = await moderateTextContent([content]);
   if (officerMessageModeration) {
     res.status(officerMessageModeration.status).json({ error: officerMessageModeration.message });
     return;
@@ -2549,7 +2549,7 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
     return;
   }
-  const moderation = await moderateTextContent([trimmed], { allowProfanity: true });
+  const moderation = await moderateTextContent([trimmed]);
   if (moderation) {
     res.status(moderation.status).json({ error: moderation.message });
     return;

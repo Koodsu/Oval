@@ -9,6 +9,7 @@ const SECRET_ENV = new Set([
   'CRON_SECRET',
   'ADMIN_REVIEW_SECRET',
   'SUPABASE_SERVICE_ROLE_KEY',
+  'OPENAI_API_KEY',
 ]);
 
 function looksLikePlaceholder(value: string): boolean {
