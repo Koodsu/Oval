@@ -391,7 +391,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
             <Card style={{ borderColor: colors.primary }}>
               <ListRow
                 icon="alert-circle-outline"
-                title={`${analytics.nonRsvpCount} member${analytics.nonRsvpCount === 1 ? " hasn't" : " haven't"} RSVP'd`}
+                title={`${analytics.nonRsvpCount} member${analytics.nonRsvpCount === 1 ? "" : "s"} ${analytics.nonRsvpCount === 1 ? "hasn't" : "haven't"} RSVP'd`}
                 sub={`${analytics.nextMeeting.title} · tap to nudge them`}
                 tint={colors.primarySoft}
                 onPress={openNonRsvpNudge}

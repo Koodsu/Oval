@@ -55,7 +55,7 @@ type Segment = 'mine' | 'discover';
 function meetingSignal(club: ClubDirectoryEntry, meeting?: ClubMeetingToday) {
   if (meeting) return `tonight ${formatTime(meeting.meetingTime)}`;
   if (club.upcomingMeetingCount) {
-    return `${club.upcomingMeetingCount} upcoming`;
+    return `${club.upcomingMeetingCount} upcoming meeting${club.upcomingMeetingCount === 1 ? '' : 's'}`;
   }
   return 'schedule pending';
 }

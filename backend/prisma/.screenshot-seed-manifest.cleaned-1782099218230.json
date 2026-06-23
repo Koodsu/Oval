@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-06-22T02:19:00.475Z",
+  "attachEmail": "vanbibber.21@osu.edu",
+  "users": [
+    "08332ccf-9d27-4c4f-b773-695b0e6df967",
+    "b79b2f46-9ae0-4dad-8dea-5983dc9f22d3",
+    "fabd29f6-1ba2-404b-9432-824c85fefc01",
+    "570186f1-c705-409e-b8a4-c6af1a0828c6",
+    "e1354170-dfb3-4457-8909-a565de994260",
+    "89c25b32-52a8-4a9b-8903-11ba926ca7f6",
+    "4b270e3f-7077-4cad-81b2-92618e6b2d27",
+    "64fc9a93-a44a-40c8-96c3-fc2437b3acb0"
+  ],
+  "activities": [
+    "c96b67f1-bb8a-4ce8-a2db-fe4b55f5c31c",
+    "6d0e25bc-e185-4bac-a3db-56750489cd12",
+    "6ac91208-87ac-4446-af44-e9483093277c",
+    "2e1ba4bd-fd91-498d-bc20-34d030cc45b6",
+    "e1f78494-4a9c-440f-a0bf-4e453b0b991b",
+    "ca81a896-b264-4ebd-b5db-7af4cccc4198"
+  ],
+  "pods": [
+    "227ca438-2496-425b-ab11-da9788528d4f",
+    "7263770e-a315-44a0-ae65-763bc612b00c",
+    "4f7927cf-70bc-4b73-bf0f-9ff625eb8b8b",
+    "fb7d782d-95d5-4f63-88d7-ce2f172dee3c",
+    "32d3661e-4355-436d-8e84-dd94bc2c0158"
+  ],
+  "clubs": [
+    "d1db0021-07ab-4d1b-95bb-ac890e005b89",
+    "e33c91cc-b397-4a13-9adf-04da4903b7bb",
+    "12063f70-9735-42e5-8bea-c8e82567a65b",
+    "70986930-0d4c-4316-85b5-b918e42fa9d7",
+    "7f73939e-feb2-4e3d-95ea-9a91e73d722a"
+  ],
+  "dmThreads": [
+    "51329eaf-2ac9-46e8-bbc8-27f2dfa6b872",
+    "29ddbb1e-644d-496f-b10e-74ad7a03156a"
+  ],
+  "friendships": [
+    "568d73a9-2db6-4c58-aa05-099e2e1fbbb8",
+    "49334ccb-23b9-456b-92a4-4b8468c0b5b8",
+    "149583e7-69ef-4950-919d-006618bca046",
+    "77e1c56c-9758-4b2b-a003-9e14ce99b635",
+    "cd03b728-24e7-46d8-a5bb-281c1a38e3d8",
+    "8a4b4469-42c4-48fe-a081-5e653e03b620"
+  ],
+  "friendRequests": []
+}
