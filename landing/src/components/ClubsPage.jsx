@@ -334,9 +334,7 @@ export default function ClubsPage() {
       <header className="sticky top-0 z-50 px-3 pt-3 md:px-6">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between border border-white/10 bg-ink/82 px-4 backdrop-blur-xl shadow-[0_14px_50px_rgba(0,0,0,0.28)] md:px-6">
           <Link to="/" className="flex items-center gap-3 no-underline">
-            <div className="grid h-7 w-7 place-items-center bg-scarlet">
-              <span className="font-display text-base leading-none text-white">B</span>
-            </div>
+            <img src="/oval-logo.png" alt="Oval" className="h-7 w-7 rounded-md" />
             <div className="flex flex-col">
               <span className="font-display text-2xl leading-none tracking-[0.12em] text-white">OVAL</span>
               <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-white/35 md:block">
@@ -640,9 +638,7 @@ export default function ClubsPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <div className="grid h-6 w-6 place-items-center bg-scarlet">
-                <span className="font-display text-sm leading-none text-white">B</span>
-              </div>
+              <img src="/oval-logo.png" alt="Oval" className="h-6 w-6 rounded-md" />
               <span className="font-display text-xl tracking-[0.12em] text-white">OVAL</span>
             </div>
             <p className="mt-2 text-xs tracking-wide text-white/30">Clubs work better when discovery and turnout are visible.</p>

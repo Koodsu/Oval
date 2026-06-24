@@ -10,9 +10,7 @@ export default function Footer() {
       <div className="relative mx-auto flex max-w-[1280px] flex-col items-start justify-between gap-8 md:flex-row md:items-center">
         <div>
           <div className="mb-3 flex items-center gap-2.5">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-flame to-scarlet shadow-[0_0_16px_rgba(187,0,0,0.4)]">
-              <span className="font-display text-[15px] font-bold leading-none text-white">B</span>
-            </div>
+            <img src="/oval-logo.png" alt="Oval" className="h-8 w-8 flex-shrink-0 rounded-xl shadow-[0_0_16px_rgba(187,0,0,0.4)]" />
             <span className="font-display text-lg font-bold tracking-tight text-white">oval</span>
           </div>
           <p className="text-[12px] text-white/30">

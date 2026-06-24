@@ -1161,6 +1161,7 @@ const fieldStyles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 15,
+    letterSpacing: -0.2,
     paddingVertical: 12,
   },
   meta: {
