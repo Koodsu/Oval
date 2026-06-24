@@ -48,12 +48,12 @@ export default function Nav() {
         }}
       >
         <a href="/" onClick={handleBrandClick} className="group flex items-center gap-2.5 no-underline">
-          <div
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-flame to-scarlet transition-shadow duration-300"
+          <img
+            src="/oval-logo.png"
+            alt="Oval"
+            className="h-8 w-8 flex-shrink-0 rounded-xl transition-shadow duration-300"
             style={{ boxShadow: scrolled ? '0 0 20px rgba(187,0,0,0.6)' : '0 0 12px rgba(187,0,0,0.35)' }}
-          >
-            <span className="font-display text-[15px] font-bold leading-none text-white">B</span>
-          </div>
+          />
           <span className="font-display text-lg font-bold tracking-tight text-white">oval</span>
         </a>
 

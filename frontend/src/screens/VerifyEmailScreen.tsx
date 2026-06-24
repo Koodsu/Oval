@@ -18,7 +18,7 @@ export default function VerifyEmailScreen() {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, signOut } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
@@ -113,6 +113,11 @@ export default function VerifyEmailScreen() {
               onPress={resend}
               loading={resending}
               disabled={resendCooldown > 0}
+              variant="ghost"
+            />
+            <Button
+              label="Use a different email"
+              onPress={() => void signOut()}
               variant="ghost"
             />
           </View>
