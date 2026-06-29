@@ -9,6 +9,7 @@ import { CURRENT_TERMS_VERSION } from '../config/legal';
 import { issueAuthToken } from '../lib/authSession';
 import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 import { hashEmailIdentity, normalizeEmail } from '../lib/identity';
+import { isPlatformAdmin } from '../middleware/admin';
 import {
   generateOneTimeCode,
   hashOneTimeCode,
@@ -66,6 +67,7 @@ function safeUser(user: {
     lastName: user.lastName,
     email: user.email,
     verifiedUniversity: user.verifiedUniversity,
+    isAdmin: isPlatformAdmin(user.id),
     avatarUrl: user.avatarUrl ?? null,
     joinedAt: user.createdAt.toISOString(),
     classYear: user.classYear ?? null,

@@ -8,6 +8,7 @@
     "userInterfaceStyle": "automatic",
     "scheme": "oval",
     "plugins": [
+      "@sentry/react-native/expo",
       [
         "expo-notifications",
         {
@@ -27,13 +28,15 @@
           "resizeMode": "contain",
           "backgroundColor": "#251018"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bradyvb.ovalapp",
       "associatedDomains": [
-        "applinks:www.theovalapp.com"
+        "applinks:www.theovalapp.com",
+        "applinks:theovalapp.com"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

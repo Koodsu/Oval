@@ -78,6 +78,7 @@ model User {
   clubFollows            ClubFollower[]
   clubClaims             ClubClaim[]
   clubApplications       ClubApplication[]
+  activityRequests       ActivityRequest[]
   analyticsEvents        AnalyticsEvent[]
 }
 
@@ -104,6 +105,24 @@ model Activity {
   createdAt       DateTime @default(now())
 
   pods Pod[]
+}
+
+model ActivityRequest {
+  id              String   @id @default(uuid())
+  userId          String
+  title           String
+  description     String?
+  category        String
+  defaultLocation String?
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewerId      String?
+  reviewNote      String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }
 
 // PodStatus values: "FORMING" | "LOCKED" | "COMPLETED"
@@ -475,6 +494,8 @@ model ClubChannel {
   description    String?
   /// JSON array of ClubRole ids; null/[] = every member (CUSTOM channels only)
   allowedRoleIds String?
+  /// JSON array of User ids; null/[] = no specific member gate (CUSTOM channels only)
+  allowedUserIds String?
   position       Int      @default(0)
   createdById    String?
   createdAt      DateTime @default(now())

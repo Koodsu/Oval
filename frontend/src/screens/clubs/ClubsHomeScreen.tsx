@@ -2,7 +2,6 @@ import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
-  Linking,
   RefreshControl,
   ScrollView,
   Text,
@@ -195,8 +194,8 @@ export default function ClubsHomeScreen() {
                 size={48}
                 color={colors.primary}
                 iconColor={colors.onPrimary}
-                onPress={() => void Linking.openURL('https://www.theovalapp.com/clubs')}
-                accessibilityLabel="List your club"
+                onPress={() => navigation.navigate('CreateClub')}
+                accessibilityLabel="Create a club"
               />
             </View>
             {warning ? <Banner message={warning} kind="info" /> : null}

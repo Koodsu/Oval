@@ -23,6 +23,9 @@ import { formatShortDate, formatTime } from '../../utils/format';
 
 /** Map a stored role color name to themed tint + ink colors. */
 export function roleAccent(colors: ThemeColors, color?: string | null): { tint: string; ink: string } {
+  if (color?.startsWith('#')) {
+    return { tint: color, ink: readableInk(color) };
+  }
   switch (color) {
     case 'scarlet':
       return { tint: colors.primarySoft, ink: colors.primary };
@@ -41,6 +44,17 @@ export function roleAccent(colors: ThemeColors, color?: string | null): { tint: 
     default:
       return { tint: colors.surfaceAlt, ink: colors.sub };
   }
+}
+
+function readableInk(hex: string): string {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!match) return '#FFFFFF';
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 165 ? '#111827' : '#FFFFFF';
 }
 
 export function channelIcon(kind: ClubChannelRow['kind']): keyof typeof Ionicons.glyphMap {
@@ -68,7 +82,10 @@ export function ChannelRow({
   fallbackSub?: string;
 }) {
   const { colors, typography } = useTheme();
-  const locked = channel.kind === 'OFFICERS' || channel.allowedRoleIds.length > 0;
+  const locked =
+    channel.kind === 'OFFICERS' ||
+    channel.allowedRoleIds.length > 0 ||
+    (channel.allowedUserIds?.length ?? 0) > 0;
   return (
     <Pressable
       onPress={onPress}
@@ -376,7 +393,7 @@ export function MemberRow({
       <View style={styles.grow}>
         <Text style={typography.subheading} numberOfLines={1}>{member.user.name}</Text>
         <Text style={typography.captionSmall} numberOfLines={1}>
-          {member.role !== 'MEMBER' ? member.role : member.user.major ?? 'Member'}
+          {member.role !== 'MEMBER' ? member.role : 'Member'}
           {tags ? ` · ${tags}` : ''}
         </Text>
       </View>

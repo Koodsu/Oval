@@ -9,12 +9,16 @@ function getAdminUserIds(): string[] {
     .filter(Boolean);
 }
 
+export function isPlatformAdmin(userId: string): boolean {
+  return getAdminUserIds().includes(userId);
+}
+
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
   if (!req.user) {
     res.status(401).json({ error: 'Authentication required' });
     return;
   }
-  if (!getAdminUserIds().includes(req.user.userId)) {
+  if (!isPlatformAdmin(req.user.userId)) {
     res.status(403).json({ error: 'Admin access required' });
     return;
   }

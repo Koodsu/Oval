@@ -18,6 +18,7 @@ export interface User {
   lastName?: string;
   email: string;
   verifiedUniversity: boolean;
+  isAdmin?: boolean;
   avatarUrl?: string | null;
   joinedAt: string;
   classYear?: string | null;
@@ -142,6 +143,21 @@ export interface Activity {
   _count?: { pods: number };
 }
 
+export interface ActivityRequest {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  category: string;
+  defaultLocation: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewerId?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+  requester?: { id: string; name: string };
+  user?: { id: string; name: string };
+}
+
 /** Row from GET /clubs */
 export interface ClubDirectoryEntry {
   id: string;
@@ -198,6 +214,7 @@ export interface ClubChannelRow {
   name: string;
   description: string | null;
   allowedRoleIds: string[];
+  allowedUserIds: string[];
   position: number;
   createdAt: string;
   unreadCount: number;
@@ -274,7 +291,7 @@ export interface ClubMemberWithUser {
   }>;
 }
 
-export type ClubRoleColor =
+export type NamedClubRoleColor =
   | 'scarlet'
   | 'blue'
   | 'green'
@@ -282,6 +299,8 @@ export type ClubRoleColor =
   | 'pink'
   | 'violet'
   | 'teal';
+
+export type ClubRoleColor = NamedClubRoleColor | `#${string}`;
 
 export interface ClubRole {
   id: string;
@@ -349,6 +368,57 @@ export interface GetClubAnnouncementsResponse {
 }
 
 /** GET /clubs/:id */
+export interface ClubClaim {
+  id: string;
+  method: string;
+  handleOrEmail: string;
+  challengeCode: string;
+  status: string;
+  expiresAt: string;
+  instructions: string;
+}
+
+export interface ClubInvite {
+  id: string;
+  code: string;
+  maxUses: number | null;
+  expiresAt: string | null;
+}
+
+export type ApplicationStage = 'APPLIED' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+
+export interface ClubApplicationCycle {
+  id: string;
+  title: string;
+  questions: string[];
+  status: 'OPEN' | 'CLOSED' | 'DRAFT';
+  opensAt: string | null;
+  closesAt: string | null;
+  createdAt: string;
+  applicationCount: number;
+}
+
+export interface ApplyInfo {
+  joinPolicy: string;
+  isMember: boolean;
+  openCycle: ClubApplicationCycle | null;
+  myApplication: { id: string; stage: ApplicationStage } | null;
+}
+
+export interface ClubApplicationRow {
+  id: string;
+  stage: ApplicationStage;
+  reviewNote: string | null;
+  createdAt: string;
+  answers: string[];
+  user: { id: string; name: string; avatarUrl?: string | null; major?: string | null; classYear?: string | null };
+}
+
+export interface CycleApplications {
+  cycle: ClubApplicationCycle;
+  applications: ClubApplicationRow[];
+}
+
 export interface ClubDetail {
   id: string;
   name: string;
@@ -358,6 +428,12 @@ export interface ClubDetail {
   avatarUrl?: string | null;
   isVerified: boolean;
   isPublic: boolean;
+  verification?: string;
+  joinPolicy?: string;
+  isDiscoverable?: boolean;
+  status?: string;
+  followerCount?: number;
+  isFollower?: boolean;
   officerPermissions: string[];
   university: string;
   createdById: string;

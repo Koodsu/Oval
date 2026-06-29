@@ -139,6 +139,21 @@ const CLAIM_STATUS_PENDING = 'PENDING';
 const CLAIM_STATUS_PROOF_SENT = 'PROOF_SENT';
 const CLAIM_EXPIRY_HOURS = 24;
 
+const CYCLE_STATUS_OPEN = 'OPEN';
+const CYCLE_STATUS_CLOSED = 'CLOSED';
+const APP_STAGE_APPLIED = 'APPLIED';
+const APP_STAGE_INTERVIEW = 'INTERVIEW';
+const APP_STAGE_ACCEPTED = 'ACCEPTED';
+const APP_STAGE_REJECTED = 'REJECTED';
+const APP_STAGE_WITHDRAWN = 'WITHDRAWN';
+const APP_STAGES = new Set([
+  APP_STAGE_APPLIED,
+  APP_STAGE_INTERVIEW,
+  APP_STAGE_ACCEPTED,
+  APP_STAGE_REJECTED,
+  APP_STAGE_WITHDRAWN,
+]);
+
 const RSVP_GOING = 'GOING';
 const RSVP_MAYBE = 'MAYBE';
 const RSVP_NOT_GOING = 'NOT_GOING';
@@ -162,6 +177,7 @@ const CHANNEL_CUSTOM = 'CUSTOM';
 
 /** Named accents from the mobile palette. */
 const ROLE_COLORS = new Set(['scarlet', 'blue', 'green', 'amber', 'pink', 'violet', 'teal']);
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const RSVP_REMINDER_COOLDOWN_MS = 15 * 60 * 1000;
 const OUTREACH_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -317,6 +333,15 @@ async function parseAndValidateTargetRoleIds(clubId: string, raw: unknown): Prom
   return count === ids.length ? ids : null;
 }
 
+async function parseAndValidateTargetUserIds(clubId: string, raw: unknown): Promise<string[] | null> {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.some((item) => typeof item !== 'string')) return null;
+  const ids = Array.from(new Set(raw.map((item) => item.trim()).filter(Boolean)));
+  if (ids.length === 0) return [];
+  const count = await prisma.clubMember.count({ where: { clubId, userId: { in: ids } } });
+  return count === ids.length ? ids : null;
+}
+
 function parseVisibility(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const normalized = raw.trim().toUpperCase();
@@ -446,6 +471,7 @@ type ChannelRecord = {
   name: string;
   description: string | null;
   allowedRoleIds: string | null;
+  allowedUserIds: string | null;
   position: number;
   createdAt: Date;
   updatedAt: Date;
@@ -453,6 +479,7 @@ type ChannelRecord = {
 
 type MembershipWithRoles = {
   id: string;
+  userId: string;
   role: string;
   joinedAt: Date;
   club?: { officerPermissions?: string | null };
@@ -552,8 +579,58 @@ function normalizeInstagramHandle(raw: string): string {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const APPLICANT_SELECT = {
+  id: true,
+  name: true,
+  avatarUrl: true,
+  major: true,
+  classYear: true,
+} as const;
+
+/** Officer-or-higher membership, or null. */
+async function getOfficerMembership(clubId: string, userId: string) {
+  const membership = await prisma.clubMember.findUnique({
+    where: { clubId_userId: { clubId, userId } },
+  });
+  return membership && roleRank(membership.role) >= roleRank(ROLE_OFFICER) ? membership : null;
+}
+
+/** Parse a JSON string array (questions/answers), tolerating bad data. */
+function parseJsonStringArray(raw: string): string[] {
+  try {
+    const value = JSON.parse(raw);
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function serializeCycle(
+  cycle: {
+    id: string;
+    title: string;
+    questionsJson: string;
+    status: string;
+    opensAt: Date | null;
+    closesAt: Date | null;
+    createdAt: Date;
+  },
+  applicationCount: number
+) {
+  return {
+    id: cycle.id,
+    title: cycle.title,
+    questions: parseJsonStringArray(cycle.questionsJson),
+    status: cycle.status,
+    opensAt: cycle.opensAt,
+    closesAt: cycle.closesAt,
+    createdAt: cycle.createdAt,
+    applicationCount,
+  };
+}
+
 function canSeeChannel(
-  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds'>,
+  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds' | 'allowedUserIds'>,
   membership: MembershipWithRoles | null,
   myRoleIds: Set<string>
 ): boolean {
@@ -561,14 +638,15 @@ function canSeeChannel(
   if (!membership) return false;
   if (channel.kind === CHANNEL_GENERAL) return true;
   if (channel.kind === CHANNEL_OFFICERS) return roleRank(membership.role) >= roleRank(ROLE_OFFICER);
-  const allowed = parseStringList(channel.allowedRoleIds);
-  if (allowed.length === 0) return true;
+  const allowedRoles = parseStringList(channel.allowedRoleIds);
+  const allowedUsers = parseStringList(channel.allowedUserIds);
+  if (allowedRoles.length === 0 && allowedUsers.length === 0) return true;
   if (roleRank(membership.role) >= roleRank(ROLE_OFFICER)) return true;
-  return allowed.some((roleId) => myRoleIds.has(roleId));
+  return allowedUsers.includes(membership.userId) || allowedRoles.some((roleId) => myRoleIds.has(roleId));
 }
 
 function canPostToChannel(
-  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds'>,
+  channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds' | 'allowedUserIds'>,
   membership: MembershipWithRoles | null,
   myRoleIds: Set<string>
 ): boolean {
@@ -728,6 +806,7 @@ function serializeChannel(channel: ChannelRecord) {
     name: channel.name,
     description: channel.description,
     allowedRoleIds: parseStringList(channel.allowedRoleIds),
+    allowedUserIds: parseStringList(channel.allowedUserIds),
     position: channel.position,
     createdAt: channel.createdAt,
   };
@@ -954,6 +1033,7 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
         const myRoleIds = roleIdsByClub.get(row.clubId) ?? new Set<string>();
         const membershipLike = {
           id: row.id,
+          userId: row.userId,
           role: row.role,
           joinedAt: row.joinedAt,
           customRoles: Array.from(myRoleIds).map((roleId) => ({ roleId })),
@@ -1135,8 +1215,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     res.status(400).json({ error: 'category is required' });
     return;
   }
-  if (typeof emoji !== 'string' || !emoji.trim()) {
-    res.status(400).json({ error: 'emoji is required' });
+  // Emoji is optional — an empty emoji renders the club's initials instead.
+  if (emoji !== undefined && emoji !== null && typeof emoji !== 'string') {
+    res.status(400).json({ error: 'emoji must be a string' });
     return;
   }
   const clubModeration = await moderateTextContent([name, description]);
@@ -1151,7 +1232,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const createAllowed = await consumeDurableRateLimit({
     action: 'club_create',
     identifiers: [userId],
-    limit: 2,
+    limit: 1,
     windowMs: 24 * 60 * 60 * 1000,
   });
   if (!createAllowed) {
@@ -1185,7 +1266,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
           name: trimmedName,
           description: description.trim(),
           category: category.trim(),
-          emoji: emoji.trim(),
+          emoji: typeof emoji === 'string' ? emoji.trim() : '',
           isPublic: false,
           isDiscoverable: false,
           verification: VERIFICATION_UNVERIFIED,
@@ -2442,7 +2523,7 @@ router.get('/:id/channels', requireAuth, async (req: AuthRequest, res: Response)
 router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
-  const { name, description, allowedRoleIds } = req.body ?? {};
+  const { name, description, allowedRoleIds, allowedUserIds } = req.body ?? {};
 
   const trimmedName = typeof name === 'string' ? name.trim() : '';
   const trimmedDescription = typeof description === 'string' ? description.trim() : '';
@@ -2476,6 +2557,11 @@ router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response
       res.status(400).json({ error: 'allowedRoleIds contains invalid roles' });
       return;
     }
+    const targetUserIds = await parseAndValidateTargetUserIds(clubId, allowedUserIds);
+    if (targetUserIds === null) {
+      res.status(400).json({ error: 'allowedUserIds contains invalid members' });
+      return;
+    }
 
     const channels = await ensureClubChannels(clubId);
     const customCount = channels.filter((channel) => channel.kind === CHANNEL_CUSTOM).length;
@@ -2492,6 +2578,7 @@ router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response
         name: trimmedName,
         description: trimmedDescription || null,
         allowedRoleIds: targetIds.length ? stringifyStringList(targetIds) : null,
+        allowedUserIds: targetUserIds.length ? stringifyStringList(targetUserIds) : null,
         position: Math.max(maxPosition + 1, 10),
         createdById: userId,
       },
@@ -2511,7 +2598,7 @@ router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response
 router.patch('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId, channelId } = req.params;
-  const { name, description, allowedRoleIds } = req.body ?? {};
+  const { name, description, allowedRoleIds, allowedUserIds } = req.body ?? {};
 
   try {
     const membership = await getMembershipWithRoles(clubId, userId);
@@ -2530,7 +2617,12 @@ router.patch('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, r
       return;
     }
 
-    const data: { name?: string; description?: string | null; allowedRoleIds?: string | null } = {};
+    const data: {
+      name?: string;
+      description?: string | null;
+      allowedRoleIds?: string | null;
+      allowedUserIds?: string | null;
+    } = {};
     if (name !== undefined) {
       const trimmedName = typeof name === 'string' ? name.trim() : '';
       if (!trimmedName || trimmedName.length > MAX_CHANNEL_NAME_LENGTH) {
@@ -2559,6 +2651,14 @@ router.patch('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, r
         return;
       }
       data.allowedRoleIds = targetIds.length ? stringifyStringList(targetIds) : null;
+    }
+    if (allowedUserIds !== undefined) {
+      const targetUserIds = await parseAndValidateTargetUserIds(clubId, allowedUserIds);
+      if (targetUserIds === null) {
+        res.status(400).json({ error: 'allowedUserIds contains invalid members' });
+        return;
+      }
+      data.allowedUserIds = targetUserIds.length ? stringifyStringList(targetUserIds) : null;
     }
 
     const channel = await prisma.clubChannel.update({ where: { id: channelId }, data });
@@ -2890,8 +2990,14 @@ function parseRoleColor(raw: unknown): string | null | undefined | false {
   if (raw === undefined) return undefined;
   if (raw === null || raw === '') return null;
   if (typeof raw !== 'string') return false;
-  const normalized = raw.trim().toLowerCase();
+  const trimmed = raw.trim();
+  if (HEX_COLOR_RE.test(trimmed)) return trimmed;
+  const normalized = trimmed.toLowerCase();
   return ROLE_COLORS.has(normalized) ? normalized : false;
+}
+
+function roleColorError(): string {
+  return 'color must be a named color or #RRGGBB hex value. Named colors: ' + Array.from(ROLE_COLORS).join(', ');
 }
 
 // POST /clubs/:id/roles — create a named member tag
@@ -2911,7 +3017,7 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
   }
   const parsedColor = parseRoleColor(color);
   if (parsedColor === false) {
-    res.status(400).json({ error: 'color must be one of: ' + Array.from(ROLE_COLORS).join(', ') });
+    res.status(400).json({ error: roleColorError() });
     return;
   }
   const roleModeration = await moderateTextContent([trimmedName]);
@@ -2978,7 +3084,7 @@ router.patch('/:id/roles/:roleId', requireAuth, async (req: AuthRequest, res: Re
 
   const parsedColor = parseRoleColor(color);
   if (parsedColor === false) {
-    res.status(400).json({ error: 'color must be one of: ' + Array.from(ROLE_COLORS).join(', ') });
+    res.status(400).json({ error: roleColorError() });
     return;
   }
   if (parsedColor !== undefined) data.color = parsedColor;
@@ -4079,5 +4185,312 @@ router.post(
     }
   }
 );
+
+// ── Club applications (joinPolicy = APPLICATION) ──────────────────────────────
+
+// POST /clubs/:id/application-cycles — officer opens a new application cycle
+router.post('/:id/application-cycles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const body = req.body ?? {};
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const questions: string[] = Array.isArray(body.questions)
+    ? body.questions
+        .map((q: unknown) => (typeof q === 'string' ? q.trim() : ''))
+        .filter((q: string) => q.length > 0)
+    : [];
+
+  if (!title) {
+    res.status(400).json({ error: 'title is required' });
+    return;
+  }
+  if (!questions.length) {
+    res.status(400).json({ error: 'Add at least one application question' });
+    return;
+  }
+
+  try {
+    if (!(await getOfficerMembership(clubId, userId))) {
+      res.status(403).json({ error: 'Only officers and admins can manage applications' });
+      return;
+    }
+    const cycle = await prisma.$transaction(async (tx) => {
+      // Only one open cycle at a time.
+      await tx.clubApplicationCycle.updateMany({
+        where: { clubId, status: CYCLE_STATUS_OPEN },
+        data: { status: CYCLE_STATUS_CLOSED },
+      });
+      const created = await tx.clubApplicationCycle.create({
+        data: {
+          clubId,
+          title,
+          questionsJson: JSON.stringify(questions),
+          status: CYCLE_STATUS_OPEN,
+          opensAt: new Date(),
+        },
+      });
+      await tx.club.update({ where: { id: clubId }, data: { joinPolicy: JOIN_APPLICATION } });
+      return created;
+    });
+    res.status(201).json(serializeCycle(cycle, 0));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /clubs/:id/application-cycles/:cycleId — officer edits/opens/closes a cycle
+router.patch('/:id/application-cycles/:cycleId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, cycleId } = req.params;
+  const body = req.body ?? {};
+
+  try {
+    if (!(await getOfficerMembership(clubId, userId))) {
+      res.status(403).json({ error: 'Only officers and admins can manage applications' });
+      return;
+    }
+    const cycle = await prisma.clubApplicationCycle.findFirst({ where: { id: cycleId, clubId } });
+    if (!cycle) {
+      res.status(404).json({ error: 'Application cycle not found' });
+      return;
+    }
+
+    const data: { title?: string; questionsJson?: string; status?: string } = {};
+    if (typeof body.title === 'string' && body.title.trim()) data.title = body.title.trim();
+    if (Array.isArray(body.questions)) {
+      const qs = body.questions
+        .map((q: unknown) => (typeof q === 'string' ? q.trim() : ''))
+        .filter((q: string) => q.length > 0);
+      if (qs.length) data.questionsJson = JSON.stringify(qs);
+    }
+    let reopen = false;
+    if (typeof body.status === 'string') {
+      const status = body.status.toUpperCase();
+      if (status !== CYCLE_STATUS_OPEN && status !== CYCLE_STATUS_CLOSED) {
+        res.status(400).json({ error: 'status must be OPEN or CLOSED' });
+        return;
+      }
+      data.status = status;
+      reopen = status === CYCLE_STATUS_OPEN;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (reopen) {
+        await tx.clubApplicationCycle.updateMany({
+          where: { clubId, status: CYCLE_STATUS_OPEN, id: { not: cycleId } },
+          data: { status: CYCLE_STATUS_CLOSED },
+        });
+      }
+      return tx.clubApplicationCycle.update({ where: { id: cycleId }, data });
+    });
+    const count = await prisma.clubApplication.count({ where: { cycleId } });
+    res.json(serializeCycle(updated, count));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /clubs/:id/application-cycles — officer lists cycles with applicant counts
+router.get('/:id/application-cycles', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  try {
+    if (!(await getOfficerMembership(clubId, userId))) {
+      res.status(403).json({ error: 'Only officers and admins can manage applications' });
+      return;
+    }
+    const cycles = await prisma.clubApplicationCycle.findMany({
+      where: { clubId },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { applications: true } } },
+    });
+    res.json(cycles.map((c) => serializeCycle(c, c._count.applications)));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /clubs/:id/apply — applicant view: the open cycle + my application
+router.get('/:id/apply', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  try {
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { id: true, status: true, joinPolicy: true },
+    });
+    if (!club || club.status === CLUB_STATUS_ARCHIVED) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+    const openCycle = await prisma.clubApplicationCycle.findFirst({
+      where: { clubId, status: CYCLE_STATUS_OPEN },
+      orderBy: { createdAt: 'desc' },
+    });
+    const [myApplication, membership] = await Promise.all([
+      openCycle
+        ? prisma.clubApplication.findUnique({
+            where: { cycleId_userId: { cycleId: openCycle.id, userId } },
+          })
+        : Promise.resolve(null),
+      prisma.clubMember.findUnique({ where: { clubId_userId: { clubId, userId } } }),
+    ]);
+    res.json({
+      joinPolicy: club.joinPolicy,
+      isMember: !!membership,
+      openCycle: openCycle ? serializeCycle(openCycle, 0) : null,
+      myApplication: myApplication ? { id: myApplication.id, stage: myApplication.stage } : null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/application-cycles/:cycleId/apply — submit an application
+router.post(
+  '/:id/application-cycles/:cycleId/apply',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, cycleId } = req.params;
+    const body = req.body ?? {};
+    const answers: string[] | null = Array.isArray(body.answers)
+      ? body.answers.map((a: unknown) => (typeof a === 'string' ? a : ''))
+      : null;
+    if (!answers) {
+      res.status(400).json({ error: 'answers are required' });
+      return;
+    }
+
+    try {
+      const cycle = await prisma.clubApplicationCycle.findFirst({ where: { id: cycleId, clubId } });
+      if (!cycle) {
+        res.status(404).json({ error: 'Application cycle not found' });
+        return;
+      }
+      if (cycle.status !== CYCLE_STATUS_OPEN) {
+        res.status(409).json({ error: 'Applications are closed.' });
+        return;
+      }
+      const member = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (member) {
+        res.status(400).json({ error: 'You are already a member of this club.' });
+        return;
+      }
+      const existing = await prisma.clubApplication.findUnique({
+        where: { cycleId_userId: { cycleId, userId } },
+      });
+      if (existing) {
+        res.status(409).json({ error: 'You have already applied.', stage: existing.stage });
+        return;
+      }
+      const application = await prisma.clubApplication.create({
+        data: { cycleId, userId, answersJson: JSON.stringify(answers), stage: APP_STAGE_APPLIED },
+      });
+      res.status(201).json({ id: application.id, stage: application.stage });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// GET /clubs/:id/application-cycles/:cycleId/applications — officer applicant pipeline
+router.get(
+  '/:id/application-cycles/:cycleId/applications',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, cycleId } = req.params;
+    try {
+      if (!(await getOfficerMembership(clubId, userId))) {
+        res.status(403).json({ error: 'Only officers and admins can manage applications' });
+        return;
+      }
+      const cycle = await prisma.clubApplicationCycle.findFirst({ where: { id: cycleId, clubId } });
+      if (!cycle) {
+        res.status(404).json({ error: 'Application cycle not found' });
+        return;
+      }
+      const apps = await prisma.clubApplication.findMany({
+        where: { cycleId },
+        orderBy: { createdAt: 'asc' },
+        include: { user: { select: APPLICANT_SELECT } },
+      });
+      res.json({
+        cycle: serializeCycle(cycle, apps.length),
+        applications: apps.map((a) => ({
+          id: a.id,
+          stage: a.stage,
+          reviewNote: a.reviewNote,
+          createdAt: a.createdAt,
+          answers: parseJsonStringArray(a.answersJson),
+          user: a.user,
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// PATCH /clubs/:id/applications/:applicationId — officer moves stage (accept -> member)
+router.patch('/:id/applications/:applicationId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId, applicationId } = req.params;
+  const body = req.body ?? {};
+  const stage = typeof body.stage === 'string' ? body.stage.toUpperCase() : '';
+  const reviewNote =
+    typeof body.reviewNote === 'string' ? body.reviewNote.trim().slice(0, 500) || null : undefined;
+
+  if (!APP_STAGES.has(stage)) {
+    res.status(400).json({ error: 'Invalid application stage' });
+    return;
+  }
+
+  try {
+    if (!(await getOfficerMembership(clubId, userId))) {
+      res.status(403).json({ error: 'Only officers and admins can manage applications' });
+      return;
+    }
+    const application = await prisma.clubApplication.findFirst({
+      where: { id: applicationId, cycle: { clubId } },
+    });
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.clubApplication.update({
+        where: { id: application.id },
+        data: { stage, ...(reviewNote !== undefined ? { reviewNote } : {}) },
+      });
+      if (stage === APP_STAGE_ACCEPTED) {
+        const existing = await tx.clubMember.findUnique({
+          where: { clubId_userId: { clubId, userId: application.userId } },
+        });
+        if (!existing) {
+          await tx.clubMember.create({
+            data: { clubId, userId: application.userId, role: ROLE_MEMBER },
+          });
+        }
+      }
+    });
+    if (stage === APP_STAGE_ACCEPTED) await maybeAutoEnableDiscovery(clubId);
+
+    res.json({ ok: true, stage });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;
