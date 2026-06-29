@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, Share, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import {
   API_USER_MESSAGE,
   createClubChannel,
@@ -22,7 +23,7 @@ import {
   type ClubOutreachPreview,
 } from '../../api';
 import type { RootStackParamList } from '../../../App';
-import type { ClubChannelRow, ClubRole, ClubRoleColor } from '../../types';
+import type { ClubChannelRow, ClubMemberWithUser, ClubRole, ClubRoleColor, NamedClubRoleColor } from '../../types';
 import {
   AppBackdrop,
   Banner,
@@ -51,7 +52,7 @@ import { spacing, useTheme } from '../../theme';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubManage'>;
 type Panel = 'profile' | 'roles' | 'channels' | 'permissions' | 'outreach' | null;
 
-const ROLE_COLOR_OPTIONS: Array<ClubRoleColor> = [
+const ROLE_COLOR_OPTIONS: Array<NamedClubRoleColor> = [
   'scarlet',
   'blue',
   'green',
@@ -60,6 +61,70 @@ const ROLE_COLOR_OPTIONS: Array<ClubRoleColor> = [
   'violet',
   'teal',
 ];
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+function MemberPicker({
+  members,
+  selectedUserIds,
+  onChange,
+}: {
+  members: ClubMemberWithUser[];
+  selectedUserIds: string[];
+  onChange: (userIds: string[]) => void;
+}) {
+  const { colors, typography } = useTheme();
+  if (!members.length) return null;
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text style={typography.kicker}>SPECIFIC MEMBERS · OPTIONAL</Text>
+      <View style={{ gap: spacing.xs }}>
+        {members.map((member) => {
+          const selected = selectedUserIds.includes(member.userId);
+          return (
+            <Pressable
+              key={member.userId}
+              onPress={() =>
+                onChange(
+                  selected
+                    ? selectedUserIds.filter((id) => id !== member.userId)
+                    : [...selectedUserIds, member.userId],
+                )
+              }
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={member.user.name}
+              style={({ pressed }) => [
+                {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  paddingVertical: spacing.sm,
+                  paddingHorizontal: spacing.sm,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: selected ? colors.primary : colors.border,
+                  backgroundColor: selected ? colors.primarySoft : colors.surface,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons
+                name={selected ? 'checkbox' : 'square-outline'}
+                size={21}
+                color={selected ? colors.primary : colors.faint}
+              />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={typography.subheading} numberOfLines={1}>{member.user.name}</Text>
+                <Text style={typography.captionSmall} numberOfLines={1}>{member.role}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function ClubManageScreen({ route, navigation }: Props) {
   const { clubId } = route.params;
@@ -85,6 +150,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
   // Role editor state
   const [roleName, setRoleName] = useState('');
   const [roleColor, setRoleColor] = useState<ClubRoleColor | null>(null);
+  const [roleHex, setRoleHex] = useState('');
   const [roleSelfAssign, setRoleSelfAssign] = useState(false);
   const [editingRole, setEditingRole] = useState<ClubRole | null>(null);
 
@@ -92,6 +158,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
   const [channelName, setChannelName] = useState('');
   const [channelDescription, setChannelDescription] = useState('');
   const [channelRoleIds, setChannelRoleIds] = useState<string[]>([]);
+  const [channelUserIds, setChannelUserIds] = useState<string[]>([]);
   const [editingChannel, setEditingChannel] = useState<ClubChannelRow | null>(null);
 
   const [outreachText, setOutreachText] = useState('');
@@ -202,6 +269,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     setEditingRole(null);
     setRoleName('');
     setRoleColor(null);
+    setRoleHex('');
     setRoleSelfAssign(false);
   };
 
@@ -209,23 +277,30 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     setEditingRole(role);
     setRoleName(role.name);
     setRoleColor(role.color ?? null);
+    setRoleHex(role.color?.startsWith('#') ? role.color : '');
     setRoleSelfAssign(Boolean(role.isSelfAssignable));
   };
 
   const saveRole = async () => {
     if (!roleName.trim()) return;
+    const trimmedHex = roleHex.trim();
+    if (trimmedHex && !HEX_COLOR_RE.test(trimmedHex)) {
+      Alert.alert('Check the hex color', 'Use a 6-digit color like #1E90FF.');
+      return;
+    }
+    const color = trimmedHex ? (trimmedHex as ClubRoleColor) : roleColor;
     setBusy(true);
     try {
       if (editingRole) {
         await updateClubRole(clubId, editingRole.id, {
           name: roleName.trim(),
-          color: roleColor,
+          color,
           isSelfAssignable: roleSelfAssign,
         });
       } else {
         await createClubRole(clubId, {
           name: roleName.trim(),
-          color: roleColor,
+          color,
           isSelfAssignable: roleSelfAssign,
         });
       }
@@ -244,6 +319,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     setChannelName('');
     setChannelDescription('');
     setChannelRoleIds([]);
+    setChannelUserIds([]);
   };
 
   const startEditChannel = (channel: ClubChannelRow) => {
@@ -251,6 +327,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     setChannelName(channel.name);
     setChannelDescription(channel.description ?? '');
     setChannelRoleIds(channel.allowedRoleIds);
+    setChannelUserIds(channel.allowedUserIds ?? []);
   };
 
   const saveChannel = async () => {
@@ -262,6 +339,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
           name: channelName.trim(),
           description: channelDescription.trim(),
           allowedRoleIds: channelRoleIds,
+          allowedUserIds: channelUserIds,
         });
         setChannels((current) =>
           current.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
@@ -271,6 +349,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
           name: channelName.trim(),
           description: channelDescription.trim() || undefined,
           allowedRoleIds: channelRoleIds,
+          allowedUserIds: channelUserIds,
         });
         setChannels((current) => [
           ...current,
@@ -438,9 +517,17 @@ export default function ClubManageScreen({ route, navigation }: Props) {
             ) : null}
             {can('MANAGE_CLUB') ? (
               <ListRow
+                icon="document-text-outline"
+                title="Applications"
+                sub="Open an application cycle and review applicants"
+                onPress={() => navigation.navigate('ClubApplications', { clubId })}
+              />
+            ) : null}
+            {can('MANAGE_CLUB') ? (
+              <ListRow
                 icon="chatbubbles-outline"
                 title="Channels"
-                sub={`${customChannels.length} custom channel${customChannels.length === 1 ? '' : 's'} · role-gated chat spaces`}
+                sub={`${customChannels.length} custom channel${customChannels.length === 1 ? '' : 's'} · private chat spaces`}
                 onPress={() => {
                   resetChannelEditor();
                   setPanel('channels');
@@ -556,13 +643,45 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                 return (
                   <Chip
                     key={color}
-                    label={color}
+                    label={color.charAt(0).toUpperCase() + color.slice(1)}
                     selected={roleColor === color}
                     tint={accent.tint}
-                    onPress={() => setRoleColor(roleColor === color ? null : color)}
+                    onPress={() => {
+                      setRoleHex('');
+                      setRoleColor(roleColor === color ? null : color);
+                    }}
                   />
                 );
               })}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+              <Field
+                label="HEX"
+                value={roleHex}
+                onChangeText={(value) => {
+                  const trimmed = value.trim();
+                  setRoleHex(value);
+                  if (!trimmed) {
+                    if (roleColor?.startsWith('#')) setRoleColor(null);
+                    return;
+                  }
+                  if (HEX_COLOR_RE.test(trimmed)) setRoleColor(trimmed as ClubRoleColor);
+                }}
+                placeholder="#1E90FF"
+                autoCapitalize="characters"
+                error={roleHex.trim() && !HEX_COLOR_RE.test(roleHex.trim()) ? 'Use #RRGGBB' : null}
+                style={{ flex: 1 }}
+              />
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: roleColor?.startsWith('#') ? roleColor : roleAccent(colors, roleColor).tint,
+                }}
+              />
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -628,8 +747,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       <Sheet visible={panel === 'channels'} onClose={() => setPanel(null)} title="Channels" scrollable>
         <View style={{ gap: spacing.md }}>
           <Text style={typography.caption}>
-            Custom channels are members-only chat spaces. Gate one to specific roles to make it
-            private — officers can always see every channel.
+            Custom channels are members-only chat spaces. Gate one to roles or specific members.
           </Text>
           <Field
             label={editingChannel ? `Editing #${editingChannel.name}` : 'New channel'}
@@ -646,6 +764,11 @@ export default function ClubManageScreen({ route, navigation }: Props) {
             roles={club.roles ?? []}
             selectedRoleIds={channelRoleIds}
             onChange={setChannelRoleIds}
+          />
+          <MemberPicker
+            members={club.members}
+            selectedUserIds={channelUserIds}
+            onChange={setChannelUserIds}
           />
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {editingChannel ? (
@@ -664,6 +787,11 @@ export default function ClubManageScreen({ route, navigation }: Props) {
               .map((roleId) => (club.roles ?? []).find((role) => role.id === roleId)?.name)
               .filter(Boolean)
               .join(', ');
+            const memberCount = channel.allowedUserIds?.length ?? 0;
+            const gateSummary = [
+              gatedNames ? `Roles: ${gatedNames}` : null,
+              memberCount ? `${memberCount} member${memberCount === 1 ? '' : 's'}` : null,
+            ].filter(Boolean).join(' · ');
             return (
               <Card key={channel.id}>
                 <ListRow
@@ -671,8 +799,8 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   title={channel.name}
                   sub={
                     isCustom
-                      ? gatedNames
-                        ? `Only: ${gatedNames}`
+                      ? gateSummary
+                        ? `Only: ${gateSummary}`
                         : 'All members'
                       : 'Built-in channel'
                   }

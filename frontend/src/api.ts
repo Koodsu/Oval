@@ -327,6 +327,36 @@ export const getActivities = (category?: string, signal?: AbortSignal) =>
     signal
   );
 
+export const requestActivity = (body: {
+  title: string;
+  category: string;
+  description?: string;
+  defaultLocation?: string;
+}) =>
+  request<import('./types').ActivityRequest>('/activities/requests', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const getAdminActivityRequests = (signal?: AbortSignal) =>
+  request<{ requests: import('./types').ActivityRequest[] }>(
+    '/admin/activity-requests',
+    {},
+    signal
+  );
+
+export const approveActivityRequest = (requestId: string) =>
+  request<{ request: import('./types').ActivityRequest; activity: import('./types').Activity }>(
+    `/admin/activity-requests/${encodeURIComponent(requestId)}/approve`,
+    { method: 'POST' }
+  );
+
+export const rejectActivityRequest = (requestId: string, reviewNote?: string) =>
+  request<{ request: import('./types').ActivityRequest }>(
+    `/admin/activity-requests/${encodeURIComponent(requestId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reviewNote }) }
+  );
+
 // Clubs
 export const getClubs = (
   params?: { category?: string; search?: string },
@@ -359,6 +389,115 @@ export const deleteClub = (clubId: string) =>
 
 export const getClub = (clubId: string, signal?: AbortSignal) =>
   request<import('./types').ClubDetail>(`/clubs/${encodeURIComponent(clubId)}`, {}, signal);
+
+export interface CreateClubBody {
+  name: string;
+  description: string;
+  category: string;
+  emoji: string;
+}
+
+export const createClub = (body: CreateClubBody) =>
+  request<import('./types').ClubDetail>('/clubs', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const startClubVerification = (
+  clubId: string,
+  body: { method: 'INSTAGRAM' | 'OFFICIAL_EMAIL'; handle?: string; email?: string }
+) =>
+  request<import('./types').ClubClaim>(`/clubs/${encodeURIComponent(clubId)}/claims`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const markClubVerificationSent = (clubId: string, claimId: string) =>
+  request<{ ok: true; status: string }>(
+    `/clubs/${encodeURIComponent(clubId)}/claims/${encodeURIComponent(claimId)}/sent`,
+    { method: 'POST' }
+  );
+
+export const createClubInvite = (
+  clubId: string,
+  body: { maxUses?: number; expiresInHours?: number } = {}
+) =>
+  request<import('./types').ClubInvite>(`/clubs/${encodeURIComponent(clubId)}/invites`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const followClub = (clubId: string) =>
+  request<{ ok: true; isFollower: boolean; followerCount: number }>(
+    `/clubs/${encodeURIComponent(clubId)}/follow`,
+    { method: 'POST' }
+  );
+
+export const unfollowClub = (clubId: string) =>
+  request<{ ok: true; isFollower: boolean; followerCount: number }>(
+    `/clubs/${encodeURIComponent(clubId)}/follow`,
+    { method: 'DELETE' }
+  );
+
+export const setClubDiscovery = (clubId: string, isDiscoverable: boolean) =>
+  request<{ ok: true; isDiscoverable: boolean }>(
+    `/clubs/${encodeURIComponent(clubId)}/discovery`,
+    { method: 'PATCH', body: JSON.stringify({ isDiscoverable }) }
+  );
+
+// ── Club applications ─────────────────────────────────────────────────────────
+
+export const getApplyInfo = (clubId: string, signal?: AbortSignal) =>
+  request<import('./types').ApplyInfo>(`/clubs/${encodeURIComponent(clubId)}/apply`, {}, signal);
+
+export const submitApplication = (clubId: string, cycleId: string, answers: string[]) =>
+  request<{ id: string; stage: string }>(
+    `/clubs/${encodeURIComponent(clubId)}/application-cycles/${encodeURIComponent(cycleId)}/apply`,
+    { method: 'POST', body: JSON.stringify({ answers }) }
+  );
+
+export const getApplicationCycles = (clubId: string, signal?: AbortSignal) =>
+  request<import('./types').ClubApplicationCycle[]>(
+    `/clubs/${encodeURIComponent(clubId)}/application-cycles`,
+    {},
+    signal
+  );
+
+export const createApplicationCycle = (
+  clubId: string,
+  body: { title: string; questions: string[] }
+) =>
+  request<import('./types').ClubApplicationCycle>(
+    `/clubs/${encodeURIComponent(clubId)}/application-cycles`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+
+export const updateApplicationCycle = (
+  clubId: string,
+  cycleId: string,
+  body: { title?: string; questions?: string[]; status?: 'OPEN' | 'CLOSED' }
+) =>
+  request<import('./types').ClubApplicationCycle>(
+    `/clubs/${encodeURIComponent(clubId)}/application-cycles/${encodeURIComponent(cycleId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
+export const getCycleApplications = (clubId: string, cycleId: string, signal?: AbortSignal) =>
+  request<import('./types').CycleApplications>(
+    `/clubs/${encodeURIComponent(clubId)}/application-cycles/${encodeURIComponent(cycleId)}/applications`,
+    {},
+    signal
+  );
+
+export const updateApplication = (
+  clubId: string,
+  applicationId: string,
+  body: { stage: 'APPLIED' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN'; reviewNote?: string }
+) =>
+  request<{ ok: true; stage: string }>(
+    `/clubs/${encodeURIComponent(clubId)}/applications/${encodeURIComponent(applicationId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  );
 
 export const getClubMeetings = (clubId: string, signal?: AbortSignal) =>
   request<import('./types').ClubMeetingWithMeta[]>(
@@ -520,6 +659,7 @@ export interface ClubChannelBody {
   name?: string;
   description?: string;
   allowedRoleIds?: string[];
+  allowedUserIds?: string[];
 }
 
 export const createClubChannel = (clubId: string, body: ClubChannelBody) =>

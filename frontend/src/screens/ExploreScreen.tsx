@@ -5,17 +5,20 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchFeed, getActivities, getApiErrorMessage } from '../api';
+import { fetchFeed, getActivities, getApiErrorMessage, requestActivity } from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
+import { useAuth } from '../context/AuthContext';
 import {
   AppBackdrop,
   Banner,
   Button,
   Chip,
   EmptyState,
+  Field,
   SearchBar,
   SectionHeader,
+  Sheet,
   SkeletonCard,
   Slab,
   Sticker,
@@ -140,6 +143,7 @@ export default function ExploreScreen() {
   const { colors, typography } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -149,6 +153,13 @@ export default function ExploreScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(12);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestTitle, setRequestTitle] = useState('');
+  const [requestCategory, setRequestCategory] = useState(CATEGORIES[0]);
+  const [requestDescription, setRequestDescription] = useState('');
+  const [requestDefaultLocation, setRequestDefaultLocation] = useState('');
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
@@ -231,6 +242,36 @@ export default function ExploreScreen() {
   const totalLivePods = useMemo(() => cards.reduce((sum, item) => sum + item.liveCount, 0), [cards]);
   const visibleCards = cards.slice(0, visibleCount);
 
+  const openActivityRequest = () => {
+    setRequestSubmitted(false);
+    setRequestCategory(category ?? CATEGORIES[0]);
+    setRequestOpen(true);
+  };
+
+  const submitActivityRequest = async () => {
+    if (!requestTitle.trim()) {
+      Alert.alert('Add a title', 'Name the activity you want added.');
+      return;
+    }
+    setRequestBusy(true);
+    try {
+      await requestActivity({
+        title: requestTitle.trim(),
+        category: requestCategory,
+        description: requestDescription.trim() || undefined,
+        defaultLocation: requestDefaultLocation.trim() || undefined,
+      });
+      setRequestTitle('');
+      setRequestDescription('');
+      setRequestDefaultLocation('');
+      setRequestSubmitted(true);
+    } catch (error) {
+      Alert.alert('Could not submit request', getApiErrorMessage(error));
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
   return (
     <AppBackdrop>
       <ScrollView
@@ -266,15 +307,26 @@ export default function ExploreScreen() {
                 </Text>
               </View>
             </View>
-            {!granted && canAskAgain ? (
-              <Chip
-                label="Nearby"
-                icon="navigate"
-                onPress={explainAndRequestLocation}
-                tint={colors.tealSoft}
-                selected
-              />
-            ) : null}
+            <View style={{ gap: spacing.sm, alignItems: 'flex-end' }}>
+              {user?.isAdmin ? (
+                <Chip
+                  label="Review"
+                  icon="checkmark-done"
+                  onPress={() => navigation.navigate('AdminActivityRequests')}
+                  tint={colors.violetSoft}
+                  selected
+                />
+              ) : null}
+              {!granted && canAskAgain ? (
+                <Chip
+                  label="Nearby"
+                  icon="navigate"
+                  onPress={explainAndRequestLocation}
+                  tint={colors.tealSoft}
+                  selected
+                />
+              ) : null}
+            </View>
           </View>
         </Animated.View>
         {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
@@ -389,6 +441,12 @@ export default function ExploreScreen() {
         {/* Browse grid */}
         <View style={styles.section}>
           <SectionHeader kicker="The catalog" title="Browse activities" />
+          <Button
+            label="Request activity"
+            icon="add-circle-outline"
+            variant="secondary"
+            onPress={openActivityRequest}
+          />
           {!loaded ? (
             <>
               <SkeletonCard />
@@ -490,6 +548,50 @@ export default function ExploreScreen() {
           ) : null}
         </View>
       </ScrollView>
+      <Sheet visible={requestOpen} onClose={() => setRequestOpen(false)} title="Request Activity" scrollable>
+        <View style={{ gap: spacing.md }}>
+          {requestSubmitted ? <Banner kind="success" message="Submitted - pending approval." /> : null}
+          <Field
+            label="Title"
+            value={requestTitle}
+            onChangeText={setRequestTitle}
+            placeholder="Pickup volleyball"
+          />
+          <View style={{ gap: spacing.sm }}>
+            <Text style={typography.kicker}>CATEGORY</Text>
+            <View style={styles.chipWrap}>
+              {CATEGORIES.map((item) => (
+                <Chip
+                  key={item}
+                  label={categoryShortLabel(item)}
+                  selected={requestCategory === item}
+                  tint={requestCategory === item ? accentForSeed(colors, item).soft : undefined}
+                  onPress={() => setRequestCategory(item)}
+                />
+              ))}
+            </View>
+          </View>
+          <Field
+            label="Location"
+            value={requestDefaultLocation}
+            onChangeText={setRequestDefaultLocation}
+            placeholder="The Oval"
+          />
+          <Field
+            label="Details"
+            value={requestDescription}
+            onChangeText={setRequestDescription}
+            placeholder="Short description"
+            multiline
+          />
+          <Button
+            label="Submit request"
+            icon="send"
+            loading={requestBusy}
+            onPress={() => void submitActivityRequest()}
+          />
+        </View>
+      </Sheet>
     </AppBackdrop>
   );
 }
@@ -529,6 +631,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     paddingRight: spacing.xl,
     paddingVertical: 4,
+  },
+  chipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: spacing.sm,
   },
   section: {
     gap: spacing.md,

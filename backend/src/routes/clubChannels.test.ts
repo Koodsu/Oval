@@ -128,6 +128,48 @@ describe('Club channels API (integration)', () => {
         .expect(200);
     });
 
+    it('owner can create a member-gated channel visible to listed members and officers', async () => {
+      const outsider = await registerAndGetToken(
+        'Channel Outsider',
+        `channel-outsider-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${clubId}/join`)
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .expect(201);
+
+      const channel = await request(app)
+        .post(`/clubs/${clubId}/channels`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'mentor-pair', allowedUserIds: [memberId] })
+        .expect(201);
+      expect(channel.body.allowedUserIds).toEqual([memberId]);
+
+      const listedMember = await request(app)
+        .get(`/clubs/${clubId}/channels`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(200);
+      expect(listedMember.body.channels.map((c: any) => c.id)).toContain(channel.body.id);
+
+      const plainMember = await request(app)
+        .get(`/clubs/${clubId}/channels`)
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .expect(200);
+      expect(plainMember.body.channels.map((c: any) => c.id)).not.toContain(channel.body.id);
+
+      await request(app)
+        .get(`/clubs/${clubId}/channels/${channel.body.id}/messages`)
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .expect(403);
+
+      const officerList = await request(app)
+        .get(`/clubs/${clubId}/channels`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(officerList.body.channels.map((c: any) => c.id)).toContain(channel.body.id);
+    });
+
     it('members cannot create channels; built-ins cannot be deleted', async () => {
       await request(app)
         .post(`/clubs/${clubId}/channels`)
@@ -343,9 +385,9 @@ describe('Club channels API (integration)', () => {
       const updated = await request(app)
         .patch(`/clubs/${clubId}/roles/${role.body.id}`)
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ color: 'pink', isSelfAssignable: false })
+        .send({ color: '#1E90FF', isSelfAssignable: false })
         .expect(200);
-      expect(updated.body.color).toBe('pink');
+      expect(updated.body.color).toBe('#1E90FF');
       expect(updated.body.isSelfAssignable).toBe(false);
     });
 

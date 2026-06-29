@@ -15,6 +15,7 @@ import {
 import { INTEREST_TAG_SET } from '../config/interestTags';
 import { getFullName, getPublicName, withDisplayName } from '../lib/userNames';
 import { moderateImageContent, moderateTextContent } from '../lib/contentModeration';
+import { isPlatformAdmin } from '../middleware/admin';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
@@ -135,6 +136,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
       lastName: user.lastName,
       email: user.email,
       verifiedUniversity: user.verifiedUniversity,
+      isAdmin: isPlatformAdmin(user.id),
       avatarUrl: user.avatarUrl ?? null,
       joinedAt: user.createdAt.toISOString(),
       classYear: user.classYear ?? null,
@@ -343,6 +345,7 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response): Promis
       lastName: updated.lastName,
       email: updated.email,
       verifiedUniversity: updated.verifiedUniversity,
+      isAdmin: isPlatformAdmin(updated.id),
       avatarUrl: updated.avatarUrl ?? null,
       joinedAt: updated.createdAt.toISOString(),
       classYear: updated.classYear ?? null,

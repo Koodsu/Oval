@@ -342,6 +342,24 @@ export default function ThreadScreen({ route, navigation }: Props) {
               const hasHeart = !!message.reactions?.some(
                 (reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI,
               );
+              const otherReactions = Object.values(
+                (message.reactions ?? [])
+                  .filter((reaction) => reaction.emoji !== HEART_EMOJI)
+                  .reduce<Record<string, { emoji: string; count: number; mine: boolean }>>(
+                    (acc, reaction) => {
+                      const group = acc[reaction.emoji] ?? {
+                        emoji: reaction.emoji,
+                        count: 0,
+                        mine: false,
+                      };
+                      group.count += 1;
+                      if (reaction.userId === user?.id) group.mine = true;
+                      acc[reaction.emoji] = group;
+                      return acc;
+                    },
+                    {},
+                  ),
+              );
               return (
                 <View style={[styles.messageCell, grouped && styles.groupedCell]}>
                   {startsDay ? (
@@ -427,6 +445,19 @@ export default function ThreadScreen({ route, navigation }: Props) {
                           />
                           {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
                         </Pressable>
+                        {otherReactions.map((group) => (
+                          <Pressable
+                            key={group.emoji}
+                            onPress={() => void handleReaction(message, group.emoji)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={[styles.reactionPill, group.mine && styles.reactionPillActive]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${group.mine ? 'Remove' : 'Add'} ${group.emoji} reaction`}
+                          >
+                            <Text style={styles.reactionPillEmoji}>{group.emoji}</Text>
+                            <Text style={styles.reactionPillCount}>{group.count}</Text>
+                          </Pressable>
+                        ))}
                         {!mine ? (
                           <Pressable
                             onPress={() => openMessageActions(message)}
@@ -715,6 +746,29 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontFamily: fonts.bold,
     fontSize: 11.5,
     color: t.colors.faint,
+  },
+  reactionPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: t.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: t.colors.borderSoft,
+  },
+  reactionPillActive: {
+    backgroundColor: t.colors.primarySoft,
+    borderColor: t.colors.primary,
+  },
+  reactionPillEmoji: {
+    fontSize: 12,
+  },
+  reactionPillCount: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: t.colors.sub,
   },
   composer: {
     borderWidth: BORDER_W,

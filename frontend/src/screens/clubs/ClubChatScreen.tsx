@@ -60,7 +60,7 @@ function channelSub(channel: ClubChannelRow): string {
   if (channel.kind === 'ANNOUNCEMENTS') return 'Official club updates';
   if (channel.kind === 'OFFICERS') return 'Leadership only';
   if (channel.kind === 'CUSTOM') {
-    return channel.allowedRoleIds.length ? 'Role-only channel' : 'Members only';
+    return channel.allowedRoleIds.length || channel.allowedUserIds.length ? 'Private channel' : 'Members only';
   }
   return 'Members only';
 }

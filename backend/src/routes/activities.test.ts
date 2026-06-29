@@ -93,3 +93,86 @@ describe('GET /activities/:id/locations', () => {
       .expect(404);
   });
 });
+
+describe('activity requests', () => {
+  it('lets a student submit and an admin approve a catalog addition once', async () => {
+    const student = await registerAndGetToken('Request Student', 'request-student@activities.test.com', 'password123');
+    const admin = await registerAndGetToken('Request Admin', 'request-admin@activities.test.com', 'password123');
+    const previousAdmins = process.env.ADMIN_USER_IDS;
+    process.env.ADMIN_USER_IDS = admin.user.id;
+
+    try {
+      const title = `Campus Croquet ${Date.now()}`;
+      const submitted = await request(app)
+        .post('/activities/requests')
+        .set('Authorization', `Bearer ${student.token}`)
+        .send({
+          title,
+          category: 'Outdoors',
+          description: 'Low-key lawn games around campus.',
+          defaultLocation: 'The Oval',
+        })
+        .expect(201);
+      expect(submitted.body.status).toBe('PENDING');
+
+      const queue = await request(app)
+        .get('/admin/activity-requests')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(200);
+      expect(queue.body.requests.some((row: any) => row.id === submitted.body.id)).toBe(true);
+
+      const approved = await request(app)
+        .post(`/admin/activity-requests/${submitted.body.id}/approve`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(200);
+      expect(approved.body.request.status).toBe('APPROVED');
+      expect(approved.body.activity.title).toBe(title);
+
+      const duplicate = await request(app)
+        .post('/activities/requests')
+        .set('Authorization', `Bearer ${student.token}`)
+        .send({ title: title.toUpperCase(), category: 'Outdoors' })
+        .expect(201);
+      const duplicateApproval = await request(app)
+        .post(`/admin/activity-requests/${duplicate.body.id}/approve`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(200);
+      expect(duplicateApproval.body.activity.id).toBe(approved.body.activity.id);
+
+      const matches = await prisma.activity.findMany({
+        where: { title: { equals: title, mode: 'insensitive' } },
+      });
+      expect(matches).toHaveLength(1);
+    } finally {
+      if (previousAdmins === undefined) delete process.env.ADMIN_USER_IDS;
+      else process.env.ADMIN_USER_IDS = previousAdmins;
+    }
+  });
+
+  it('lets an admin reject a pending activity request', async () => {
+    const student = await registerAndGetToken('Reject Student', 'reject-student@activities.test.com', 'password123');
+    const admin = await registerAndGetToken('Reject Admin', 'reject-admin@activities.test.com', 'password123');
+    const previousAdmins = process.env.ADMIN_USER_IDS;
+    process.env.ADMIN_USER_IDS = admin.user.id;
+
+    try {
+      const submitted = await request(app)
+        .post('/activities/requests')
+        .set('Authorization', `Bearer ${student.token}`)
+        .send({ title: `Rejected Activity ${Date.now()}`, category: 'Social' })
+        .expect(201);
+
+      const rejected = await request(app)
+        .post(`/admin/activity-requests/${submitted.body.id}/reject`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ reviewNote: 'Too similar to the current catalog.' })
+        .expect(200);
+
+      expect(rejected.body.request.status).toBe('REJECTED');
+      expect(rejected.body.request.reviewNote).toBe('Too similar to the current catalog.');
+    } finally {
+      if (previousAdmins === undefined) delete process.env.ADMIN_USER_IDS;
+      else process.env.ADMIN_USER_IDS = previousAdmins;
+    }
+  });
+});

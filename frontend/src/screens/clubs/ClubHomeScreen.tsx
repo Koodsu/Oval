@@ -31,7 +31,8 @@ import {
   Slab,
 } from '../../components/ui';
 import { MeetingCard, MemberRow, roleAccent } from '../../components/clubs';
-import { useClub } from '../../hooks/useClub';
+import ClubVerifyPrompt from './ClubVerifyPrompt';
+import { useClub, roleRank } from '../../hooks/useClub';
 import { useAuth } from '../../context/AuthContext';
 import {
   BORDER_W,
@@ -49,7 +50,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 type ClubTab = 'pulse' | 'events' | 'people' | 'about';
 
 export default function ClubHomeScreen({ route, navigation }: Props) {
-  const { clubId } = route.params;
+  const { clubId, justCreated } = route.params;
   const {
     club,
     meetings,
@@ -72,6 +73,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [tab, setTab] = useState<ClubTab>('pulse');
+  const [verifyOpen, setVerifyOpen] = useState(Boolean(justCreated));
   const nextMeeting = meetings[0] ?? null;
 
   const myMember = useMemo(
@@ -176,7 +178,13 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
 
   const primaryAction: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void } =
     !club.isMember
-      ? { label: 'Join club', icon: 'add', onPress: () => void handleMembership() }
+      ? club.joinPolicy === 'APPLICATION'
+        ? {
+            label: 'Apply to join',
+            icon: 'document-text-outline',
+            onPress: () => navigation.navigate('ClubApply', { clubId }),
+          }
+        : { label: 'Join club', icon: 'add', onPress: () => void handleMembership() }
       : nextMeeting && nextMeeting.myRsvp === 'GOING'
         ? {
             label: `RSVP'd · ${nextMeeting.title}`,
@@ -408,7 +416,9 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                 Manage members →
               </Text>
             ) : null}
-            {club.members.map((member) => (
+            {[...club.members]
+              .sort((a, b) => roleRank(b.role) - roleRank(a.role))
+              .map((member) => (
               <MemberRow
                 key={member.userId}
                 member={member}
@@ -505,6 +515,26 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
         title={club.name}
         kicker="CLUB ACTIONS"
       >
+        {isLeader && !club.isVerified ? (
+          <ListRow
+            icon="ribbon-outline"
+            title="Verify club"
+            onPress={() => {
+              setActionsOpen(false);
+              setVerifyOpen(true);
+            }}
+          />
+        ) : null}
+        {isLeader ? (
+          <ListRow
+            icon="settings-outline"
+            title="Club settings"
+            onPress={() => {
+              setActionsOpen(false);
+              navigation.navigate('ClubManage', { clubId });
+            }}
+          />
+        ) : null}
         <ListRow
           icon="share-outline"
           title="Share club"
@@ -536,6 +566,14 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
           />
         ) : null}
       </Sheet>
+
+      <ClubVerifyPrompt
+        visible={verifyOpen}
+        onClose={() => setVerifyOpen(false)}
+        clubId={club.id}
+        clubName={club.name}
+        memberCount={club.members.length}
+      />
     </AppBackdrop>
   );
 }

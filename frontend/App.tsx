@@ -42,6 +42,7 @@ import ClubMeetingsTonightScreen from './src/screens/clubs/ClubMeetingsTonightSc
 import InboxScreen from './src/screens/InboxScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ActivityPodsScreen from './src/screens/ActivityPodsScreen';
+import AdminActivityRequestsScreen from './src/screens/AdminActivityRequestsScreen';
 import PodDetailScreen from './src/screens/PodDetailScreen';
 import PodChatScreen from './src/screens/PodChatScreen';
 import ClubHomeScreen from './src/screens/clubs/ClubHomeScreen';
@@ -50,6 +51,13 @@ import ClubEventsScreen from './src/screens/clubs/ClubEventsScreen';
 import MeetingDetailScreen from './src/screens/clubs/MeetingDetailScreen';
 import ClubMembersScreen from './src/screens/clubs/ClubMembersScreen';
 import ClubManageScreen from './src/screens/clubs/ClubManageScreen';
+import CreateClubScreen from './src/screens/clubs/CreateClubScreen';
+import ClubApplyScreen from './src/screens/clubs/ClubApplyScreen';
+import ClubApplicationsScreen from './src/screens/clubs/ClubApplicationsScreen';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { initMonitoring, wrapApp } from './src/lib/monitoring';
+
+initMonitoring();
 import ThreadScreen from './src/screens/ThreadScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
@@ -78,15 +86,19 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   MainTabs: { screen?: keyof MainTabParamList } | undefined;
   ActivityPods: { activity: Activity; startCreate?: boolean };
+  AdminActivityRequests: undefined;
   PodDetail: { podId: string };
   PodChat: { podId: string };
-  ClubDetail: { clubId: string };
+  ClubDetail: { clubId: string; justCreated?: boolean };
   ClubChat: { clubId: string; channelId: string };
   ClubEvents: { clubId: string; startCreate?: boolean };
   ClubMeeting: { clubId: string; meetingId: string };
   ClubMembers: { clubId: string };
   ClubManage: { clubId: string };
   ClubMeetingsTonight: undefined;
+  CreateClub: undefined;
+  ClubApply: { clubId: string };
+  ClubApplications: { clubId: string };
   Thread: { threadId: string; title: string };
   Profile: undefined;
   EditProfile: undefined;
@@ -102,7 +114,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: ['oval://', 'https://www.theovalapp.com'],
+  prefixes: ['oval://', 'https://www.theovalapp.com', 'https://theovalapp.com'],
   config: {
     screens: {
       PodDetail: 'pod/:podId',
@@ -333,6 +345,7 @@ function AuthedApp() {
     >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
+      <Stack.Screen name="AdminActivityRequests" component={AdminActivityRequestsScreen} />
       <Stack.Screen name="PodDetail" component={PodDetailScreen} />
       <Stack.Screen name="PodChat" component={PodChatScreen} />
       <Stack.Screen name="ClubDetail" component={ClubHomeScreen} />
@@ -342,6 +355,9 @@ function AuthedApp() {
       <Stack.Screen name="ClubMembers" component={ClubMembersScreen} />
       <Stack.Screen name="ClubManage" component={ClubManageScreen} />
       <Stack.Screen name="ClubMeetingsTonight" component={ClubMeetingsTonightScreen} />
+      <Stack.Screen name="CreateClub" component={CreateClubScreen} />
+      <Stack.Screen name="ClubApply" component={ClubApplyScreen} />
+      <Stack.Screen name="ClubApplications" component={ClubApplicationsScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
@@ -412,7 +428,7 @@ function ThemedApp() {
   );
 }
 
-export default function App() {
+function App() {
   const [fontsLoaded, fontError] = useFonts({
     [fonts.displayMedium]: Sora_600SemiBold,
     [fonts.display]: Sora_700Bold,
@@ -441,9 +457,11 @@ export default function App() {
       <View style={[styles.flex, Platform.OS === 'web' && styles.webShell]}>
         <SafeAreaProvider>
           <ThemeProvider>
-            <AuthProvider>
-              <ThemedApp />
-            </AuthProvider>
+            <ErrorBoundary>
+              <AuthProvider>
+                <ThemedApp />
+              </AuthProvider>
+            </ErrorBoundary>
           </ThemeProvider>
         </SafeAreaProvider>
       </View>
@@ -513,3 +531,5 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+
+export default wrapApp(App);

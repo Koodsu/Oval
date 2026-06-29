@@ -333,6 +333,113 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('Club applications', () => {
+    it('runs open cycle -> apply -> accept -> member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const clubId = create.body.id;
+
+      const cycle = await request(app)
+        .post(`/clubs/${clubId}/application-cycles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Fall 2026', questions: ['Why do you want to join?'] })
+        .expect(201);
+      expect(cycle.body.status).toBe('OPEN');
+      expect(cycle.body.questions).toEqual(['Why do you want to join?']);
+
+      const clubRow = await prisma.club.findUnique({ where: { id: clubId } });
+      expect(clubRow?.joinPolicy).toBe('APPLICATION');
+
+      const { token: token2, user: u2 } = await registerAndGetToken(
+        'Applicant',
+        `applicant-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const applyInfo = await request(app)
+        .get(`/clubs/${clubId}/apply`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(200);
+      expect(applyInfo.body.openCycle.id).toBe(cycle.body.id);
+      expect(applyInfo.body.isMember).toBe(false);
+
+      await request(app)
+        .post(`/clubs/${clubId}/application-cycles/${cycle.body.id}/apply`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ answers: ['I love chess'] })
+        .expect(201);
+
+      const list = await request(app)
+        .get(`/clubs/${clubId}/application-cycles/${cycle.body.id}/applications`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(list.body.applications).toHaveLength(1);
+      expect(list.body.applications[0].answers).toEqual(['I love chess']);
+
+      await request(app)
+        .patch(`/clubs/${clubId}/applications/${list.body.applications[0].id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ stage: 'ACCEPTED' })
+        .expect(200);
+
+      const member = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId: u2.id } },
+      });
+      expect(member?.role).toBe('MEMBER');
+    });
+
+    it('blocks non-officers from opening a cycle', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const { token: token2 } = await registerAndGetToken(
+        'Rando',
+        `rando-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/application-cycles`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ title: 'X', questions: ['Q'] })
+        .expect(403);
+    });
+
+    it('rejects applying to a closed cycle', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const clubId = create.body.id;
+      const cycle = await request(app)
+        .post(`/clubs/${clubId}/application-cycles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'C', questions: ['Q'] })
+        .expect(201);
+      await request(app)
+        .patch(`/clubs/${clubId}/application-cycles/${cycle.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'CLOSED' })
+        .expect(200);
+
+      const { token: token2 } = await registerAndGetToken(
+        'Late',
+        `late-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${clubId}/application-cycles/${cycle.body.id}/apply`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ answers: ['x'] })
+        .expect(409);
+    });
+  });
+
   describe('GET /clubs/my', () => {
     it('returns memberships with next meeting', async () => {
       const create = await request(app)

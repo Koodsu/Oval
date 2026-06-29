@@ -171,7 +171,10 @@ async function main() {
   // --- Activities ---
   const activityIds: string[] = [];
   for (const a of ACTIVITIES) {
-    const act = await prisma.activity.create({ data: a });
+    // Reuse an existing activity with the same title so re-running this seed
+    // (or running it alongside the main seed) doesn't create duplicates.
+    const existing = await prisma.activity.findFirst({ where: { title: a.title } });
+    const act = existing ?? (await prisma.activity.create({ data: a }));
     manifest.activities.push(act.id);
     activityIds.push(act.id);
   }
