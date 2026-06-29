@@ -17,6 +17,7 @@ model User {
   password                String
   createdAt               DateTime  @default(now())
   verifiedUniversity      Boolean   @default(false)
+  isClubReviewer          Boolean   @default(false)
   emailVerifyCode         String?
   emailVerifyExpiry       DateTime?
   passwordResetCode       String?
@@ -74,6 +75,9 @@ model User {
   clubMessages           ClubMessage[]
   clubOfficerMessages    ClubOfficerMessage[]
   clubChannelReadStates  ClubChannelReadState[]
+  clubFollows            ClubFollower[]
+  clubClaims             ClubClaim[]
+  clubApplications       ClubApplication[]
   analyticsEvents        AnalyticsEvent[]
 }
 
@@ -418,13 +422,32 @@ model Club {
   category           String
   emoji              String   @default("🎓")
   avatarUrl          String?
-  isVerified         Boolean  @default(false)
-  isPublic           Boolean  @default(true)
+  isVerified         Boolean  @default(false) // legacy, dropped in Phase 4 (see CLUB_LIFECYCLE_IMPLEMENTATION.md)
+  isPublic           Boolean  @default(true)   // legacy, dropped in Phase 4
   university         String   @default("OSU")
   createdById        String
   officerPermissions String   @default("[]")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  // --- Club lifecycle: four orthogonal axes ---
+  isDiscoverable     Boolean  @default(false)
+  verification       String   @default("UNVERIFIED") // UNVERIFIED | PENDING_REVIEW | VERIFIED
+  joinPolicy         String   @default("OPEN") // OPEN | REQUEST | APPLICATION | INVITE_ONLY
+  status             String   @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
+
+  // verification metadata
+  verificationMethod String? // INSTAGRAM | OFFICIAL_EMAIL | DIRECTORY | MANUAL
+  verifiedAt         DateTime?
+  verifiedByUserId   String?
+  instagramHandle    String?
+  officialEmail      String?
+  lastReaffirmedAt   DateTime?
+
+  // bookkeeping
+  discoverableSince  DateTime?
+  suspendedAt        DateTime?
+  suspendedReason    String?
 
   createdBy       User                 @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
   members         ClubMember[]
@@ -434,8 +457,14 @@ model Club {
   messages        ClubMessage[]
   officerMessages ClubOfficerMessage[]
   channels        ClubChannel[]
+  followers       ClubFollower[]
+  claims          ClubClaim[]
+  invites         ClubInvite[]
+  appCycles       ClubApplicationCycle[]
 
   @@index([isPublic, category])
+  @@index([isDiscoverable, status, category])
+  @@index([university, isDiscoverable])
 }
 
 model ClubChannel {
@@ -616,4 +645,92 @@ model ClubOfficerMessage {
 
   @@index([clubId, createdAt])
   @@index([userId])
+}
+
+// ---------- Club lifecycle & verification ----------
+
+/// Public follow — audience, separate from membership.
+model ClubFollower {
+  id        String   @id @default(uuid())
+  clubId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+}
+
+/// A verification attempt by a member who claims to be an officer.
+model ClubClaim {
+  id            String    @id @default(uuid())
+  clubId        String
+  userId        String
+  method        String // INSTAGRAM | OFFICIAL_EMAIL | DIRECTORY | MANUAL
+  handleOrEmail String
+  challengeCode String
+  status        String    @default("PENDING") // PENDING | PROOF_SENT | APPROVED | REJECTED | EXPIRED
+  reviewerId    String?
+  reviewNote    String?
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  resolvedAt    DateTime?
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, status])
+  @@index([status, createdAt])
+}
+
+/// Invite links for the private (pre-threshold) stage.
+model ClubInvite {
+  id          String    @id @default(uuid())
+  clubId      String
+  code        String    @unique
+  createdById String
+  maxUses     Int?
+  uses        Int       @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+}
+
+/// In-app applications to JOIN a club (the Builders flow).
+model ClubApplicationCycle {
+  id            String    @id @default(uuid())
+  clubId        String
+  title         String
+  questionsJson String // customizable form schema
+  status        String    @default("DRAFT") // DRAFT | OPEN | CLOSED
+  opensAt       DateTime?
+  closesAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  club         Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  applications ClubApplication[]
+
+  @@index([clubId, status])
+}
+
+model ClubApplication {
+  id          String   @id @default(uuid())
+  cycleId     String
+  userId      String
+  answersJson String
+  stage       String   @default("APPLIED") // APPLIED | INTERVIEW | ACCEPTED | REJECTED | WITHDRAWN
+  reviewNote  String?
+  createdAt   DateTime @default(now())
+
+  cycle ClubApplicationCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, userId])
+  @@index([cycleId, stage])
 }

@@ -7,6 +7,7 @@ import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
 import { normalizeNameParts } from '../lib/userNames';
 import { issueAuthToken } from '../lib/authSession';
+import { CURRENT_TERMS_VERSION } from '../config/legal';
 
 let testUserCounter = 0;
 
@@ -69,7 +70,7 @@ export async function registerAndGetToken(
       major: 'Computer Science',
       termsAccepted: true,
       ageConfirmed: true,
-      termsVersion: '2026-06-08',
+      termsVersion: CURRENT_TERMS_VERSION,
     })
     .expect(201);
 

@@ -18,8 +18,11 @@ describe('Clubs API (integration)', () => {
     userId = user.id;
   });
 
+  // Unique name per call so the club-name collision guard (anti-squatting) doesn't
+  // trip across tests, since the test DB isn't reset between cases.
+  let clubNameSeq = 0;
   const validCreateBody = () => ({
-    name: 'Chess Society',
+    name: `Chess Society ${Date.now()}-${clubNameSeq++}`,
     description: 'Weekly casual games.',
     category: 'Gaming',
     emoji: '♟️',
@@ -32,6 +35,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: res.body.id }, data: { isDiscoverable: true } });
 
       expect(res.body.id).toBeDefined();
       expect(res.body.isMember).toBe(true);
@@ -62,6 +66,13 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+
+      // New clubs start hidden; make this one discoverable so it appears in Explore.
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
 
       const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await prisma.clubMeeting.create({
@@ -88,6 +99,240 @@ describe('Clubs API (integration)', () => {
     });
   });
 
+  describe('Club lifecycle', () => {
+    it('hides newly created clubs from GET /clubs until discoverable', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      expect(create.body.isDiscoverable).toBe(false);
+
+      const list = await request(app)
+        .get('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(list.body.find((c: { id: string }) => c.id === create.body.id)).toBeUndefined();
+    });
+
+    it('lets a user follow and unfollow a discoverable club', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const { token: token2 } = await registerAndGetToken(
+        'Follower',
+        `follower-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      const followed = await request(app)
+        .post(`/clubs/${create.body.id}/follow`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+      expect(followed.body.isFollower).toBe(true);
+      expect(followed.body.followerCount).toBe(1);
+
+      const unfollowed = await request(app)
+        .delete(`/clubs/${create.body.id}/follow`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(200);
+      expect(unfollowed.body.followerCount).toBe(0);
+    });
+
+    it('rejects discovery toggle when ineligible, allows it once verified', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}/discovery`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ isDiscoverable: true })
+        .expect(409);
+
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { verification: 'VERIFIED' },
+      });
+
+      const ok = await request(app)
+        .patch(`/clubs/${create.body.id}/discovery`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ isDiscoverable: true })
+        .expect(200);
+      expect(ok.body.isDiscoverable).toBe(true);
+    });
+
+    it('redeems an invite link to add a member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+
+      const invite = await request(app)
+        .post(`/clubs/${create.body.id}/invites`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({})
+        .expect(201);
+      expect(invite.body.code).toBeDefined();
+
+      const { token: token2, user: u2 } = await registerAndGetToken(
+        'Invitee',
+        `invitee-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post(`/clubs/join/${invite.body.code}`)
+        .set('Authorization', `Bearer ${token2}`)
+        .expect(201);
+
+      const m = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId: create.body.id, userId: u2.id } },
+      });
+      expect(m?.role).toBe('MEMBER');
+    });
+  });
+
+  describe('Club verification', () => {
+    it('runs the Instagram claim -> proof -> approve flow and verifies the club', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const clubId = create.body.id;
+
+      const claim = await request(app)
+        .post(`/clubs/${clubId}/claims`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ method: 'INSTAGRAM', handle: '@MyClub' })
+        .expect(201);
+      expect(claim.body.challengeCode).toMatch(/^OVAL-/);
+      expect(claim.body.handleOrEmail).toBe('myclub');
+
+      let club = await prisma.club.findUnique({ where: { id: clubId } });
+      expect(club?.verification).toBe('PENDING_REVIEW');
+
+      await request(app)
+        .post(`/clubs/${clubId}/claims/${claim.body.id}/sent`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const { token: reviewerToken, user: reviewer } = await registerAndGetToken(
+        'Reviewer',
+        `reviewer-${Date.now()}@example.com`,
+        'password123'
+      );
+      await prisma.user.update({
+        where: { id: reviewer.id },
+        data: { isClubReviewer: true },
+      });
+
+      const queue = await request(app)
+        .get('/admin/club-claims')
+        .set('Authorization', `Bearer ${reviewerToken}`)
+        .expect(200);
+      expect(queue.body.some((c: { id: string }) => c.id === claim.body.id)).toBe(true);
+
+      await request(app)
+        .post(`/admin/club-claims/${claim.body.id}/approve`)
+        .set('Authorization', `Bearer ${reviewerToken}`)
+        .expect(200);
+
+      club = await prisma.club.findUnique({ where: { id: clubId } });
+      expect(club?.verification).toBe('VERIFIED');
+      expect(club?.instagramHandle).toBe('myclub');
+      expect(club?.verifiedAt).not.toBeNull();
+    });
+
+    it('blocks non-officers from starting a claim', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const { token: memberToken } = await registerAndGetToken(
+        'Member',
+        `vmember-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(201);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/claims`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ method: 'INSTAGRAM', handle: 'club' })
+        .expect(403);
+    });
+
+    it('blocks non-reviewers from the admin queue', async () => {
+      await request(app)
+        .get('/admin/club-claims')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+    });
+
+    it('rejecting a claim returns the club to unverified', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const clubId = create.body.id;
+
+      const claim = await request(app)
+        .post(`/clubs/${clubId}/claims`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ method: 'INSTAGRAM', handle: 'club' })
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${clubId}/claims/${claim.body.id}/sent`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const { token: reviewerToken, user: reviewer } = await registerAndGetToken(
+        'Reviewer2',
+        `reviewer2-${Date.now()}@example.com`,
+        'password123'
+      );
+      await prisma.user.update({
+        where: { id: reviewer.id },
+        data: { isClubReviewer: true },
+      });
+
+      await request(app)
+        .post(`/admin/club-claims/${claim.body.id}/reject`)
+        .set('Authorization', `Bearer ${reviewerToken}`)
+        .send({ reason: 'Not the real club' })
+        .expect(200);
+
+      const club = await prisma.club.findUnique({ where: { id: clubId } });
+      expect(club?.verification).toBe('UNVERIFIED');
+    });
+  });
+
   describe('GET /clubs/my', () => {
     it('returns memberships with next meeting', async () => {
       const create = await request(app)
@@ -95,6 +340,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const t1 = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       const t2 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
@@ -130,6 +376,12 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
 
       await request(app)
         .post(`/clubs/${create.body.id}/join`)
@@ -143,6 +395,12 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
+
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'Joiner',
@@ -169,6 +427,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       await request(app)
         .delete(`/clubs/${create.body.id}/leave`)
@@ -184,6 +443,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'Member',
@@ -209,6 +469,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'Officer',
@@ -247,6 +508,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const meeting = await prisma.clubMeeting.create({
         data: {
@@ -273,6 +535,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'MeetingMember',
@@ -305,6 +568,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const when = new Date(Date.now() + 86400000);
       const meeting = await prisma.clubMeeting.create({
@@ -352,6 +616,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const when = new Date(Date.now() + 86400000);
       const meeting = await prisma.clubMeeting.create({
@@ -403,6 +668,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const when = new Date(Date.now() + 86400000);
       const meeting = await prisma.clubMeeting.create({
@@ -442,6 +708,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const when = new Date(Date.now() + 86400000);
       const meeting = await prisma.clubMeeting.create({
@@ -477,6 +744,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: officerTok, user: officer } = await registerAndGetToken(
         'OfficerAtt',
@@ -515,6 +783,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: memberTok } = await registerAndGetToken(
         'PlainMember',
@@ -549,6 +818,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ ...validCreateBody(), name: 'Club One Att' })
         .expect(201);
+      await prisma.club.update({ where: { id: c1.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'OtherAdmin',
@@ -560,6 +830,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token2}`)
         .send({ ...validCreateBody(), name: 'Club Two Att' })
         .expect(201);
+      await prisma.club.update({ where: { id: c2.body.id }, data: { isDiscoverable: true } });
 
       const when = new Date(Date.now() + 86400000);
       const meeting = await prisma.clubMeeting.create({
@@ -586,6 +857,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const base = Date.now();
       for (let i = 0; i < 5; i++) {
@@ -621,6 +893,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const res = await request(app)
         .post(`/clubs/${create.body.id}/announcements`)
@@ -637,6 +910,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2 } = await registerAndGetToken(
         'PlainMember',
@@ -660,6 +934,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const announcement = await prisma.clubAnnouncement.create({
         data: {
@@ -684,6 +959,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'AnnouncementMember',
@@ -714,6 +990,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'OfficerX',
@@ -740,6 +1017,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'M1',
@@ -767,6 +1045,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'CoAdmin',
@@ -794,6 +1073,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'KickMe',
@@ -819,6 +1099,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'OtherAdmin',
@@ -843,6 +1124,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'A',
@@ -892,6 +1174,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'RsvpUser',
@@ -941,6 +1224,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'Out',
@@ -960,6 +1244,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const empty = await request(app)
         .get(`/clubs/${create.body.id}/messages`)
@@ -990,6 +1275,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const tooLong = 'a'.repeat(501);
       await request(app)
@@ -1015,6 +1301,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       await request(app)
         .post(`/clubs/${create.body.id}/typing`)
@@ -1030,6 +1317,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'Promotee',
@@ -1059,6 +1347,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'M1',
@@ -1085,6 +1374,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: t2, user: u2 } = await registerAndGetToken(
         'Off',
@@ -1110,6 +1400,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: targetToken, user: target } = await registerAndGetToken(
         'Dues Target',
@@ -1166,6 +1457,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: adminToken, user: admin } = await registerAndGetToken(
         'Role Admin',
@@ -1206,6 +1498,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const res = await request(app)
         .patch(`/clubs/${create.body.id}`)
@@ -1225,6 +1518,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const res = await request(app)
         .patch(`/clubs/${create.body.id}`)
@@ -1249,6 +1543,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       await request(app)
         .patch(`/clubs/${create.body.id}`)
@@ -1262,6 +1557,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2 } = await registerAndGetToken(
         'NonAdmin',
@@ -1286,6 +1582,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       await request(app)
         .patch(`/clubs/${create.body.id}`)
@@ -1301,6 +1598,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'NotAdmin',
@@ -1324,6 +1622,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       await request(app)
         .delete(`/clubs/${create.body.id}`)
@@ -1342,6 +1641,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'Officer Two',
@@ -1395,6 +1695,7 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(validCreateBody())
         .expect(201);
+      await prisma.club.update({ where: { id: create.body.id }, data: { isDiscoverable: true } });
 
       const { token: token2, user: u2 } = await registerAndGetToken(
         'Channel Officer',

@@ -5,7 +5,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
 import {
-  deleteMyAccount,
   downloadMyData,
   getApiErrorMessage,
   getNotificationPreferences,
@@ -63,12 +62,12 @@ const PREFERENCE_ROWS: Array<{
 export default function PrivacyDataScreen({ navigation }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
-  const { user, updateUser, clearSession } = useAuth();
+  const { user, updateUser } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [instagram, setInstagram] = useState(user?.instagramHandle ?? '');
   const [socialBusy, setSocialBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteBusy] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   useFocusEffect(
@@ -158,27 +157,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
   };
 
   const confirmDeleteAccount = () => {
-    Alert.alert(
-      'Permanently delete account?',
-      'This removes your profile, posts, messages, memberships, social links, and sign-in access. Limited safety records may be retained as described in the Privacy Policy. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete account',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleteBusy(true);
-            try {
-              await deleteMyAccount();
-              await clearSession();
-            } catch (error) {
-              Alert.alert('Could not delete account', getApiErrorMessage(error));
-              setDeleteBusy(false);
-            }
-          },
-        },
-      ],
-    );
+    navigation.navigate('DeleteAccount');
   };
 
   return (

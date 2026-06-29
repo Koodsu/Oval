@@ -47,11 +47,7 @@ import {
 } from '../theme';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 import { INTEREST_TAGS } from '../constants/interestTags';
-import {
-  CAMPUS_ZONE_OPTIONS,
-  MAX_CAMPUS_ZONES,
-  PURPOSE_OPTIONS,
-} from '../constants/profileOptions';
+import { PURPOSE_OPTIONS } from '../constants/profileOptions';
 
 type Mode = 'login' | 'register' | 'reset';
 
@@ -82,8 +78,7 @@ export default function AuthScreen() {
   const [resetCodeSent, setResetCodeSent] = useState(false);
   const [classYear, setClassYear] = useState('');
   const [major, setMajor] = useState('');
-  const [purpose, setPurpose] = useState('');
-  const [campusZones, setCampusZones] = useState<string[]>([]);
+  const [purpose, setPurpose] = useState<string[]>([]);
   const [interestTags, setInterestTags] = useState<string[]>([]);
   const [clubInterests, setClubInterests] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -148,7 +143,7 @@ export default function AuthScreen() {
     const nextErrors: Record<string, string> = {};
     if (!classYear) nextErrors.classYear = 'Choose your class year.';
     if (!major.trim()) nextErrors.major = 'Enter your major.';
-    if (!purpose) nextErrors.purpose = 'Choose what brings you to Oval.';
+    if (!purpose.length) nextErrors.purpose = 'Choose what brings you to Oval.';
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
@@ -221,9 +216,8 @@ export default function AuthScreen() {
       if (!lastName.trim()) nextErrors.lastName = 'Enter your last name.';
       if (!classYear.trim()) nextErrors.classYear = 'Choose your class year.';
       if (!major.trim()) nextErrors.major = 'Enter your major.';
-      if (!purpose) nextErrors.purpose = 'Choose what brings you to Oval.';
+      if (!purpose.length) nextErrors.purpose = 'Choose what brings you to Oval.';
       if (!interestTags.length) nextErrors.interestTags = 'Choose at least one interest.';
-      if (!campusZones.length) nextErrors.campusZones = 'Choose at least one campus zone.';
       if (!ageConfirmed) nextErrors.ageConfirmed = 'Confirm that you are 18 or older.';
       if (!termsAccepted) nextErrors.termsAccepted = 'Accept the terms to create an account.';
     }
@@ -259,8 +253,7 @@ export default function AuthScreen() {
       let profileSaved = true;
       try {
         finalUser = await updateProfile({
-          purpose,
-          campusZones,
+          purpose: purpose.join(', '),
           clubInterests: clubInterests.trim() || null,
           interestTags,
         });
@@ -282,7 +275,7 @@ export default function AuthScreen() {
       }
       void trackEvent('auth.register', {
         classYear: classYear.trim(),
-        purpose,
+        purpose: purpose.join(', '),
         interestCount: interestTags.length,
       });
     } catch (error) {
@@ -529,16 +522,16 @@ export default function AuthScreen() {
                         placeholder="Computer Science"
                       />
                       <View style={styles.fieldBlock}>
-                        <Text style={typography.kicker}>What are you here for?</Text>
+                        <Text style={typography.kicker}>What are you here for? (pick any)</Text>
                         <View style={styles.chipWrap}>
                           {PURPOSE_OPTIONS.map((option) => (
                             <Chip
                               key={option}
                               label={option}
-                              selected={purpose === option}
+                              selected={purpose.includes(option)}
                               tint={colors.amberSoft}
                               onPress={() => {
-                                setPurpose(option);
+                                toggleListValue(option, setPurpose);
                                 clearError('purpose');
                               }}
                             />
@@ -574,28 +567,6 @@ export default function AuthScreen() {
                         {errors.interestTags ? (
                           <Text style={[styles.inlineError, { color: colors.danger }]}>
                             {errors.interestTags}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <View style={styles.fieldBlock}>
-                        <Text style={typography.kicker}>Campus zones — pick up to 3</Text>
-                        <View style={styles.chipWrap}>
-                          {CAMPUS_ZONE_OPTIONS.map((zone) => (
-                            <Chip
-                              key={zone}
-                              label={zone}
-                              selected={campusZones.includes(zone)}
-                              tint={colors.tealSoft}
-                              onPress={() => {
-                                toggleListValue(zone, setCampusZones, MAX_CAMPUS_ZONES);
-                                clearError('campusZones');
-                              }}
-                            />
-                          ))}
-                        </View>
-                        {errors.campusZones ? (
-                          <Text style={[styles.inlineError, { color: colors.danger }]}>
-                            {errors.campusZones}
                           </Text>
                         ) : null}
                       </View>

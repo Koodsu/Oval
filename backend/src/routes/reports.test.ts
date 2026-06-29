@@ -3,6 +3,7 @@ import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
 import { registerAndGetToken, getAuthToken, createTestUser } from '../test/helpers';
+import { CURRENT_TERMS_VERSION } from '../config/legal';
 
 describe('Reports API', () => {
   let token: string;
@@ -384,7 +385,7 @@ describe('Reports API', () => {
           major: 'Computer Science',
           termsAccepted: true,
           ageConfirmed: true,
-          termsVersion: '2026-06-08',
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(403);
     });

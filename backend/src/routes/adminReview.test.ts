@@ -20,7 +20,16 @@ describe('signed admin report review page', () => {
   it('loads and enforces moderation actions only with a valid report token', async () => {
     const reporter = await createTestUser();
     const target = await createTestUser();
-    const pod = await prisma.pod.findFirstOrThrow();
+    // Create our own pod instead of assuming one exists (test runs in any order).
+    const activity = await prisma.activity.findFirstOrThrow();
+    const pod = await prisma.pod.create({
+      data: {
+        activityId: activity.id,
+        meetupTime: new Date(Date.now() + 86400000),
+        location: 'Test Location',
+        creatorId: reporter.id,
+      },
+    });
     const message = await prisma.message.create({
       data: {
         podId: pod.id,
