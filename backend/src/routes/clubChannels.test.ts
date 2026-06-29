@@ -25,6 +25,8 @@ describe('Club channels API (integration)', () => {
         emoji: '♟️',
       })
       .expect(201);
+    // New clubs start hidden; make discoverable so members can join in tests.
+    await prisma.club.update({ where: { id: res.body.id }, data: { isDiscoverable: true } });
     return res.body.id as string;
   };
 

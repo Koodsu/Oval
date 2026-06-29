@@ -437,6 +437,7 @@ describe('Privacy and account data APIs', () => {
     await request(app)
       .delete('/users/me')
       .set('Authorization', `Bearer ${owner.token}`)
+      .send({ password: 'password123' })
       .expect(204);
 
     expect(await prisma.user.findUnique({ where: { id: owner.user.id } })).toBeNull();

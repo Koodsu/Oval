@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { requireAuth, requireVerifiedAuth, AuthRequest } from '../middleware/auth';
 import { isSupabaseStorageConfigured, supabaseStorage } from '../lib/supabaseStorage';
@@ -725,10 +726,23 @@ router.get('/me/export', requireAuth, async (req: AuthRequest, res: Response): P
 
 router.delete('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
   try {
-    const existing = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarUrl: true, password: true },
+    });
     if (!existing) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (!password) {
+      res.status(400).json({ error: 'Password is required to delete your account' });
+      return;
+    }
+    const passwordValid = await bcrypt.compare(password, existing.password);
+    if (!passwordValid) {
+      res.status(403).json({ error: 'Incorrect password' });
       return;
     }
 

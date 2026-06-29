@@ -57,6 +57,7 @@ import UserSearchScreen from './src/screens/UserSearchScreen';
 import BlockedUsersScreen from './src/screens/BlockedUsersScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
+import DeleteAccountScreen from './src/screens/DeleteAccountScreen';
 import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
 import { Activity } from './src/types';
 import { getFriendRequests, getMessageThreads, getPodInvites } from './src/api';
@@ -94,6 +95,7 @@ export type RootStackParamList = {
   BlockedUsers: undefined;
   Settings: undefined;
   PrivacyData: undefined;
+  DeleteAccount: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -348,6 +350,7 @@ function AuthedApp() {
       <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="PrivacyData" component={PrivacyDataScreen} />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
     </Stack.Navigator>
   );
 }

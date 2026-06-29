@@ -3,6 +3,7 @@ import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
 import { hashOneTimeCode } from '../lib/oneTimeCodes';
+import { CURRENT_TERMS_VERSION } from '../config/legal';
 
 const TEST_DOMAIN = '@osu.edu';
 const VALID_PROFILE = {
@@ -10,7 +11,7 @@ const VALID_PROFILE = {
   major: 'Computer Science',
   termsAccepted: true,
   ageConfirmed: true,
-  termsVersion: '2026-06-08',
+  termsVersion: CURRENT_TERMS_VERSION,
 };
 
 describe('POST /auth/register', () => {
@@ -39,7 +40,7 @@ describe('POST /auth/register', () => {
       joinedAt: expect.any(String),
     });
     expect(res.body.user.id).toHaveLength(36); // UUID format
-    expect(res.body.user.termsVersion).toBe('2026-06-08');
+    expect(res.body.user.termsVersion).toBe(CURRENT_TERMS_VERSION);
     expect(res.body.user.termsAcceptedAt).toEqual(expect.any(String));
     expect(res.body.user.ageAttestedAt).toEqual(expect.any(String));
   });
@@ -444,11 +445,11 @@ describe('POST /auth/accept-terms', () => {
       .send({
         termsAccepted: true,
         ageConfirmed: true,
-        termsVersion: '2026-06-08',
+        termsVersion: CURRENT_TERMS_VERSION,
       })
       .expect(200);
 
-    expect(response.body.user.termsVersion).toBe('2026-06-08');
+    expect(response.body.user.termsVersion).toBe(CURRENT_TERMS_VERSION);
     expect(response.body.user.ageAttestedAt).toEqual(expect.any(String));
   });
 });

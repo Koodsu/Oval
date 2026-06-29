@@ -1079,8 +1079,8 @@ export const uploadAvatar = async (uri: string, signal?: AbortSignal): Promise<{
 export const deleteAvatar = () =>
   request<{ avatarUrl: null }>('/users/me/avatar', { method: 'DELETE' });
 
-export const deleteMyAccount = () =>
-  request<void>('/users/me', { method: 'DELETE' });
+export const deleteMyAccount = (password: string) =>
+  request<void>('/users/me', { method: 'DELETE', body: JSON.stringify({ password }) });
 
 export const downloadMyData = () =>
   request<Record<string, unknown>>('/users/me/export');

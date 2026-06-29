@@ -115,6 +115,30 @@ const VISIBILITY_PUBLIC = 'PUBLIC';
 const VISIBILITY_MEMBERS = 'MEMBERS';
 const VISIBILITY_OFFICERS = 'OFFICERS';
 
+// ── Club lifecycle (see docs/CLUB_LIFECYCLE_IMPLEMENTATION.md) ─────────────────
+const CLUB_PUBLISH_THRESHOLD = 5; // distinct qualifying members to auto-enable discovery
+const MIN_ACCOUNT_AGE_DAYS = 3; // min account age for a member to count toward the gate
+
+const VERIFICATION_UNVERIFIED = 'UNVERIFIED';
+const VERIFICATION_PENDING = 'PENDING_REVIEW';
+const VERIFICATION_VERIFIED = 'VERIFIED';
+
+const JOIN_OPEN = 'OPEN';
+const JOIN_REQUEST = 'REQUEST';
+const JOIN_APPLICATION = 'APPLICATION';
+const JOIN_INVITE_ONLY = 'INVITE_ONLY';
+const CLUB_JOIN_POLICIES = new Set([JOIN_OPEN, JOIN_REQUEST, JOIN_APPLICATION, JOIN_INVITE_ONLY]);
+
+const CLUB_STATUS_ACTIVE = 'ACTIVE';
+const CLUB_STATUS_SUSPENDED = 'SUSPENDED';
+const CLUB_STATUS_ARCHIVED = 'ARCHIVED';
+
+const CLAIM_METHOD_INSTAGRAM = 'INSTAGRAM';
+const CLAIM_METHOD_EMAIL = 'OFFICIAL_EMAIL';
+const CLAIM_STATUS_PENDING = 'PENDING';
+const CLAIM_STATUS_PROOF_SENT = 'PROOF_SENT';
+const CLAIM_EXPIRY_HOURS = 24;
+
 const RSVP_GOING = 'GOING';
 const RSVP_MAYBE = 'MAYBE';
 const RSVP_NOT_GOING = 'NOT_GOING';
@@ -472,6 +496,62 @@ async function getMembershipWithRoles(clubId: string, userId: string): Promise<M
   });
 }
 
+// ── Club lifecycle helpers ────────────────────────────────────────────────────
+
+/** Distinct, university-verified, sufficiently-aged members count toward the publish gate. */
+async function countQualifyingMembers(clubId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000);
+  return prisma.clubMember.count({
+    where: {
+      clubId,
+      user: { verifiedUniversity: true, createdAt: { lte: cutoff } },
+    },
+  });
+}
+
+/** A club may turn discovery on once it has enough real members OR is verified. */
+async function isEligibleForDiscovery(club: { id: string; verification: string }): Promise<boolean> {
+  if (club.verification === VERIFICATION_VERIFIED) return true;
+  const qualifying = await countQualifyingMembers(club.id);
+  return qualifying >= CLUB_PUBLISH_THRESHOLD;
+}
+
+/**
+ * After a membership add, auto-flip a never-published club to discoverable the first
+ * time it crosses the member threshold. One-time: once `discoverableSince` is set the
+ * club controls discovery via PATCH /:id/discovery.
+ */
+async function maybeAutoEnableDiscovery(clubId: string): Promise<void> {
+  const club = await prisma.club.findUnique({
+    where: { id: clubId },
+    select: { id: true, isDiscoverable: true, discoverableSince: true, status: true },
+  });
+  if (!club) return;
+  if (club.isDiscoverable || club.discoverableSince || club.status !== CLUB_STATUS_ACTIVE) return;
+  const qualifying = await countQualifyingMembers(clubId);
+  if (qualifying < CLUB_PUBLISH_THRESHOLD) return;
+  await prisma.club.update({
+    where: { id: clubId },
+    data: { isDiscoverable: true, discoverableSince: new Date(), isPublic: true },
+  });
+}
+
+function generateInviteCode(): string {
+  return crypto.randomBytes(6).toString('base64url');
+}
+
+/** Short human-typable code the officer DMs to @oval (or receives by email). */
+function generateChallengeCode(): string {
+  return `OVAL-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
+/** Normalize an Instagram handle: strip leading @, lowercase, trim. */
+function normalizeInstagramHandle(raw: string): string {
+  return raw.trim().replace(/^@+/, '').toLowerCase();
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function canSeeChannel(
   channel: Pick<ChannelRecord, 'kind' | 'allowedRoleIds'>,
   membership: MembershipWithRoles | null,
@@ -733,11 +813,13 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
 
   try {
     const where: {
-      isPublic: boolean;
+      isDiscoverable: boolean;
+      status: string;
       category?: string;
       name?: { contains: string; mode: 'insensitive' };
     } = {
-      isPublic: true,
+      isDiscoverable: true,
+      status: CLUB_STATUS_ACTIVE,
     };
 
     if (category && typeof category === 'string' && category.trim()) {
@@ -753,6 +835,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
         _count: {
           select: {
             members: true,
+            followers: true,
             meetings: { where: { meetingTime: { gt: now } } },
           },
         },
@@ -761,14 +844,21 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     });
 
     const clubIds = clubs.map((c) => c.id);
-    const myMemberships =
+    const [myMemberships, myFollows] =
       clubIds.length === 0
-        ? []
-        : await prisma.clubMember.findMany({
-            where: { userId, clubId: { in: clubIds } },
-            select: { clubId: true },
-          });
+        ? [[], []]
+        : await Promise.all([
+            prisma.clubMember.findMany({
+              where: { userId, clubId: { in: clubIds } },
+              select: { clubId: true },
+            }),
+            prisma.clubFollower.findMany({
+              where: { userId, clubId: { in: clubIds } },
+              select: { clubId: true },
+            }),
+          ]);
     const memberSet = new Set(myMemberships.map((m) => m.clubId));
+    const followSet = new Set(myFollows.map((f) => f.clubId));
 
     res.json(
       clubs.map((c) => ({
@@ -779,13 +869,18 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
         emoji: c.emoji,
         avatarUrl: c.avatarUrl,
         isVerified: c.isVerified,
+        verification: c.verification,
         isPublic: c.isPublic,
+        isDiscoverable: c.isDiscoverable,
+        joinPolicy: c.joinPolicy,
         university: c.university,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         memberCount: c._count.members,
+        followerCount: c._count.followers,
         upcomingMeetingCount: c._count.meetings,
         isMember: memberSet.has(c.id),
+        isFollower: followSet.has(c.id),
       }))
     );
   } catch (err) {
@@ -1026,7 +1121,7 @@ router.get('/today', requireAuth, async (req: AuthRequest, res: Response): Promi
 router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const body = req.body ?? {};
-  const { name, description, category, emoji, isPublic } = body;
+  const { name, description, category, emoji } = body;
 
   if (typeof name !== 'string' || !name.trim()) {
     res.status(400).json({ error: 'name is required' });
@@ -1049,24 +1144,53 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     res.status(clubModeration.status).json({ error: clubModeration.message });
     return;
   }
-  let publicFlag = true;
-  if (isPublic !== undefined) {
-    if (typeof isPublic !== 'boolean') {
-      res.status(400).json({ error: 'isPublic must be a boolean' });
-      return;
-    }
-    publicFlag = isPublic;
+
+  const trimmedName = name.trim();
+
+  // Rate-limit club creation to curb spam/squatting.
+  const createAllowed = await consumeDurableRateLimit({
+    action: 'club_create',
+    identifiers: [userId],
+    limit: 2,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!createAllowed) {
+    res.status(429).json({ error: 'You are creating clubs too quickly. Try again later.' });
+    return;
+  }
+
+  // Soft name-collision guard within the same university (default OSU).
+  const collision = await prisma.club.findFirst({
+    where: {
+      university: 'OSU',
+      name: { equals: trimmedName, mode: 'insensitive' },
+      status: { not: CLUB_STATUS_ARCHIVED },
+    },
+    select: { id: true },
+  });
+  if (collision) {
+    res.status(409).json({
+      error: 'A club with this name already exists. Try joining it instead.',
+      existingClubId: collision.id,
+    });
+    return;
   }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // New clubs start hidden, unverified, open-join; they become discoverable
+      // once they reach the member threshold (§5) or get verified (§7).
       const club = await tx.club.create({
         data: {
-          name: name.trim(),
+          name: trimmedName,
           description: description.trim(),
           category: category.trim(),
           emoji: emoji.trim(),
-          isPublic: publicFlag,
+          isPublic: false,
+          isDiscoverable: false,
+          verification: VERIFICATION_UNVERIFIED,
+          joinPolicy: JOIN_OPEN,
+          status: CLUB_STATUS_ACTIVE,
           createdById: userId,
         },
       });
@@ -3255,6 +3379,26 @@ router.post('/:id/join', requireAuth, async (req: AuthRequest, res: Response): P
       res.status(404).json({ error: 'Club not found' });
       return;
     }
+    if (club.status !== CLUB_STATUS_ACTIVE) {
+      res.status(403).json({ error: 'This club is not accepting members right now.' });
+      return;
+    }
+    // You can only directly join a club you can see; hidden clubs are joined via invite.
+    if (!club.isDiscoverable) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+    // Gated join policies route through request/application/invite flows, not direct join.
+    if (club.joinPolicy !== JOIN_OPEN) {
+      const message =
+        club.joinPolicy === JOIN_APPLICATION
+          ? 'This club accepts members by application.'
+          : club.joinPolicy === JOIN_REQUEST
+            ? 'This club requires officer approval to join.'
+            : 'This club is invite-only.';
+      res.status(403).json({ error: message, joinPolicy: club.joinPolicy });
+      return;
+    }
 
     const existing = await prisma.clubMember.findUnique({
       where: { clubId_userId: { clubId, userId } },
@@ -3267,6 +3411,7 @@ router.post('/:id/join', requireAuth, async (req: AuthRequest, res: Response): P
     await prisma.clubMember.create({
       data: { clubId, userId, role: ROLE_MEMBER },
     });
+    await maybeAutoEnableDiscovery(clubId);
 
     res.status(201).json({ ok: true });
   } catch (err) {
@@ -3517,10 +3662,16 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
 
     const myMembership = club.members.find((m) => m.userId === userId);
     const myRoleIds = new Set(myMembership?.customRoles.map((role) => role.roleId) ?? []);
-    if (!club.isPublic && !myMembership) {
+    // Hidden clubs are visible only to members; archived clubs are hidden from everyone.
+    if ((!club.isDiscoverable && !myMembership) || club.status === CLUB_STATUS_ARCHIVED) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
+
+    const [followerCount, myFollow] = await Promise.all([
+      prisma.clubFollower.count({ where: { clubId } }),
+      prisma.clubFollower.findUnique({ where: { clubId_userId: { clubId, userId } } }),
+    ]);
 
     const visibleMeetings = club.meetings
       .filter((meeting) =>
@@ -3568,11 +3719,365 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       ),
       isMember: !!myMembership,
       myRole: myMembership?.role ?? null,
+      followerCount,
+      isFollower: !!myFollow,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ── Follow / unfollow (public audience, separate from membership) ──────────────
+
+// POST /clubs/:id/follow
+router.post('/:id/follow', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+
+  try {
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { id: true, isDiscoverable: true, status: true },
+    });
+    if (!club || club.status === CLUB_STATUS_ARCHIVED || !club.isDiscoverable) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+    await prisma.clubFollower.upsert({
+      where: { clubId_userId: { clubId, userId } },
+      create: { clubId, userId },
+      update: {},
+    });
+    const followerCount = await prisma.clubFollower.count({ where: { clubId } });
+    res.status(201).json({ ok: true, isFollower: true, followerCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /clubs/:id/follow
+router.delete('/:id/follow', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+
+  try {
+    await prisma.clubFollower.deleteMany({ where: { clubId, userId } });
+    const followerCount = await prisma.clubFollower.count({ where: { clubId } });
+    res.json({ ok: true, isFollower: false, followerCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Discovery toggle (officer-controlled, eligibility-gated) ───────────────────
+
+// PATCH /clubs/:id/discovery — { isDiscoverable: boolean }
+router.patch('/:id/discovery', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const { isDiscoverable } = req.body ?? {};
+
+  if (typeof isDiscoverable !== 'boolean') {
+    res.status(400).json({ error: 'isDiscoverable must be a boolean' });
+    return;
+  }
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership || roleRank(membership.role) < roleRank(ROLE_OFFICER)) {
+      res.status(403).json({ error: 'Only officers and admins can change discovery' });
+      return;
+    }
+
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { id: true, verification: true, status: true, discoverableSince: true },
+    });
+    if (!club || club.status === CLUB_STATUS_ARCHIVED) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+
+    if (isDiscoverable) {
+      if (club.status !== CLUB_STATUS_ACTIVE) {
+        res.status(403).json({ error: 'A suspended club cannot be made discoverable.' });
+        return;
+      }
+      const eligible = await isEligibleForDiscovery(club);
+      if (!eligible) {
+        res.status(409).json({
+          error: `Your club needs ${CLUB_PUBLISH_THRESHOLD} members or Instagram verification before it can be discoverable.`,
+        });
+        return;
+      }
+    }
+
+    const updated = await prisma.club.update({
+      where: { id: clubId },
+      data: {
+        isDiscoverable,
+        isPublic: isDiscoverable,
+        discoverableSince: isDiscoverable && !club.discoverableSince ? new Date() : undefined,
+      },
+      select: { isDiscoverable: true },
+    });
+    res.json({ ok: true, isDiscoverable: updated.isDiscoverable });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Invite links (private-stage growth) ───────────────────────────────────────
+
+// POST /clubs/:id/invites — officer creates a shareable invite link
+router.post('/:id/invites', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const { maxUses, expiresInHours } = req.body ?? {};
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership || roleRank(membership.role) < roleRank(ROLE_OFFICER)) {
+      res.status(403).json({ error: 'Only officers and admins can create invites' });
+      return;
+    }
+
+    let maxUsesValue: number | null = null;
+    if (maxUses !== undefined && maxUses !== null) {
+      if (typeof maxUses !== 'number' || !Number.isInteger(maxUses) || maxUses < 1) {
+        res.status(400).json({ error: 'maxUses must be a positive integer' });
+        return;
+      }
+      maxUsesValue = maxUses;
+    }
+
+    let expiresAt: Date | null = null;
+    if (expiresInHours !== undefined && expiresInHours !== null) {
+      if (typeof expiresInHours !== 'number' || expiresInHours <= 0) {
+        res.status(400).json({ error: 'expiresInHours must be a positive number' });
+        return;
+      }
+      expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
+    }
+
+    const invite = await prisma.clubInvite.create({
+      data: { clubId, code: generateInviteCode(), createdById: userId, maxUses: maxUsesValue, expiresAt },
+    });
+    res.status(201).json({
+      id: invite.id,
+      code: invite.code,
+      maxUses: invite.maxUses,
+      expiresAt: invite.expiresAt,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/join/:code — redeem an invite link to become a member
+router.post('/join/:code', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { code } = req.params;
+
+  try {
+    const invite = await prisma.clubInvite.findUnique({ where: { code } });
+    if (!invite) {
+      res.status(404).json({ error: 'Invite not found' });
+      return;
+    }
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      res.status(410).json({ error: 'This invite has expired' });
+      return;
+    }
+    if (invite.maxUses !== null && invite.uses >= invite.maxUses) {
+      res.status(410).json({ error: 'This invite has reached its use limit' });
+      return;
+    }
+
+    const club = await prisma.club.findUnique({
+      where: { id: invite.clubId },
+      select: { id: true, status: true },
+    });
+    if (!club || club.status === CLUB_STATUS_ARCHIVED) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+
+    const existing = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId: invite.clubId, userId } },
+    });
+    if (existing) {
+      res.status(200).json({ ok: true, clubId: invite.clubId, alreadyMember: true });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.clubMember.create({ data: { clubId: invite.clubId, userId, role: ROLE_MEMBER } }),
+      prisma.clubInvite.update({ where: { id: invite.id }, data: { uses: { increment: 1 } } }),
+    ]);
+    await maybeAutoEnableDiscovery(invite.clubId);
+
+    res.status(201).json({ ok: true, clubId: invite.clubId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Verification claims (Instagram / official email) ──────────────────────────
+
+// POST /clubs/:id/claims — an officer starts verification for the club
+router.post('/:id/claims', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const body = req.body ?? {};
+  const method = typeof body.method === 'string' ? body.method.trim().toUpperCase() : '';
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+    });
+    if (!membership || roleRank(membership.role) < roleRank(ROLE_OFFICER)) {
+      res.status(403).json({ error: 'Only officers and admins can verify a club' });
+      return;
+    }
+
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { id: true, status: true, verification: true },
+    });
+    if (!club || club.status === CLUB_STATUS_ARCHIVED) {
+      res.status(404).json({ error: 'Club not found' });
+      return;
+    }
+    if (club.verification === VERIFICATION_VERIFIED) {
+      res.status(409).json({ error: 'This club is already verified.' });
+      return;
+    }
+
+    // Resolve the handle/email being claimed.
+    let handleOrEmail: string;
+    if (method === CLAIM_METHOD_INSTAGRAM) {
+      const handle = typeof body.handle === 'string' ? normalizeInstagramHandle(body.handle) : '';
+      if (!handle || handle.length < 2) {
+        res.status(400).json({ error: 'A valid Instagram handle is required' });
+        return;
+      }
+      handleOrEmail = handle;
+    } else if (method === CLAIM_METHOD_EMAIL) {
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!EMAIL_REGEX.test(email)) {
+        res.status(400).json({ error: 'A valid official email is required' });
+        return;
+      }
+      handleOrEmail = email;
+    } else {
+      res.status(400).json({ error: 'method must be INSTAGRAM or OFFICIAL_EMAIL' });
+      return;
+    }
+
+    const challengeCode = generateChallengeCode();
+    const expiresAt = new Date(Date.now() + CLAIM_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    const claim = await prisma.$transaction(async (tx) => {
+      // Supersede any still-open claims for this club.
+      await tx.clubClaim.updateMany({
+        where: { clubId, status: { in: [CLAIM_STATUS_PENDING, CLAIM_STATUS_PROOF_SENT] } },
+        data: { status: 'EXPIRED', resolvedAt: new Date() },
+      });
+      const created = await tx.clubClaim.create({
+        data: {
+          clubId,
+          userId,
+          method,
+          handleOrEmail,
+          challengeCode,
+          status: CLAIM_STATUS_PENDING,
+          expiresAt,
+        },
+      });
+      await tx.club.update({ where: { id: clubId }, data: { verification: VERIFICATION_PENDING } });
+      return created;
+    });
+
+    const instructions =
+      method === CLAIM_METHOD_INSTAGRAM
+        ? `DM this exact code to @oval from @${handleOrEmail} on Instagram, then tap "I've sent it".`
+        : `We will review the code sent from ${handleOrEmail}.`;
+
+    res.status(201).json({
+      id: claim.id,
+      method: claim.method,
+      handleOrEmail: claim.handleOrEmail,
+      challengeCode: claim.challengeCode,
+      status: claim.status,
+      expiresAt: claim.expiresAt,
+      instructions,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /clubs/:id/claims/:claimId/sent — officer confirms they sent the code
+router.post(
+  '/:id/claims/:claimId/sent',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, claimId } = req.params;
+
+    try {
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership || roleRank(membership.role) < roleRank(ROLE_OFFICER)) {
+        res.status(403).json({ error: 'Only officers and admins can verify a club' });
+        return;
+      }
+
+      const claim = await prisma.clubClaim.findFirst({ where: { id: claimId, clubId } });
+      if (!claim) {
+        res.status(404).json({ error: 'Claim not found' });
+        return;
+      }
+      if (claim.status === CLAIM_STATUS_PROOF_SENT) {
+        res.json({ ok: true, status: claim.status });
+        return;
+      }
+      if (claim.status !== CLAIM_STATUS_PENDING) {
+        res.status(409).json({ error: 'This claim can no longer be updated.' });
+        return;
+      }
+      if (claim.expiresAt < new Date()) {
+        await prisma.clubClaim.update({
+          where: { id: claim.id },
+          data: { status: 'EXPIRED', resolvedAt: new Date() },
+        });
+        res.status(410).json({ error: 'This verification code has expired. Start again.' });
+        return;
+      }
+
+      await prisma.clubClaim.update({
+        where: { id: claim.id },
+        data: { status: CLAIM_STATUS_PROOF_SENT },
+      });
+      res.json({ ok: true, status: CLAIM_STATUS_PROOF_SENT });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
 
 export default router;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import app from '../server';
+import { CURRENT_TERMS_VERSION } from '../config/legal';
 
 async function registerUnverified(email: string) {
   const res = await request(app)
@@ -14,7 +15,7 @@ async function registerUnverified(email: string) {
       major: 'Computer Science',
       termsAccepted: true,
       ageConfirmed: true,
-      termsVersion: '2026-06-08',
+      termsVersion: CURRENT_TERMS_VERSION,
     })
     .expect(201);
 
