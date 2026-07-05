@@ -10,20 +10,16 @@ import { formatDateTime } from '../utils/format';
 import { Pod } from '../types';
 import {
   AppBackdrop,
-  Avatar,
   Button,
   Card,
   Chip,
   EmptyState,
   SkeletonCard,
-  Sticker,
 } from '../components/ui';
 import {
-  DOCK_CLEARANCE,
   Theme,
   createThemedStyles,
   fonts,
-  radii,
   spacing,
   useTheme,
 } from '../theme';
@@ -108,117 +104,119 @@ export default function FirstPlanScreen({ navigation, onDone }: Props) {
 
   return (
     <AppBackdrop>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + DOCK_CLEARANCE },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.masthead}>
-          <Text style={[typography.kicker, { color: colors.accentText }]}>This week, near you</Text>
-          <Text style={styles.title}>Pick your first plan.</Text>
-          <Text style={[typography.body, { color: colors.sub }]}>
-            A few live pods based on what you told us. Join one now or browse later.
-          </Text>
-        </View>
-
-        {interests.length ? (
-          <View style={styles.chipWrap}>
-            {interests.slice(0, 6).map((tag) => (
-              <Chip
-                key={tag}
-                label={INTEREST_TAG_META[tag]?.label ?? tag}
-                selected
-                tint={colors.primarySoft}
-              />
-            ))}
+      <View style={styles.screen}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.masthead}>
+            <Text style={[typography.kicker, { color: colors.accentText }]}>
+              This week, near you
+            </Text>
+            <Text style={styles.title}>Pick your first plan.</Text>
+            <Text style={[typography.caption, { color: colors.sub }]} numberOfLines={2}>
+              A few live pods based on what you told us. Join one now or browse later.
+            </Text>
           </View>
-        ) : null}
 
-        {loading ? (
-          <>
-            <SkeletonCard />
-            <SkeletonCard compact />
-          </>
-        ) : pods.length ? (
-          <View style={styles.podList}>
-            {pods.map((pod, index) => {
-              const topPick = index === 0;
-              const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
-              return (
-                <Card key={pod.id} padded borderColor={topPick ? colors.primary : undefined}>
-                  <View style={styles.cardTop}>
-                    <Sticker
-                      label={topPick ? 'Best match' : pod.activity?.category ?? 'Open'}
-                      tint={topPick ? colors.primary : colors.surfaceAlt}
-                      textColor={topPick ? colors.onPrimary : colors.ink}
-                      small
-                      tilt={topPick ? -2 : 2}
-                    />
-                    <Text style={styles.spots}>{spotsLeft} spots left</Text>
-                  </View>
-                  <Text style={typography.title}>{pod.activity?.title ?? 'Pod'}</Text>
-                  <Text style={[typography.caption, { marginTop: 4 }]}>
-                    {formatDateTime(pod.meetupTime)} · {pod.location}
-                  </Text>
-                  <View style={styles.memberRow}>
-                    {pod.members.slice(0, 4).map((member, memberIndex) => (
-                      <Avatar
-                        key={member.id}
-                        name={member.user.name}
-                        uri={member.user.avatarUrl}
-                        size={28}
-                        tilt={memberIndex % 2 === 0 ? -2 : 2}
+          {interests.length ? (
+            <View style={styles.chipWrap}>
+              {interests.slice(0, 4).map((tag) => (
+                <Chip
+                  key={tag}
+                  label={INTEREST_TAG_META[tag]?.label ?? tag}
+                  selected
+                  tint={colors.primarySoft}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {loading ? (
+            <>
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </>
+          ) : pods.length ? (
+            <View style={styles.podList}>
+              {pods.map((pod, index) => {
+                const topPick = index === 0;
+                const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+                return (
+                  <Card key={pod.id} padded borderColor={topPick ? colors.primary : undefined}>
+                    <View style={styles.podRow}>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        {topPick ? (
+                          <Text style={[typography.kicker, { color: colors.accentText }]}>
+                            BEST MATCH
+                          </Text>
+                        ) : null}
+                        <Text style={typography.heading} numberOfLines={1}>
+                          {pod.activity?.title ?? 'Pod'}
+                        </Text>
+                        <Text style={typography.captionSmall} numberOfLines={1}>
+                          {formatDateTime(pod.meetupTime)} · {pod.location}
+                        </Text>
+                        <Text style={[typography.captionSmall, { color: colors.sub }]}>
+                          {pod.members.length} of {pod.maxMembers} in · {spotsLeft}{' '}
+                          {spotsLeft === 1 ? 'spot' : 'spots'} left
+                        </Text>
+                      </View>
+                      <Button
+                        label="Join"
+                        size="sm"
+                        onPress={() => void handleJoin(pod)}
+                        loading={busyPodId === pod.id}
+                        disabled={Boolean(busyPodId)}
+                        variant={topPick ? 'primary' : 'secondary'}
                       />
-                    ))}
-                    <Text style={[typography.captionSmall, { color: colors.sub }]}>
-                      {pod.members.length} of {pod.maxMembers} in
-                    </Text>
-                  </View>
-                  <Button
-                    label={topPick ? 'Join this pod' : 'Join'}
-                    onPress={() => void handleJoin(pod)}
-                    loading={busyPodId === pod.id}
-                    disabled={Boolean(busyPodId)}
-                    variant={topPick ? 'primary' : 'secondary'}
-                    style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
-                  />
-                </Card>
-              );
-            })}
-          </View>
-        ) : (
-          <EmptyState
-            icon="compass"
-            title="No pods right now"
-            body="Oval will take you to the app instead."
-            actionLabel="Continue"
-            onAction={complete}
-          />
-        )}
+                    </View>
+                  </Card>
+                );
+              })}
+            </View>
+          ) : (
+            <EmptyState
+              icon="compass"
+              title="No pods right now"
+              body="Oval will take you to the app instead."
+              actionLabel="Continue"
+              onAction={complete}
+            />
+          )}
+        </ScrollView>
 
+        {/* Pinned footer: skipping must be visible without scrolling — users
+            were missing it entirely when it lived at the end of the scroll. */}
         {!loading && pods.length ? (
-          <Button label="Skip for now" variant="ghost" onPress={handleSkip} />
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <Button label="Skip for now" variant="ghost" onPress={handleSkip} />
+          </View>
         ) : null}
-      </ScrollView>
+      </View>
     </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
+  screen: {
+    flex: 1,
+  },
   content: {
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
   },
   masthead: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   title: {
     fontFamily: fonts.display,
-    fontSize: 30,
-    lineHeight: 36,
+    fontWeight: '800' as const,
+    fontSize: 26,
+    lineHeight: 31,
     color: t.colors.ink,
   },
   chipWrap: {
@@ -227,24 +225,15 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
   },
   podList: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  cardTop: {
+  podRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
     gap: spacing.md,
-    marginBottom: spacing.md,
   },
-  spots: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: t.colors.sub,
-  },
-  memberRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-    marginTop: spacing.md,
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
   },
 }));
