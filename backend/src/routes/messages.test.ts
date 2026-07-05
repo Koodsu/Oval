@@ -60,6 +60,43 @@ describe('Messages API (integration)', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(403);
     });
+
+    it('stamps pod read state and clears unread counts', async () => {
+      const { token: otherToken } = await registerAndGetToken(
+        'Unread Sender',
+        `unread-sender-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ podId })
+        .expect(201);
+
+      await request(app)
+        .post(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ content: 'Unread for owner' })
+        .expect(201);
+
+      const mineBefore = await request(app)
+        .get('/pods/mine')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(mineBefore.body[0].unreadCount).toBe(1);
+
+      await request(app)
+        .get(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const mineAfter = await request(app)
+        .get('/pods/mine')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(mineAfter.body[0].unreadCount).toBe(0);
+    });
   });
 
   describe('POST /pods/:id/messages', () => {
@@ -114,6 +151,38 @@ describe('Messages API (integration)', () => {
 
       expect(res.body.messages).toHaveLength(1);
       expect(res.body.messages[0].content).toBe('First message');
+    });
+
+    it('stamps read state when posting a message', async () => {
+      const { token: otherToken } = await registerAndGetToken(
+        'Reply Sender',
+        `reply-sender-${Date.now()}@example.com`,
+        'password123'
+      );
+
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ podId })
+        .expect(201);
+
+      await request(app)
+        .post(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ content: 'Ping' })
+        .expect(201);
+
+      await request(app)
+        .post(`/pods/${podId}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Pong' })
+        .expect(201);
+
+      const mine = await request(app)
+        .get('/pods/mine')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(mine.body[0].unreadCount).toBe(0);
     });
 
     it('cannot message when blocked relationship exists', async () => {

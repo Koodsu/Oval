@@ -5,7 +5,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchFeed, getActivities, getApiErrorMessage, requestActivity } from '../api';
+import {
+  clearActivityDemand,
+  createPod,
+  fetchFeed,
+  getActivities,
+  getApiErrorMessage,
+  requestActivity,
+  signalActivityDemand,
+} from '../api';
 import { Activity, Pod } from '../types';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
@@ -24,7 +32,10 @@ import {
   Sticker,
   accentForSeed,
 } from '../components/ui';
+import PodTemplatePicker from '../components/PodTemplatePicker';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
+import { PodTemplate, templateCreateOptions } from '../constants/podTemplates';
+import { useJoinPod } from '../hooks/useJoinPod';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import {
   BORDER_W,
@@ -37,6 +48,7 @@ import {
   spacing,
   useTheme,
 } from '../theme';
+import { formatTime } from '../utils/format';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -138,7 +150,13 @@ type ExploreCard = {
   totalParticipants: number;
 };
 
-export default function ExploreScreen() {
+export default function ExploreScreen({
+  startCreate,
+  embedded,
+}: {
+  startCreate?: number;
+  embedded?: boolean;
+}) {
   const navigation = useNavigation<Nav>();
   const { colors, typography } = useTheme();
   const styles = useStyles();
@@ -160,6 +178,12 @@ export default function ExploreScreen() {
   const [requestDefaultLocation, setRequestDefaultLocation] = useState('');
   const [requestBusy, setRequestBusy] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
+  const [demandBusyId, setDemandBusyId] = useState<string | null>(null);
+  const [customHint, setCustomHint] = useState<string | null>(null);
+  const { join: joinInline, busyPodId: busyJoinPodId } = useJoinPod();
+  const handledStartCreateRef = React.useRef<number | null>(null);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
@@ -212,6 +236,14 @@ export default function ExploreScreen() {
     setVisibleCount(12);
   }, [category, deferredQuery]);
 
+  useEffect(() => {
+    // Nonce-keyed: each [+] → "Start a pod" tap carries a fresh Date.now(), so
+    // the picker re-opens every time (a boolean here only ever fired once).
+    if (!startCreate || handledStartCreateRef.current === startCreate || !loaded) return;
+    handledStartCreateRef.current = startCreate;
+    setTemplateOpen(true);
+  }, [loaded, startCreate]);
+
   const cards = useMemo<ExploreCard[]>(() => {
     const q = deferredQuery.trim().toLowerCase();
     return activities
@@ -240,6 +272,19 @@ export default function ExploreScreen() {
 
   const liveCards = useMemo(() => cards.filter((item) => item.liveCount > 0).slice(0, 6), [cards]);
   const totalLivePods = useMemo(() => cards.reduce((sum, item) => sum + item.liveCount, 0), [cards]);
+  const joinableFeed = useMemo(
+    () =>
+      feed
+        .filter(
+          (pod) =>
+            pod.status === 'FORMING' &&
+            pod.members.length < pod.maxMembers &&
+            !pod.members.some((member) => member.userId === user?.id),
+        )
+        .sort((a, b) => new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime())
+        .slice(0, 3),
+    [feed, user?.id],
+  );
   const visibleCards = cards.slice(0, visibleCount);
 
   const openActivityRequest = () => {
@@ -272,10 +317,60 @@ export default function ExploreScreen() {
     }
   };
 
+  const handleTemplateCreate = async ({
+    template,
+    activity,
+  }: {
+    template: PodTemplate;
+    activity: Activity;
+  }) => {
+    setBusyTemplateId(template.id);
+    try {
+      const pod = await createPod(activity.id, templateCreateOptions(template));
+      setTemplateOpen(false);
+      navigation.navigate('PodDetail', { podId: pod.id, justCreated: true });
+    } catch (error) {
+      Alert.alert('Could not start pod', getApiErrorMessage(error));
+    } finally {
+      setBusyTemplateId(null);
+    }
+  };
+
+  const handleCustomTemplate = () => {
+    // No single activity context here — closing reveals the activity grid, so
+    // tell the user what to do next instead of silently doing nothing.
+    setTemplateOpen(false);
+    setCustomHint('Pick an activity below to build a custom pod.');
+  };
+
+  const toggleDemand = async (activity: Activity) => {
+    setDemandBusyId(activity.id);
+    try {
+      const response = activity.myDemanded
+        ? await clearActivityDemand(activity.id)
+        : await signalActivityDemand(activity.id);
+      setActivities((current) =>
+        current.map((item) =>
+          item.id === activity.id
+            ? { ...item, demandCount: response.demandCount, myDemanded: response.myDemanded }
+            : item,
+        ),
+      );
+    } catch (error) {
+      Alert.alert('Could not update demand', getApiErrorMessage(error));
+    } finally {
+      setDemandBusyId(null);
+    }
+  };
+
   return (
     <AppBackdrop>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+        contentContainerStyle={[
+          styles.content,
+          // Inside Discover the segmented header already clears the status bar.
+          { paddingTop: embedded ? spacing.md : insets.top + spacing.md },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -294,8 +389,8 @@ export default function ExploreScreen() {
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
-              <Text style={[typography.kicker, { color: colors.primary }]}>FIND YOUR PEOPLE</Text>
-              <Text style={styles.pageTitle}>Explore</Text>
+              <Text style={[typography.kicker, { color: colors.accentText }]}>FIND YOUR PEOPLE</Text>
+              <Text style={styles.pageTitle}>Discover</Text>
               <View style={styles.liveSummary}>
                 <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
                 <Text style={typography.caption}>
@@ -330,6 +425,7 @@ export default function ExploreScreen() {
           </View>
         </Animated.View>
         {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
+        {customHint ? <Banner message={customHint} kind="info" onDismiss={() => setCustomHint(null)} /> : null}
 
         <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
           <SearchBar
@@ -438,6 +534,51 @@ export default function ExploreScreen() {
           </Animated.View>
         ) : null}
 
+        {/* Happening now — joinable pods with inline Join (02 §3) */}
+        {loaded && joinableFeed.length ? (
+          <Animated.View
+            entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
+            style={styles.section}
+          >
+            <SectionHeader kicker="Open spots" title="Happening now" />
+            {joinableFeed.map((pod) => {
+              const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+              return (
+                <Slab
+                  key={pod.id}
+                  onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                  faceStyle={styles.joinRowFace}
+                  accessibilityLabel={pod.activity?.title ?? 'Pod'}
+                >
+                  <View
+                    style={[
+                      styles.joinTimeBlock,
+                      { backgroundColor: colors.primarySoft, borderColor: colors.border },
+                    ]}
+                  >
+                    <Text style={styles.joinTimeText}>{formatTime(pod.meetupTime)}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={typography.heading} numberOfLines={1}>
+                      {pod.activity?.title ?? 'Pod'}
+                    </Text>
+                    <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                      {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left · {pod.location}
+                    </Text>
+                  </View>
+                  <Button
+                    label={busyJoinPodId === pod.id ? 'Joining…' : 'Join'}
+                    size="sm"
+                    variant="secondary"
+                    disabled={Boolean(busyJoinPodId)}
+                    onPress={() => void joinInline(pod)}
+                  />
+                </Slab>
+              );
+            })}
+          </Animated.View>
+        ) : null}
+
         {/* Browse grid */}
         <View style={styles.section}>
           <SectionHeader kicker="The catalog" title="Browse activities" />
@@ -508,19 +649,32 @@ export default function ExploreScreen() {
                         {item.activity.description}
                       </Text>
                       <View style={[styles.tileFooter, { borderTopColor: colors.borderSoft }]}>
-                        <Text
-                          style={[
-                            styles.tileCta,
-                            { color: hasActivePods ? colors.primary : colors.sub },
-                          ]}
-                        >
-                          {ctaLabel(item.liveCount)}
-                        </Text>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={13}
-                          color={hasActivePods ? colors.primary : colors.sub}
-                        />
+                        {hasActivePods ? (
+                          <>
+                            <Text style={[styles.tileCta, { color: colors.primary }]}>
+                              {ctaLabel(item.liveCount)}
+                            </Text>
+                            <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+                          </>
+                        ) : (
+                          <Chip
+                            label={
+                              demandBusyId === item.activity.id
+                                ? 'Saving'
+                                : item.activity.myDemanded
+                                ? 'You are down'
+                                : item.activity.demandCount
+                                  ? `${item.activity.demandCount} down`
+                                  : "I'm down"
+                            }
+                            icon={item.activity.myDemanded ? 'checkmark' : 'sparkles'}
+                            selected={Boolean(item.activity.myDemanded)}
+                            tint={colors.primarySoft}
+                            onPress={
+                              demandBusyId ? undefined : () => void toggleDemand(item.activity)
+                            }
+                          />
+                        )}
                       </View>
                     </Slab>
                   </Animated.View>
@@ -592,6 +746,14 @@ export default function ExploreScreen() {
           />
         </View>
       </Sheet>
+      <PodTemplatePicker
+        visible={templateOpen}
+        activities={activities}
+        busyTemplateId={busyTemplateId}
+        onClose={() => setTemplateOpen(false)}
+        onTemplate={(choice) => void handleTemplateCreate(choice)}
+        onCustom={handleCustomTemplate}
+      />
     </AppBackdrop>
   );
 }
@@ -679,6 +841,26 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontSize: 12,
     flexShrink: 1,
   },
+  joinRowFace: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  joinTimeBlock: {
+    minWidth: 70,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: radii.xs,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+  },
+  joinTimeText: {
+    fontFamily: fonts.bold,
+    fontWeight: '700' as const,
+    fontSize: 12,
+    color: t.colors.ink,
+  },
   grid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
@@ -713,7 +895,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontFamily: fonts.bold,
     fontSize: 10,
     letterSpacing: 1.2,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   tileTitle: {
     // Reserve two lines so neighboring tiles in a row stay the same height.

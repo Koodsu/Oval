@@ -4,6 +4,12 @@ const FORMING = 'FORMING';
 const LOCKED = 'LOCKED';
 const COMPLETED = 'COMPLETED';
 const EXPIRED = 'EXPIRED';
+const THROTTLE_MS = 60 * 1000;
+
+// NOTE: module-level state — on serverless this throttles per warm instance,
+// not globally. That's fine (load-shedding, not a correctness guard; the
+// expiry updates are idempotent), just don't rely on it.
+let lastRunAt = 0;
 
 /**
  * Lifecycle cleanup for pods:
@@ -14,6 +20,10 @@ const EXPIRED = 'EXPIRED';
  */
 export async function expireOldPods(): Promise<{ lockedToCompleted: number; formingToExpired: number }> {
   const now = new Date();
+  if (now.getTime() - lastRunAt < THROTTLE_MS) {
+    return { lockedToCompleted: 0, formingToExpired: 0 };
+  }
+  lastRunAt = now.getTime();
 
   const lockedResult = await prisma.pod.updateMany({
     where: {
@@ -35,4 +45,10 @@ export async function expireOldPods(): Promise<{ lockedToCompleted: number; form
     lockedToCompleted: lockedResult.count,
     formingToExpired: expiredResult.count,
   };
+}
+
+export function resetExpireOldPodsThrottleForTests(): void {
+  if (process.env.NODE_ENV === 'test') {
+    lastRunAt = 0;
+  }
 }

@@ -24,6 +24,9 @@ jest.mock('expo-linear-gradient', () => {
 });
 
 jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponseAsync: jest.fn().mockResolvedValue(null),
   getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
   requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
   getExpoPushTokenAsync: jest.fn(),

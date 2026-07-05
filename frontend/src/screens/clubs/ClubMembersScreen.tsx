@@ -115,7 +115,19 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
             </Card>
           </View>
         ) : null) : (
-          <EmptyState icon="people-outline" title="No members found" body="Try another search." />
+          <EmptyState
+            icon="people-outline"
+            title="No members found"
+            body="Try another search."
+            actionLabel={query ? 'Clear search' : 'Refresh'}
+            onAction={() => {
+              if (query) {
+                setQuery('');
+              } else {
+                void refresh();
+              }
+            }}
+          />
         )}
       </ScrollView>
       <Sheet visible={active != null} onClose={() => setActive(null)} title={active?.user.name} kicker={active?.role}>

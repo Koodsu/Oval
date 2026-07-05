@@ -28,8 +28,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#251018"
         }
-      ],
-      "@sentry/react-native"
+      ]
     ],
     "ios": {
       "supportsTablet": false,

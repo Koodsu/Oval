@@ -3,6 +3,7 @@ import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
+import { resetExpireOldPodsThrottleForTests } from '../lib/expireOldPods';
 
 describe('Pods API (integration)', () => {
   let token: string;
@@ -10,6 +11,7 @@ describe('Pods API (integration)', () => {
   let activityId: string;
 
   beforeEach(async () => {
+    resetExpireOldPodsThrottleForTests();
     const { token: t, user } = await registerAndGetToken(
       'Pod Tester',
       `pod-test-${Date.now()}@example.com`,
@@ -324,6 +326,63 @@ describe('Pods API (integration)', () => {
       if (samePods.length >= 2) {
         expect(samePods[0].members.length).toBeGreaterThanOrEqual(samePods[1].members.length);
       }
+    });
+
+    it('boosts matching interest categories for users with fewer than 3 pod memberships', async () => {
+      const { token: feedToken, user: feedUser } = await registerAndGetToken(
+        'Interest Feed',
+        `interest-feed-${Date.now()}@example.com`,
+        'password123'
+      );
+      await prisma.user.update({
+        where: { id: feedUser.id },
+        data: { interestTags: JSON.stringify(['Gym']) },
+      });
+
+      const { token: academicCreator } = await registerAndGetToken(
+        'Academic Creator',
+        `academic-creator-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: sportsCreator } = await registerAndGetToken(
+        'Sports Creator',
+        `sports-creator-${Date.now()}@example.com`,
+        'password123'
+      );
+      const sportsActivity = await prisma.activity.findFirst({
+        where: { category: 'Sports & Fitness' },
+      });
+      if (!sportsActivity) throw new Error('No Sports activity');
+
+      const academicRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${academicCreator}`)
+        .send({
+          activityId,
+          meetupTime: new Date(Date.now() + 2 * 3600000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const sportsRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${sportsCreator}`)
+        .send({
+          activityId: sportsActivity.id,
+          meetupTime: new Date(Date.now() + 4 * 3600000).toISOString(),
+          location: 'RPAC',
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get('/pods/feed')
+        .set('Authorization', `Bearer ${feedToken}`)
+        .expect(200);
+
+      const ids = res.body.map((pod: { id: string }) => pod.id);
+      expect(ids.indexOf(sportsRes.body.id)).toBeGreaterThanOrEqual(0);
+      expect(ids.indexOf(academicRes.body.id)).toBeGreaterThanOrEqual(0);
+      expect(ids.indexOf(sportsRes.body.id)).toBeLessThan(ids.indexOf(academicRes.body.id));
     });
 
     it('marks recommended=true for pods in activities the user has previously joined', async () => {

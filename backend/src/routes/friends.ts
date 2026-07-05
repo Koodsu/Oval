@@ -4,6 +4,7 @@ import prisma from '../prisma';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { normalizeUserPair } from '../lib/friendUtils';
 import { withDisplayName } from '../lib/userNames';
+import { broadcast, REALTIME_EVENTS, userTopic } from '../lib/realtime';
 import {
   sendFriendRequest,
   acceptFriendRequest,
@@ -95,6 +96,7 @@ router.post('/requests', async (req: AuthRequest, res: Response): Promise<void> 
 
   try {
     const friendRequest = await sendFriendRequest(senderId, receiverId);
+    void broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
     res.status(201).json(friendRequest);
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -107,7 +109,15 @@ router.post('/requests/:id/accept', async (req: AuthRequest, res: Response): Pro
   const userId = req.user!.userId;
   const { id } = req.params;
   try {
+    const requestRow = await prisma.friendRequest.findUnique({
+      where: { id },
+      select: { senderId: true, receiverId: true },
+    });
     await acceptFriendRequest(id, userId);
+    if (requestRow) {
+      void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
+      void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    }
     res.json({ ok: true });
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -120,7 +130,9 @@ router.post('/requests/:id/decline', async (req: AuthRequest, res: Response): Pr
   const userId = req.user!.userId;
   const { id } = req.params;
   try {
-    await declineFriendRequest(id, userId);
+    const requestRow = await declineFriendRequest(id, userId);
+    void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
+    void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
     res.json({ ok: true });
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -133,7 +145,9 @@ router.delete('/requests/:id', async (req: AuthRequest, res: Response): Promise<
   const userId = req.user!.userId;
   const { id } = req.params;
   try {
-    await cancelFriendRequest(id, userId);
+    const requestRow = await cancelFriendRequest(id, userId);
+    void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
+    void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
     res.status(204).send();
   } catch (err) {
     const e = err as Error & { status?: number };

@@ -19,8 +19,11 @@ jest.mock('react-native-safe-area-context', () => ({
 // ── API ──────────────────────────────────────────────────────────────────────
 jest.mock('../api', () => ({
   getMyPods: jest.fn().mockResolvedValue([]),
+  getMyPodHistory: jest.fn().mockResolvedValue([]),
   getMyClubs: jest.fn().mockResolvedValue([]),
   getFriends: jest.fn().mockResolvedValue([]),
+  getUserProfile: jest.fn().mockResolvedValue(null),
+  getApiErrorMessage: jest.fn(() => 'error'),
   resolveAvatarUrl: jest.fn((value?: string | null) => value ?? undefined),
 }));
 

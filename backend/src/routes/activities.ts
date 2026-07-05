@@ -23,6 +23,11 @@ const ACTIVITY_REQUEST_CATEGORIES = new Set([
 
 const ACTIVITY_REQUEST_LIMIT = 5;
 const ACTIVITY_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEMAND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function demandExpiresAt(now = new Date()): Date {
+  return new Date(now.getTime() + DEMAND_TTL_MS);
+}
 
 // GET /activities/locations?category= – locations by category (must be before /:id/locations)
 router.get('/locations', requireAuth, async (req: Request, res: Response): Promise<void> => {
@@ -103,6 +108,78 @@ router.post('/requests', requireAuth, async (req: AuthRequest, res: Response): P
   }
 });
 
+// POST /activities/:id/demand — signal "I'm down this week" for an activity.
+router.post('/:id/demand', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: activityId } = req.params;
+  const now = new Date();
+
+  try {
+    const activity = await prisma.activity.findUnique({ where: { id: activityId } });
+    if (!activity) {
+      res.status(404).json({ error: 'Activity not found' });
+      return;
+    }
+
+    const demand = await prisma.podDemand.upsert({
+      where: { userId_activityId: { userId, activityId } },
+      create: {
+        userId,
+        activityId,
+        expiresAt: demandExpiresAt(now),
+      },
+      update: {
+        createdAt: now,
+        expiresAt: demandExpiresAt(now),
+        consumedAt: null,
+      },
+    });
+
+    await prisma.analyticsEvent.create({
+      data: {
+        userId,
+        name: 'demand.signaled',
+        properties: { activityId, activityTitle: activity.title },
+      },
+    });
+
+    const activeCount = await prisma.podDemand.count({
+      where: { activityId, consumedAt: null, expiresAt: { gt: now } },
+    });
+
+    res.status(201).json({
+      id: demand.id,
+      activityId,
+      expiresAt: demand.expiresAt.toISOString(),
+      demandCount: activeCount,
+      myDemanded: true,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /activities/:id/demand — remove the current user's active demand signal.
+router.delete('/:id/demand', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: activityId } = req.params;
+  const now = new Date();
+
+  try {
+    const result = await prisma.podDemand.deleteMany({
+      where: { userId, activityId, consumedAt: null, expiresAt: { gt: now } },
+    });
+    const activeCount = await prisma.podDemand.count({
+      where: { activityId, consumedAt: null, expiresAt: { gt: now } },
+    });
+    res.json({ removed: result.count > 0, activityId, demandCount: activeCount, myDemanded: false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /activities/:id/locations – buildings for this activity's category
 router.get('/:id/locations', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -124,13 +201,14 @@ router.get('/:id/locations', requireAuth, async (req: Request, res: Response): P
 });
 
 // GET /activities?category=
-router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     await expireOldPods();
 
     const { category } = req.query;
     const where = category && typeof category === 'string' ? { category } : {};
     const now = new Date();
+    const userId = req.user!.userId;
 
     const activities = await prisma.activity.findMany({
       where,
@@ -151,7 +229,36 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         },
       },
     });
-    res.json(activities);
+
+    const activityIds = activities.map((activity) => activity.id);
+    const [demandCounts, myDemands] = await Promise.all([
+      activityIds.length
+        ? prisma.podDemand.groupBy({
+            by: ['activityId'],
+            where: { activityId: { in: activityIds }, consumedAt: null, expiresAt: { gt: now } },
+            _count: { _all: true },
+          })
+        : [],
+      activityIds.length
+        ? prisma.podDemand.findMany({
+            where: { userId, activityId: { in: activityIds }, consumedAt: null, expiresAt: { gt: now } },
+            select: { activityId: true },
+          })
+        : [],
+    ]);
+
+    const demandCountByActivity = new Map(
+      demandCounts.map((row) => [row.activityId, row._count._all]),
+    );
+    const myDemandActivityIds = new Set(myDemands.map((row) => row.activityId));
+
+    res.json(
+      activities.map((activity) => ({
+        ...activity,
+        demandCount: demandCountByActivity.get(activity.id) ?? 0,
+        myDemanded: myDemandActivityIds.has(activity.id),
+      })),
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

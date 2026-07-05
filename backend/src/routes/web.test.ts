@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../server';
+import prisma from '../prisma';
 
 describe('Web / invite-link routes (public)', () => {
   describe('GET /.well-known/apple-app-site-association', () => {
@@ -142,10 +143,84 @@ describe('Web / invite-link routes (public)', () => {
       expect(res.text).toContain(`oval://pod/${otherId}`);
     });
 
+    it('logs invite link opens with ref attribution', async () => {
+      const ref = 'inviter-user-1';
+      await request(app)
+        .get(`/pod/${podId}?ref=${encodeURIComponent(ref)}`)
+        .expect(200);
+
+      const event = await prisma.analyticsEvent.findFirst({
+        where: { name: 'invite.link_opened' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(event?.properties).toEqual({ podId, ref });
+    });
+
     it('rejects non-UUID pod IDs', async () => {
       await request(app)
         .get('/pod/not-a-valid-uuid')
         .expect(400);
+    });
+
+    it('renders generic OG tags when the pod does not exist (no existence leak)', async () => {
+      const res = await request(app)
+        .get(`/pod/${podId}`)
+        .expect(200);
+
+      expect(res.text).toContain('<meta property="og:title" content="Join a Pod on Oval" />');
+      expect(res.text).toContain('<meta property="og:site_name" content="Oval" />');
+      expect(res.text).toContain('og:description');
+    });
+
+    it('renders pod details in OG tags for a public forming pod', async () => {
+      const activity = await prisma.activity.findFirst();
+      if (!activity) throw new Error('seed data missing');
+      const meetupTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const pod = await prisma.pod.create({
+        data: {
+          activityId: activity.id,
+          meetupTime,
+          location: 'RPAC',
+          locationType: 'public',
+          minMembers: 2,
+          maxMembers: 6,
+          status: 'FORMING',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/pod/${pod.id}`)
+        .expect(200);
+
+      expect(res.text).toContain(activity.title);
+      expect(res.text).toContain('spots left');
+
+      await prisma.pod.delete({ where: { id: pod.id } });
+    });
+
+    it('keeps OG tags generic for private pods', async () => {
+      const activity = await prisma.activity.findFirst();
+      if (!activity) throw new Error('seed data missing');
+      const pod = await prisma.pod.create({
+        data: {
+          activityId: activity.id,
+          meetupTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          location: 'Secret spot',
+          locationType: 'private',
+          minMembers: 2,
+          maxMembers: 6,
+          status: 'FORMING',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/pod/${pod.id}`)
+        .expect(200);
+
+      expect(res.text).toContain('<meta property="og:title" content="Join a Pod on Oval" />');
+      expect(res.text).not.toContain('Secret spot');
+
+      await prisma.pod.delete({ where: { id: pod.id } });
     });
   });
 });

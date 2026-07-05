@@ -74,7 +74,7 @@ export default function CreateClubScreen({ navigation }: Props) {
                 <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
                   {GUIDELINES.map((g) => (
                     <View key={g} style={{ flexDirection: 'row', gap: 8 }}>
-                      <Text style={[typography.body, { color: colors.primary }]}>•</Text>
+                      <Text style={[typography.body, { color: colors.accentText }]}>•</Text>
                       <Text style={[typography.body, { flex: 1, color: colors.sub }]}>{g}</Text>
                     </View>
                   ))}

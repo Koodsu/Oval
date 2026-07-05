@@ -1,3 +1,7 @@
+// Campus product: all "today / tonight / Sunday 6pm" logic is Columbus time.
+// vercel.json also sets TZ; this is a defensive fallback for other hosts.
+process.env.TZ = process.env.TZ || 'America/New_York';
+
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -21,6 +25,7 @@ import attendanceRoutes from './routes/attendance';
 import webRoutes from './routes/web';
 import friendsRoutes from './routes/friends';
 import directMessagesRoutes from './routes/directMessages';
+import inboxRoutes from './routes/inbox';
 import podInvitesRoutes from './routes/podInvites';
 import recapsRoutes from './routes/recaps';
 import podWaitlistRoutes from './routes/podWaitlist';
@@ -183,6 +188,7 @@ app.use('/admin/reports', apiLimiter, adminReportsRoutes);
 app.use('/analytics', apiLimiter, analyticsRoutes);
 app.use('/cron', apiLimiter, cronRoutes);
 app.use('/friends', apiLimiter, friendsRoutes);
+app.use('/inbox', apiLimiter, inboxRoutes);
 app.use('/messages', apiLimiter, directMessagesRoutes);
 app.use('/pods', apiLimiter, recapsRoutes);
 app.use('/pods', apiLimiter, podWaitlistRoutes);

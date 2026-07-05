@@ -32,6 +32,8 @@ const DEFAULT_NOTIFICATION_PREFERENCES = {
   clubKick: true,
   clubRoleChange: true,
   clubAttendanceOpen: true,
+  weeklyRecap: true,
+  demandAlerts: true,
 };
 
 function parseJsonArray(raw: string | null | undefined): string[] {
@@ -929,6 +931,8 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
     clubKick,
     clubRoleChange,
     clubAttendanceOpen,
+    weeklyRecap,
+    demandAlerts,
   } = req.body;
 
   if (
@@ -941,7 +945,9 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
     (clubAnnouncementCreated !== undefined && typeof clubAnnouncementCreated !== 'boolean') ||
     (clubKick !== undefined && typeof clubKick !== 'boolean') ||
     (clubRoleChange !== undefined && typeof clubRoleChange !== 'boolean') ||
-    (clubAttendanceOpen !== undefined && typeof clubAttendanceOpen !== 'boolean')
+    (clubAttendanceOpen !== undefined && typeof clubAttendanceOpen !== 'boolean') ||
+    (weeklyRecap !== undefined && typeof weeklyRecap !== 'boolean') ||
+    (demandAlerts !== undefined && typeof demandAlerts !== 'boolean')
   ) {
     res.status(400).json({ error: 'Preference values must be booleans' });
     return;
@@ -967,6 +973,8 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
       ...(clubKick !== undefined && { clubKick }),
       ...(clubRoleChange !== undefined && { clubRoleChange }),
       ...(clubAttendanceOpen !== undefined && { clubAttendanceOpen }),
+      ...(weeklyRecap !== undefined && { weeklyRecap }),
+      ...(demandAlerts !== undefined && { demandAlerts }),
     };
 
     await prisma.user.update({
@@ -1055,13 +1063,25 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
     const isSelf = req.user!.userId === targetId;
     const isFriend = isSelf ? true : await areFriends(req.user!.userId, targetId);
 
-    const [podsJoined, noShowPods, friendCount] = await Promise.all([
+    const [podsJoined, noShowPods, friendCount, sharedPodCount] = await Promise.all([
       prisma.podMember.count({ where: { userId: targetId, pod: { status: 'COMPLETED' } } }),
       prisma.noShowReport.groupBy({ by: ['podId'], where: { targetUserId: targetId } }),
       // Count friendships for this user (appears as userA or userB)
       prisma.friendship.count({
         where: { OR: [{ userAId: targetId }, { userBId: targetId }] },
       }),
+      // Pods the viewer and target were BOTH in — the real-meetings graph
+      // behind the "you've been to N pods together" reconnect prompt (04 §3b).
+      isSelf
+        ? Promise.resolve(0)
+        : prisma.pod.count({
+            where: {
+              AND: [
+                { members: { some: { userId: req.user!.userId } } },
+                { members: { some: { userId: targetId } } },
+              ],
+            },
+          }),
     ]);
 
     const noShowPodCount = noShowPods.length;
@@ -1081,6 +1101,7 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
       reliabilityScore,
       joinedAt: user.createdAt.toISOString(),
       friendCount,
+      sharedPodCount,
       classYear: user.classYear ?? null,
       major: user.major ?? null,
       bio: user.bio ?? null,

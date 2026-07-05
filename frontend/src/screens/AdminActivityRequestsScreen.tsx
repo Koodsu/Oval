@@ -139,10 +139,11 @@ export default function AdminActivityRequestsScreen({ navigation }: Props) {
             icon="checkmark-done"
             title="Queue clear"
             body="No pending activity requests."
+            actionLabel="Refresh"
+            onAction={() => void load()}
           />
         )}
       </ScrollView>
     </AppBackdrop>
   );
 }
-

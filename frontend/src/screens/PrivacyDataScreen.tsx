@@ -48,6 +48,16 @@ const PREFERENCE_ROWS: Array<{
   },
   { key: 'recapPrompt', title: 'Recap prompts', body: 'Post-meetup feedback and connection prompts.' },
   { key: 'waitlistSpot', title: 'Waitlist openings', body: 'When a spot opens in a full pod.' },
+  {
+    key: 'weeklyRecap',
+    title: 'Weekly planning',
+    body: 'Sunday recaps and planning nudges when there is something real to join.',
+  },
+  {
+    key: 'demandAlerts',
+    title: 'Demand alerts',
+    body: 'When enough people are down for an activity, or a pod opens for one you wanted.',
+  },
   { key: 'clubMeetingCreated', title: 'New club meetings', body: 'When a club schedules a meeting.' },
   {
     key: 'clubAnnouncementCreated',

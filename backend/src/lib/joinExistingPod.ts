@@ -136,6 +136,11 @@ async function joinWithinTx(
     data: { status: 'JOINED' },
   });
 
+  await tx.podDemand.updateMany({
+    where: { userId, activityId: pod.activityId, consumedAt: null, expiresAt: { gt: new Date() } },
+    data: { consumedAt: new Date() },
+  });
+
   const memberCount = await tx.podMember.count({ where: { podId } });
   if (memberCount >= pod.maxMembers) {
     await tx.pod.update({ where: { id: podId }, data: { status: LOCKED } });

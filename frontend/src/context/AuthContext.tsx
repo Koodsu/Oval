@@ -1,14 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import {
   acceptCurrentTerms,
   setToken as setApiToken,
   setOnUnauthorized,
+  trackEvent,
 } from '../api';
 import { User } from '../types';
 import { CURRENT_TERMS_VERSION } from '../constants/legal';
+import { registerTokenIfGranted } from '../hooks/useNotificationPermission';
 
 const TOKEN_KEY = 'auth_token';
 const LEGACY_TOKEN_KEY = 'token'; // old AsyncStorage key — migrated on first launch
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // registration) don't read stale null values from a closed-over state.
   const userRef = useRef<User | null>(null);
   const tokenRef = useRef<string | null>(null);
+  const launchTrackedRef = useRef(false);
   userRef.current = user;
   tokenRef.current = token;
 
@@ -119,10 +122,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   useEffect(() => {
+    if (!token || !user?.verifiedUniversity) return;
+    void registerTokenIfGranted().catch(() => {});
+  }, [token, user?.verifiedUniversity]);
+
+  useEffect(() => {
     // Wire up the 401 callback so expired tokens trigger automatic sign-out
     setOnUnauthorized(signOut);
     return () => setOnUnauthorized(null);
   }, [signOut]);
+
+  useEffect(() => {
+    // Retention heartbeat: fire on cold launch and whenever the app returns to
+    // the foreground. Used to compute DAU and D1/D7 retention.
+    // IMPORTANT: wait for session restore (isLoading === false) before the
+    // launch event — an event posted before the stored token is applied is
+    // recorded anonymously and silently drops out of DAU/D1/D7 math.
+    if (isLoading) return;
+    if (!launchTrackedRef.current) {
+      launchTrackedRef.current = true;
+      void trackEvent('app.opened', { state: 'launch' });
+    }
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void trackEvent('app.opened', { state: 'foreground' });
+      }
+    });
+    return () => sub.remove();
+  }, [isLoading]);
 
   useEffect(() => {
     // Restore session from storage on startup

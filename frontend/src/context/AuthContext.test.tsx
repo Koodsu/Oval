@@ -5,7 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { AuthProvider, useAuth } from './AuthContext';
 
-jest.mock('../api', () => ({ setToken: jest.fn(), setOnUnauthorized: jest.fn() }));
+jest.mock('../api', () => ({
+  setToken: jest.fn(),
+  setOnUnauthorized: jest.fn(),
+  trackEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),

@@ -3,6 +3,17 @@ import { Linking, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken } from '../api';
 
+export async function registerTokenIfGranted(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+
+  const permission = await Notifications.getPermissionsAsync();
+  if (permission.status !== 'granted') return false;
+
+  const tokenData = await Notifications.getExpoPushTokenAsync();
+  await registerPushToken(tokenData.data);
+  return true;
+}
+
 export function useNotificationPermission() {
   const [granted, setGranted] = useState(Platform.OS === 'web');
   const [canAskAgain, setCanAskAgain] = useState(true);
@@ -43,9 +54,7 @@ export function useNotificationPermission() {
       setCanAskAgain(permission.canAskAgain);
       if (!allowed) return false;
 
-      const tokenData = await Notifications.getExpoPushTokenAsync();
-      await registerPushToken(tokenData.data);
-      return true;
+      return registerTokenIfGranted();
     } catch {
       return false;
     }

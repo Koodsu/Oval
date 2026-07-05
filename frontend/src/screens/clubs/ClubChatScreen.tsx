@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   API_USER_MESSAGE,
@@ -195,6 +196,10 @@ export default function ClubChatScreen({ route, navigation }: Props) {
     const mine = message.userId === user?.id;
     const actions: Array<{ text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }> = [
       { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Copy text',
+        onPress: () => void Clipboard.setStringAsync(message.content).catch(() => {}),
+      },
     ];
     if (!mine) {
       actions.unshift({
@@ -280,6 +285,8 @@ export default function ClubChatScreen({ route, navigation }: Props) {
               icon="lock-closed"
               title="This space is private"
               body="Join the club — or pick up the right role — to get access."
+              actionLabel="Back to club"
+              onAction={() => navigation.navigate('ClubDetail', { clubId })}
             />
           )}
         </View>
@@ -315,6 +322,10 @@ export default function ClubChatScreen({ route, navigation }: Props) {
               onLongPress={() => {
                 const mine = item.userId === user?.id;
                 Alert.alert(item.user.name, item.content, [
+                  {
+                    text: 'Copy text',
+                    onPress: () => void Clipboard.setStringAsync(item.content).catch(() => {}),
+                  },
                   ...(mine || canDelete ? [{
                     text: 'Delete',
                     style: 'destructive' as const,
@@ -347,7 +358,21 @@ export default function ClubChatScreen({ route, navigation }: Props) {
               </Card>
             </Pressable>
           )}
-          ListEmptyComponent={<EmptyState icon="megaphone-outline" title="No announcements yet" body="Official updates will appear here." />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="megaphone-outline"
+              title="No announcements yet"
+              body="Official updates will appear here."
+              actionLabel={canPostAnnouncements ? 'Post announcement' : 'Back to club'}
+              onAction={() => {
+                if (canPostAnnouncements) {
+                  setComposerOpen(true);
+                } else {
+                  navigation.navigate('ClubDetail', { clubId });
+                }
+              }}
+            />
+          }
         />
         <Sheet visible={composerOpen} onClose={() => setComposerOpen(false)} title="New announcement" scrollable>
           <View style={{ gap: spacing.md }}>
@@ -406,9 +431,11 @@ export default function ClubChatScreen({ route, navigation }: Props) {
           messages={messages}
           currentUserId={user?.id}
           onLongPress={messageActions}
+          emptyActionLabel="Back to club"
+          onEmptyAction={() => navigation.navigate('ClubDetail', { clubId })}
         />
         {typingIds.length ? (
-          <Text style={[typography.captionSmall, { color: colors.primary, paddingHorizontal: spacing.xl }]}>
+          <Text style={[typography.captionSmall, { color: colors.accentText, paddingHorizontal: spacing.xl }]}>
             Someone is typing…
           </Text>
         ) : null}

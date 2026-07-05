@@ -18,7 +18,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -30,15 +29,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BORDER_W,
-  GLASS_BLUR,
   SLAB_OFFSET,
   ThemeColors,
-  backdropEnd,
-  backdropStart,
-  darkBackdrop,
   elevation,
   fonts,
-  lightBackdrop,
   motion,
   radii,
   spacing,
@@ -48,11 +42,10 @@ import { resolveAvatarUrl } from '../api';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * LUMEN COMPONENT KIT
+ * CRIMSON COMPONENT KIT
  *
- * Surfaces are frosted glass: a translucent fill over a real backdrop blur,
- * outlined by a hairline highlight and lifted on a soft, diffuse shadow.
- * Pressing gently scales the surface instead of pushing it into a hard offset.
+ * Content surfaces are solid, calm, and native-feeling. Blur is reserved for
+ * chrome such as the dock and bottom sheets.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -130,14 +123,10 @@ export function Slab({
   hitSlop,
   testID,
 }: SlabProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const press = useSharedValue(0);
   const interactive = Boolean(onPress || onLongPress) && !disabled;
 
-  // A solid `color` (a button fill, a tinted chip) opts out of frosted glass —
-  // it gets a clean opaque face. Surfaces left to the theme stay translucent
-  // and let the backdrop blur read through.
-  const isGlass = color == null || color === colors.surface || color === colors.surfaceAlt;
   const faceFill = color ?? colors.surface;
 
   const faceAnimated = useAnimatedStyle(() => ({
@@ -155,20 +144,6 @@ export function Slab({
     interactive ? faceAnimated : null,
     faceStyle,
   ];
-
-  const content = (
-    <>
-      {isGlass ? (
-        <BlurView
-          tint={isDark ? 'dark' : 'light'}
-          intensity={GLASS_BLUR}
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
-        />
-      ) : null}
-      {children}
-    </>
-  );
 
   return (
     <View
@@ -199,10 +174,10 @@ export function Slab({
           testID={testID}
           style={faceStyles}
         >
-          {content}
+          {children}
         </AnimatedPressable>
       ) : (
-        <Animated.View style={faceStyles}>{content}</Animated.View>
+        <Animated.View style={faceStyles}>{children}</Animated.View>
       )}
     </View>
   );
@@ -245,7 +220,16 @@ export function Card({
 
 // ── Buttons ──────────────────────────────────────────────────────────────────
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'tertiary'
+  /** @deprecated Use secondary. */
+  | 'ghost'
+  /** @deprecated Destructive buttons keep the legacy danger fill. */
+  | 'danger'
+  /** @deprecated Use primary with tint only where a legacy accent is needed. */
+  | 'accent';
 export type ButtonSize = 'lg' | 'md' | 'sm';
 
 export function Button({
@@ -273,51 +257,38 @@ export function Button({
   testID?: string;
 }) {
   const { colors } = useTheme();
-
+  const resolvedVariant =
+    variant === 'ghost' ? 'secondary' : variant === 'accent' ? 'primary' : variant;
   const fill =
-    variant === 'primary'
-      ? colors.primary
-      : variant === 'danger'
+    resolvedVariant === 'primary'
+      ? (variant === 'accent' ? (tint ?? colors.primary) : colors.primary)
+      : resolvedVariant === 'danger'
         ? colors.danger
-        : variant === 'accent'
-          ? (tint ?? colors.amber)
-          : variant === 'ghost'
-            ? 'transparent'
-            : colors.surface;
+        : resolvedVariant === 'tertiary'
+          ? colors.ink
+          : colors.surface;
   const labelColor =
-    variant === 'primary' || variant === 'danger' ? colors.onPrimary : colors.ink;
+    resolvedVariant === 'primary' || resolvedVariant === 'danger'
+      ? colors.onPrimary
+      : resolvedVariant === 'tertiary'
+        ? colors.bg
+        : colors.accentText;
+  const borderColor =
+    resolvedVariant === 'secondary'
+      ? colors.primary
+      : resolvedVariant === 'danger'
+        ? colors.danger
+        : colors.border;
   const height = size === 'lg' ? 56 : size === 'md' ? 48 : 38;
-  const fontSize = size === 'sm' ? 13.5 : 15.5;
-
-  if (variant === 'ghost') {
-    return (
-      <Pressable
-        onPress={() => {
-          tick();
-          onPress?.();
-        }}
-        disabled={disabled || loading}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        testID={testID}
-        style={({ pressed }) => [
-          buttonStyles.ghost,
-          { height, opacity: disabled ? 0.45 : pressed ? 0.6 : 1 },
-          style,
-        ]}
-      >
-        {icon ? <Ionicons name={icon} size={17} color={colors.ink} /> : null}
-        <Text style={[buttonStyles.label, { color: colors.ink, fontSize }]}>{label}</Text>
-      </Pressable>
-    );
-  }
+  const fontSize = size === 'sm' ? 13 : 15;
 
   return (
     <Slab
       onPress={onPress}
       disabled={disabled || loading}
       color={fill}
-      radius={radii.sm}
+      borderColor={borderColor}
+      radius={radii.md}
       style={style}
       faceStyle={[buttonStyles.face, { height: height - SLAB_OFFSET }]}
       accessibilityLabel={label}
@@ -369,14 +340,8 @@ const buttonStyles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bold,
-    letterSpacing: 0.2,
-  },
-  ghost: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    fontWeight: '600',
+    letterSpacing: 0,
   },
 });
 
@@ -444,18 +409,17 @@ export function Chip({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
-  const { colors, isDark } = useTheme();
-  const fill = selected ? (tint ?? colors.ink) : colors.surface;
-  const fg = selected ? (tint ? colors.ink : isDark ? colors.bg : colors.surface) : colors.ink;
-  // When tinted fills are light pastels, keep ink text; ink fill gets paper text.
-  const labelColor = selected && !tint ? (isDark ? '#181210' : '#FFFCF2') : fg;
+  const { colors } = useTheme();
+  const fill = selected ? colors.primarySoft : colors.surface;
+  const labelColor = selected ? colors.accentText : colors.sub;
 
   return (
     <Slab
       onPress={onPress}
       color={fill}
+      borderColor={selected ? colors.primary : colors.border}
       radius={radii.pill}
-      raised={Boolean(selected)}
+      raised={false}
       style={style}
       faceStyle={chipStyles.face}
       hitSlop={{ top: 6, bottom: 6 }}
@@ -475,7 +439,7 @@ export function Chip({
 const chipStyles = StyleSheet.create({
   face: {
     paddingHorizontal: 14,
-    height: 36,
+    minHeight: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -486,6 +450,7 @@ const chipStyles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.semibold,
+    fontWeight: '600',
     fontSize: 13,
   },
 });
@@ -592,7 +557,7 @@ export function Sticker({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const fg = textColor ?? colors.ink;
+  const fg = textColor ?? colors.sub;
   return (
     <View
       style={[
@@ -607,7 +572,7 @@ export function Sticker({
     >
       {icon ? <Ionicons name={icon} size={small ? 11 : 13} color={fg} /> : null}
       <Text
-        style={[stickerStyles.label, { color: fg, fontSize: small ? 10.5 : 12 }]}
+        style={[stickerStyles.label, { color: fg, fontSize: small ? 11 : 12 }]}
         numberOfLines={1}
       >
         {label}
@@ -627,7 +592,8 @@ const stickerStyles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.semibold,
-    letterSpacing: 0.2,
+    fontWeight: '600',
+    letterSpacing: 0,
     flexShrink: 1,
   },
 });
@@ -637,8 +603,36 @@ export function Tag({ label, tint, style }: { label: string; tint?: string; styl
   const { colors } = useTheme();
   return (
     <View style={[tagStyles.base, { backgroundColor: tint ?? colors.surfaceAlt }, style]}>
-      <Text style={[tagStyles.label, { color: colors.ink }]} numberOfLines={1}>
+      <Text style={[tagStyles.label, { color: colors.sub }]} numberOfLines={1}>
         {label}
+      </Text>
+    </View>
+  );
+}
+
+export function StatusTag({
+  status,
+  style,
+}: {
+  status: 'FORMING' | 'LOCKED' | 'COMPLETED' | 'EXPIRED' | string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const normalized = status.toUpperCase();
+  const config =
+    normalized === 'FORMING'
+      ? { label: 'Forming', bg: colors.primarySoft, fg: colors.accentText, icon: null }
+      : normalized === 'LOCKED'
+        ? { label: 'Locked', bg: colors.surfaceAlt, fg: colors.sub, icon: 'lock-closed' as const }
+        : normalized === 'COMPLETED'
+          ? { label: 'Completed', bg: colors.successSoft, fg: colors.success, icon: null }
+          : { label: 'Expired', bg: colors.surfaceAlt, fg: colors.faint, icon: null };
+
+  return (
+    <View style={[tagStyles.status, { backgroundColor: config.bg }, style]}>
+      {config.icon ? <Ionicons name={config.icon} size={12} color={config.fg} /> : null}
+      <Text style={[tagStyles.label, { color: config.fg }]} numberOfLines={1}>
+        {config.label}
       </Text>
     </View>
   );
@@ -648,12 +642,23 @@ const tagStyles = StyleSheet.create({
   base: {
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: radii.xs,
+    borderRadius: radii.pill,
     alignSelf: 'flex-start',
+  },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   label: {
     fontFamily: fonts.semibold,
-    fontSize: 11.5,
+    fontWeight: '600',
+    fontSize: 12,
   },
 });
 
@@ -665,7 +670,7 @@ export function CountBubble({ count, style }: { count: number; style?: StyleProp
     <View
       style={[
         bubbleStyles.base,
-        { backgroundColor: colors.primary, borderColor: colors.border },
+        { backgroundColor: colors.primary },
         style,
       ]}
     >
@@ -728,17 +733,17 @@ const statSlabStyles = StyleSheet.create({
 
 const bubbleStyles = StyleSheet.create({
   base: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    paddingHorizontal: 5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontWeight: '700',
+    fontSize: 10,
   },
 });
 
@@ -898,16 +903,18 @@ export function AvatarStack({
   names,
   size = 30,
   max = 4,
+  overflowCount,
   style,
 }: {
   names: { name?: string | null; uri?: string | null }[];
   size?: number;
   max?: number;
+  overflowCount?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
   const shown = names.slice(0, max);
-  const extra = names.length - shown.length;
+  const extra = overflowCount ?? names.length - shown.length;
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
       {shown.map((member, index) => (
@@ -945,16 +952,9 @@ export function AvatarStack({
 // ── Layout primitives ────────────────────────────────────────────────────────
 
 export function AppBackdrop({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   return (
     <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>
-      <LinearGradient
-        colors={[...(isDark ? darkBackdrop : lightBackdrop)] as [string, string, string]}
-        start={backdropStart}
-        end={backdropEnd}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
       {children}
     </View>
   );
@@ -1004,7 +1004,7 @@ export function SectionHeader({
           accessibilityLabel={actionLabel}
           style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
         >
-          <Text style={[sectionStyles.action, { color: colors.primary }]}>{actionLabel} →</Text>
+          <Text style={[sectionStyles.action, { color: colors.accentText }]}>{actionLabel} →</Text>
         </Pressable>
       ) : null}
     </View>
@@ -1142,7 +1142,7 @@ export function Field({
       {error ? (
         <Text style={[fieldStyles.meta, { color: colors.danger }]}>{error}</Text>
       ) : hint ? (
-        <Text style={[fieldStyles.meta, { color: colors.faint }]}>{hint}</Text>
+        <Text style={[fieldStyles.meta, { color: colors.sub }]}>{hint}</Text>
       ) : null}
     </View>
   );
@@ -1292,7 +1292,7 @@ export function DateTimeField({
         accessibilityLabel="Choose date"
         style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
       >
-        <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+        <Ionicons name="calendar-outline" size={17} color={colors.accentText} />
         <Text style={typography.caption}>
           {value.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
         </Text>
@@ -1303,7 +1303,7 @@ export function DateTimeField({
         accessibilityLabel="Choose time"
         style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
       >
-        <Ionicons name="time-outline" size={17} color={colors.primary} />
+        <Ionicons name="time-outline" size={17} color={colors.accentText} />
         <Text style={typography.caption}>
           {value.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
         </Text>
@@ -1346,10 +1346,13 @@ export function Banner({
   message,
   kind = 'error',
   style,
+  onDismiss,
 }: {
   message: string;
   kind?: 'error' | 'info' | 'success';
   style?: StyleProp<ViewStyle>;
+  /** Optional ✕ affordance for transient hints. */
+  onDismiss?: () => void;
 }) {
   const { colors } = useTheme();
   const tint =
@@ -1368,6 +1371,16 @@ export function Banner({
     >
       <Ionicons name={icon} size={18} color={fg} />
       <Text style={[bannerStyles.text, { color: colors.ink }]}>{message}</Text>
+      {onDismiss ? (
+        <Pressable
+          onPress={onDismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          hitSlop={12}
+        >
+          <Ionicons name="close" size={16} color={colors.sub} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1401,8 +1414,8 @@ export function EmptyState({
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   body?: string;
-  actionLabel?: string;
-  onAction?: () => void;
+  actionLabel: string;
+  onAction: () => void;
   tint?: string;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -1422,9 +1435,7 @@ export function EmptyState({
       </View>
       <Text style={[typography.title, emptyStyles.title]}>{title}</Text>
       {body ? <Text style={[typography.caption, emptyStyles.body]}>{body}</Text> : null}
-      {actionLabel && onAction ? (
-        <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
-      ) : null}
+      <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
     </View>
   );
 }
@@ -1521,7 +1532,7 @@ export function Sheet({
   children: React.ReactNode;
   scrollable?: boolean;
 }) {
-  const { colors, typography } = useTheme();
+  const { colors, typography, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -1535,12 +1546,22 @@ export function Sheet({
             style={[
               sheetStyles.sheet,
               {
-                backgroundColor: colors.bg,
+                backgroundColor: colors.tabBar,
                 borderColor: colors.border,
                 paddingBottom: Math.max(insets.bottom, spacing.xl),
               },
             ]}
           >
+            <BlurView
+              tint={isDark ? 'dark' : 'light'}
+              intensity={40}
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+            />
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]}
+            />
             <View style={[sheetStyles.grabber, { backgroundColor: colors.borderSoft }]} />
             {(title || kicker) ? (
               <View style={sheetStyles.header}>
@@ -1582,6 +1603,7 @@ const sheetStyles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
+    overflow: 'hidden',
   },
   grabber: {
     alignSelf: 'center',
@@ -1667,7 +1689,7 @@ export function ListRow({
           </Text>
         ) : null}
       </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.faint} /> : null)}
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.sub} /> : null)}
     </Pressable>
   );
 }
@@ -1744,7 +1766,7 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   const { colors, typography } = useTheme();
   return (
     <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }}>
-      <ActivityIndicator color={colors.primary} />
+      <ActivityIndicator color={colors.accentText} />
       <Text style={typography.caption}>{label}</Text>
     </View>
   );

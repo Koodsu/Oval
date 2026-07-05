@@ -18,10 +18,6 @@
     "web": "expo start --web --port 8081"
   },
   "dependencies": {
-    "@expo-google-fonts/inter": "^0.4.2",
-    "@expo-google-fonts/sora": "^0.4.2",
-    "@expo-google-fonts/space-grotesk": "^0.4.1",
-    "@expo-google-fonts/unbounded": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "9.1.0",
@@ -67,6 +63,9 @@
     "typescript": "~6.0.3"
   },
   "overrides": {
+    "@react-native/babel-preset": "0.85.3",
+    "@react-native/metro-babel-transformer": "0.85.3",
+    "@react-native/metro-config": "0.85.3",
     "shell-quote": "^1.8.4",
     "uuid": "^11.1.1"
   },

@@ -112,8 +112,9 @@ export function resolveAvatarUrl(avatarUrl: string | null | undefined): string |
   return `${API_BASE}${avatarUrl}`;
 }
 
-export function getPodShareUrl(podId: string): string {
-  return `${PUBLIC_SITE_URL}/pod/${encodeURIComponent(podId)}`;
+export function getPodShareUrl(podId: string, inviterUserId?: string | null): string {
+  const url = `${PUBLIC_SITE_URL}/pod/${encodeURIComponent(podId)}`;
+  return inviterUserId ? `${url}?ref=${encodeURIComponent(inviterUserId)}` : url;
 }
 
 export function getClubShareUrl(clubId: string): string {
@@ -300,11 +301,14 @@ export const resetPassword = (email: string, code: string, password: string) =>
     body: JSON.stringify({ email, code, password }),
   });
 
-export const verifyEmail = (code: string) =>
-  request<{ user: import('./types').User }>('/auth/verify-email', {
+export const verifyEmail = async (code: string) => {
+  const result = await request<{ user: import('./types').User }>('/auth/verify-email', {
     method: 'POST',
     body: JSON.stringify({ code }),
   });
+  void trackEvent('verify.completed');
+  return result;
+};
 
 export const resendVerification = () =>
   request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
@@ -337,6 +341,18 @@ export const requestActivity = (body: {
     method: 'POST',
     body: JSON.stringify(body),
   });
+
+export const signalActivityDemand = (activityId: string) =>
+  request<{ id: string; activityId: string; expiresAt: string; demandCount: number; myDemanded: boolean }>(
+    `/activities/${encodeURIComponent(activityId)}/demand`,
+    { method: 'POST' }
+  );
+
+export const clearActivityDemand = (activityId: string) =>
+  request<{ removed: boolean; activityId: string; demandCount: number; myDemanded: boolean }>(
+    `/activities/${encodeURIComponent(activityId)}/demand`,
+    { method: 'DELETE' }
+  );
 
 export const getAdminActivityRequests = (signal?: AbortSignal) =>
   request<{ requests: import('./types').ActivityRequest[] }>(
@@ -378,8 +394,13 @@ export const getClubsWeek = (signal?: AbortSignal) =>
 export const getMyClubs = (signal?: AbortSignal) =>
   request<import('./types').MyClubMembershipRow[]>('/clubs/my', {}, signal);
 
-export const joinClub = (clubId: string) =>
-  request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/join`, { method: 'POST' });
+export const joinClub = async (clubId: string) => {
+  const result = await request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/join`, {
+    method: 'POST',
+  });
+  void trackEvent('club.joined', { clubId });
+  return result;
+};
 
 export const leaveClub = (clubId: string) =>
   request<{ ok: true }>(`/clubs/${encodeURIComponent(clubId)}/leave`, { method: 'DELETE' });
@@ -865,6 +886,21 @@ export const sendClubRsvpReminders = (clubId: string, meetingId: string) =>
 export const getMyPods = (signal?: AbortSignal) =>
   request<import('./types').Pod[]>('/pods/mine', {}, signal);
 
+export interface InboxSummary {
+  dmUnread: number;
+  podUnread: number;
+  invites: number;
+  friendRequests: number;
+  total: number;
+  friendsTonight?: {
+    count: number;
+    avatars: Array<{ id: string; name: string; avatarUrl: string | null }>;
+  };
+}
+
+export const getInboxSummary = (signal?: AbortSignal) =>
+  request<InboxSummary>('/inbox/summary', {}, signal);
+
 export const getMyPodHistory = () =>
   request<import('./types').Pod[]>('/pods/mine/history');
 
@@ -893,11 +929,14 @@ export const getPodsByActivity = (
   return request<import('./types').Pod[]>(`/pods?${params.toString()}`);
 };
 
-export const joinPod = (podId: string) =>
-  request<import('./types').Pod>('/pods/join', {
+export const joinPod = async (podId: string) => {
+  const result = await request<import('./types').Pod>('/pods/join', {
     method: 'POST',
     body: JSON.stringify({ podId }),
   });
+  void trackEvent('pod.joined', { podId, activityId: result?.activityId });
+  return result;
+};
 
 export interface CreatePodOptions {
   minMembers?: number;
@@ -907,13 +946,27 @@ export interface CreatePodOptions {
   visibility?: 'public' | 'private';
   latitude?: number;
   longitude?: number;
+  template?: string;
+  twinFromPodId?: string;
 }
 
-export const createPod = (activityId: string, options?: CreatePodOptions) =>
-  request<import('./types').Pod>('/pods/join', {
+export const createPod = async (activityId: string, options?: CreatePodOptions) => {
+  const result = await request<import('./types').Pod>('/pods/join', {
     method: 'POST',
     body: JSON.stringify({ activityId, ...options }),
   });
+  void trackEvent('pod.created', {
+    activityId,
+    visibility: options?.visibility,
+    hasLocation: Boolean(options?.location),
+    template: options?.template ?? 'custom',
+    twinFromPodId: options?.twinFromPodId,
+  });
+  if (options?.twinFromPodId) {
+    void trackEvent('pod.twinned', { fromPodId: options.twinFromPodId, podId: result.id, activityId });
+  }
+  return result;
+};
 
 export const getActivityLocations = (activityId: string) =>
   request<string[]>(`/activities/${activityId}/locations`);
@@ -991,11 +1044,14 @@ export const getMessages = (podId: string, opts?: MessagePageOptions, signal?: A
 export const sendPodTyping = (podId: string) =>
   request<{ ok: boolean }>(`/pods/${podId}/typing`, { method: 'POST' });
 
-export const sendMessage = (podId: string, content: string, replyToId?: string) =>
-  request<import('./types').Message>(`/pods/${podId}/messages`, {
+export const sendMessage = async (podId: string, content: string, replyToId?: string) => {
+  const result = await request<import('./types').Message>(`/pods/${podId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content, replyToId: replyToId || undefined }),
   });
+  void trackEvent('pod.message_sent', { podId, isReply: Boolean(replyToId) });
+  return result;
+};
 
 export const addPodMessageReaction = (podId: string, msgId: string, emoji: string) =>
   request<import('./types').Message>(`/pods/${podId}/messages/${msgId}/reactions`, {
@@ -1138,6 +1194,9 @@ export interface NotificationPreferences {
   clubKick: boolean;
   clubRoleChange: boolean;
   clubAttendanceOpen: boolean;
+  weeklyRecap: boolean;
+  /** Demand-pool pushes ("6 people want a boba run" / "a pod just went up"). */
+  demandAlerts: boolean;
 }
 
 export const getNotificationPreferences = () =>
@@ -1313,14 +1372,22 @@ export const getFriendRequests = () =>
 export const getFriendRelationship = (userId: string) =>
   request<import('./types').FriendRelationship>(`/friends/relationship/${userId}`);
 
-export const sendFriendRequest = (receiverId: string) =>
-  request<import('./types').FriendRequest>('/friends/requests', {
+export const sendFriendRequest = async (receiverId: string) => {
+  const result = await request<import('./types').FriendRequest>('/friends/requests', {
     method: 'POST',
     body: JSON.stringify({ receiverId }),
   });
+  void trackEvent('friend.request_sent', { receiverId });
+  return result;
+};
 
-export const acceptFriendRequest = (id: string) =>
-  request<{ ok: boolean }>(`/friends/requests/${id}/accept`, { method: 'POST' });
+export const acceptFriendRequest = async (id: string) => {
+  const result = await request<{ ok: boolean }>(`/friends/requests/${id}/accept`, {
+    method: 'POST',
+  });
+  void trackEvent('friend.accepted', { requestId: id });
+  return result;
+};
 
 export const declineFriendRequest = (id: string) =>
   request<{ ok: boolean }>(`/friends/requests/${id}/decline`, { method: 'POST' });

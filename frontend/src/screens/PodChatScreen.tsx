@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addPodMessageReaction,
   blockUser,
+  confirmAttendance,
   createReport,
   deletePodMessage,
   getApiErrorMessage,
@@ -27,6 +28,7 @@ import {
   sendMessage,
   sendPodTyping,
 } from '../api';
+import * as Clipboard from 'expo-clipboard';
 import { RootStackParamList } from '../../App';
 import { Message, Pod } from '../types';
 import {
@@ -89,6 +91,8 @@ export default function PodChatScreen({ route, navigation }: Props) {
   const [reportTarget, setReportTarget] = useState<Message | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [dismissedCard, setDismissedCard] = useState<'confirm' | 'recap' | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
@@ -283,6 +287,37 @@ export default function PodChatScreen({ route, navigation }: Props) {
 
   const isMember = pod?.members.some((member) => member.userId === user?.id) ?? false;
 
+  // Contextual action cards (02 §5) — one at a time, dismissible for the session.
+  const myMember = pod?.members.find((member) => member.userId === user?.id) ?? null;
+  const msUntilMeetup = pod ? new Date(pod.meetupTime).getTime() - Date.now() : Infinity;
+  const showConfirmCard =
+    isMember &&
+    pod != null &&
+    (pod.status === 'FORMING' || pod.status === 'LOCKED') &&
+    msUntilMeetup <= 2 * 60 * 60 * 1000 &&
+    msUntilMeetup > -30 * 60 * 1000 &&
+    !myMember?.confirmedAt &&
+    dismissedCard !== 'confirm';
+  const showRecapCard =
+    !showConfirmCard &&
+    isMember &&
+    pod?.status === 'COMPLETED' &&
+    !pod.myRecap &&
+    dismissedCard !== 'recap';
+
+  const handleConfirmAttendance = async () => {
+    if (!pod || confirmBusy) return;
+    setConfirmBusy(true);
+    try {
+      await confirmAttendance(pod.id);
+      await load();
+    } catch (error) {
+      Alert.alert('Could not confirm attendance', getApiErrorMessage(error));
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
   return (
     <AppBackdrop>
       <KeyboardAvoidingView
@@ -323,12 +358,14 @@ export default function PodChatScreen({ route, navigation }: Props) {
                   icon="chatbubble-ellipses"
                   title="No messages yet"
                   body="Start with an ETA, meetup note, or quick check-in."
+                  actionLabel="Back to pod"
+                  onAction={() => navigation.navigate('PodDetail', { podId })}
                 />
               </View>
             }
             ListHeaderComponent={
               typingLabel ? (
-                <Text style={[typography.caption, { color: colors.primary }]}>{typingLabel}</Text>
+                <Text style={[typography.caption, { color: colors.accentText }]}>{typingLabel}</Text>
               ) : null
             }
             ListFooterComponent={
@@ -340,7 +377,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Load earlier messages"
                 >
-                  <Text style={[typography.caption, { color: colors.primary }]}>
+                  <Text style={[typography.caption, { color: colors.accentText }]}>
                     {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
                   </Text>
                 </Pressable>
@@ -424,7 +461,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
                             <Text
                               style={[
                                 styles.replyMeta,
-                                { color: mine ? 'rgba(255,246,232,0.8)' : colors.faint },
+                                { color: mine ? 'rgba(255,246,232,0.8)' : colors.sub },
                               ]}
                             >
                               Replying to {message.replyTo.user.name}
@@ -432,7 +469,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
                             <Text
                               style={[
                                 styles.replyBody,
-                                { color: mine ? 'rgba(255,246,232,0.7)' : colors.faint },
+                                { color: mine ? 'rgba(255,246,232,0.7)' : colors.sub },
                               ]}
                               numberOfLines={1}
                             >
@@ -486,6 +523,87 @@ export default function PodChatScreen({ route, navigation }: Props) {
               );
             }}
           />
+
+          {/* Contextual action card (02 §5) — one at a time, above the composer */}
+          {showConfirmCard && pod ? (
+            <View
+              style={[
+                styles.contextCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={typography.subheading}>See you soon</Text>
+                <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
+                  {pod.activity?.title ?? 'Your pod'} at {formatTime(pod.meetupTime)} — let the
+                  others know you're coming.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => void handleConfirmAttendance()}
+                disabled={confirmBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm attendance"
+                style={({ pressed }) => [
+                  styles.contextAction,
+                  { backgroundColor: colors.primary, opacity: pressed || confirmBusy ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={[styles.contextActionText, { color: colors.onPrimary }]}>
+                  {confirmBusy ? 'Confirming…' : "I'm coming"}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setDismissedCard('confirm')}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={18} color={colors.sub} />
+              </Pressable>
+            </View>
+          ) : null}
+          {showRecapCard && pod ? (
+            <View
+              style={[
+                styles.contextCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={typography.subheading}>How was it?</Text>
+                <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
+                  A quick rating keeps the good plans coming.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => navigation.navigate('PodDetail', { podId })}
+                accessibilityRole="button"
+                accessibilityLabel="Post recap"
+                style={({ pressed }) => [
+                  styles.contextAction,
+                  {
+                    backgroundColor: colors.surface,
+                    borderWidth: BORDER_W,
+                    borderColor: colors.primary,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.contextActionText, { color: colors.accentText }]}>
+                  Post recap
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setDismissedCard('recap')}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={18} color={colors.sub} />
+              </Pressable>
+            </View>
+          ) : null}
 
           {isMember ? (
             <View
@@ -609,6 +727,14 @@ export default function PodChatScreen({ route, navigation }: Props) {
                 setActiveMessage(null);
               }}
             />
+            <ListRow
+              icon="copy-outline"
+              title="Copy text"
+              onPress={() => {
+                void Clipboard.setStringAsync(activeMessage.content).catch(() => {});
+                setActiveMessage(null);
+              }}
+            />
             {activeMessage.user.id === user?.id ? (
               <ListRow
                 icon="trash-outline"
@@ -716,7 +842,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   metaTime: {
     fontFamily: fonts.medium,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   bubble: {
     borderWidth: BORDER_W,
@@ -763,7 +889,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   heartCount: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   composer: {
     borderWidth: BORDER_W,
@@ -771,6 +897,30 @@ const useStyles = createThemedStyles((t: Theme) => ({
     overflow: 'hidden' as const,
     marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
+  },
+  contextCard: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  contextAction: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+    minHeight: 34,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  contextActionText: {
+    fontFamily: fonts.bold,
+    fontWeight: '700' as const,
+    fontSize: 13,
   },
   replyComposer: {
     flexDirection: 'row' as const,

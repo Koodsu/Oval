@@ -42,3 +42,4 @@ export function useRealtimeChannel(
 }
 
 export const REALTIME_CHAT_EVENTS = ['new_message', 'message_update', 'typing'];
+export const REALTIME_INBOX_EVENTS = ['inbox_updated'];

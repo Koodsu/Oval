@@ -94,6 +94,105 @@ describe('GET /activities/:id/locations', () => {
   });
 });
 
+describe('activity demand signals', () => {
+  it('lets a student signal and clear demand for an activity', async () => {
+    const { token, user } = await registerAndGetToken(
+      'Demand Student',
+      'demand-student@activities.test.com',
+      'password123'
+    );
+    const activity = await prisma.activity.create({
+      data: {
+        title: `Demand Signal ${Date.now()}`,
+        description: 'Demand pooling test activity.',
+        category: 'Food & Drink',
+        defaultLocation: 'Ohio Union',
+      },
+    });
+
+    const signaled = await request(app)
+      .post(`/activities/${activity.id}/demand`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+
+    expect(signaled.body).toMatchObject({
+      activityId: activity.id,
+      demandCount: 1,
+      myDemanded: true,
+    });
+
+    const activities = await request(app)
+      .get('/activities')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const row = activities.body.find((item: { id: string }) => item.id === activity.id);
+    expect(row).toMatchObject({ demandCount: 1, myDemanded: true });
+
+    const event = await prisma.analyticsEvent.findFirst({
+      where: { userId: user.id, name: 'demand.signaled' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(event?.properties).toMatchObject({ activityId: activity.id });
+
+    const cleared = await request(app)
+      .delete(`/activities/${activity.id}/demand`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(cleared.body).toMatchObject({ removed: true, demandCount: 0, myDemanded: false });
+  });
+
+  it('consumes a demand pool when a matching pod is created', async () => {
+    const demander = await registerAndGetToken(
+      'Demand Pool',
+      'demand-pool@activities.test.com',
+      'password123'
+    );
+    const creator = await registerAndGetToken(
+      'Demand Creator',
+      'demand-creator@activities.test.com',
+      'password123'
+    );
+    const activity = await prisma.activity.create({
+      data: {
+        title: `Demand Pool ${Date.now()}`,
+        description: 'Demand conversion test activity.',
+        category: 'Food & Drink',
+        defaultLocation: 'Ohio Union',
+      },
+    });
+
+    await request(app)
+      .post(`/activities/${activity.id}/demand`)
+      .set('Authorization', `Bearer ${demander.token}`)
+      .expect(201);
+
+    const created = await request(app)
+      .post('/pods/join')
+      .set('Authorization', `Bearer ${creator.token}`)
+      .send({
+        activityId: activity.id,
+        meetupTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        location: 'Ohio Union',
+      })
+      .expect(201);
+
+    const activeDemand = await prisma.podDemand.findFirst({
+      where: { activityId: activity.id, consumedAt: null },
+    });
+    expect(activeDemand).toBeNull();
+
+    const converted = await prisma.analyticsEvent.findFirst({
+      where: { name: 'demand.converted' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(converted?.properties).toMatchObject({
+      activityId: activity.id,
+      podId: created.body.id,
+    });
+  });
+});
+
 describe('activity requests', () => {
   it('lets a student submit and an admin approve a catalog addition once', async () => {
     const student = await registerAndGetToken('Request Student', 'request-student@activities.test.com', 'password123');

@@ -5,9 +5,10 @@ import { hasBlockingRelationship, getBlockedUserIds } from '../lib/blocks';
 import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
-import { broadcast, dmTopic, REALTIME_EVENTS } from '../lib/realtime';
+import { broadcast, dmTopic, REALTIME_EVENTS, userTopic } from '../lib/realtime';
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router();
 router.use(requireAuth);
@@ -481,6 +482,8 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
     ]);
 
     void broadcast(dmTopic(threadId), REALTIME_EVENTS.NEW_MESSAGE);
+    void broadcast(userTopic(otherId), REALTIME_EVENTS.INBOX_UPDATED);
+    NotificationService.notifyDirectMessage(threadId, userId).catch(() => {});
 
     res.status(201).json(formatDmMessage(message));
   } catch {

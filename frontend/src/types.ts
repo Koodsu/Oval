@@ -9,6 +9,9 @@ export interface NotificationPreferences {
   clubKick: boolean;
   clubRoleChange: boolean;
   clubAttendanceOpen: boolean;
+  weeklyRecap: boolean;
+  /** Demand-pool pushes ("6 people want a boba run" / "a pod just went up"). */
+  demandAlerts: boolean;
 }
 
 export interface User {
@@ -47,6 +50,8 @@ export interface PublicProfile {
   reliabilityScore: number | null;
   joinedAt: string;
   friendCount?: number;
+  /** Pods the viewer and this user were both in (0 on own profile). */
+  sharedPodCount?: number;
   classYear?: string | null;
   major?: string | null;
   bio?: string | null;
@@ -141,6 +146,8 @@ export interface Activity {
   defaultLocation: string;
   createdAt: string;
   _count?: { pods: number };
+  demandCount?: number;
+  myDemanded?: boolean;
 }
 
 export interface ActivityRequest {
@@ -502,6 +509,7 @@ export interface Pod {
   myWaitlistPosition?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  unreadCount?: number;
 }
 
 export interface PeopleYouMetUser {
