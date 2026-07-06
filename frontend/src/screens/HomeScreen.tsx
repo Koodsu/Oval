@@ -330,10 +330,8 @@ export default function HomeScreen() {
   const openDiscover = useCallback(
     (startCreate?: boolean) =>
       navigation.navigate('MainTabs', {
-        screen: 'Discover',
-        params: startCreate
-          ? { segment: 'activities', startCreate: Date.now() }
-          : { segment: 'activities' },
+        screen: 'Explore',
+        params: startCreate ? { startCreate: Date.now() } : undefined,
       }),
     [navigation],
   );
@@ -554,7 +552,7 @@ export default function HomeScreen() {
               <>
                 <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
                 <Pressable
-                  onPress={() => navigation.navigate('MainTabs', { screen: 'Plans' })}
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Pods' })}
                   accessibilityRole="button"
                   accessibilityLabel={`${friendsTonight.count} friends out tonight`}
                   style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
@@ -625,7 +623,7 @@ export default function HomeScreen() {
           <SectionHeader
             kicker="Fresh"
             title="Happening soon"
-            actionLabel="Discover"
+            actionLabel="Explore"
             onAction={() => openDiscover()}
           />
           {!loaded ? (

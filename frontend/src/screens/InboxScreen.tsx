@@ -449,7 +449,7 @@ export default function InboxScreen() {
                 title="No invites waiting"
                 body="When pod creators invite you into something, it shows up here."
                 actionLabel="Browse activities"
-                onAction={() => navigation.navigate('MainTabs', { screen: 'Discover', params: { segment: 'activities' } })}
+                onAction={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
               />
             )}
           </View>

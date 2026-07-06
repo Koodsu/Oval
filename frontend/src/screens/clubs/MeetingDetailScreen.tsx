@@ -261,8 +261,8 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
               size="sm"
               onPress={() =>
                 navigation.navigate('MainTabs', {
-                  screen: 'Discover',
-                  params: { segment: 'activities', startCreate: Date.now() },
+                  screen: 'Explore',
+                  params: { startCreate: Date.now() },
                 })
               }
               style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}

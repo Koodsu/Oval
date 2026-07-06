@@ -390,7 +390,7 @@ export default function ExploreScreen({
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.kicker, { color: colors.accentText }]}>FIND YOUR PEOPLE</Text>
-              <Text style={styles.pageTitle}>Discover</Text>
+              <Text style={styles.pageTitle}>Explore</Text>
               <View style={styles.liveSummary}>
                 <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
                 <Text style={typography.caption}>

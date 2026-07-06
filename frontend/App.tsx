@@ -26,7 +26,8 @@ import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import FirstPlanScreen from './src/screens/FirstPlanScreen';
-import DiscoverScreen from './src/screens/DiscoverScreen';
+import ExploreScreen from './src/screens/ExploreScreen';
+import ClubsHomeScreen from './src/screens/clubs/ClubsHomeScreen';
 import PodsScreen from './src/screens/PodsScreen';
 import ClubMeetingsTonightScreen from './src/screens/clubs/ClubMeetingsTonightScreen';
 import InboxScreen from './src/screens/InboxScreen';
@@ -93,8 +94,9 @@ export type MainTabParamList = {
   // startCreate is a nonce (Date.now()) rather than a boolean so repeated
   // "[+] → Start a pod" taps re-trigger the template picker; a boolean param
   // never changes value on the persistent tab screen after the first tap.
-  Discover: { segment?: 'activities' | 'clubs'; startCreate?: number } | undefined;
-  Plans: undefined;
+  Explore: { startCreate?: number } | undefined;
+  Pods: undefined;
+  Clubs: undefined;
   Inbox: undefined;
 };
 
@@ -165,8 +167,9 @@ const linking: LinkingOptions<RootStackParamList> = {
       MainTabs: {
         screens: {
           Home: 'home',
-          Discover: 'discover',
-          Plans: 'plans',
+          Explore: 'explore',
+          Pods: 'pods',
+          Clubs: 'clubs-home',
           Inbox: 'inbox',
         },
       },
@@ -230,10 +233,12 @@ function tabIcon(
   switch (routeName) {
     case 'Home':
       return focused ? 'home' : 'home-outline';
-    case 'Discover':
+    case 'Explore':
       return 'search';
-    case 'Plans':
+    case 'Pods':
       return focused ? 'calendar' : 'calendar-outline';
+    case 'Clubs':
+      return focused ? 'megaphone' : 'megaphone-outline';
     case 'Inbox':
       return focused ? 'mail' : 'mail-outline';
   }
@@ -457,8 +462,11 @@ function MainTabs() {
         screenOptions={{ headerShown: false }}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Discover" component={DiscoverScreen} />
-        <Tab.Screen name="Plans" component={PodsScreen} />
+        <Tab.Screen name="Explore">
+          {({ route }) => <ExploreScreen startCreate={route.params?.startCreate} />}
+        </Tab.Screen>
+        <Tab.Screen name="Pods" component={PodsScreen} />
+        <Tab.Screen name="Clubs" component={ClubsHomeScreen} />
         <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarBadge: inboxBadge }} />
       </Tab.Navigator>
       <CreateSheet visible={createOpen} onClose={() => setCreateOpen(false)} />

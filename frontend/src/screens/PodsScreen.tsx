@@ -220,10 +220,7 @@ export default function PodsScreen() {
   const shownHistory = historyExpanded ? history : history.slice(0, 3);
 
   const openDiscover = useCallback(() => {
-    navigation.navigate('MainTabs', {
-      screen: 'Discover',
-      params: { segment: 'activities' },
-    });
+    navigation.navigate('MainTabs', { screen: 'Explore' });
   }, [navigation]);
 
   const handleInvite = async (inviteId: string, accept: boolean) => {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Oval",
     "slug": "oval",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/brand/oval-open-1024.png",
     "userInterfaceStyle": "automatic",
