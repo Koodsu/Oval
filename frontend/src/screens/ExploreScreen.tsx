@@ -582,12 +582,6 @@ export default function ExploreScreen({
         {/* Browse grid */}
         <View style={styles.section}>
           <SectionHeader kicker="The catalog" title="Browse activities" />
-          <Button
-            label="Request activity"
-            icon="add-circle-outline"
-            variant="secondary"
-            onPress={openActivityRequest}
-          />
           {!loaded ? (
             <>
               <SkeletonCard />
@@ -700,11 +694,25 @@ export default function ExploreScreen({
               variant="secondary"
             />
           ) : null}
+          <View style={{ gap: spacing.sm, alignItems: 'center' }}>
+            <Text style={[typography.captionSmall, { color: colors.sub }]}>
+              Don&apos;t see your activity in the catalog?
+            </Text>
+            <Button
+              label="Suggest an activity"
+              icon="bulb-outline"
+              variant="secondary"
+              onPress={openActivityRequest}
+            />
+          </View>
         </View>
       </ScrollView>
-      <Sheet visible={requestOpen} onClose={() => setRequestOpen(false)} title="Request Activity" scrollable>
+      <Sheet visible={requestOpen} onClose={() => setRequestOpen(false)} title="Suggest an activity" scrollable>
         <View style={{ gap: spacing.md }}>
           {requestSubmitted ? <Banner kind="success" message="Submitted - pending approval." /> : null}
+          <Text style={[typography.captionSmall, { color: colors.sub }]}>
+            Suggest something new for the catalog. Once approved, anyone can start pods for it.
+          </Text>
           <Field
             label="Title"
             value={requestTitle}
