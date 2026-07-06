@@ -114,7 +114,7 @@ function PolicyLink({ label, url }: { label: string; url: string }) {
       ]}
     >
       <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>{label}</Text>
-      <Ionicons name="open-outline" size={16} color={colors.primary} />
+      <Ionicons name="open-outline" size={16} color={colors.accentText} />
     </Pressable>
   );
 }

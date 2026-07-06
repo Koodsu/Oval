@@ -18,6 +18,7 @@ export const REALTIME_EVENTS = {
   NEW_MESSAGE: 'new_message',
   MESSAGE_UPDATE: 'message_update',
   TYPING: 'typing',
+  INBOX_UPDATED: 'inbox_updated',
 } as const;
 
 export function podTopic(podId: string): string {
@@ -26,6 +27,10 @@ export function podTopic(podId: string): string {
 
 export function dmTopic(threadId: string): string {
   return `dm-${threadId}`;
+}
+
+export function userTopic(userId: string): string {
+  return `user-${userId}`;
 }
 
 export async function broadcast(

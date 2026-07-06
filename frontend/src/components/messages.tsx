@@ -25,10 +25,14 @@ export function MessageList<T extends MessageListItem>({
   messages,
   currentUserId,
   onLongPress,
+  emptyActionLabel,
+  onEmptyAction,
 }: {
   messages: T[];
   currentUserId?: string;
   onLongPress: (message: T) => void;
+  emptyActionLabel: string;
+  onEmptyAction: () => void;
 }) {
   const { colors, typography } = useTheme();
   const newestFirst = useMemo(() => [...messages].reverse(), [messages]);
@@ -67,7 +71,7 @@ export function MessageList<T extends MessageListItem>({
               <Text
                 style={[
                   typography.captionSmall,
-                  { alignSelf: 'flex-end', color: mine ? 'rgba(255,255,255,0.78)' : colors.faint },
+                  { alignSelf: 'flex-end', color: mine ? 'rgba(255,255,255,0.78)' : colors.sub },
                 ]}
               >
                 {formatTime(item.createdAt)}
@@ -81,6 +85,8 @@ export function MessageList<T extends MessageListItem>({
           icon="chatbubbles-outline"
           title="No messages yet"
           body="Start the conversation."
+          actionLabel={emptyActionLabel}
+          onAction={onEmptyAction}
         />
       }
     />

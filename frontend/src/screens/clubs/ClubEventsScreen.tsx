@@ -144,8 +144,14 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
             icon="calendar-outline"
             title="No upcoming meetings"
             body="Scheduled club events will appear here."
-            actionLabel={canCreate ? 'Create meeting' : undefined}
-            onAction={canCreate ? () => setComposerOpen(true) : undefined}
+            actionLabel={canCreate ? 'Create meeting' : 'Back to club'}
+            onAction={() => {
+              if (canCreate) {
+                setComposerOpen(true);
+              } else {
+                navigation.navigate('ClubDetail', { clubId });
+              }
+            }}
           />
         )}
       </ScrollView>

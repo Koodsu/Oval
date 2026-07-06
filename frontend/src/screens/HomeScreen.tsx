@@ -1,18 +1,36 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchFeed, getActivities, getApiErrorMessage, getClubsToday, getMyPods } from '../api';
+import {
+  fetchFeed,
+  getClubsToday,
+  getFriends,
+  getInboxSummary,
+  getMyPods,
+  InboxSummary,
+} from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Activity, ClubMeetingToday, Pod } from '../types';
+import { ClubMeetingToday, FriendUser, Pod } from '../types';
 import { RootStackParamList } from '../../App';
 import {
   AppBackdrop,
   Avatar,
+  AvatarStack,
   Banner,
   Button,
   Card,
@@ -21,11 +39,8 @@ import {
   SectionHeader,
   SkeletonCard,
   Slab,
-  Sticker,
-  accentForSeed,
 } from '../components/ui';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
-import { CATEGORY_META } from '../constants/categories';
 import {
   BORDER_W,
   DOCK_CLEARANCE,
@@ -37,8 +52,9 @@ import {
   spacing,
   useTheme,
 } from '../theme';
-import { formatDateTime, formatTime } from '../utils/format';
-import { getFeaturedActivities, sortUpcomingPods } from '../utils/experience';
+import { formatTime } from '../utils/format';
+import { sortUpcomingPods } from '../utils/experience';
+import { useJoinPod } from '../hooks/useJoinPod';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
@@ -58,6 +74,21 @@ function datelineForNow(): string {
     .toUpperCase();
 }
 
+/** "starts in 45m" / "starts in 2h" / "starts Fri" */
+function startsIn(time: string): string {
+  const diffMs = new Date(time).getTime() - Date.now();
+  const mins = Math.round(diffMs / 60000);
+  if (mins <= 0) return 'starting now';
+  if (mins < 60) return `starts in ${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours <= 24) return `starts in ${hours}h`;
+  return `starts ${new Date(time).toLocaleDateString([], { weekday: 'short' })}`;
+}
+
+type HeroItem =
+  | { kind: 'pod'; pod: Pod; mine: boolean }
+  | { kind: 'meeting'; meeting: ClubMeetingToday };
+
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { user, token } = useAuth();
@@ -74,11 +105,14 @@ export default function HomeScreen() {
   } = useNotificationPermission();
   const [pods, setPods] = useState<Pod[]>([]);
   const [myPods, setMyPods] = useState<Pod[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [clubsToday, setClubsToday] = useState<ClubMeetingToday[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const { join, busyPodId } = useJoinPod();
 
   const load = useCallback(async () => {
     if (!token) {
@@ -87,28 +121,30 @@ export default function HomeScreen() {
       return;
     }
 
-    try {
-      const [feed, mine, activityList, clubList] = await Promise.all([
+    const [feedResult, mineResult, clubResult, friendResult, summaryResult] =
+      await Promise.allSettled([
         fetchFeed(
           userLocation
             ? { limit: 20, lat: userLocation.latitude, lng: userLocation.longitude }
             : { limit: 20 },
         ),
         getMyPods(),
-        getActivities(),
         getClubsToday(),
+        getFriends(),
+        getInboxSummary(),
       ]);
-      setPods(feed);
-      setMyPods(mine);
-      setActivities(activityList);
-      setClubsToday(clubList);
-      setLoadWarning(null);
-    } catch {
-      setLoadWarning("Couldn't refresh — pull to retry.");
-    } finally {
-      setLoaded(true);
-      setRefreshing(false);
-    }
+
+    if (feedResult.status === 'fulfilled') setPods(feedResult.value);
+    if (mineResult.status === 'fulfilled') setMyPods(mineResult.value);
+    if (clubResult.status === 'fulfilled') setClubsToday(clubResult.value);
+    if (friendResult.status === 'fulfilled') setFriends(friendResult.value);
+    if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
+
+    const coreFailed =
+      feedResult.status === 'rejected' && mineResult.status === 'rejected';
+    setLoadWarning(coreFailed ? "Couldn't refresh — pull to retry." : null);
+    setLoaded(true);
+    setRefreshing(false);
   }, [token, userLocation]);
 
   const explainAndRequestLocation = useCallback(() => {
@@ -170,32 +206,70 @@ export default function HomeScreen() {
     }, [load]),
   );
 
-  const featuredActivities = useMemo(
-    () => getFeaturedActivities(activities, pods),
-    [activities, pods],
+  const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
+
+  const myNextPod = useMemo(
+    () =>
+      sortUpcomingPods(myPods).find(
+        (pod) => pod.status === 'FORMING' || pod.status === 'LOCKED',
+      ) ?? null,
+    [myPods],
   );
-  const activePods = useMemo(
-    () => sortUpcomingPods(pods).filter((pod) => pod.status === 'FORMING').slice(0, 4),
-    [pods],
+
+  const nextMeeting = useMemo(() => {
+    const upcoming = clubsToday
+      .filter((meeting) => new Date(meeting.meetingTime).getTime() > Date.now() - 30 * 60000)
+      .sort((a, b) => new Date(a.meetingTime).getTime() - new Date(b.meetingTime).getTime());
+    return upcoming[0] ?? null;
+  }, [clubsToday]);
+
+  const joinablePods = useMemo(
+    () =>
+      sortUpcomingPods(pods).filter(
+        (pod) =>
+          pod.status === 'FORMING' &&
+          pod.members.length < pod.maxMembers &&
+          !pod.members.some((member) => member.userId === user?.id),
+      ),
+    [pods, user?.id],
   );
+
+  // Hero: ONE next action. Your own soonest commitment wins; otherwise the
+  // top-ranked joinable pod from the feed (interest-boosted server-side).
+  const hero = useMemo<HeroItem | null>(() => {
+    if (myNextPod && nextMeeting) {
+      return new Date(myNextPod.meetupTime).getTime() <=
+        new Date(nextMeeting.meetingTime).getTime()
+        ? { kind: 'pod', pod: myNextPod, mine: true }
+        : { kind: 'meeting', meeting: nextMeeting };
+    }
+    if (myNextPod) return { kind: 'pod', pod: myNextPod, mine: true };
+    if (nextMeeting) return { kind: 'meeting', meeting: nextMeeting };
+    if (joinablePods[0]) return { kind: 'pod', pod: joinablePods[0], mine: false };
+    return null;
+  }, [joinablePods, myNextPod, nextMeeting]);
+
+  const heroPodId = hero?.kind === 'pod' ? hero.pod.id : null;
+  const heroMeetingId = hero?.kind === 'meeting' ? hero.meeting.id : null;
+
   const openPodCount = useMemo(
     () => pods.filter((pod) => pod.status === 'FORMING').length,
     [pods],
   );
+
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null).slice(0, 10),
     [pods],
   );
-  const yourNextPod = useMemo(
-    () =>
-      sortUpcomingPods(myPods).find((pod) => pod.status === 'FORMING' || pod.status === 'LOCKED') ??
-      null,
-    [myPods],
-  );
+
+  // Today: merged agenda minus whatever the hero already shows.
   const agendaItems = useMemo(() => {
     const podItems = sortUpcomingPods(myPods)
-      .filter((pod) => pod.status === 'FORMING' || pod.status === 'LOCKED')
-      .slice(0, 3)
+      .filter(
+        (pod) =>
+          (pod.status === 'FORMING' || pod.status === 'LOCKED') && pod.id !== heroPodId,
+      )
+      .slice(0, 4)
       .map((pod) => ({
         id: `pod-${pod.id}`,
         time: pod.meetupTime,
@@ -205,25 +279,157 @@ export default function HomeScreen() {
         onPress: () => navigation.navigate('PodDetail', { podId: pod.id }),
       }));
 
-    const clubItems = clubsToday.slice(0, 3).map((meeting) => ({
-      id: `club-${meeting.id}`,
-      time: meeting.meetingTime,
-      title: meeting.title,
-      detail: `${meeting.clubName} • ${meeting.location}`,
-      kind: 'club' as const,
-      onPress: () =>
-        navigation.navigate('ClubMeeting', {
-          clubId: meeting.clubId,
-          meetingId: meeting.id,
-        }),
-    }));
+    const clubItems = clubsToday
+      .filter((meeting) => meeting.id !== heroMeetingId)
+      .slice(0, 4)
+      .map((meeting) => ({
+        id: `club-${meeting.id}`,
+        time: meeting.meetingTime,
+        title: meeting.title,
+        detail: `${meeting.clubName} • ${meeting.location}`,
+        kind: 'club' as const,
+        onPress: () =>
+          navigation.navigate('ClubMeeting', {
+            clubId: meeting.clubId,
+            meetingId: meeting.id,
+          }),
+      }));
 
     return [...podItems, ...clubItems]
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
       .slice(0, 4);
-  }, [clubsToday, myPods, navigation]);
+  }, [clubsToday, heroMeetingId, heroPodId, myPods, navigation]);
+
+  // Happening soon: up to 3 joinable feed pods the hero isn't already showing.
+  const happeningSoon = useMemo(
+    () => joinablePods.filter((pod) => pod.id !== heroPodId).slice(0, 3),
+    [heroPodId, joinablePods],
+  );
+
+  const friendsGoing = useCallback(
+    (pod: Pod) => pod.members.filter((member) => friendIds.has(member.userId)),
+    [friendIds],
+  );
 
   const firstName = (user?.firstName ?? user?.name?.split(' ')[0] ?? 'friend').toUpperCase();
+  const friendsTonight = summary?.friendsTonight ?? null;
+
+  const openDiscover = useCallback(
+    (startCreate?: boolean) =>
+      navigation.navigate('MainTabs', {
+        screen: 'Discover',
+        params: startCreate
+          ? { segment: 'activities', startCreate: Date.now() }
+          : { segment: 'activities' },
+      }),
+    [navigation],
+  );
+
+  const renderHero = () => {
+    if (!loaded) return <SkeletonCard />;
+    if (!hero) {
+      return (
+        <EmptyState
+          icon="flash"
+          title="Nothing on the board. Yet."
+          body="Campus is full of reasons to leave your room — start something in two taps."
+          actionLabel="Start a pod"
+          onAction={() => openDiscover(true)}
+        />
+      );
+    }
+
+    if (hero.kind === 'meeting') {
+      const meeting = hero.meeting;
+      return (
+        <Slab
+          onPress={() =>
+            navigation.navigate('ClubMeeting', { clubId: meeting.clubId, meetingId: meeting.id })
+          }
+          color={colors.primary}
+          radius={radii.lg}
+          faceStyle={styles.heroFace}
+          accessibilityLabel={`${meeting.title}, ${startsIn(meeting.meetingTime)}`}
+        >
+          <Text style={[styles.heroKicker, { color: colors.onPrimary }]}>
+            YOUR NEXT MOVE · {formatTime(meeting.meetingTime)}
+          </Text>
+          <Text style={[styles.heroTitle, { color: colors.onPrimary }]} numberOfLines={2}>
+            {meeting.title}
+          </Text>
+          <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+            {meeting.clubName} · {meeting.location} · {startsIn(meeting.meetingTime)}
+          </Text>
+          <View style={styles.heroBottom}>
+            <View style={{ flex: 1 }} />
+            <View style={[styles.heroPill, { backgroundColor: colors.onPrimary }]}>
+              <Text style={[styles.heroPillText, { color: colors.primary }]}>Open</Text>
+            </View>
+          </View>
+        </Slab>
+      );
+    }
+
+    const pod = hero.pod;
+    const going = friendsGoing(pod);
+    const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+    return (
+      <Slab
+        onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+        color={colors.primary}
+        radius={radii.lg}
+        faceStyle={styles.heroFace}
+        accessibilityLabel={`${pod.activity?.title ?? 'Pod'}, ${startsIn(pod.meetupTime)}`}
+      >
+        <Text style={[styles.heroKicker, { color: colors.onPrimary }]}>
+          {hero.mine ? 'YOUR NEXT MOVE' : 'TONIGHT’S BEST PICK'} · {formatTime(pod.meetupTime)}
+        </Text>
+        <Text style={[styles.heroTitle, { color: colors.onPrimary }]} numberOfLines={2}>
+          {pod.activity?.title ?? 'Pod'}
+        </Text>
+        <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+          {pod.members.length}/{pod.maxMembers} going · {pod.location} · {startsIn(pod.meetupTime)}
+        </Text>
+        <View style={styles.heroBottom}>
+          <AvatarStack
+            names={pod.members.map((member) => ({
+              name: member.user.name,
+              uri: member.user.avatarUrl,
+            }))}
+            size={28}
+          />
+          {hero.mine ? (
+            <View style={[styles.heroPill, { backgroundColor: colors.onPrimary }]}>
+              <Text style={[styles.heroPillText, { color: colors.primary }]}>Open</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => void join(pod)}
+              disabled={Boolean(busyPodId)}
+              accessibilityRole="button"
+              accessibilityLabel={`Join ${pod.activity?.title ?? 'pod'}`}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.heroPill,
+                { backgroundColor: colors.onPrimary, opacity: pressed || busyPodId ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.heroPillText, { color: colors.primary }]}>
+                {busyPodId === pod.id ? 'Joining…' : `Join · ${spotsLeft} left`}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        {going.length > 0 ? (
+          <Text style={[typography.captionSmall, { color: colors.onPrimary }]} numberOfLines={1}>
+            {going.length === 1
+              ? `${going[0].user.name.split(' ')[0]} is going`
+              : `${going.length} friends are going`}
+          </Text>
+        ) : null}
+      </Slab>
+    );
+  };
 
   return (
     <AppBackdrop>
@@ -243,11 +449,13 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Masthead */}
+        {/* 1 — Masthead */}
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
-              <Text style={[typography.kicker, { color: colors.primary }]}>{datelineForNow()}</Text>
+              <Text style={[typography.kicker, { color: colors.accentText }]}>
+                {datelineForNow()}
+              </Text>
               <Text style={styles.greeting} numberOfLines={2}>
                 {greetingForNow()},{'\n'}
                 {firstName}.
@@ -256,7 +464,6 @@ export default function HomeScreen() {
             <Slab
               onPress={() => navigation.navigate('Profile')}
               radius={radii.md}
-              tilt={2}
               faceStyle={{ padding: 3 }}
               accessibilityLabel="Open profile"
             >
@@ -266,45 +473,10 @@ export default function HomeScreen() {
         </Animated.View>
         {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        {/* Pulse — a single calm glass stat strip */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
-          style={styles.pulseRow}
-        >
-          <Card padded faceStyle={styles.pulseStrip}>
-            <Pressable
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-              accessibilityRole="button"
-              accessibilityLabel={`${openPodCount} pods open now`}
-              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
-            >
-              <View style={styles.pulseValueRow}>
-                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
-                <Text style={[styles.pulseNumber, { color: colors.primary }]}>
-                  {loaded ? openPodCount : '–'}
-                </Text>
-              </View>
-              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Pods open now</Text>
-            </Pressable>
-            <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
-            <Pressable
-              onPress={() => navigation.navigate('ClubMeetingsTonight')}
-              accessibilityRole="button"
-              accessibilityLabel={`${clubsToday.length} club meetings today`}
-              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
-            >
-              <Text style={[styles.pulseNumber, { color: colors.ink }]}>
-                {loaded ? clubsToday.length : '–'}
-              </Text>
-              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Meetings today</Text>
-            </Pressable>
-          </Card>
-        </Animated.View>
-
-        {/* Permission nudges */}
+        {/* Permission nudges (between masthead and hero) */}
         {(!granted && canAskAgain) || (notificationPermissionLoaded && !notificationsGranted) ? (
           <Animated.View
-            entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
+            entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
             style={styles.nudgeRow}
           >
             {!granted && canAskAgain ? (
@@ -328,13 +500,69 @@ export default function HomeScreen() {
           </Animated.View>
         ) : null}
 
-        {/* Today's agenda */}
+        {/* 2 — Hero: one next action */}
+        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+          {renderHero()}
+        </Animated.View>
+
+        {/* 3 — Pulse strip */}
         <Animated.View
           entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
-          style={styles.section}
+          style={styles.pulseRow}
         >
-          <SectionHeader kicker="The lineup" title="Your day" />
-          {agendaItems.length ? (
+          <Card padded faceStyle={styles.pulseStrip}>
+            <Pressable
+              onPress={() => openDiscover()}
+              accessibilityRole="button"
+              accessibilityLabel={`${openPodCount} pods open now`}
+              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
+            >
+              <View style={styles.pulseValueRow}>
+                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+                <Text style={[styles.pulseNumber, { color: colors.accentText }]}>
+                  {loaded ? openPodCount : '–'}
+                </Text>
+              </View>
+              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Pods open</Text>
+            </Pressable>
+            <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
+            <Pressable
+              onPress={() => navigation.navigate('ClubMeetingsTonight')}
+              accessibilityRole="button"
+              accessibilityLabel={`${clubsToday.length} club meetings today`}
+              style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={[styles.pulseNumber, { color: colors.ink }]}>
+                {loaded ? clubsToday.length : '–'}
+              </Text>
+              <Text style={[styles.pulseLabel, { color: colors.sub }]}>Meetings today</Text>
+            </Pressable>
+            {friendsTonight ? (
+              <>
+                <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
+                <Pressable
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Plans' })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${friendsTonight.count} friends out tonight`}
+                  style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
+                >
+                  <Text style={[styles.pulseNumber, { color: colors.ink }]}>
+                    {friendsTonight.count}
+                  </Text>
+                  <Text style={[styles.pulseLabel, { color: colors.sub }]}>Friends out</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </Card>
+        </Animated.View>
+
+        {/* 4 — Today */}
+        {agendaItems.length ? (
+          <Animated.View
+            entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
+            style={styles.section}
+          >
+            <SectionHeader kicker="The lineup" title="Today" />
             <Card padded>
               {agendaItems.map((item, index) => (
                 <View key={item.id}>
@@ -346,7 +574,15 @@ export default function HomeScreen() {
                     faceStyle={styles.agendaRow}
                     accessibilityLabel={`${item.title} at ${formatTime(item.time)}`}
                   >
-                    <View style={[styles.agendaTime, { backgroundColor: item.kind === 'pod' ? colors.primarySoft : colors.violetSoft }]}>
+                    <View
+                      style={[
+                        styles.agendaTime,
+                        {
+                          backgroundColor:
+                            item.kind === 'pod' ? colors.primarySoft : colors.violetSoft,
+                        },
+                      ]}
+                    >
                       <Text style={styles.agendaTimeText}>{formatTime(item.time)}</Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -357,7 +593,7 @@ export default function HomeScreen() {
                         {item.detail}
                       </Text>
                     </View>
-                    <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                    <Ionicons name="arrow-forward" size={16} color={colors.sub} />
                   </Slab>
                   {index < agendaItems.length - 1 ? (
                     <View style={[styles.agendaDivider, { borderColor: colors.borderSoft }]} />
@@ -365,270 +601,185 @@ export default function HomeScreen() {
                 </View>
               ))}
             </Card>
-          ) : (
-            <Card padded>
-              <View style={{ gap: spacing.md }}>
-                <Sticker label="Blank slate" tint={colors.amberSoft} tilt={-2} icon="cafe" />
-                <Text style={typography.title}>Nothing on the board. Yet.</Text>
-                <Text style={typography.caption}>
-                  Campus is full of reasons to leave your room — go find one.
-                </Text>
-                <Button
-                  label="Find tonight's plan"
-                  icon="sparkles"
-                  onPress={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-                />
-              </View>
-            </Card>
-          )}
-        </Animated.View>
+          </Animated.View>
+        ) : null}
 
-        {/* Live campus map */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader kicker="Live" title="On the map" />
-          {mappablePods.length ? (
-            <Card padded={false}>
-              <MapView
-                provider={PROVIDER_DEFAULT}
-                style={styles.map}
-                initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
-                scrollEnabled={false}
-                rotateEnabled={false}
-                pitchEnabled={false}
-              >
-                <Polygon
-                  coordinates={OSU_CAMPUS_POLYGON}
-                  fillColor="rgba(200,16,46,0.06)"
-                  strokeColor="rgba(200,16,46,0.3)"
-                />
-                {mappablePods.map((pod) => (
-                  <Marker
-                    key={pod.id}
-                    coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
-                    title={pod.activity?.title ?? 'Pod'}
-                    description={pod.location}
-                    onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                  />
-                ))}
-              </MapView>
-              <View style={[styles.mapFooter, { borderTopColor: colors.border }]}>
-                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
-                <Text style={typography.caption}>Tap a pin to jump into that pod.</Text>
-              </View>
-            </Card>
-          ) : (
-            <EmptyState
-              icon="map"
-              title="No live pins yet"
-              body="Start or join a pod and the campus map lights up."
-              actionLabel="Explore activities"
-              onAction={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
-            />
-          )}
-        </Animated.View>
-
-        {/* Your next move */}
+        {/* 5 — Happening soon (inline join + social proof) */}
         <Animated.View
           entering={FadeInDown.delay(motion.stagger * 4).duration(motion.durBase)}
           style={styles.section}
         >
           <SectionHeader
-            kicker="Locked in"
-            title="Your next move"
-            actionLabel="All pods"
-            onAction={() => navigation.navigate('MainTabs', { screen: 'Pods' })}
-          />
-          {!loaded ? (
-            <SkeletonCard />
-          ) : yourNextPod ? (
-            <Slab
-              onPress={() => navigation.navigate('PodDetail', { podId: yourNextPod.id })}
-              color={colors.primary}
-              radius={radii.lg}
-              faceStyle={styles.nextPodFace}
-              accessibilityLabel={yourNextPod.activity?.title ?? 'Upcoming pod'}
-            >
-              <View style={styles.nextPodTop}>
-                <Sticker
-                  label={formatDateTime(yourNextPod.meetupTime)}
-                  tint={colors.surface}
-                  tilt={-1.5}
-                  icon="time"
-                />
-                <View style={styles.nextPodCount}>
-                  <Ionicons name="people" size={14} color={colors.onPrimary} />
-                  <Text style={[styles.nextPodCountText, { color: colors.onPrimary }]}>
-                    {yourNextPod.members.length}/{yourNextPod.maxMembers}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.nextPodTitle, { color: colors.onPrimary }]} numberOfLines={2}>
-                {(yourNextPod.activity?.title ?? 'Upcoming pod').toUpperCase()}
-              </Text>
-              <View style={styles.nextPodLocation}>
-                <Ionicons name="location" size={14} color={colors.onPrimary} />
-                <Text style={[typography.bodyMedium, { color: colors.onPrimary, flex: 1 }]} numberOfLines={1}>
-                  {yourNextPod.location}
-                </Text>
-              </View>
-            </Slab>
-          ) : (
-            <EmptyState
-              icon="flash"
-              title="No pod lined up yet"
-              body="Jump into the live campus flow from Explore, or start your own."
-            />
-          )}
-        </Animated.View>
-
-        {/* Open pods feed */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 5).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader
             kicker="Fresh"
-            title="Open pods"
-            actionLabel="Explore"
-            onAction={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
+            title="Happening soon"
+            actionLabel="Discover"
+            onAction={() => openDiscover()}
           />
           {!loaded ? (
             <>
               <SkeletonCard compact />
               <SkeletonCard compact />
             </>
-          ) : activePods.length ? (
-            activePods.map((pod) => (
-              <Slab
-                key={pod.id}
-                onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                faceStyle={styles.podRowFace}
-                accessibilityLabel={pod.activity?.title ?? 'Pod'}
-              >
-                <View style={[styles.podTimeBlock, { backgroundColor: accentForSeed(colors, pod.activity?.title ?? pod.id).soft, borderColor: colors.border }]}>
-                  <Text style={styles.podTimeText}>{formatTime(pod.meetupTime)}</Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={typography.heading} numberOfLines={1}>
-                    {pod.activity?.title ?? 'Pod'}
-                  </Text>
-                  <View style={styles.inlineMeta}>
-                    <Ionicons name="location" size={12} color={colors.faint} />
-                    <Text style={typography.caption} numberOfLines={1}>
-                      {pod.location}
-                    </Text>
+          ) : happeningSoon.length ? (
+            happeningSoon.map((pod) => {
+              const going = friendsGoing(pod);
+              const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+              return (
+                <Slab
+                  key={pod.id}
+                  onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                  faceStyle={styles.podRowFace}
+                  accessibilityLabel={pod.activity?.title ?? 'Pod'}
+                >
+                  <View
+                    style={[
+                      styles.podTimeBlock,
+                      { backgroundColor: colors.primarySoft, borderColor: colors.border },
+                    ]}
+                  >
+                    <Text style={styles.podTimeText}>{formatTime(pod.meetupTime)}</Text>
                   </View>
-                </View>
-                <Ionicons name="arrow-forward" size={16} color={colors.faint} />
-              </Slab>
-            ))
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={typography.heading} numberOfLines={1}>
+                      {pod.activity?.title ?? 'Pod'}
+                    </Text>
+                    {going.length > 0 ? (
+                      <View style={styles.inlineMeta}>
+                        <AvatarStack
+                          names={going.slice(0, 2).map((member) => ({
+                            name: member.user.name,
+                            uri: member.user.avatarUrl,
+                          }))}
+                          size={16}
+                        />
+                        <Text
+                          style={[typography.captionSmall, { color: colors.success }]}
+                          numberOfLines={1}
+                        >
+                          {going.length === 1
+                            ? `${going[0].user.name.split(' ')[0]} is going`
+                            : `${going.length} friends going`}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                        {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left · {pod.location}
+                      </Text>
+                    )}
+                  </View>
+                  <Button
+                    label={busyPodId === pod.id ? 'Joining…' : 'Join'}
+                    size="sm"
+                    variant="secondary"
+                    disabled={Boolean(busyPodId)}
+                    onPress={() => void join(pod)}
+                  />
+                </Slab>
+              );
+            })
           ) : (
             <EmptyState
               icon="moon"
               title="The feed is quiet"
               body="When new pods spin up, they land here first."
+              actionLabel="Start a pod"
+              onAction={() => openDiscover(true)}
             />
           )}
         </Animated.View>
 
-        {/* Activity rail */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 6).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader kicker="Jump in" title="Activities with open pods" />
-          {!loaded ? (
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <SkeletonCard compact style={{ flex: 1 }} />
-              <SkeletonCard compact style={{ flex: 1 }} />
-            </View>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
+        {/* 6 — Map strip (compact → full-screen modal) */}
+        {mappablePods.length ? (
+          <Animated.View
+            entering={FadeInDown.delay(motion.stagger * 5).duration(motion.durBase)}
+            style={styles.section}
+          >
+            <Pressable
+              onPress={() => setMapOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`${mappablePods.length} pods live on map. Open full map.`}
             >
-              {featuredActivities.map((activity, index) => {
-                const accent = accentForSeed(colors, activity.category ?? activity.title);
-                const meta = CATEGORY_META[activity.category];
-                return (
-                  <Slab
-                    key={activity.id}
-                    onPress={() => navigation.navigate('ActivityPods', { activity })}
-                    color={accent.soft}
-                    tilt={index % 2 === 0 ? -0.8 : 0.8}
-                    style={styles.activityCard}
-                    faceStyle={styles.activityFace}
-                    accessibilityLabel={activity.title}
+              <Card padded={false}>
+                <View pointerEvents="none">
+                  <MapView
+                    provider={PROVIDER_DEFAULT}
+                    style={styles.mapStrip}
+                    initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                    rotateEnabled={false}
+                    pitchEnabled={false}
                   >
-                    <View style={styles.activityTop}>
-                      <View style={[styles.activityIcon, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <Ionicons name={meta?.icon ?? 'sparkles-outline'} size={19} color={accent.tint} />
-                      </View>
-                      <Sticker label={activity.category ?? 'Activity'} tint={colors.surface} small tilt={2} />
-                    </View>
-                    <Text style={typography.heading} numberOfLines={1}>
-                      {activity.title}
-                    </Text>
-                    <Text style={typography.caption} numberOfLines={2}>
-                      {activity.description}
-                    </Text>
-                  </Slab>
-                );
-              })}
-            </ScrollView>
-          )}
-        </Animated.View>
+                    {mappablePods.map((pod) => (
+                      <Marker
+                        key={pod.id}
+                        coordinate={{
+                          latitude: pod.latitude ?? 0,
+                          longitude: pod.longitude ?? 0,
+                        }}
+                      />
+                    ))}
+                  </MapView>
+                </View>
+                <View style={[styles.mapStripPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+                  <Text style={typography.captionSmall}>
+                    {mappablePods.length} {mappablePods.length === 1 ? 'pod' : 'pods'} live on map
+                  </Text>
+                </View>
+              </Card>
+            </Pressable>
+          </Animated.View>
+        ) : null}
 
-        {/* Clubs today */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 7).duration(motion.durBase)}
-          style={styles.section}
+        {/* Full-screen map modal */}
+        <Modal
+          visible={mapOpen}
+          animationType="slide"
+          onRequestClose={() => setMapOpen(false)}
         >
-          <SectionHeader kicker="IRL" title="Club meetings today" />
-          {!loaded ? (
-            <>
-              <SkeletonCard compact />
-              <SkeletonCard compact />
-            </>
-          ) : clubsToday.length ? (
-            clubsToday.slice(0, 4).map((meeting) => (
-              <Slab
-                key={meeting.id}
-                onPress={() =>
-                  navigation.navigate('ClubMeeting', {
-                    clubId: meeting.clubId,
-                    meetingId: meeting.id,
-                  })
-                }
-                faceStyle={styles.podRowFace}
-                accessibilityLabel={meeting.title}
-              >
-                <View style={[styles.podTimeBlock, { backgroundColor: colors.violetSoft, borderColor: colors.border }]}>
-                  <Text style={styles.podTimeText}>{formatTime(meeting.meetingTime)}</Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={typography.heading} numberOfLines={1}>
-                    {meeting.title}
-                  </Text>
-                  <Text style={typography.caption} numberOfLines={1}>
-                    {meeting.clubName} • {meeting.location}
-                  </Text>
-                </View>
-                <Ionicons name="arrow-forward" size={16} color={colors.faint} />
-              </Slab>
-            ))
-          ) : (
-            <EmptyState
-              icon="megaphone"
-              title="No club meetings today"
-              body="When leaders schedule meetings, they show up here."
-            />
-          )}
-        </Animated.View>
+          <View style={[styles.mapModal, { backgroundColor: colors.bg }]}>
+            <MapView
+              provider={PROVIDER_DEFAULT}
+              style={StyleSheet.absoluteFill}
+              initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+            >
+              <Polygon
+                coordinates={OSU_CAMPUS_POLYGON}
+                fillColor="rgba(200,16,46,0.06)"
+                strokeColor="rgba(200,16,46,0.3)"
+              />
+              {mappablePods.map((pod) => (
+                <Marker
+                  key={pod.id}
+                  coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
+                  title={pod.activity?.title ?? 'Pod'}
+                  description={pod.location}
+                  onPress={() => {
+                    setMapOpen(false);
+                    navigation.navigate('PodDetail', { podId: pod.id });
+                  }}
+                />
+              ))}
+            </MapView>
+            <Pressable
+              onPress={() => setMapOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close map"
+              hitSlop={12}
+              style={[
+                styles.mapClose,
+                {
+                  top: insets.top + spacing.md,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Ionicons name="close" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+        </Modal>
       </ScrollView>
     </AppBackdrop>
   );
@@ -650,9 +801,45 @@ const useStyles = createThemedStyles((t: Theme) => ({
     fontFamily: fonts.display,
     fontSize: 28,
     lineHeight: 33,
-    letterSpacing: -0.6,
+    fontWeight: '800' as const,
     color: t.colors.ink,
     marginTop: 4,
+  },
+  heroFace: {
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  heroKicker: {
+    fontFamily: fonts.bold,
+    fontWeight: '700' as const,
+    fontSize: 11,
+    letterSpacing: 0.8,
+  },
+  heroTitle: {
+    fontFamily: fonts.display,
+    fontWeight: '800' as const,
+    fontSize: 24,
+    lineHeight: 29,
+  },
+  heroBottom: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  heroPill: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 9,
+    borderRadius: radii.pill,
+    minHeight: 36,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  heroPillText: {
+    fontFamily: fonts.bold,
+    fontWeight: '700' as const,
+    fontSize: 14,
   },
   pulseRow: {
     alignSelf: 'stretch' as const,
@@ -673,17 +860,18 @@ const useStyles = createThemedStyles((t: Theme) => ({
   pulseDivide: {
     width: StyleSheet.hairlineWidth,
     alignSelf: 'stretch' as const,
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.md,
   },
   pulseNumber: {
     fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 30,
-    letterSpacing: -0.5,
+    fontWeight: '800' as const,
+    fontSize: 24,
+    lineHeight: 28,
   },
   pulseLabel: {
     fontFamily: fonts.medium,
-    fontSize: 12.5,
+    fontWeight: '500' as const,
+    fontSize: 12,
     lineHeight: 16,
   },
   nudgeRow: {
@@ -711,59 +899,18 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   agendaTimeText: {
     fontFamily: fonts.bold,
-    fontSize: 12.5,
+    fontWeight: '700' as const,
+    fontSize: 12,
     color: t.colors.ink,
   },
   agendaDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     marginVertical: 2,
   },
-  map: {
-    height: 200,
-  },
-  mapFooter: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: BORDER_W,
-  },
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-  },
-  nextPodFace: {
-    padding: spacing.xl,
-    gap: spacing.md,
-  },
-  nextPodTop: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-    flexShrink: 1,
-  },
-  nextPodCount: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 5,
-  },
-  nextPodCountText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-  },
-  nextPodTitle: {
-    fontFamily: fonts.display,
-    fontSize: 22,
-    lineHeight: 27,
-    letterSpacing: -0.5,
-  },
-  nextPodLocation: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
   },
   podRowFace: {
     flexDirection: 'row' as const,
@@ -781,36 +928,39 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   podTimeText: {
     fontFamily: fonts.bold,
-    fontSize: 12.5,
+    fontWeight: '700' as const,
+    fontSize: 12,
     color: t.colors.ink,
   },
   inlineMeta: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
+    gap: 6,
   },
-  rail: {
-    paddingRight: spacing.xl,
-    paddingVertical: 4,
-    gap: spacing.md,
+  mapStrip: {
+    height: 96,
   },
-  activityCard: {
-    width: 250,
-  },
-  activityFace: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  activityTop: {
+  mapStripPill: {
+    position: 'absolute' as const,
+    left: spacing.md,
+    bottom: spacing.md,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    marginBottom: 2,
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    borderWidth: BORDER_W,
   },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.sm,
+  mapModal: {
+    flex: 1,
+  },
+  mapClose: {
+    position: 'absolute' as const,
+    right: spacing.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: BORDER_W,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

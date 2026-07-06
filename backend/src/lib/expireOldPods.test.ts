@@ -3,13 +3,14 @@ import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
 import request from 'supertest';
 import app from '../server';
-import { expireOldPods } from './expireOldPods';
+import { expireOldPods, resetExpireOldPodsThrottleForTests } from './expireOldPods';
 
 describe('expireOldPods', () => {
   let activityId: string;
   const validLocation = 'Thompson Library';
 
   beforeEach(async () => {
+    resetExpireOldPodsThrottleForTests();
     const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
     if (!activity) throw new Error('No activities in seed');
     activityId = activity.id;

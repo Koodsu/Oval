@@ -3,40 +3,30 @@ import { StyleSheet, TextStyle, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * ─────────────────────────────────────────────────────────────────────────────
- * OVAL DESIGN SYSTEM — "Lumen"
+ * OVAL DESIGN SYSTEM — Crimson
  *
- * A premium liquid-glass language built for OSU students:
- *  - A soft tinted gradient backdrop (warm cream → lilac → cool blue)
- *  - Frosted translucent surfaces with hairline highlight borders
- *  - Soft, diffuse elevation — no hard ink borders, no offset slab shadows
- *  - OSU scarlet kept as a focused accent (primary actions, live state)
- *  - Sora for quiet geometric display type, Inter for clean body copy
- *  - Generous radii, calm spacing, depth instead of decoration
- *
- * Restraint is the system: let the gradient + glass carry mood, and spend
- * scarlet only where the user should act or where something is live.
- * ─────────────────────────────────────────────────────────────────────────────
+ * Rule: screens must not use raw hex colors. Route every color through
+ * useTheme() tokens so light/dark contrast stays intentional.
  */
 
 // ── Fonts ────────────────────────────────────────────────────────────────────
 
 export const fonts = {
-  /** Sora 800 — hero numerals, splash moments */
-  displayHeavy: 'Sora-ExtraBold',
-  /** Sora 700 — screen titles */
-  display: 'Sora-Bold',
-  /** Sora 600 — card titles, medium display */
-  displayMedium: 'Sora-SemiBold',
-  /** Inter 400 — body copy */
-  body: 'Inter-Regular',
-  /** Inter 500 */
-  medium: 'Inter-Medium',
-  /** Inter 600 */
-  semibold: 'Inter-SemiBold',
-  /** Inter 700 — buttons, labels, kickers */
-  bold: 'Inter-Bold',
-} as const;
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  displayHeavy: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  display: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  displayMedium: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  body: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  medium: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  semibold: undefined,
+  /** @deprecated System fonts are used; aliases remain for compatibility. */
+  bold: undefined,
+} satisfies Record<string, undefined>;
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +63,8 @@ export type ThemeColors = {
   primaryPress: string;
   primarySoft: string;
   onPrimary: string;
+  /** Text/icon accent. Dark mode uses a brighter red for AA contrast. */
+  accentText: string;
 
   danger: string;
   dangerSoft: string;
@@ -97,31 +89,32 @@ export type ThemeColors = {
 };
 
 export const lightColors: ThemeColors = {
-  bg: '#F3EEF6',
-  surface: 'rgba(255, 255, 255, 0.72)',
-  surfaceAlt: 'rgba(255, 255, 255, 0.46)',
-  sunken: 'rgba(108, 96, 122, 0.10)',
-  ink: '#241F2B',
-  sub: '#6C6476',
-  faint: '#A39BAD',
-  border: 'rgba(120, 108, 134, 0.16)',
-  borderSoft: 'rgba(120, 108, 134, 0.09)',
-  shadow: '#36283F',
-  glass: 'rgba(255, 255, 255, 0.50)',
-  overlay: 'rgba(28, 22, 38, 0.40)',
-  tabBar: 'rgba(255, 255, 255, 0.70)',
+  bg: '#F5F4F2',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F3F2F0',
+  sunken: '#EAE9E6',
+  ink: '#111317',
+  sub: '#5B5E66',
+  faint: '#9A9DA6',
+  border: '#E7E6E3',
+  borderSoft: '#F0EFEC',
+  shadow: '#111317',
+  glass: 'rgba(255,255,255,0.6)',
+  overlay: 'rgba(17,19,23,0.45)',
+  tabBar: 'rgba(255,255,255,0.92)',
 
-  primary: '#C8102E',
-  primaryPress: '#9C0A22',
-  primarySoft: 'rgba(200, 16, 46, 0.12)',
+  primary: '#D90429',
+  primaryPress: '#B00321',
+  primarySoft: '#FFE5EA',
   onPrimary: '#FFFFFF',
+  accentText: '#D90429',
 
   danger: '#C01731',
-  dangerSoft: 'rgba(192, 23, 49, 0.12)',
-  success: '#1A8C49',
-  successSoft: 'rgba(26, 140, 73, 0.14)',
-  warning: '#C2810C',
-  warningSoft: 'rgba(194, 129, 12, 0.16)',
+  dangerSoft: '#F9E2E6',
+  success: '#178A47',
+  successSoft: '#E2F3E9',
+  warning: '#B57A0B',
+  warningSoft: '#F8EEDB',
 
   blue: '#2E63D9',
   blueSoft: 'rgba(46, 99, 217, 0.14)',
@@ -138,31 +131,32 @@ export const lightColors: ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  bg: '#15121C',
-  surface: 'rgba(255, 255, 255, 0.075)',
-  surfaceAlt: 'rgba(255, 255, 255, 0.05)',
-  sunken: 'rgba(0, 0, 0, 0.26)',
-  ink: '#F2EDF8',
-  sub: '#B6AEC4',
-  faint: '#7C7389',
-  border: 'rgba(255, 255, 255, 0.14)',
-  borderSoft: 'rgba(255, 255, 255, 0.08)',
+  bg: '#0F0E12',
+  surface: '#1B1A20',
+  surfaceAlt: '#232228',
+  sunken: '#0A090C',
+  ink: '#F4F3F6',
+  sub: '#A8A7B0',
+  faint: '#6E6D78',
+  border: '#2E2D35',
+  borderSoft: '#26252C',
   shadow: '#000000',
-  glass: 'rgba(255, 255, 255, 0.08)',
-  overlay: 'rgba(0, 0, 0, 0.55)',
-  tabBar: 'rgba(26, 22, 34, 0.70)',
+  glass: 'rgba(27,26,32,0.6)',
+  overlay: 'rgba(0,0,0,0.6)',
+  tabBar: 'rgba(20,19,24,0.94)',
 
-  primary: '#FF566A',
-  primaryPress: '#E33B50',
-  primarySoft: 'rgba(255, 86, 106, 0.18)',
+  primary: '#D90429',
+  primaryPress: '#F0264A',
+  primarySoft: 'rgba(217,4,41,0.16)',
   onPrimary: '#FFFFFF',
+  accentText: '#FF4D63',
 
-  danger: '#FF6275',
-  dangerSoft: 'rgba(255, 98, 117, 0.18)',
-  success: '#46CC7E',
-  successSoft: 'rgba(70, 204, 126, 0.16)',
-  warning: '#F2B753',
-  warningSoft: 'rgba(242, 183, 83, 0.16)',
+  danger: '#FF5C71',
+  dangerSoft: 'rgba(255,92,113,0.16)',
+  success: '#3ECF7A',
+  successSoft: 'rgba(62,207,122,0.15)',
+  warning: '#E8B04B',
+  warningSoft: 'rgba(232,176,75,0.15)',
 
   blue: '#7CA2FF',
   blueSoft: 'rgba(124, 162, 255, 0.16)',
@@ -178,24 +172,16 @@ export const darkColors: ThemeColors = {
   tealSoft: 'rgba(84, 212, 224, 0.16)',
 };
 
-// ── Backdrop gradients (consumed by AppBackdrop) ─────────────────────────────
-
-/** Soft tinted wash behind every screen. Warm cream → lilac → cool blue. */
-export const lightBackdrop = ['#FCEAE1', '#F3EDF8', '#E9F0F8'] as const;
-export const darkBackdrop = ['#1E1726', '#15121C', '#121521'] as const;
-export const backdropStart = { x: 0.1, y: 0 } as const;
-export const backdropEnd = { x: 0.9, y: 1 } as const;
-
-// ── Elevation — soft, diffuse shadows (replaces the hard slab offset) ────────
+// ── Elevation — soft, diffuse shadows ───────────────────────────────────────
 
 export const elevation = {
-  /** Resting glass card. */
+  /** Resting solid card. */
   card: {
-    shadowColor: '#2A1F36',
-    shadowOpacity: 0.10,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowColor: '#111317',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   /** Floating chrome (docks, FABs, sheets). */
   floating: {
@@ -222,9 +208,9 @@ export const spacing = {
 export const radii = {
   xs: 10,
   sm: 14,
-  md: 18,
-  lg: 22,
-  xl: 28,
+  md: 16,
+  lg: 20,
+  xl: 24,
   pill: 999,
 } as const;
 
@@ -241,8 +227,6 @@ export const density = {
 export const SLAB_OFFSET = 0;
 /** Hairline highlight border on glass surfaces. */
 export const BORDER_W = 1;
-/** Default blur strength for frosted surfaces. */
-export const GLASS_BLUR = 24;
 /** Space screens must reserve above the bottom dock. */
 export const DOCK_CLEARANCE = 104;
 
@@ -266,87 +250,81 @@ export const motion = {
 
 export function getTypography(colors: ThemeColors): Record<string, TextStyle> {
   return {
-    /** Unbounded 800 — splash numbers, auth hero */
     hero: {
-      fontFamily: fonts.displayHeavy,
-      fontSize: 30,
-      lineHeight: 37,
-      letterSpacing: -0.8,
+      fontSize: 32,
+      lineHeight: 39,
+      fontWeight: '800',
+      letterSpacing: 0,
       color: colors.ink,
     },
-    /** Unbounded 700 — screen titles */
     display: {
-      fontFamily: fonts.display,
-      fontSize: 23,
-      lineHeight: 29,
-      letterSpacing: -0.5,
+      fontSize: 24,
+      lineHeight: 30,
+      fontWeight: '800',
+      letterSpacing: 0,
       color: colors.ink,
     },
-    /** Unbounded 600 — section/card display titles */
     title: {
-      fontFamily: fonts.displayMedium,
-      fontSize: 17.5,
+      fontSize: 17,
       lineHeight: 23,
-      letterSpacing: -0.3,
+      fontWeight: '700',
+      letterSpacing: 0,
       color: colors.ink,
     },
-    /** Grotesk 700 — entity names, list titles */
     heading: {
-      fontFamily: fonts.bold,
-      fontSize: 16.5,
+      fontSize: 16,
       lineHeight: 21,
+      fontWeight: '700',
       color: colors.ink,
     },
-    /** Grotesk 600 — emphasized body */
     subheading: {
-      fontFamily: fonts.semibold,
       fontSize: 15,
       lineHeight: 20,
+      fontWeight: '600',
       color: colors.ink,
     },
     body: {
-      fontFamily: fonts.body,
       fontSize: 15,
       lineHeight: 21,
+      fontWeight: '400',
       color: colors.ink,
     },
     bodyMedium: {
-      fontFamily: fonts.medium,
       fontSize: 15,
       lineHeight: 21,
+      fontWeight: '500',
       color: colors.ink,
     },
     caption: {
-      fontFamily: fonts.medium,
       fontSize: 13,
       lineHeight: 18,
+      fontWeight: '500',
       color: colors.sub,
     },
     captionSmall: {
-      fontFamily: fonts.medium,
-      fontSize: 11.5,
+      fontSize: 12,
       lineHeight: 15,
-      color: colors.faint,
+      fontWeight: '500',
+      color: colors.sub,
     },
-    /** SHOUTY KICKER — section eyebrow labels */
     kicker: {
-      fontFamily: fonts.bold,
       fontSize: 11,
       lineHeight: 14,
+      fontWeight: '700',
       letterSpacing: 0.8,
       textTransform: 'uppercase',
       color: colors.sub,
     },
     button: {
-      fontFamily: fonts.bold,
-      fontSize: 15.5,
+      fontSize: 15,
       lineHeight: 20,
+      fontWeight: '600',
       color: colors.ink,
     },
     chip: {
-      fontFamily: fonts.semibold,
       fontSize: 13,
       lineHeight: 17,
+      fontWeight: '600',
       color: colors.ink,
     },
   };
@@ -364,6 +342,7 @@ export type Theme = {
   isDark: boolean;
   scheme: 'light' | 'dark';
   preference: AppearancePreference;
+  ready: boolean;
   setPreference: (preference: AppearancePreference) => void;
 };
 
@@ -375,15 +354,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Returning users' saved choice (loaded below) still takes precedence, and
   // anyone can switch to Light or System in Settings.
   const [preference, setPreferenceState] = React.useState<AppearancePreference>('dark');
+  const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
+    let active = true;
     AsyncStorage.getItem(APPEARANCE_KEY)
       .then((stored) => {
-        if (stored === 'light' || stored === 'dark' || stored === 'system') {
+        if (active && (stored === 'light' || stored === 'dark' || stored === 'system')) {
           setPreferenceState(stored);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setReady(true);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const setPreference = React.useCallback((next: AppearancePreference) => {
@@ -403,9 +390,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       isDark,
       scheme,
       preference,
+      ready,
       setPreference,
     }),
-    [colors, isDark, scheme, preference, setPreference],
+    [colors, isDark, scheme, preference, ready, setPreference],
   );
 
   return React.createElement(ThemeContext.Provider, { value }, children);
@@ -422,6 +410,7 @@ export function useTheme(): Theme {
       isDark: false,
       scheme: 'light',
       preference: 'system',
+      ready: true,
       setPreference: () => {},
     };
   }

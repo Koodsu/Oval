@@ -143,26 +143,28 @@ async function main() {
     const d = DETAILED[i];
     const firstName = d?.firstName ?? FIRST[(i - DETAILED.length) % FIRST.length];
     const lastName = d?.lastName ?? LAST[((i - DETAILED.length) * 5) % LAST.length];
-    const u = await prisma.user.create({
-      data: {
-        name: `${firstName} ${lastName}`,
-        firstName,
-        lastName,
-        email: `oval-seed-${i}-${firstName.toLowerCase()}@osu.edu`,
-        password: passwordHash,
-        verifiedUniversity: true,
-        accountStatus: 'ACTIVE',
-        termsVersion: CURRENT_TERMS_VERSION,
-        termsAcceptedAt: new Date(),
-        ageAttestedAt: new Date(),
-        classYear: d?.classYear ?? YEARS[i % YEARS.length],
-        major: d?.major ?? MAJORS[i % MAJORS.length],
-        bio: d?.bio ?? BIOS[i % BIOS.length],
-        instagramHandle: d?.instagramHandle ?? `@${firstName.toLowerCase()}.${lastName.toLowerCase()}`,
-        interestTags: JSON.stringify(d?.interests ?? [INTEREST_POOL[i % INTEREST_POOL.length], INTEREST_POOL[(i * 3) % INTEREST_POOL.length]]),
-        campusZones: JSON.stringify(['Central Campus']),
-      },
-    });
+    // Upsert on the deterministic email so re-running the seed (e.g. after a
+    // run that wasn't cleaned up) reuses existing demo users instead of
+    // failing on the unique email constraint.
+    const data = {
+      name: `${firstName} ${lastName}`,
+      firstName,
+      lastName,
+      email: `oval-seed-${i}-${firstName.toLowerCase()}@osu.edu`,
+      password: passwordHash,
+      verifiedUniversity: true,
+      accountStatus: 'ACTIVE',
+      termsVersion: CURRENT_TERMS_VERSION,
+      termsAcceptedAt: new Date(),
+      ageAttestedAt: new Date(),
+      classYear: d?.classYear ?? YEARS[i % YEARS.length],
+      major: d?.major ?? MAJORS[i % MAJORS.length],
+      bio: d?.bio ?? BIOS[i % BIOS.length],
+      instagramHandle: d?.instagramHandle ?? `@${firstName.toLowerCase()}.${lastName.toLowerCase()}`,
+      interestTags: JSON.stringify(d?.interests ?? [INTEREST_POOL[i % INTEREST_POOL.length], INTEREST_POOL[(i * 3) % INTEREST_POOL.length]]),
+      campusZones: JSON.stringify(['Central Campus']),
+    };
+    const u = await prisma.user.upsert({ where: { email: data.email }, create: data, update: data });
     manifest.users.push(u.id);
     users.push({ id: u.id });
   }
@@ -182,14 +184,21 @@ async function main() {
   // --- Pods (first one gets a full chat thread) ---
   const ovalLat = 40.0076;
   const ovalLng = -83.0306;
+  // Spread across the next 7 days so the upcoming-week view looks alive.
   const podSpecs = [
     { actIdx: 1, location: 'The Lounge – High Street', inHours: 18, size: 4, max: 4, chat: true },
-    { actIdx: 0, location: 'The Oval – South End', inHours: 26, size: 2, max: 6 },
     { actIdx: 2, location: 'Thompson Library – 11th Floor', inHours: 4, size: 3, max: 5 },
-    { actIdx: 5, location: 'Lincoln Tower Fields', inHours: 50, size: 7, max: 10 },
     { actIdx: 4, location: 'The Oval', inHours: 8, size: 2, max: 4 },
-    { actIdx: 3, location: 'High Street', inHours: 30, size: 3, max: 4 },
-    { actIdx: 2, location: 'Thompson Library – Reading Room', inHours: 12, size: 4, max: 6 },
+    { actIdx: 0, location: 'The Oval – South End', inHours: 26, size: 2, max: 6 },
+    { actIdx: 3, location: 'High Street', inHours: 44, size: 3, max: 4 },
+    { actIdx: 5, location: 'Lincoln Tower Fields', inHours: 58, size: 7, max: 10 },
+    { actIdx: 2, location: 'Thompson Library – Reading Room', inHours: 74, size: 4, max: 6 },
+    { actIdx: 4, location: 'The Oval – North End', inHours: 92, size: 3, max: 6 },
+    { actIdx: 1, location: 'The Lounge – High Street', inHours: 110, size: 2, max: 4 },
+    { actIdx: 0, location: 'The Oval', inHours: 122, size: 4, max: 8 },
+    { actIdx: 3, location: 'High Street', inHours: 140, size: 2, max: 4 },
+    { actIdx: 5, location: 'Lincoln Tower Fields', inHours: 152, size: 5, max: 10 },
+    { actIdx: 2, location: 'Thompson Library – 11th Floor', inHours: 164, size: 3, max: 5 },
   ];
   let chatPodId = '';
   for (let i = 0; i < podSpecs.length; i++) {
@@ -241,27 +250,53 @@ async function main() {
     const memberUserIds = memberIdxs.map((i) => users[i].id);
     const ownerId = memberUserIds[0];
 
-    const club = await prisma.club.create({
-      data: {
-        name: c.name,
-        description: c.description,
-        category: c.category,
-        emoji: c.emoji,
-        isVerified: true,
-        isPublic: true,
-        university: 'OSU',
-        createdById: ownerId,
-        members: { create: memberUserIds.map((uid, idx) => ({ userId: uid, role: idx === 0 ? 'OWNER' : idx < 4 ? 'OFFICER' : 'MEMBER' })) },
-        channels: {
-          create: [
-            { kind: 'ANNOUNCEMENTS', name: 'Announcements', position: 0, createdById: ownerId },
-            { kind: 'GENERAL', name: 'General', position: 1, createdById: ownerId },
-            { kind: 'OFFICERS', name: 'Officers', position: 2, createdById: ownerId },
-          ],
-        },
-      },
+    // Lifecycle fields (isDiscoverable + verification) are what the app's club
+    // directory actually filters on — legacy isVerified/isPublic alone leave
+    // the club invisible. Reuse an existing club with the same name so reruns
+    // don't create duplicates.
+    const lifecycle = {
+      isVerified: true,
+      isPublic: true,
+      isDiscoverable: true,
+      discoverableSince: new Date(),
+      verification: 'VERIFIED',
+      verificationMethod: 'MANUAL',
+      verifiedAt: new Date(),
+      status: 'ACTIVE',
+    };
+    const existingClub = await prisma.club.findFirst({ where: { name: c.name } });
+    const club = existingClub
+      ? await prisma.club.update({ where: { id: existingClub.id }, data: lifecycle })
+      : await prisma.club.create({
+          data: {
+            name: c.name,
+            description: c.description,
+            category: c.category,
+            emoji: c.emoji,
+            university: 'OSU',
+            createdById: ownerId,
+            ...lifecycle,
+            channels: {
+              create: [
+                { kind: 'ANNOUNCEMENTS', name: 'Announcements', position: 0, createdById: ownerId },
+                { kind: 'GENERAL', name: 'General', position: 1, createdById: ownerId },
+                { kind: 'OFFICERS', name: 'Officers', position: 2, createdById: ownerId },
+              ],
+            },
+          },
+        });
+    await prisma.clubMember.createMany({
+      data: memberUserIds.map((uid, idx) => ({ clubId: club.id, userId: uid, role: idx === 0 && !existingClub ? 'OWNER' : idx < 4 ? 'OFFICER' : 'MEMBER' })),
+      skipDuplicates: true,
     });
     manifest.clubs.push(club.id);
+
+    // Content below only on first creation — reruns on an existing club would
+    // duplicate meetings/announcements/chat.
+    if (existingClub) {
+      if (c.showcase) showcaseClubId = club.id;
+      continue;
+    }
 
     // Meetings (+ RSVP attendees so "X going · Y maybe" looks real)
     const meetingDefs = [
@@ -303,6 +338,42 @@ async function main() {
     }
   }
   console.log(`[seed] created ${clubSpecs.length} clubs (mid-double-digit members, RSVP'd meetings, chat each)`);
+
+  // --- Fill pre-existing (real) clubs so they don't look empty ---
+  // Adds demo members, an announcement, general chat, and meeting RSVPs to
+  // clubs that existed before this seed. All of it is attributed to demo users,
+  // so cleanup (which deletes those users) cascades it away without touching
+  // the club itself.
+  const realClubs = await prisma.club.findMany({
+    where: { id: { notIn: manifest.clubs }, status: 'ACTIVE' },
+    include: { _count: { select: { members: true } }, meetings: { where: { meetingTime: { gte: new Date() } } } },
+  });
+  for (let ri = 0; ri < realClubs.length; ri++) {
+    const rc = realClubs[ri];
+    const fillIdxs = shuffled(POOL_SIZE).slice(0, 18 + Math.floor(rand() * 12));
+    const fillIds = fillIdxs.map((i) => users[i].id);
+    await prisma.clubMember.createMany({
+      data: fillIds.map((uid) => ({ clubId: rc.id, userId: uid, role: 'MEMBER' })),
+      skipDuplicates: true,
+    });
+    if (rc._count.members === 0) {
+      await prisma.clubAnnouncement.create({
+        data: { clubId: rc.id, userId: fillIds[0], content: 'Welcome to everyone who signed up this week! Check the meetings tab for our next event. 🎉' },
+      });
+      for (let m = 0; m < 6; m++) {
+        await prisma.clubMessage.create({
+          data: { clubId: rc.id, channelId: null, userId: fillIds[m % fillIds.length], content: CLUB_CHAT_POOL[(ri * 3 + m) % CLUB_CHAT_POOL.length], createdAt: new Date(now - (6 - m) * 11 * 60 * 1000) },
+        });
+      }
+    }
+    for (const meeting of rc.meetings) {
+      await prisma.clubMeetingAttendee.createMany({
+        data: fillIds.map((uid, idx) => ({ meetingId: meeting.id, userId: uid, status: idx % 5 === 4 ? 'MAYBE' : 'GOING' })),
+        skipDuplicates: true,
+      });
+    }
+  }
+  if (realClubs.length) console.log(`[seed] filled ${realClubs.length} pre-existing club(s) with demo members, chat, and RSVPs`);
 
   // --- Friendships among demo users ---
   const fp = shuffled(POOL_SIZE);

@@ -6,16 +6,34 @@ import { deleteExpiredClosedReports } from './reportRetention';
 export async function runMaintenanceJobs() {
   const expiry = await expireOldPods();
 
-  const [, , , abuseEventsDeleted, closedReportsDeleted] = await Promise.all([
+  const [
+    pushReceipts,
+    ,
+    ,
+    ,
+    firstPodNudges,
+    demandPrompts,
+    weeklyRecaps,
+    abuseEventsDeleted,
+    closedReportsDeleted,
+  ] = await Promise.all([
+    NotificationService.checkPushReceipts(),
     NotificationService.sendMeetupReminders(),
     NotificationService.sendRecapPrompts(),
     NotificationService.expireStaleWaitlistEntries(),
+    NotificationService.sendFirstPodNudges(),
+    NotificationService.sendDemandConversionPrompts(),
+    NotificationService.sendWeeklyRecaps(),
     deleteExpiredAbuseEvents(),
     deleteExpiredClosedReports(),
   ]);
 
   return {
     ...expiry,
+    pushReceipts,
+    firstPodNudges,
+    demandPrompts,
+    weeklyRecaps,
     abuseEventsDeleted,
     closedReportsDeleted,
     completedAt: new Date().toISOString(),

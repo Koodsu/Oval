@@ -4,9 +4,16 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getApiErrorMessage, getFriends, getMyClubs, getUserProfile } from '../api';
+import {
+  getApiErrorMessage,
+  getFriends,
+  getMyClubs,
+  getMyPodHistory,
+  getMyPods,
+  getUserProfile,
+} from '../api';
 import { RootStackParamList } from '../../App';
-import { FriendUser, MyClubMembershipRow, PublicProfile } from '../types';
+import { FriendUser, MyClubMembershipRow, Pod, PublicProfile } from '../types';
 import {
   AppBackdrop,
   Avatar,
@@ -48,19 +55,34 @@ export default function ProfileScreen() {
   const [showAllClubs, setShowAllClubs] = useState(false);
   const [showAllFriends, setShowAllFriends] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const [podsHosted, setPodsHosted] = useState(0);
+  const [peopleMet, setPeopleMet] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const [friendList, clubRows, profile] = await Promise.all([
+      const [friendList, clubRows, profile, minePods, historyPods] = await Promise.all([
         getFriends(),
         getMyClubs(),
         user?.id && typeof getUserProfile === 'function'
           ? getUserProfile(user.id)
           : Promise.resolve(null),
+        getMyPods().catch(() => [] as Pod[]),
+        getMyPodHistory().catch(() => [] as Pod[]),
       ]);
       setFriends(friendList);
       setMyClubs(clubRows);
       setPublicProfile(profile);
+      // Meetup stats (02 §8 / 04 §3b): hosted count + unique people met,
+      // computed from pod memberships — real meetings, not follows.
+      const allPods = [...minePods, ...historyPods];
+      const met = new Set<string>();
+      for (const pod of allPods) {
+        for (const member of pod.members) {
+          if (member.userId !== user?.id) met.add(member.userId);
+        }
+      }
+      setPodsHosted(allPods.filter((pod) => pod.creatorId === user?.id).length);
+      setPeopleMet(met.size);
       setLoadWarning(null);
     } catch {
       setLoadWarning("Couldn't refresh — your saved profile is still available.");
@@ -155,6 +177,20 @@ export default function ProfileScreen() {
                 tint={colors.tealSoft}
               />
             </View>
+            <View style={styles.trustStats}>
+              <StatSlab
+                label="HOSTED"
+                value={String(podsHosted)}
+                icon="sparkles"
+                tint={colors.violetSoft}
+              />
+              <StatSlab
+                label="PEOPLE MET"
+                value={String(peopleMet)}
+                icon="people"
+                tint={colors.pinkSoft}
+              />
+            </View>
             <Button
               label="Edit profile"
               icon="create"
@@ -226,7 +262,7 @@ export default function ProfileScreen() {
                         : ' • No upcoming meeting'}
                     </Text>
                   </View>
-                  <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                  <Ionicons name="arrow-forward" size={16} color={colors.sub} />
                 </Slab>
               );
             })
@@ -264,7 +300,7 @@ export default function ProfileScreen() {
                 <Text style={[typography.heading, { flex: 1 }]} numberOfLines={1}>
                   {friend.name}
                 </Text>
-                <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                <Ionicons name="arrow-forward" size={16} color={colors.sub} />
               </Slab>
             ))
           ) : (
@@ -272,6 +308,8 @@ export default function ProfileScreen() {
               icon="people"
               title="No friends yet"
               body="People you connect with after pods will show up here."
+              actionLabel="Find people"
+              onAction={() => navigation.navigate('UserSearch')}
             />
           )}
           {friends.length > 6 ? (

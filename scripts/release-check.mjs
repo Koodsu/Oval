@@ -37,8 +37,16 @@ const appConfig = JSON.parse(fs.readFileSync('frontend/app.json', 'utf8'));
 if (appConfig.expo.ios?.supportsTablet !== false) {
   fail('iPad support must stay disabled until the iPad release is tested');
 }
-if (appConfig.expo.plugins?.find((entry) => Array.isArray(entry) && entry[0] === 'expo-splash-screen')?.[1]?.image !== './assets/brand/oval-app-icon.png') {
-  fail('the production splash screen is not using the Bridge artwork');
+const splashConfig = appConfig.expo.plugins?.find(
+  (entry) => Array.isArray(entry) && entry[0] === 'expo-splash-screen',
+)?.[1];
+if (splashConfig?.image !== './assets/brand/oval-open-1024-transparent.png') {
+  fail('the production splash screen is not using the Oval wordmark artwork');
+}
+// Splash background must match the app's dark-theme bg (theme.ts darkColors.bg)
+// so the splash → first-paint transition doesn't flash a different color.
+if (splashConfig?.backgroundColor !== '#0F0E12') {
+  fail('the splash backgroundColor does not match the Crimson dark theme bg (#0F0E12)');
 }
 
 const publicSource = [

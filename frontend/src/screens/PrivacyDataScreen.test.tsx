@@ -23,6 +23,7 @@ jest.mock('../api', () => ({
       clubKick: true,
       clubRoleChange: true,
       clubAttendanceOpen: true,
+      weeklyRecap: true,
     },
   }),
   updateNotificationPreferences: jest.fn(),
@@ -60,8 +61,10 @@ describe('PrivacyDataScreen', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('switch')).toHaveLength(10);
+      expect(screen.getAllByRole('switch')).toHaveLength(12);
     });
+    expect(screen.getByText('Weekly planning')).toBeTruthy();
+    expect(screen.getByText('Demand alerts')).toBeTruthy();
     expect(screen.getByText('Download my data')).toBeTruthy();
     expect(screen.getByText('Connected accounts')).toBeTruthy();
     expect(screen.getAllByText('Delete my account')).toHaveLength(2);

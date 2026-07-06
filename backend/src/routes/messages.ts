@@ -5,9 +5,10 @@ import { hasBlockingRelationshipWithAny } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
 import { setTyping, getTypingUserIds } from '../lib/typingStore';
-import { broadcast, podTopic, REALTIME_EVENTS } from '../lib/realtime';
+import { broadcast, podTopic, REALTIME_EVENTS, userTopic } from '../lib/realtime';
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
+import { stampPodReadState } from '../lib/podReadState';
 
 const router = Router({ mergeParams: true });
 
@@ -127,6 +128,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const typingUserIds = getTypingUserIds('pod', podId, userId);
+    await stampPodReadState(userId, podId);
+    // Reading clears unread — ping the reader's own inbox topic so their tab
+    // badge refreshes immediately instead of waiting for the 60s poll.
+    void broadcast(userTopic(userId), REALTIME_EVENTS.INBOX_UPDATED);
 
     res.json({ messages: messages.map(formatPodMessage), typingUserIds, hasMore });
   } catch (err) {
@@ -209,7 +214,13 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
     // Fire-and-forget — don't await so message response isn't delayed
     NotificationService.notifyNewMessage(podId, userId).catch(() => {});
+    stampPodReadState(userId, podId).catch(() => {});
     void broadcast(podTopic(podId), REALTIME_EVENTS.NEW_MESSAGE);
+    for (const member of pod.members) {
+      if (member.userId !== userId) {
+        void broadcast(userTopic(member.userId), REALTIME_EVENTS.INBOX_UPDATED);
+      }
+    }
 
     res.status(201).json(formatPodMessage(message));
   } catch (err) {

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cancelPod,
   confirmAttendance,
+  createPod,
   editPod,
   getApiErrorMessage,
   getFriends,
@@ -37,6 +38,7 @@ import {
   sendFriendRequest,
   sendPodInvite,
   submitRecap,
+  trackEvent,
   unlockPod,
   updatePodPrivacy,
 } from '../api';
@@ -102,9 +104,16 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { podId } = route.params;
+  const { podId, justCreated } = route.params;
   const { user } = useAuth();
   const [pod, setPod] = useState<Pod | null>(null);
+  // Post-create share prompt (04 §4b): shown once, right after creating.
+  const [showCreatePrompt, setShowCreatePrompt] = useState(Boolean(justCreated));
+  useEffect(() => {
+    // navigate('PodDetail') from inside PodDetail (recap chain) updates params
+    // without remounting — re-sync so the new pod gets its prompt.
+    setShowCreatePrompt(Boolean(justCreated));
+  }, [podId, justCreated]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [peopleYouMet, setPeopleYouMet] = useState<PeopleYouMetUser[]>([]);
@@ -172,6 +181,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         ? 'Join waitlist'
         : 'Join pod'
       : 'Pod closed';
+  const podIsFull = pod ? pod.members.length >= pod.maxMembers : false;
+  const canStartTwin = Boolean(pod && !meInPod && pod.status === 'FORMING' && podIsFull);
   const eligibleInviteFriends = useMemo(() => {
     if (!pod) return [];
     const memberIds = new Set(pod.members.map((member) => member.userId));
@@ -261,8 +272,74 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await submitRecap(pod.id, { rating });
       await load(false);
+      if (rating === 3) {
+        Alert.alert('Run it back?', 'Start the same plan again and bring someone new.', [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Start next pod',
+            onPress: () => {
+              void (async () => {
+                setActionBusy('chain');
+                try {
+                  const nextTime = new Date(pod.meetupTime);
+                  const now = new Date();
+                  do {
+                    nextTime.setDate(nextTime.getDate() + 7);
+                  } while (nextTime <= now);
+                  if (nextTime.getTime() > now.getTime() + 7 * 24 * 60 * 60 * 1000) {
+                    nextTime.setTime(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+                    nextTime.setHours(19, 30, 0, 0);
+                  }
+                  const response = await createPod(pod.activityId, {
+                    location: pod.location,
+                    meetupTime: nextTime.toISOString(),
+                    minMembers: 2,
+                    maxMembers: pod.maxMembers,
+                    visibility: 'public',
+                    template: 'recap-chain',
+                  });
+                  void trackEvent('recap.chained_create', {
+                    fromPodId: pod.id,
+                    podId: response.id,
+                    activityId: pod.activityId,
+                  });
+                  // justCreated → the new pod shows the "bring someone new" share prompt (04 §3a)
+                  navigation.navigate('PodDetail', { podId: response.id, justCreated: true });
+                } catch (error) {
+                  Alert.alert('Could not run it back', getApiErrorMessage(error));
+                } finally {
+                  setActionBusy(null);
+                }
+              })();
+            },
+          },
+        ]);
+      }
     } catch (error) {
       Alert.alert('Could not submit recap', getApiErrorMessage(error));
+    } finally {
+      if (actionBusy !== 'chain') setActionBusy(null);
+    }
+  };
+
+  const handleStartTwin = async () => {
+    if (!pod) return;
+    setActionBusy('twin');
+    try {
+      const twinTime = new Date(pod.meetupTime);
+      twinTime.setMinutes(twinTime.getMinutes() + 30);
+      const response = await createPod(pod.activityId, {
+        location: pod.location,
+        meetupTime: twinTime.toISOString(),
+        minMembers: 2,
+        maxMembers: pod.maxMembers,
+        visibility: 'public',
+        twinFromPodId: pod.id,
+        template: 'twin',
+      });
+      navigation.replace('PodDetail', { podId: response.id, justCreated: true });
+    } catch (error) {
+      Alert.alert('Could not start twin', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -270,12 +347,23 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
   const handleShare = async () => {
     if (!pod) return;
+    const shareUrl = getPodShareUrl(pod.id, user?.id);
+    const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+    const dayLabel =
+      new Date(pod.meetupTime).toDateString() === new Date().toDateString()
+        ? 'tonight'
+        : new Date(pod.meetupTime).toLocaleDateString([], { weekday: 'short' });
     try {
-      await Share.share({
+      const result = await Share.share({
         title: `Join my ${pod.activity?.title ?? 'Oval'} pod`,
-        message: `Join my ${pod.activity?.title ?? 'Oval'} pod on Oval: ${getPodShareUrl(pod.id)}`,
-        url: getPodShareUrl(pod.id),
+        message: `${pod.activity?.title ?? 'Oval pod'} ${dayLabel} ${formatTime(pod.meetupTime)} - ${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'}. I'm in. ${shareUrl}`,
+        url: shareUrl,
       });
+      // Only count real shares — iOS reports dismissedAction when the user
+      // closes the sheet without sharing (Android always reports shared).
+      if (result.action !== Share.dismissedAction) {
+        void trackEvent('invite.shared', { surface: 'pod_detail', podId: pod.id });
+      }
     } catch (error) {
       Alert.alert('Could not open share sheet', getApiErrorMessage(error));
     }
@@ -429,8 +517,13 @@ export default function PodDetailScreen({ route, navigation }: Props) {
           keyboardDismissMode="on-drag"
         >
           <ScreenHeader title="Pod" onBack={() => navigation.goBack()} />
-          <EmptyState icon="alert-circle" title="Could not load pod" body={loadError} />
-          <Button label="Try again" onPress={() => void load(false)} />
+          <EmptyState
+            icon="alert-circle"
+            title="Could not load pod"
+            body={loadError}
+            actionLabel="Try again"
+            onAction={() => void load(false)}
+          />
         </ScrollView>
       </AppBackdrop>
     );
@@ -533,6 +626,43 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
             {loadError ? <Banner message={loadError} kind="error" /> : null}
 
+            {/* Post-create prompt (04 §4b): "Pod's up. Now fill it." — once per pod */}
+            {showCreatePrompt && meInPod ? (
+              <Card padded>
+                <View style={styles.createPromptHeader}>
+                  <Text style={typography.title}>Pod's up. Now fill it.</Text>
+                  <IconButton
+                    icon="close"
+                    onPress={() => setShowCreatePrompt(false)}
+                    accessibilityLabel="Dismiss"
+                    size={32}
+                  />
+                </View>
+                <Text style={[typography.caption, { marginTop: 2 }]}>
+                  A pod with people in it fills itself. Drop the link in a group chat or invite a
+                  friend.
+                </Text>
+                <View style={styles.createPromptActions}>
+                  <Button
+                    label="Share link"
+                    icon="share-outline"
+                    size="sm"
+                    onPress={() => {
+                      setShowCreatePrompt(false);
+                      void handleShare();
+                    }}
+                  />
+                  <Button
+                    label="Invite friends"
+                    icon="person-add-outline"
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => setShowCreatePrompt(false)}
+                  />
+                </View>
+              </Card>
+            ) : null}
+
             {!meInPod && pod.myWaitlistPosition ? (
               <Card padded>
                 <Text style={typography.title}>Waitlist status</Text>
@@ -544,6 +674,22 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   onPress={() => void handleLeaveWaitlist()}
                   loading={actionBusy === 'waitlist'}
                   variant="secondary"
+                  style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
+                />
+              </Card>
+            ) : null}
+
+            {canStartTwin ? (
+              <Card padded>
+                <Text style={typography.title}>This pod is full</Text>
+                <Text style={[typography.caption, { marginTop: 4 }]}>
+                  Start the same plan nearby and catch the overflow.
+                </Text>
+                <Button
+                  label="Start a twin"
+                  icon="copy-outline"
+                  onPress={() => void handleStartTwin()}
+                  loading={actionBusy === 'twin'}
                   style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
                 />
               </Card>
@@ -751,9 +897,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                           { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
                         ]}
                       >
-                        <Ionicons name="link" size={18} color={colors.primary} />
+                        <Ionicons name="link" size={18} color={colors.accentText} />
                         <Text style={[typography.captionSmall, { flex: 1 }]} numberOfLines={1}>
-                          {getPodShareUrl(pod.id)}
+                          {getPodShareUrl(pod.id, user?.id)}
                         </Text>
                         <Button label="Share" size="sm" variant="secondary" onPress={() => void handleShare()} />
                       </View>
@@ -1071,6 +1217,17 @@ const useStyles = createThemedStyles((t: Theme) => ({
     borderRadius: radii.md,
     padding: spacing.md,
   },
+  createPromptHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+  },
+  createPromptActions: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
   chatHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1128,7 +1285,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   messageTime: {
     fontFamily: fonts.medium,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   bubble: {
     gap: 4,
@@ -1176,7 +1333,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   heartCount: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   safetyButton: {
     width: 26,

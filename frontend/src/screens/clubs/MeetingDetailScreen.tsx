@@ -69,6 +69,11 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
     return now >= start && now - start <= LIVE_WINDOW_MS;
   }, [LIVE_WINDOW_MS, meeting]);
 
+  const meetingStarted = useMemo(
+    () => (meeting ? Date.now() >= new Date(meeting.meetingTime).getTime() : false),
+    [meeting],
+  );
+
   const targetRoleNames = useMemo(
     () => (meeting?.targetRoleIds ?? [])
       .map((id) => club?.roles?.find((role) => role.id === id)?.name)
@@ -120,7 +125,13 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
       <AppBackdrop>
         <View style={{ flex: 1, paddingHorizontal: spacing.xl, paddingTop: insets.top + spacing.md }}>
           <ScreenHeader title="Meeting" onBack={() => navigation.goBack()} />
-          <EmptyState icon="calendar-outline" title="Meeting not found" body="It may have been removed or ended." />
+          <EmptyState
+            icon="calendar-outline"
+            title="Meeting not found"
+            body="It may have been removed or ended."
+            actionLabel="Back to club"
+            onAction={() => navigation.navigate('ClubDetail', { clubId })}
+          />
         </View>
       </AppBackdrop>
     );
@@ -234,6 +245,28 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
             <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
               {attendance?.attendedCount ?? meeting.attendeeCount} of {meeting.rsvpCounts.going} RSVPs checked in
             </Text>
+          </Card>
+        ) : null}
+        {/* Club → pod bridge (04 §2e): the meeting is a pre-aggregated audience —
+            let officers spin up an after-hang while everyone's still together. */}
+        {canManageAttendance && meetingStarted ? (
+          <Card padded>
+            <Text style={typography.subheading}>Meeting winding down?</Text>
+            <Text style={[typography.captionSmall, { marginTop: 2 }]}>
+              Anyone hanging out after? Spin up a pod while everyone's still here.
+            </Text>
+            <Button
+              label="Spin up a hang"
+              icon="sparkles"
+              size="sm"
+              onPress={() =>
+                navigation.navigate('MainTabs', {
+                  screen: 'Discover',
+                  params: { segment: 'activities', startCreate: Date.now() },
+                })
+              }
+              style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}
+            />
           </Card>
         ) : null}
         {meeting.description ? <Text style={typography.body}>{meeting.description}</Text> : null}

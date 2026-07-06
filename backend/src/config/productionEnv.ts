@@ -43,4 +43,13 @@ export function validateProductionEnvironment(
   if (errors.length > 0) {
     throw new Error(`Invalid production environment:\n- ${errors.join('\n- ')}`);
   }
+
+  // Soft warnings: these degrade features silently rather than breaking the
+  // app, which makes the failure invisible in testing — say so in the logs.
+  if (!env.SUPABASE_URL?.trim() || !env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    console.warn(
+      '[env] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — realtime broadcasts are ' +
+        'DISABLED; clients will fall back to polling for chat, typing, and inbox badges.',
+    );
+  }
 }

@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+import prisma from '../prisma';
 
 const router = Router();
 const APP_HOST = 'www.theovalapp.com';
@@ -58,7 +60,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Web landing page for pod invite links
 // Shown to users who don't have the app installed
-router.get('/pod/:podId', (req: Request, res: Response) => {
+router.get('/pod/:podId', async (req: Request, res: Response) => {
   const { podId } = req.params;
   const scriptNonce = res.locals.cspNonce;
 
@@ -67,6 +69,57 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
     res.status(400).send('Invalid pod ID');
     return;
   }
+
+  const rawRef = typeof req.query.ref === 'string' ? req.query.ref.trim() : '';
+  const ref = rawRef && rawRef.length <= 128 ? rawRef : null;
+  await prisma.analyticsEvent
+    .create({
+      data: {
+        userId: null,
+        name: 'invite.link_opened',
+        properties: { podId, ref } as Prisma.InputJsonValue,
+      },
+    })
+    .catch((err) => {
+      console.error('[web] Failed to record invite link open:', err);
+    });
+
+  // OG meta for group-chat link previews (04 §4a): activity, day/time, spots
+  // left. Private pods and missing pods keep the generic copy — never leak a
+  // private location or confirm/deny pod existence in a preview.
+  let ogTitle = 'Join a Pod on Oval';
+  let ogDescription = 'Real plans with real people at Ohio State.';
+  try {
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      include: {
+        activity: { select: { title: true } },
+        members: { select: { id: true } },
+      },
+    });
+    if (pod && pod.locationType !== 'private' && ['FORMING', 'LOCKED'].includes(pod.status)) {
+      const meetup = new Date(pod.meetupTime);
+      const dayPart = meetup.toLocaleDateString('en-US', { weekday: 'short' });
+      const timePart = meetup.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
+      const activityTitle = pod.activity?.title ?? 'A pod';
+      ogTitle = `${activityTitle} · ${dayPart} ${timePart}`;
+      ogDescription =
+        pod.status === 'FORMING' && spotsLeft > 0
+          ? `${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'} left · ${pod.members.length} in — join on Oval`
+          : `${pod.members.length} going — see it on Oval`;
+    }
+  } catch (err) {
+    console.error('[web] Failed to load pod for OG tags:', err);
+  }
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  const ogTitleSafe = escapeHtml(ogTitle);
+  const ogDescriptionSafe = escapeHtml(ogDescription);
 
   const deepLink = `oval://pod/${podId}`;
   const universalLink = `https://${APP_HOST}/pod/${podId}`;
@@ -92,7 +145,15 @@ router.get('/pod/:podId', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Join a Pod on Oval</title>
+  <title>${ogTitleSafe}</title>
+  <meta property="og:title" content="${ogTitleSafe}" />
+  <meta property="og:description" content="${ogDescriptionSafe}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Oval" />
+  <meta property="og:url" content="${universalLink}" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="${ogTitleSafe}" />
+  <meta name="twitter:description" content="${ogDescriptionSafe}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />

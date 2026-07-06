@@ -163,8 +163,13 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       <AppBackdrop>
         <View style={[styles.content, { paddingTop: insets.top + spacing.md }]}>
           <ScreenHeader title="Club" onBack={() => navigation.goBack()} />
-          <EmptyState icon="alert-circle" title="Could not load club" body={error ?? 'Try again.'} />
-          <Button label="Try again" onPress={() => void refresh()} />
+          <EmptyState
+            icon="alert-circle"
+            title="Could not load club"
+            body={error ?? 'Try again.'}
+            actionLabel="Try again"
+            onAction={() => void refresh()}
+          />
         </View>
       </AppBackdrop>
     );
@@ -249,7 +254,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                   {club.name}
                 </Text>
                 {club.isVerified ? (
-                  <Ionicons name="checkmark-circle" size={17} color={colors.primary} />
+                  <Ionicons name="checkmark-circle" size={17} color={colors.accentText} />
                 ) : null}
               </View>
               <Text style={typography.caption} numberOfLines={1}>
@@ -279,7 +284,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
             <View style={styles.sectionHead}>
               <Text style={typography.title}>Latest</Text>
               <Text
-                style={[styles.link, { color: colors.primary }]}
+                style={[styles.link, { color: colors.accentText }]}
                 onPress={() => {
                   const announcementsChannel = channels.find((channel) => channel.kind === 'ANNOUNCEMENTS');
                   if (announcementsChannel) openChannel(announcementsChannel.id);
@@ -290,8 +295,8 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
             </View>
             <Card padded style={{ borderColor: colors.primary }}>
               <View style={styles.pinnedHead}>
-                <Ionicons name="megaphone" size={14} color={colors.primary} />
-                <Text style={[typography.kicker, { color: colors.primary }]}>
+                <Ionicons name="megaphone" size={14} color={colors.accentText} />
+                <Text style={[typography.kicker, { color: colors.accentText }]}>
                   {latestAnnouncement.user.name.toUpperCase()} · {formatShortDate(latestAnnouncement.createdAt).toUpperCase()}
                 </Text>
               </View>
@@ -306,7 +311,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
           <View style={styles.sectionHead}>
             <Text style={typography.title}>Next meeting</Text>
             <Text
-              style={[styles.link, { color: colors.primary }]}
+              style={[styles.link, { color: colors.accentText }]}
               onPress={() => navigation.navigate('ClubEvents', { clubId })}
             >
               All events
@@ -360,7 +365,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                 : 'Join the club to jump into the conversation.'}
             </Text>
             <View style={styles.jumpRow}>
-              <Text style={[styles.link, { color: colors.primary }]}>Jump in →</Text>
+              <Text style={[styles.link, { color: colors.accentText }]}>Jump in →</Text>
             </View>
           </Slab>
         ) : null}
@@ -401,6 +406,13 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                 icon="calendar-outline"
                 title="No upcoming meetings"
                 body="New events will appear here."
+                actionLabel={can('CREATE_MEETINGS') ? 'Create meeting' : 'View calendar'}
+                onAction={() =>
+                  navigation.navigate('ClubEvents', {
+                    clubId,
+                    startCreate: can('CREATE_MEETINGS'),
+                  })
+                }
               />
             )}
           </View>
@@ -410,7 +422,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
           <View style={styles.section}>
             {isLeader ? (
               <Text
-                style={[styles.link, { color: colors.primary, alignSelf: 'flex-end' }]}
+                style={[styles.link, { color: colors.accentText, alignSelf: 'flex-end' }]}
                 onPress={() => navigation.navigate('ClubMembers', { clubId })}
               >
                 Manage members →

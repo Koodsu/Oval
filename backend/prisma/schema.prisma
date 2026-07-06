@@ -44,6 +44,7 @@ model User {
   clubInterests           String?
 
   podMembers             PodMember[]
+  podDemands             PodDemand[]
   messages               Message[]
   messageReactions       MessageReaction[]
   directMessageReactions DirectMessageReaction[]
@@ -56,6 +57,7 @@ model User {
   noShowsReceived        NoShowReport[]          @relation("NoShowTarget")
   recaps                 PodRecap[]
   waitlistEntries        PodWaitlist[]
+  podReadStates          PodReadState[]
 
   sentFriendRequests     FriendRequest[]       @relation("FriendRequestSender")
   receivedFriendRequests FriendRequest[]       @relation("FriendRequestReceiver")
@@ -105,6 +107,7 @@ model Activity {
   createdAt       DateTime @default(now())
 
   pods Pod[]
+  demands PodDemand[]
 }
 
 model ActivityRequest {
@@ -147,6 +150,7 @@ model Pod {
   creator       User?          @relation(fields: [creatorId], references: [id], onDelete: SetNull)
   members       PodMember[]
   messages      Message[]
+  readStates    PodReadState[]
   reports       Report[]
   noShowReports NoShowReport[]
   podInvites    PodInvite[]
@@ -163,11 +167,53 @@ model PodMember {
   userId      String
   joinedAt    DateTime  @default(now())
   confirmedAt DateTime?
+  firstPodNudgeSentAt DateTime?
 
   pod  Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([podId, userId])
+  @@index([userId])
+}
+
+model PodDemand {
+  id         String    @id @default(uuid())
+  userId     String
+  activityId String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activityId])
+  @@index([activityId, expiresAt])
+  @@index([userId, expiresAt])
+  @@index([consumedAt])
+}
+
+/// Expo push tickets awaiting a receipt check. Durable (serverless-safe):
+/// send() inserts rows, the maintenance cron reads receipts for rows older
+/// than a settling delay and clears dead tokens, then deletes the rows.
+model PushReceipt {
+  id        String   @id
+  token     String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model PodReadState {
+  id         String   @id @default(cuid())
+  userId     String
+  podId      String
+  lastReadAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pod  Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, podId])
   @@index([userId])
 }
 

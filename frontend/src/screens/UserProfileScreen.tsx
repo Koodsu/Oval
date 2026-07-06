@@ -256,8 +256,13 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           keyboardDismissMode="on-drag"
         >
           <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
-          <EmptyState icon="alert-circle" title="Could not load profile" body={loadError} />
-          <Button label="Try again" onPress={() => void load(false)} />
+          <EmptyState
+            icon="alert-circle"
+            title="Could not load profile"
+            body={loadError}
+            actionLabel="Try again"
+            onAction={() => void load(false)}
+          />
         </ScrollView>
       </AppBackdrop>
     );
@@ -324,7 +329,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
 
             {relationshipActions()}
 
-            {/* Stats */}
+            {/* Stats — D-5: reliability/on-time stats are private to the person
+                themselves and never shown on someone else's profile. */}
             <View style={styles.statRow}>
               <StatSlab
                 label="PODS JOINED"
@@ -339,14 +345,37 @@ export default function UserProfileScreen({ route, navigation }: Props) {
                 tint={colors.greenSoft}
               />
               <StatSlab
-                label="RELIABILITY"
-                value={
-                  profile.reliabilityScore == null ? 'N/A' : `${profile.reliabilityScore}%`
-                }
-                icon="shield-checkmark"
-                tint={colors.tealSoft}
+                label="TOGETHER"
+                value={String(profile.sharedPodCount ?? 0)}
+                icon="people"
+                tint={colors.pinkSoft}
               />
             </View>
+
+            {/* Reconnect prompt (04 §3b): the graph of real meetings */}
+            {(profile.sharedPodCount ?? 0) >= 2 ? (
+              <Card padded>
+                <Text style={typography.subheading}>
+                  You and {profile.firstName || profile.name.split(' ')[0]} have been to{' '}
+                  {profile.sharedPodCount} pods together
+                </Text>
+                <Text style={[typography.captionSmall, { marginTop: 2 }]}>
+                  Down for another one this week?
+                </Text>
+                <Button
+                  label="Start a plan"
+                  icon="sparkles"
+                  size="sm"
+                  onPress={() =>
+                    navigation.navigate('MainTabs', {
+                      screen: 'Discover',
+                      params: { segment: 'activities', startCreate: Date.now() },
+                    })
+                  }
+                  style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}
+                />
+              </Card>
+            ) : null}
 
             {interestTags.length ? (
               <Card padded>

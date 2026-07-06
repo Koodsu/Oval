@@ -12,20 +12,24 @@ import {
   getFriends,
   getFriendRequests,
   getApiErrorMessage,
+  getInboxSummary,
   getMessageThreads,
+  getMyPods,
   getPodInvites,
+  InboxSummary,
 } from '../api';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList, RootStackParamList } from '../../App';
-import { DirectMessageThread, FriendRequest, FriendUser, PodInvite } from '../types';
+import { DirectMessageThread, FriendRequest, FriendUser, Pod, PodInvite } from '../types';
 import {
   AppBackdrop,
   Avatar,
   Banner,
   Button,
   Card,
+  CountBubble,
   Segmented,
   EmptyState,
   IconButton,
@@ -63,18 +67,38 @@ export default function InboxScreen() {
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [podThreads, setPodThreads] = useState<Pod[]>([]);
+  const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [threadResult, inviteResult, requestResult, friendResult] = await Promise.allSettled([
-      getMessageThreads(),
-      getPodInvites(),
-      getFriendRequests(),
-      getFriends(),
-    ]);
+    const [summaryResult, threadResult, inviteResult, requestResult, friendResult, myPodsResult] =
+      await Promise.allSettled([
+        getInboxSummary(),
+        getMessageThreads(),
+        getPodInvites(),
+        getFriendRequests(),
+        getFriends(),
+        getMyPods(),
+      ]);
+
+    if (myPodsResult.status === 'fulfilled') {
+      // Pod chats with unread messages appear as inbox threads (02 §6), so the
+      // tab badge (which counts pod unreads) always has a visible, clearable
+      // counterpart on this screen.
+      setPodThreads(
+        myPodsResult.value.filter(
+          (pod) => typeof pod.unreadCount === 'number' && pod.unreadCount > 0,
+        ),
+      );
+    }
+
+    if (summaryResult.status === 'fulfilled') {
+      setSummary(summaryResult.value);
+    }
 
     if (threadResult.status === 'fulfilled') {
       setThreads(
@@ -98,6 +122,7 @@ export default function InboxScreen() {
     }
 
     if (
+      summaryResult.status === 'rejected' &&
       threadResult.status === 'rejected' &&
       inviteResult.status === 'rejected' &&
       requestResult.status === 'rejected' &&
@@ -106,6 +131,7 @@ export default function InboxScreen() {
       setLoadWarning("Couldn't refresh — pull to retry.");
     } else {
       const failedSections = [
+        summaryResult.status === 'rejected' ? 'counts' : null,
         threadResult.status === 'rejected' ? 'messages' : null,
         inviteResult.status === 'rejected' ? 'invites' : null,
         requestResult.status === 'rejected' ? 'friend requests' : null,
@@ -205,7 +231,7 @@ export default function InboxScreen() {
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
-              <Text style={[typography.kicker, { color: colors.primary }]}>THE LOOP</Text>
+              <Text style={[typography.kicker, { color: colors.accentText }]}>THE LOOP</Text>
               <Text style={styles.pageTitle}>Inbox</Text>
             </View>
             <IconButton
@@ -227,9 +253,9 @@ export default function InboxScreen() {
             value={mode}
             onChange={setMode}
             options={[
-              { value: 'messages', label: threads.length ? `Messages · ${threads.length}` : 'Messages' },
-              { value: 'invites', label: invites.length ? `Invites · ${invites.length}` : 'Invites' },
-              { value: 'friends', label: requests.length ? `Friends · ${requests.length}` : 'Friends' },
+              { value: 'messages', label: summary?.dmUnread ? `Messages · ${summary.dmUnread}` : 'Messages' },
+              { value: 'invites', label: summary?.invites ? `Invites · ${summary.invites}` : 'Invites' },
+              { value: 'friends', label: summary?.friendRequests ? `Friends · ${summary.friendRequests}` : 'Friends' },
             ]}
           />
         </Animated.View>
@@ -248,8 +274,41 @@ export default function InboxScreen() {
                 <SkeletonCard compact />
                 <SkeletonCard compact />
               </>
-            ) : threads.length ? (
-              threads.map((thread, threadIndex) => (
+            ) : podThreads.length || threads.length ? (
+              <>
+                {podThreads.map((pod) => (
+                  <Slab
+                    key={`pod-${pod.id}`}
+                    onPress={() => navigation.navigate('PodChat', { podId: pod.id })}
+                    faceStyle={styles.rowFace}
+                    accessibilityLabel={`Open ${pod.activity?.title ?? 'pod'} chat, ${pod.unreadCount} unread`}
+                  >
+                    <View
+                      style={[
+                        styles.podChatIcon,
+                        { backgroundColor: colors.violetSoft, borderColor: colors.border },
+                      ]}
+                    >
+                      <Ionicons name="flash" size={18} color={colors.violet} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <View style={styles.threadTop}>
+                        <Text style={[typography.heading, { flex: 1 }]} numberOfLines={1}>
+                          {pod.activity?.title ?? 'Pod'}
+                        </Text>
+                        <Sticker label="POD" tint={colors.violetSoft} small tilt={0} />
+                      </View>
+                      <Text
+                        style={[typography.caption, { fontFamily: fonts.semibold, color: colors.ink }]}
+                        numberOfLines={1}
+                      >
+                        {pod.unreadCount} new {pod.unreadCount === 1 ? 'message' : 'messages'}
+                      </Text>
+                    </View>
+                    <CountBubble count={pod.unreadCount ?? 0} />
+                  </Slab>
+                ))}
+                {threads.map((thread, threadIndex) => (
                 <Animated.View
                   key={thread.id}
                   entering={FadeInDown.delay(Math.min(threadIndex, 6) * motion.stagger).duration(
@@ -304,15 +363,18 @@ export default function InboxScreen() {
                         {thread.lastMessage?.content ?? 'No messages yet'}
                       </Text>
                     </View>
-                    <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                    <Ionicons name="arrow-forward" size={16} color={colors.sub} />
                   </Slab>
                 </Animated.View>
-              ))
+                ))}
+              </>
             ) : (
               <EmptyState
                 icon="mail-open"
                 title="No messages yet"
                 body="New DMs land here once you start connecting through pods and profiles."
+                actionLabel="Find people"
+                onAction={() => navigation.navigate('UserSearch')}
               />
             )}
           </View>
@@ -386,6 +448,8 @@ export default function InboxScreen() {
                 icon="paper-plane"
                 title="No invites waiting"
                 body="When pod creators invite you into something, it shows up here."
+                actionLabel="Browse activities"
+                onAction={() => navigation.navigate('MainTabs', { screen: 'Discover', params: { segment: 'activities' } })}
               />
             )}
           </View>
@@ -516,7 +580,7 @@ export default function InboxScreen() {
                       </Text>
                       <Text style={typography.captionSmall}>View profile</Text>
                     </View>
-                    <Ionicons name="arrow-forward" size={16} color={colors.faint} />
+                    <Ionicons name="arrow-forward" size={16} color={colors.sub} />
                   </Slab>
                 ))}
               </>
@@ -571,6 +635,14 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     padding: spacing.md,
+  },
+  podChatIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: radii.sm,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   threadTop: {
     flexDirection: 'row' as const,

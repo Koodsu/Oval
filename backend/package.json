@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
+    "seed:launch": "ts-node prisma/seed-launch.ts",
     "seed:screenshots": "ts-node prisma/seed-screenshots.ts",
     "cleanup:screenshots": "ts-node prisma/cleanup-screenshots.ts",
     "test": "vitest run",
@@ -32,7 +33,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "multer": "^2.1.1",
+    "multer": "^2.2.0",
     "resend": "^6.9.3"
   },
   "prisma": {

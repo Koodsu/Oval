@@ -25,6 +25,7 @@ import {
   updateProfile,
 } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { getStoredReferral } from '../lib/referrals';
 import {
   AppBackdrop,
   Button,
@@ -273,10 +274,12 @@ export default function AuthScreen() {
           'We could not save your interests right now — you can add them any time from Edit Profile.',
         );
       }
+      const referredBy = await getStoredReferral();
       void trackEvent('auth.register', {
         classYear: classYear.trim(),
         purpose: purpose.join(', '),
         interestCount: interestTags.length,
+        referredBy: referredBy ?? undefined,
       });
     } catch (error) {
       Alert.alert(
@@ -308,7 +311,7 @@ export default function AuthScreen() {
         <Animated.View entering={FadeInDown.duration(motion.durBase)}>
           <View style={styles.masthead}>
             <Slab
-              color={colors.primary}
+              color={colors.accentText}
               radius={radii.md}
               faceStyle={styles.markFace}
               accessibilityRole="none"
@@ -482,7 +485,7 @@ export default function AuthScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Forgot password"
                     >
-                      <Text style={[styles.forgotText, { color: colors.primary }]}>
+                      <Text style={[styles.forgotText, { color: colors.accentText }]}>
                         Forgot password? →
                       </Text>
                     </Pressable>
@@ -718,8 +721,8 @@ function PolicyLink({ label, url }: { label: string; url: string }) {
       onPress={() => void Linking.openURL(url)}
       style={({ pressed }) => [policyStyles.link, pressed && { opacity: 0.5 }]}
     >
-      <Text style={[policyStyles.text, { color: colors.primary }]}>{label}</Text>
-      <Ionicons name="open-outline" size={12} color={colors.primary} />
+      <Text style={[policyStyles.text, { color: colors.accentText }]}>{label}</Text>
+      <Ionicons name="open-outline" size={12} color={colors.accentText} />
     </Pressable>
   );
 }

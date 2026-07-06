@@ -103,14 +103,14 @@ export function ChannelRow({
       <View style={styles.grow}>
         <View style={styles.titleLine}>
           <Text style={typography.subheading} numberOfLines={1}>{channel.name}</Text>
-          {locked ? <Ionicons name="lock-closed" size={12} color={colors.faint} /> : null}
+          {locked ? <Ionicons name="lock-closed" size={12} color={colors.sub} /> : null}
         </View>
         <Text style={typography.captionSmall} numberOfLines={1}>
           {channel.lastMessagePreview ?? channel.description ?? fallbackSub ?? 'No messages yet'}
         </Text>
       </View>
       {channel.unreadCount > 0 ? <CountBubble count={channel.unreadCount} /> : null}
-      <Ionicons name="chevron-forward" size={17} color={colors.faint} />
+      <Ionicons name="chevron-forward" size={17} color={colors.sub} />
     </Pressable>
   );
 }
@@ -226,7 +226,7 @@ export function ClubRow({
           </Text>
         </Pressable>
       ) : (
-        <Ionicons name="chevron-forward" size={17} color={colors.faint} />
+        <Ionicons name="chevron-forward" size={17} color={colors.sub} />
       )}
     </Pressable>
   );
@@ -317,7 +317,7 @@ export function MeetingCard({
       <View style={styles.meetingTop}>
         <DateBadge iso={meeting.meetingTime} />
         <View style={styles.grow}>
-          <Text style={[typography.kicker, { color: colors.primary }]} numberOfLines={1}>
+          <Text style={[typography.kicker, { color: colors.accentText }]} numberOfLines={1}>
             {formatShortDate(meeting.meetingTime)} · {formatTime(meeting.meetingTime)}
           </Text>
           <Text style={typography.heading} numberOfLines={2}>{meeting.title}</Text>
@@ -325,7 +325,7 @@ export function MeetingCard({
             {meeting.location} · {meeting.rsvpCounts.going} going
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={17} color={colors.faint} />
+        <Ionicons name="chevron-forward" size={17} color={colors.sub} />
       </View>
       {onRsvp ? (
         <SegmentedControl
@@ -371,7 +371,7 @@ export function SpaceRow({
         <Text style={typography.captionSmall} numberOfLines={1}>{sub}</Text>
       </View>
       {badge ? <CountBubble count={badge} /> : null}
-      <Ionicons name="chevron-forward" size={17} color={colors.faint} />
+      <Ionicons name="chevron-forward" size={17} color={colors.sub} />
     </Pressable>
   );
 }
@@ -402,7 +402,7 @@ export function MemberRow({
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.sub} />
         </Pressable>
       ) : (
-        <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+        <Ionicons name="chevron-forward" size={16} color={colors.sub} />
       )}
     </Pressable>
   );

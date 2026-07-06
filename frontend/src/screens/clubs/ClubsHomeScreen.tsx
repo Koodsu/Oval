@@ -68,7 +68,7 @@ function myClubSignal(row: MyClubMembershipRow) {
     : `Next ${meetingDate.toLocaleDateString([], { weekday: 'short' })} · ${formatTime(row.nextMeeting.meetingTime)}`;
 }
 
-export default function ClubsHomeScreen() {
+export default function ClubsHomeScreen({ embedded }: { embedded?: boolean } = {}) {
   const navigation = useNavigation<Nav>();
   const styles = useStyles();
   const { colors, typography } = useTheme();
@@ -163,7 +163,8 @@ export default function ClubsHomeScreen() {
         keyExtractor={(club) => club.id}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: DOCK_CLEARANCE },
+          // Inside Discover the segmented header already clears the status bar.
+          { paddingTop: embedded ? spacing.md : insets.top + spacing.md, paddingBottom: DOCK_CLEARANCE },
         ]}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         refreshControl={
@@ -180,7 +181,7 @@ export default function ClubsHomeScreen() {
           <View style={styles.header}>
             <View style={styles.masthead}>
               <View style={{ flex: 1 }}>
-                <Text style={[typography.kicker, { color: colors.primary }]}>CAMPUS ORGS</Text>
+                <Text style={[typography.kicker, { color: colors.accentText }]}>CAMPUS ORGS</Text>
                 <Text style={styles.title}>Clubs</Text>
                 {loaded ? (
                   <Text style={typography.caption}>
@@ -192,7 +193,7 @@ export default function ClubsHomeScreen() {
               <IconButton
                 icon="add"
                 size={48}
-                color={colors.primary}
+                color={colors.accentText}
                 iconColor={colors.onPrimary}
                 onPress={() => navigation.navigate('CreateClub')}
                 accessibilityLabel="Create a club"
@@ -287,7 +288,7 @@ export default function ClubsHomeScreen() {
                             <Text style={typography.captionSmall} numberOfLines={1}>{myClubSignal(row)}</Text>
                           </View>
                           {row.unreadCount ? <CountBubble count={row.unreadCount} /> : null}
-                          <Text style={[styles.chevron, { color: colors.faint }]}>›</Text>
+                          <Text style={[styles.chevron, { color: colors.sub }]}>›</Text>
                         </Slab>
                       </Animated.View>
                     ))}
@@ -352,10 +353,22 @@ export default function ClubsHomeScreen() {
               icon="search"
               title={myClubs.length === clubs.length && clubs.length ? 'You joined every club' : 'No clubs found'}
               body="Try a different search or category."
-              actionLabel={query || filter ? 'Clear filters' : undefined}
+              actionLabel={
+                query || filter
+                  ? 'Clear filters'
+                  : myClubs.length === clubs.length && clubs.length
+                    ? 'View my clubs'
+                    : 'Refresh'
+              }
               onAction={() => {
-                setQuery('');
-                setFilter(null);
+                if (query || filter) {
+                  setQuery('');
+                  setFilter(null);
+                } else if (myClubs.length === clubs.length && clubs.length) {
+                  setSegment('mine');
+                } else {
+                  void load();
+                }
               }}
             />
           ) : null

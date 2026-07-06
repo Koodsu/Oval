@@ -112,7 +112,7 @@ function MemberPicker({
               <Ionicons
                 name={selected ? 'checkbox' : 'square-outline'}
                 size={21}
-                color={selected ? colors.primary : colors.faint}
+                color={selected ? colors.accentText : colors.sub}
               />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={typography.subheading} numberOfLines={1}>{member.user.name}</Text>
@@ -285,7 +285,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     if (!roleName.trim()) return;
     const trimmedHex = roleHex.trim();
     if (trimmedHex && !HEX_COLOR_RE.test(trimmedHex)) {
-      Alert.alert('Check the hex color', 'Use a 6-digit color like #1E90FF.');
+      Alert.alert('Check the hex color', 'Use # plus 6 digits.');
       return;
     }
     const color = trimmedHex ? (trimmedHex as ClubRoleColor) : roleColor;
@@ -667,9 +667,9 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   }
                   if (HEX_COLOR_RE.test(trimmed)) setRoleColor(trimmed as ClubRoleColor);
                 }}
-                placeholder="#1E90FF"
+                placeholder="Hex color"
                 autoCapitalize="characters"
-                error={roleHex.trim() && !HEX_COLOR_RE.test(roleHex.trim()) ? 'Use #RRGGBB' : null}
+                error={roleHex.trim() && !HEX_COLOR_RE.test(roleHex.trim()) ? 'Use # plus 6 digits' : null}
                 style={{ flex: 1 }}
               />
               <View

@@ -277,13 +277,13 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
                       </View>
 
                       <View style={styles.metaRow}>
-                        <Ionicons name="location" size={13} color={colors.faint} />
+                        <Ionicons name="location" size={13} color={colors.sub} />
                         <Text style={[typography.captionSmall, { flex: 1 }]} numberOfLines={1}>
                           {meeting.location}
                         </Text>
                         <View style={styles.goingPill}>
-                          <Ionicons name="people" size={11} color={colors.primary} />
-                          <Text style={[styles.goingText, { color: colors.primary }]}>
+                          <Ionicons name="people" size={11} color={colors.accentText} />
+                          <Text style={[styles.goingText, { color: colors.accentText }]}>
                             {meeting.attendeeCount}
                           </Text>
                         </View>
@@ -299,6 +299,14 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
             icon="calendar"
             title={isToday ? 'No club meetings tonight' : 'No meetings this day'}
             body="Club meetings will show up here once they're posted."
+            actionLabel={isToday ? 'Refresh' : 'Show tonight'}
+            onAction={() => {
+              if (isToday) {
+                void load();
+              } else {
+                setSelectedDay(dayKey(week[0]));
+              }
+            }}
           />
         )}
       </ScrollView>

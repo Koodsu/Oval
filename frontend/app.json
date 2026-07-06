@@ -26,10 +26,9 @@
         {
           "image": "./assets/brand/oval-open-1024-transparent.png",
           "resizeMode": "contain",
-          "backgroundColor": "#251018"
+          "backgroundColor": "#0F0E12"
         }
-      ],
-      "@sentry/react-native"
+      ]
     ],
     "ios": {
       "supportsTablet": false,
@@ -48,7 +47,7 @@
       "package": "com.bradyvb.ovalapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/oval-open-1024-transparent.png",
-        "backgroundColor": "#251018"
+        "backgroundColor": "#0F0E12"
       },
       "predictiveBackGestureEnabled": false,
       "intentFilters": [

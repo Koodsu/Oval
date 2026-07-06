@@ -19,12 +19,14 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  clearActivityDemand,
   createPod,
   getActivityLocations,
   getApiErrorMessage,
   getPodsByActivity,
   joinPod,
   joinWaitlist,
+  signalActivityDemand,
 } from '../api';
 import { RootStackParamList } from '../../App';
 import { Pod } from '../types';
@@ -42,7 +44,13 @@ import {
   Slab,
   Sticker,
 } from '../components/ui';
+import PodTemplatePicker from '../components/PodTemplatePicker';
 import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
+import {
+  PodTemplate,
+  customCreateDefaults,
+  templateCreateOptions,
+} from '../constants/podTemplates';
 import { formatDateTime } from '../utils/format';
 import {
   BORDER_W,
@@ -79,13 +87,18 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [location, setLocation] = useState('');
-  const [meetupTime, setMeetupTime] = useState(() => new Date(Date.now() + 45 * 60 * 1000));
+  const [meetupTime, setMeetupTime] = useState(() => new Date(customCreateDefaults().meetupTime ?? Date.now()));
   const [maxMembers, setMaxMembers] = useState(4);
   const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(
     null,
   );
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
-  const [composerExpanded, setComposerExpanded] = useState(!!startCreate);
+  const [composerExpanded, setComposerExpanded] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(!!startCreate);
+  const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
+  const [demandCount, setDemandCount] = useState(activity.demandCount ?? 0);
+  const [myDemanded, setMyDemanded] = useState(Boolean(activity.myDemanded));
+  const [demandBusy, setDemandBusy] = useState(false);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -95,6 +108,11 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   useEffect(() => {
     latestLocationRef.current = location;
   }, [location]);
+
+  useEffect(() => {
+    setDemandCount(activity.demandCount ?? 0);
+    setMyDemanded(Boolean(activity.myDemanded));
+  }, [activity.demandCount, activity.id, activity.myDemanded]);
 
   const load = useCallback(async () => {
     try {
@@ -186,14 +204,51 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
         meetupTime: meetupTime.toISOString(),
         minMembers: 2,
         maxMembers,
+        template: 'custom',
         latitude: selectedPin?.latitude,
         longitude: selectedPin?.longitude,
       });
-      navigation.replace('PodDetail', { podId: response.id });
+      navigation.replace('PodDetail', { podId: response.id, justCreated: true });
     } catch (error) {
       Alert.alert('Could not start pod', getApiErrorMessage(error));
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleTemplateCreate = async (template: PodTemplate) => {
+    setBusyTemplateId(template.id);
+    try {
+      const response = await createPod(activity.id, templateCreateOptions(template));
+      setTemplateOpen(false);
+      navigation.replace('PodDetail', { podId: response.id, justCreated: true });
+    } catch (error) {
+      Alert.alert('Could not start pod', getApiErrorMessage(error));
+    } finally {
+      setBusyTemplateId(null);
+    }
+  };
+
+  const openCustomComposer = () => {
+    const defaults = customCreateDefaults();
+    setTemplateOpen(false);
+    if (defaults.meetupTime) setMeetupTime(new Date(defaults.meetupTime));
+    setMaxMembers(defaults.maxMembers ?? 4);
+    setComposerExpanded(true);
+  };
+
+  const toggleDemand = async () => {
+    setDemandBusy(true);
+    try {
+      const response = myDemanded
+        ? await clearActivityDemand(activity.id)
+        : await signalActivityDemand(activity.id);
+      setDemandCount(response.demandCount);
+      setMyDemanded(response.myDemanded);
+    } catch (error) {
+      Alert.alert('Could not update demand', getApiErrorMessage(error));
+    } finally {
+      setDemandBusy(false);
     }
   };
 
@@ -240,6 +295,10 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   };
 
   const toggleComposer = () => {
+    if (!composerExpanded) {
+      setTemplateOpen(true);
+      return;
+    }
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setComposerExpanded((current) => !current);
   };
@@ -518,15 +577,53 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
               );
             })
           ) : (
-            <EmptyState
-              icon="flash"
-              title="No pods yet"
-              body="Start the first one and set the tone for this activity."
-            />
+            <>
+              <View
+                style={[
+                  styles.demandBox,
+                  { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                ]}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={typography.subheading}>
+                    {demandCount > 0
+                      ? `${demandCount} ${demandCount === 1 ? 'person is' : 'people are'} down this week`
+                      : 'Be the first signal'}
+                  </Text>
+                  <Text style={typography.captionSmall}>
+                    No commitment. It helps others know there is demand.
+                  </Text>
+                </View>
+                <Chip
+                  label={demandBusy ? 'Saving' : myDemanded ? 'You are down' : "I'm down"}
+                  selected={myDemanded}
+                  icon={myDemanded ? 'checkmark' : 'sparkles'}
+                  onPress={demandBusy ? undefined : () => void toggleDemand()}
+                  tint={colors.primarySoft}
+                />
+              </View>
+              <EmptyState
+                icon="flash"
+                title="No pods yet"
+                body="Start the first one and set the tone for this activity."
+                actionLabel="Start pod"
+                onAction={() => setTemplateOpen(true)}
+              />
+            </>
           )}
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <PodTemplatePicker
+        visible={templateOpen}
+        title={`Start ${activity.title}`}
+        activities={[activity]}
+        activity={activity}
+        busyTemplateId={busyTemplateId}
+        onClose={() => setTemplateOpen(false)}
+        onTemplate={(choice) => void handleTemplateCreate(choice.template)}
+        onCustom={openCustomComposer}
+      />
     </AppBackdrop>
   );
 }
@@ -636,5 +733,13 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: spacing.sm,
+  },
+  demandBox: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    padding: spacing.md,
   },
 }));

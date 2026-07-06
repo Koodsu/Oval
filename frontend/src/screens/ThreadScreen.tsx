@@ -29,6 +29,7 @@ import {
 } from '../api';
 import { REACTION_EMOJIS } from '../constants/reactions';
 import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
+import * as Clipboard from 'expo-clipboard';
 import { mergeLatestPage } from '../utils/chat';
 import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
 import { RootStackParamList } from '../../App';
@@ -77,8 +78,10 @@ export default function ThreadScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { threadId, title } = route.params;
+  const { threadId, title: titleParam } = route.params;
   const { user } = useAuth();
+  // Notification taps deep-link here without a title param — derive the other
+  // person's name from the loaded messages instead of showing "Messages".
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -93,6 +96,11 @@ export default function ThreadScreen({ route, navigation }: Props) {
   const lastReadMessageIdRef = useRef<string | null>(null);
   const messagesRef = useRef<DirectMessage[]>([]);
   messagesRef.current = messages;
+  const otherPartyName = useMemo(
+    () => messages.find((message) => message.sender.id !== user?.id)?.sender.name ?? null,
+    [messages, user?.id],
+  );
+  const title = titleParam ?? otherPartyName ?? 'Messages';
 
   const load = useCallback(
     async (showAlert = false) => {
@@ -297,6 +305,8 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 icon="chatbubble-ellipses"
                 title="No messages yet"
                 body="This conversation is ready whenever you are."
+                actionLabel="Back to inbox"
+                onAction={() => navigation.goBack()}
               />
             }
             ListHeaderComponent={
@@ -319,7 +329,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Load earlier messages"
                 >
-                  <Text style={[typography.caption, { color: colors.primary }]}>
+                  <Text style={[typography.caption, { color: colors.accentText }]}>
                     {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
                   </Text>
                 </Pressable>
@@ -404,7 +414,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                             <Text
                               style={[
                                 styles.replyMeta,
-                                { color: mine ? 'rgba(255,246,232,0.8)' : colors.faint },
+                                { color: mine ? 'rgba(255,246,232,0.8)' : colors.sub },
                               ]}
                             >
                               Replying to {message.replyTo.sender.name}
@@ -412,7 +422,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                             <Text
                               style={[
                                 styles.replyBody,
-                                { color: mine ? 'rgba(255,246,232,0.7)' : colors.faint },
+                                { color: mine ? 'rgba(255,246,232,0.7)' : colors.sub },
                               ]}
                               numberOfLines={1}
                             >
@@ -595,6 +605,14 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 setActiveSheet(null);
               }}
             />
+            <ListRow
+              icon="copy-outline"
+              title="Copy text"
+              onPress={() => {
+                void Clipboard.setStringAsync(activeSheet.content).catch(() => {});
+                setActiveSheet(null);
+              }}
+            />
             {activeSheet.sender.id === user?.id ? (
               <ListRow
                 icon="trash-outline"
@@ -698,7 +716,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   metaTime: {
     fontFamily: fonts.medium,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   bubble: {
     borderWidth: BORDER_W,
@@ -745,7 +763,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   heartCount: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: t.colors.faint,
+    color: t.colors.sub,
   },
   reactionPill: {
     flexDirection: 'row' as const,

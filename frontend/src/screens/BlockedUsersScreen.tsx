@@ -87,6 +87,8 @@ export default function BlockedUsersScreen({ navigation }: Props) {
             icon="shield-checkmark"
             title="No blocked users"
             body="People you block will show up here."
+            actionLabel="Refresh"
+            onAction={() => void load()}
           />
         ) : null}
         {users.map((blocked) => (

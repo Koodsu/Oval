@@ -2,6 +2,34 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../server';
 import { registerAndGetToken } from '../test/helpers';
+import { INTEREST_TAGS, TAG_TO_CATEGORY } from '../config/interestTags';
+
+// Must stay in sync with the `category` values in prisma/seed.ts — a mapping
+// to a category that no activity uses silently disables the interest boost.
+const KNOWN_ACTIVITY_CATEGORIES = new Set([
+  'Sports & Fitness',
+  'Food & Drink',
+  'Academic',
+  'Arts & Creative',
+  'Social',
+  'Outdoors',
+  'Music & Entertainment',
+  'Wellness',
+  'Gaming',
+  'Volunteering',
+]);
+
+describe('Interest tag category mapping', () => {
+  it('maps every selectable interest tag to a real activity category', () => {
+    for (const tag of INTEREST_TAGS) {
+      expect(TAG_TO_CATEGORY[tag]).toEqual(expect.any(String));
+      expect(
+        KNOWN_ACTIVITY_CATEGORIES.has(TAG_TO_CATEGORY[tag]),
+        `TAG_TO_CATEGORY['${tag}'] = '${TAG_TO_CATEGORY[tag]}' is not a known activity category`,
+      ).toBe(true);
+    }
+  });
+});
 
 describe('Interest Tags — PATCH /users/me', () => {
   let token: string;

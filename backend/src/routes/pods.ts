@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
 import { getLocationsForCategory } from '../config/locations';
+import { getInterestCategories } from '../config/interestTags';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
 import { setTyping } from '../lib/typingStore';
@@ -11,6 +12,7 @@ import { joinExistingPodMember, parsePodMembers, MEMBER_USER_SELECT } from '../l
 import { withDisplayName } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
 import { broadcast, podTopic, REALTIME_EVENTS } from '../lib/realtime';
+import { getPodUnreadCounts } from '../lib/podReadState';
 
 const router = Router();
 
@@ -120,7 +122,13 @@ router.get('/mine', requireAuth, async (req: AuthRequest, res: Response): Promis
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json(pods.map(parsePodMembers));
+    const unreadCounts = await getPodUnreadCounts(userId, pods.map((pod) => pod.id), blockedIds);
+    res.json(
+      pods.map((pod) => ({
+        ...parsePodMembers(pod),
+        unreadCount: unreadCounts.get(pod.id) ?? 0,
+      }))
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -184,7 +192,8 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       where.activity = { category };
     }
 
-    const [pods, pastMembers, recaps] = await Promise.all([
+    const requestedLimit = Math.min(Number(limit) || 20, 50);
+    const [pods, pastMembers, recaps, user] = await Promise.all([
       prisma.pod.findMany({
         where,
         include: {
@@ -193,7 +202,8 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
             include: { user: { select: MEMBER_USER_SELECT } },
           },
         },
-        take: Math.min(Number(limit) || 20, 50),
+        orderBy: [{ meetupTime: 'asc' }, { id: 'asc' }],
+        take: requestedLimit,
       }),
       prisma.podMember.findMany({
         where: { userId },
@@ -203,6 +213,10 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       prisma.podRecap.findMany({
         where: { userId },
         include: { pod: { select: { activityId: true } } },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { interestTags: true },
       }),
     ]);
 
@@ -217,6 +231,7 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
     }
 
     const preferredActivityIds = new Set(pastMembers.map((pm) => pm.pod.activityId));
+    const interestCategories = getInterestCategories(user?.interestTags);
 
     function getActivityScore(activityId: string): number {
       const count = activityRatingCount[activityId] ?? 0;
@@ -224,8 +239,29 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       return (activityRatingSum[activityId] ?? 0) / count; // -1..+1
     }
 
-    // Sort: negatively-rated activities go last, then by meetupTime asc, then memberCount desc
+    function interestMatch(pod: (typeof pods)[number]): number {
+      return interestCategories.has(pod.activity.category) ? 1 : 0;
+    }
+
+    function compareTime(a: (typeof pods)[number], b: (typeof pods)[number]): number {
+      return new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime();
+    }
+
+    function compareMembersDesc(a: (typeof pods)[number], b: (typeof pods)[number]): number {
+      return b.members.length - a.members.length;
+    }
+
     pods.sort((a, b) => {
+      if (pastMembers.length < 3) {
+        const interestDiff = interestMatch(b) - interestMatch(a);
+        if (interestDiff !== 0) return interestDiff;
+        const timeDiff = compareTime(a, b);
+        if (timeDiff !== 0) return timeDiff;
+        const memberDiff = compareMembersDesc(a, b);
+        if (memberDiff !== 0) return memberDiff;
+        return a.id.localeCompare(b.id);
+      }
+
       const scoreA = getActivityScore(a.activityId);
       const scoreB = getActivityScore(b.activityId);
       // Heavily negative activities (avg < -0.5) sink to the bottom
@@ -233,9 +269,13 @@ router.get('/feed', requireAuth, async (req: AuthRequest, res: Response): Promis
       const sinkB = scoreB < -0.5 ? 1 : 0;
       if (sinkA !== sinkB) return sinkA - sinkB;
       // Otherwise sort by time then members
-      const timeDiff = new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime();
+      const timeDiff = compareTime(a, b);
       if (timeDiff !== 0) return timeDiff;
-      return b.members.length - a.members.length;
+      const memberDiff = compareMembersDesc(a, b);
+      if (memberDiff !== 0) return memberDiff;
+      const interestDiff = interestMatch(b) - interestMatch(a);
+      if (interestDiff !== 0) return interestDiff;
+      return a.id.localeCompare(b.id);
     });
 
     // Optional distance sort when caller provides their location
@@ -493,6 +533,31 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     });
 
     await prisma.podMember.create({ data: { podId: newPod.id, userId } });
+
+    // Demand pool: only public pods count as supply — a private pod must not
+    // consume the pool or deep-link strangers to it. Fire-and-forget so pushes
+    // never delay the create response.
+    if (visibilityInput !== PRIVATE_LOCATION_TYPE) {
+      NotificationService.notifyDemandPoolPodCreated(
+        activityId,
+        newPod.id,
+        userId,
+        newPod.meetupTime,
+      ).catch(() => {});
+    }
+
+    // Twin pods: tell the original pod's waitlist a second pod just opened.
+    const twinFromPodId =
+      typeof req.body.twinFromPodId === 'string' ? req.body.twinFromPodId : null;
+    if (twinFromPodId && visibilityInput !== PRIVATE_LOCATION_TYPE) {
+      const twinSource = await prisma.pod.findUnique({
+        where: { id: twinFromPodId },
+        select: { activityId: true },
+      });
+      if (twinSource?.activityId === activityId) {
+        NotificationService.notifyWaitlistTwin(twinFromPodId, newPod.id, userId).catch(() => {});
+      }
+    }
 
     const updatedPod = await prisma.pod.findUnique({
       where: { id: newPod.id },

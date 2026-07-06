@@ -5,7 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { AuthProvider, useAuth } from './AuthContext';
 
-jest.mock('../api', () => ({ setToken: jest.fn(), setOnUnauthorized: jest.fn() }));
+jest.mock('../api', () => ({
+  setToken: jest.fn(),
+  setOnUnauthorized: jest.fn(),
+  trackEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),
@@ -23,6 +27,11 @@ function TestConsumer() {
     </>
   );
 }
+
+// CI runners are ~2x slower than dev machines and the first test in a suite
+// pays the full transform + first-render cost — the RNTL default 1s waitFor
+// timeout is flaky there.
+const WAIT = { timeout: 5000 };
 
 describe('AuthContext — guidelines', () => {
   beforeEach(() => {
@@ -43,7 +52,10 @@ describe('AuthContext — guidelines', () => {
         <TestConsumer />
       </AuthProvider>,
     );
-    await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('not-accepted'));
+    await waitFor(
+      () => expect(screen.getByTestId('status').props.children).toBe('not-accepted'),
+      WAIT,
+    );
   });
 
   it('hasAcceptedGuidelines is true when hasAcceptedPodTerms is "true"', async () => {
@@ -59,7 +71,10 @@ describe('AuthContext — guidelines', () => {
         <TestConsumer />
       </AuthProvider>,
     );
-    await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
+    await waitFor(
+      () => expect(screen.getByTestId('status').props.children).toBe('accepted'),
+      WAIT,
+    );
   });
 
   it('migrates legacy guidelinesAccepted to hasAcceptedPodTerms', async () => {
@@ -75,9 +90,13 @@ describe('AuthContext — guidelines', () => {
         <TestConsumer />
       </AuthProvider>,
     );
-    await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
-    await waitFor(() =>
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith('hasAcceptedPodTerms', 'true')
+    await waitFor(
+      () => expect(screen.getByTestId('status').props.children).toBe('accepted'),
+      WAIT,
+    );
+    await waitFor(
+      () => expect(AsyncStorage.setItem).toHaveBeenCalledWith('hasAcceptedPodTerms', 'true'),
+      WAIT,
     );
   });
 
@@ -87,13 +106,16 @@ describe('AuthContext — guidelines', () => {
         <TestConsumer />
       </AuthProvider>,
     );
-    await waitFor(() => screen.getByTestId('accept-btn'));
+    await waitFor(() => screen.getByTestId('accept-btn'), WAIT);
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('accept-btn'));
     });
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('hasAcceptedPodTerms', 'true');
-    await waitFor(() => expect(screen.getByTestId('status').props.children).toBe('accepted'));
+    await waitFor(
+      () => expect(screen.getByTestId('status').props.children).toBe('accepted'),
+      WAIT,
+    );
   });
 });

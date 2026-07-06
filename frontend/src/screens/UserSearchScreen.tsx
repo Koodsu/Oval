@@ -92,6 +92,8 @@ export default function UserSearchScreen({ navigation }: Props) {
             icon="telescope"
             title="Search the campus graph"
             body="Look up someone you met in a pod, class, or club and send the request from here."
+            actionLabel="Back"
+            onAction={() => navigation.goBack()}
           />
         ) : results.length ? (
           <View style={styles.section}>
@@ -132,6 +134,8 @@ export default function UserSearchScreen({ navigation }: Props) {
             icon="person"
             title="No matches yet"
             body="Try a different spelling or search for their first and last name."
+            actionLabel="Clear search"
+            onAction={() => setQuery('')}
           />
         )}
       </ScrollView>
