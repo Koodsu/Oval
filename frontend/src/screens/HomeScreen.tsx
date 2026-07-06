@@ -74,6 +74,19 @@ function datelineForNow(): string {
     .toUpperCase();
 }
 
+/** "TONIGHT'S BEST PICK" / "TODAY'S BEST PICK" / "TOMORROW'S BEST PICK" / "FRIDAY'S BEST PICK" */
+function bestPickKicker(time: string, now = new Date()): string {
+  const date = new Date(time);
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  const startDate = new Date(date);
+  startDate.setHours(0, 0, 0, 0);
+  const dayDiff = Math.round((startDate.getTime() - startToday.getTime()) / (24 * 60 * 60 * 1000));
+  if (dayDiff === 0) return date.getHours() < 17 ? 'TODAY’S BEST PICK' : 'TONIGHT’S BEST PICK';
+  if (dayDiff === 1) return 'TOMORROW’S BEST PICK';
+  return `${date.toLocaleDateString([], { weekday: 'long' }).toUpperCase()}’S BEST PICK`;
+}
+
 /** "starts in 45m" / "starts in 2h" / "starts Fri" */
 function startsIn(time: string): string {
   const diffMs = new Date(time).getTime() - Date.now();
@@ -382,7 +395,7 @@ export default function HomeScreen() {
         accessibilityLabel={`${pod.activity?.title ?? 'Pod'}, ${startsIn(pod.meetupTime)}`}
       >
         <Text style={[styles.heroKicker, { color: colors.onPrimary }]}>
-          {hero.mine ? 'YOUR NEXT MOVE' : 'TONIGHT’S BEST PICK'} · {formatTime(pod.meetupTime)}
+          {hero.mine ? 'YOUR NEXT MOVE' : bestPickKicker(pod.meetupTime)} · {formatTime(pod.meetupTime)}
         </Text>
         <Text style={[styles.heroTitle, { color: colors.onPrimary }]} numberOfLines={2}>
           {pod.activity?.title ?? 'Pod'}
