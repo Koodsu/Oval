@@ -62,7 +62,6 @@ import { Activity } from './src/types';
 import { getInboxSummary } from './src/api';
 import { BORDER_W, ThemeProvider, elevation, fonts, motion, radii, useTheme } from './src/theme';
 import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/components/ui';
-import CreateSheet from './src/components/CreateSheet';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 import { REALTIME_INBOX_EVENTS, useRealtimeChannel } from './src/hooks/useRealtimeChannel';
 import { captureReferralFromUrl } from './src/lib/referrals';
@@ -232,15 +231,15 @@ function tabIcon(
 ): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case 'Home':
-      return focused ? 'home' : 'home-outline';
+      return focused ? 'planet' : 'planet-outline';
     case 'Explore':
-      return 'search';
+      return focused ? 'telescope' : 'telescope-outline';
     case 'Pods':
-      return focused ? 'calendar' : 'calendar-outline';
+      return focused ? 'flash' : 'flash-outline';
     case 'Clubs':
       return focused ? 'megaphone' : 'megaphone-outline';
     case 'Inbox':
-      return focused ? 'mail' : 'mail-outline';
+      return focused ? 'chatbox-ellipses' : 'chatbox-ellipses-outline';
   }
 }
 
@@ -312,36 +311,7 @@ function TabItem({
   );
 }
 
-function CreateTabButton({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      onPress={() => {
-        try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)?.catch?.(() => {}); } catch {}
-        onPress();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel="Create"
-      hitSlop={8}
-      style={styles.createSlot}
-    >
-      <View
-        style={[
-          styles.createButton,
-          { backgroundColor: colors.primary, ...elevation.floating, shadowColor: colors.shadow },
-        ]}
-      >
-        <Ionicons name="add" size={28} color={colors.onPrimary} />
-      </View>
-    </Pressable>
-  );
-}
-
-type OvalDockProps = BottomTabBarProps & {
-  onCreatePress: () => void;
-};
-
-function OvalDock({ state, descriptors, navigation, onCreatePress }: OvalDockProps) {
+function OvalDock({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -390,9 +360,7 @@ function OvalDock({ state, descriptors, navigation, onCreatePress }: OvalDockPro
         />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]} />
         <View style={[StyleSheet.absoluteFill, styles.dockBorder, { borderColor: colors.border }]} />
-        {state.routes.slice(0, 2).map(renderRoute)}
-        <CreateTabButton onPress={onCreatePress} />
-        {state.routes.slice(2).map((route, offset) => renderRoute(route, offset + 2))}
+        {state.routes.map(renderRoute)}
       </View>
     </View>
   );
@@ -454,23 +422,19 @@ function useInboxBadgeCount(): number | undefined {
 
 function MainTabs() {
   const inboxBadge = useInboxBadgeCount();
-  const [createOpen, setCreateOpen] = React.useState(false);
   return (
-    <>
-      <Tab.Navigator
-        tabBar={(props) => <OvalDock {...props} onCreatePress={() => setCreateOpen(true)} />}
-        screenOptions={{ headerShown: false }}
-      >
-        <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Explore">
-          {({ route }) => <ExploreScreen startCreate={route.params?.startCreate} />}
-        </Tab.Screen>
-        <Tab.Screen name="Pods" component={PodsScreen} />
-        <Tab.Screen name="Clubs" component={ClubsHomeScreen} />
-        <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarBadge: inboxBadge }} />
-      </Tab.Navigator>
-      <CreateSheet visible={createOpen} onClose={() => setCreateOpen(false)} />
-    </>
+    <Tab.Navigator
+      tabBar={(props) => <OvalDock {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Explore">
+        {({ route }) => <ExploreScreen startCreate={route.params?.startCreate} />}
+      </Tab.Screen>
+      <Tab.Screen name="Pods" component={PodsScreen} />
+      <Tab.Screen name="Clubs" component={ClubsHomeScreen} />
+      <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarBadge: inboxBadge }} />
+    </Tab.Navigator>
   );
 }
 
@@ -713,20 +677,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingVertical: 2,
-  },
-  createSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 58,
-  },
-  createButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ translateY: -8 }],
   },
   tabSticker: {
     width: 46,
