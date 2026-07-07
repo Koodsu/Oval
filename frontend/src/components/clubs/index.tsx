@@ -102,7 +102,7 @@ export function ChannelRow({
       </View>
       <View style={styles.grow}>
         <View style={styles.titleLine}>
-          <Text style={typography.subheading} numberOfLines={1}>{channel.name}</Text>
+          <Text style={[typography.subheading, styles.titleText]} numberOfLines={1}>{channel.name}</Text>
           {locked ? <Ionicons name="lock-closed" size={12} color={colors.sub} /> : null}
         </View>
         <Text style={typography.captionSmall} numberOfLines={1}>
@@ -203,7 +203,7 @@ export function ClubRow({
       <ClubMark name={club.name} emoji={club.emoji} uri={club.avatarUrl} size={44} />
       <View style={styles.grow}>
         <View style={styles.titleLine}>
-          <Text style={typography.subheading} numberOfLines={1}>{club.name}</Text>
+          <Text style={[typography.subheading, styles.titleText]} numberOfLines={1}>{club.name}</Text>
           {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
         </View>
         <Text style={typography.captionSmall} numberOfLines={1}>
@@ -421,12 +421,15 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.65 },
   grow: { flex: 1, minWidth: 0, gap: 2 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
+  // Lets long titles truncate instead of pushing trailing icons out of the row.
+  titleText: { flexShrink: 1 },
   join: {
     borderWidth: BORDER_W,
     borderRadius: radii.xs,
     paddingHorizontal: 12,
     paddingVertical: 7,
+    flexShrink: 0,
   },
   joinText: { fontFamily: fonts.bold, fontSize: 12 },
   date: {

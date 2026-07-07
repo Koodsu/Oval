@@ -321,7 +321,7 @@ export default function PodsScreen() {
                     </View>
                     <View style={styles.rowCopy}>
                       <View style={styles.titleLine}>
-                        <Text style={typography.heading} numberOfLines={1}>
+                        <Text style={[typography.heading, { flexShrink: 1 }]} numberOfLines={1}>
                           {displayPodTitle(pod)}
                         </Text>
                         {unreadCount > 0 ? <CountBubble count={unreadCount} /> : null}
