@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
@@ -62,6 +61,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'>;
 
 function dedupeLocations(locations: string[]) {
@@ -153,7 +153,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const handleJoin = async (pod: Pod) => {
     if (pod.status !== 'FORMING') {
-      Alert.alert('Pod is not open', 'This pod is already locked, completed, or expired.');
+      toast.error('Pod is not open', 'This pod is already locked, completed, or expired.');
       return;
     }
     setBusyId(pod.id);
@@ -165,7 +165,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       }
       navigation.navigate('PodDetail', { podId: pod.id });
     } catch (error) {
-      Alert.alert('Could not join pod', getApiErrorMessage(error));
+      toast.error('Could not join pod', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -173,7 +173,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const handleCreate = async () => {
     if (!location.trim()) {
-      Alert.alert(
+      toast.error(
         'Add a meetup spot',
         'Choose a suggested spot or drop a pin for a custom campus location.',
       );
@@ -184,7 +184,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       locationSuggestions.length > 0 &&
       !locationSuggestions.includes(location.trim())
     ) {
-      Alert.alert(
+      toast.error(
         'Drop a pin for custom spots',
         'Custom meetup notes need a campus map pin. Choose a suggested spot, or tap the map to save coordinates.',
       );
@@ -194,7 +194,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       meetupTime.getTime() < Date.now() ||
       meetupTime.getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000
     ) {
-      Alert.alert('Choose a valid time', 'Pods can be scheduled any time within the next week.');
+      toast.error('Choose a valid time', 'Pods can be scheduled any time within the next week.');
       return;
     }
     setCreating(true);
@@ -210,7 +210,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       });
       navigation.replace('PodDetail', { podId: response.id, justCreated: true });
     } catch (error) {
-      Alert.alert('Could not start pod', getApiErrorMessage(error));
+      toast.error('Could not start pod', getApiErrorMessage(error));
     } finally {
       setCreating(false);
     }
@@ -223,7 +223,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       setTemplateOpen(false);
       navigation.replace('PodDetail', { podId: response.id, justCreated: true });
     } catch (error) {
-      Alert.alert('Could not start pod', getApiErrorMessage(error));
+      toast.error('Could not start pod', getApiErrorMessage(error));
     } finally {
       setBusyTemplateId(null);
     }
@@ -246,7 +246,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       setDemandCount(response.demandCount);
       setMyDemanded(response.myDemanded);
     } catch (error) {
-      Alert.alert('Could not update demand', getApiErrorMessage(error));
+      toast.error('Could not update demand', getApiErrorMessage(error));
     } finally {
       setDemandBusy(false);
     }

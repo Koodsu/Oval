@@ -58,6 +58,7 @@ import { useJoinPod } from '../hooks/useJoinPod';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function greetingForNow(): string {
@@ -171,7 +172,7 @@ export default function HomeScreen() {
           onPress: () => {
             void requestLocation().then((allowed) => {
               if (!allowed) {
-                Alert.alert(
+                toast.info(
                   'Location is off',
                   'You can still use Oval. Turn on location later if you want nearby pod sorting.',
                 );
@@ -201,7 +202,7 @@ export default function HomeScreen() {
             }
             void requestNotifications().then((allowed) => {
               if (!allowed) {
-                Alert.alert(
+                toast.info(
                   'Alerts are off',
                   'No problem. Oval still works normally without notifications.',
                 );
@@ -330,10 +331,8 @@ export default function HomeScreen() {
   const openDiscover = useCallback(
     (startCreate?: boolean) =>
       navigation.navigate('MainTabs', {
-        screen: 'Discover',
-        params: startCreate
-          ? { segment: 'activities', startCreate: Date.now() }
-          : { segment: 'activities' },
+        screen: 'Explore',
+        params: startCreate ? { startCreate: Date.now() } : undefined,
       }),
     [navigation],
   );
@@ -554,7 +553,7 @@ export default function HomeScreen() {
               <>
                 <View style={[styles.pulseDivide, { backgroundColor: colors.border }]} />
                 <Pressable
-                  onPress={() => navigation.navigate('MainTabs', { screen: 'Plans' })}
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Pods' })}
                   accessibilityRole="button"
                   accessibilityLabel={`${friendsTonight.count} friends out tonight`}
                   style={({ pressed }) => [styles.pulseCol, pressed && { opacity: 0.6 }]}
@@ -625,7 +624,7 @@ export default function HomeScreen() {
           <SectionHeader
             kicker="Fresh"
             title="Happening soon"
-            actionLabel="Discover"
+            actionLabel="Explore"
             onAction={() => openDiscover()}
           />
           {!loaded ? (

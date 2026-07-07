@@ -32,6 +32,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyData'>;
 
 const PREFERENCE_ROWS: Array<{
@@ -100,7 +101,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
       setPrefs(response.preferences);
     } catch (error) {
       setPrefs(previous);
-      Alert.alert('Could not update notifications', getApiErrorMessage(error));
+      toast.error('Could not update notifications', getApiErrorMessage(error));
     }
   };
 
@@ -111,14 +112,14 @@ export default function PrivacyDataScreen({ navigation }: Props) {
       const updated = await updateProfile({ instagramHandle: normalizedInstagram || null });
       await updateUser(updated);
       setInstagram(updated.instagramHandle ?? '');
-      Alert.alert(
+      toast.success(
         'Connected accounts updated',
         updated.instagramHandle
           ? `Instagram @${updated.instagramHandle} is linked to your profile.`
           : 'Instagram has been unlinked from your profile.',
       );
     } catch (error) {
-      Alert.alert('Could not update Instagram', getApiErrorMessage(error));
+      toast.error('Could not update Instagram', getApiErrorMessage(error));
     } finally {
       setSocialBusy(false);
     }
@@ -138,7 +139,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
             await updateUser(updated);
           } catch (error) {
             setInstagram(user?.instagramHandle ?? '');
-            Alert.alert('Could not unlink Instagram', getApiErrorMessage(error));
+            toast.error('Could not unlink Instagram', getApiErrorMessage(error));
           } finally {
             setSocialBusy(false);
           }
@@ -160,7 +161,7 @@ export default function PrivacyDataScreen({ navigation }: Props) {
         title: 'Download my Oval data',
       });
     } catch (error) {
-      Alert.alert('Could not download your data', getApiErrorMessage(error));
+      toast.error('Could not download your data', getApiErrorMessage(error));
     } finally {
       setExportBusy(false);
     }

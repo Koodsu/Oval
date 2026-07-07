@@ -14,6 +14,7 @@ import {
 } from '../api';
 import type { Pod } from '../types';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /**
@@ -37,9 +38,9 @@ export function useJoinPod(onJoined?: (pod: Pod) => void) {
             text: 'Join waitlist',
             onPress: () => {
               void joinWaitlist(pod.id)
-                .then(() => Alert.alert('On the list', "We'll ping you the moment a spot opens."))
+                .then(() => toast.success('On the list', "We'll ping you the moment a spot opens."))
                 .catch((error) =>
-                  Alert.alert('Could not join waitlist', getApiErrorMessage(error)),
+                  toast.error('Could not join waitlist', getApiErrorMessage(error)),
                 );
             },
           },
@@ -61,7 +62,7 @@ export function useJoinPod(onJoined?: (pod: Pod) => void) {
                   });
                   navigation.navigate('PodDetail', { podId: twin.id, justCreated: true });
                 } catch (error) {
-                  Alert.alert('Could not start twin', getApiErrorMessage(error));
+                  toast.error('Could not start twin', getApiErrorMessage(error));
                 }
               })();
             },
@@ -98,7 +99,7 @@ export function useJoinPod(onJoined?: (pod: Pod) => void) {
       } catch {
         // fall through to the generic copy
       }
-      Alert.alert('Already in one', 'You are already in an active pod for this activity.');
+      toast.error('Already in one', 'You are already in an active pod for this activity.');
     },
     [navigation],
   );
@@ -127,7 +128,7 @@ export function useJoinPod(onJoined?: (pod: Pod) => void) {
         } else if (status === 409 && /already in an active pod/i.test(message)) {
           void offerExistingPod(pod);
         } else {
-          Alert.alert('Could not join pod', message);
+          toast.error('Could not join pod', message);
         }
         return false;
       } finally {

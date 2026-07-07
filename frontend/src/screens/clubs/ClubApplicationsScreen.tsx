@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +25,7 @@ import {
 import type { ApplicationStage, ClubApplicationCycle, ClubApplicationRow } from '../../types';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubApplications'>;
 
 const STAGE_TINT: Record<ApplicationStage, string> = {
@@ -89,11 +90,11 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
   const openCycleSubmit = async () => {
     const qs = newQuestions.map((q) => q.trim()).filter((q) => q.length);
     if (!title.trim()) {
-      Alert.alert('Add a title', 'Give this application cycle a name (e.g. Fall 2026).');
+      toast.error('Add a title', 'Give this application cycle a name (e.g. Fall 2026).');
       return;
     }
     if (!qs.length) {
-      Alert.alert('Add a question', 'Add at least one application question.');
+      toast.error('Add a question', 'Add at least one application question.');
       return;
     }
     setBusy(true);
@@ -103,7 +104,7 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
       setNewQuestions(['']);
       await load();
     } catch (e) {
-      Alert.alert('Could not open applications', getApiErrorMessage(e));
+      toast.error('Could not open applications', getApiErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -116,7 +117,7 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
       await updateApplicationCycle(clubId, openCycle.id, { status: 'CLOSED' });
       await load();
     } catch (e) {
-      Alert.alert('Could not close applications', getApiErrorMessage(e));
+      toast.error('Could not close applications', getApiErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -130,7 +131,7 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
       setSelected(null);
       await load();
     } catch (e) {
-      Alert.alert('Could not update', getApiErrorMessage(e));
+      toast.error('Could not update', getApiErrorMessage(e));
     } finally {
       setStageBusy(false);
     }

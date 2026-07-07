@@ -22,6 +22,7 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSpring,
   withTiming,
@@ -1771,3 +1772,92 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
     </View>
   );
 }
+
+// ── Typing indicator ─────────────────────────────────────────────────────────
+
+function TypingDot({ index, color }: { index: number; color: string }) {
+  const progress = useSharedValue(0);
+
+  React.useEffect(() => {
+    progress.value = withDelay(
+      index * 160,
+      withRepeat(
+        withTiming(1, { duration: 420, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      ),
+    );
+  }, [index, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 + progress.value * 0.65,
+    transform: [{ translateY: -2.5 * progress.value }],
+  }));
+
+  return (
+    <Animated.View
+      style={[typingStyles.dot, { backgroundColor: color }, animatedStyle]}
+    />
+  );
+}
+
+/**
+ * iMessage-style typing bubble: three staggered bouncing dots inside a chat
+ * bubble, with an optional label ("Sarah is typing…") alongside.
+ */
+export function TypingIndicator({
+  label,
+  style,
+}: {
+  label?: string | null;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors, typography } = useTheme();
+  return (
+    <View
+      style={[typingStyles.row, style]}
+      accessibilityRole="text"
+      accessibilityLabel={label ?? 'Someone is typing'}
+    >
+      <View
+        style={[
+          typingStyles.bubble,
+          { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+        ]}
+      >
+        <TypingDot index={0} color={colors.sub} />
+        <TypingDot index={1} color={colors.sub} />
+        <TypingDot index={2} color={colors.sub} />
+      </View>
+      {label ? (
+        <Text style={[typography.caption, { color: colors.sub }]} numberOfLines={1}>
+          {label}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+const typingStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  bubble: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    borderBottomLeftRadius: radii.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+});

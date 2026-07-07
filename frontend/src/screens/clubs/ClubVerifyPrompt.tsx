@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Share, Text, View } from 'react-native';
+import { Share, Text, View } from 'react-native';
 import { Banner, Button, Field, Sheet } from '../../components/ui';
 import {
   createClubInvite,
@@ -10,6 +10,7 @@ import {
 import type { ClubClaim } from '../../types';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 const MEMBER_THRESHOLD = 5;
 
 type Props = {
@@ -33,14 +34,14 @@ export default function ClubVerifyPrompt({ visible, onClose, clubId, clubName, m
 
   const startVerify = async () => {
     if (!handle.trim()) {
-      Alert.alert('Add your Instagram', 'Enter the club’s Instagram handle first.');
+      toast.error('Add your Instagram', 'Enter the club’s Instagram handle first.');
       return;
     }
     setVerifyBusy(true);
     try {
       setClaim(await startClubVerification(clubId, { method: 'INSTAGRAM', handle: handle.trim() }));
     } catch (e) {
-      Alert.alert('Could not start verification', getApiErrorMessage(e));
+      toast.error('Could not start verification', getApiErrorMessage(e));
     } finally {
       setVerifyBusy(false);
     }
@@ -53,7 +54,7 @@ export default function ClubVerifyPrompt({ visible, onClose, clubId, clubName, m
       const result = await markClubVerificationSent(clubId, claim.id);
       setClaim({ ...claim, status: result.status });
     } catch (e) {
-      Alert.alert('Something went wrong', getApiErrorMessage(e));
+      toast.error('Something went wrong', getApiErrorMessage(e));
     } finally {
       setSentBusy(false);
     }
@@ -67,7 +68,7 @@ export default function ClubVerifyPrompt({ visible, onClose, clubId, clubName, m
         message: `Join ${clubName} on Oval! Open the app and enter invite code: ${invite.code}`,
       });
     } catch (e) {
-      Alert.alert('Could not create invite', getApiErrorMessage(e));
+      toast.error('Could not create invite', getApiErrorMessage(e));
     } finally {
       setInviteBusy(false);
     }

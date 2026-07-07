@@ -38,6 +38,7 @@ import type { ClubMeetingAttendanceResponse } from '../../types';
 import { formatDateTime } from '../../utils/format';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMeeting'>;
 
 export default function MeetingDetailScreen({ route, navigation }: Props) {
@@ -147,7 +148,7 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
     } catch {
       setMeetings((current) => current.map((item) => item.id === meetingId ? { ...item, myRsvp: previous } : item));
       setFallbackMeeting((current) => current ? { ...current, myRsvp: previous } : current);
-      Alert.alert('Could not RSVP', API_USER_MESSAGE);
+      toast.error('Could not RSVP', API_USER_MESSAGE);
     }
   };
 
@@ -159,7 +160,7 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
       setFallbackMeeting((current) => current ? { ...current, attendanceCode: result.attendanceCode } : current);
       void getClubMeetingAttendance(clubId, meetingId).then(setAttendance).catch(() => {});
     } catch {
-      Alert.alert('Could not open attendance', API_USER_MESSAGE);
+      toast.error('Could not open attendance', API_USER_MESSAGE);
     } finally {
       setBusy(null);
     }
@@ -173,7 +174,7 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
       setFallbackMeeting((current) => current ? { ...current, attendanceCode: null } : current);
       void getClubMeetingAttendance(clubId, meetingId).then(setAttendance).catch(() => {});
     } catch {
-      Alert.alert('Could not close attendance', API_USER_MESSAGE);
+      toast.error('Could not close attendance', API_USER_MESSAGE);
     } finally {
       setBusy(null);
     }
@@ -185,13 +186,13 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
     try {
       await checkInToClubMeeting(clubId, meetingId, code.trim());
       setCode('');
-      Alert.alert('Checked in', 'Your attendance has been recorded.');
+      toast.success('Checked in', 'Your attendance has been recorded.');
       await refresh();
       if (canManageAttendance) {
         void getClubMeetingAttendance(clubId, meetingId).then(setAttendance).catch(() => {});
       }
     } catch {
-      Alert.alert('Could not check in', API_USER_MESSAGE);
+      toast.error('Could not check in', API_USER_MESSAGE);
     } finally {
       setBusy(null);
     }
@@ -261,8 +262,8 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
               size="sm"
               onPress={() =>
                 navigation.navigate('MainTabs', {
-                  screen: 'Discover',
-                  params: { segment: 'activities', startCreate: Date.now() },
+                  screen: 'Explore',
+                  params: { startCreate: Date.now() },
                 })
               }
               style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}
@@ -351,8 +352,8 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
                   onPress={() => {
                     setBusy('remind');
                     void sendClubRsvpReminders(clubId, meetingId)
-                      .then((result) => Alert.alert('Reminder sent', `${result.count} members matched.`))
-                      .catch(() => Alert.alert('Could not send reminder', API_USER_MESSAGE))
+                      .then((result) => toast.success('Reminder sent', `${result.count} members matched.`))
+                      .catch(() => toast.error('Could not send reminder', API_USER_MESSAGE))
                       .finally(() => setBusy(null));
                   }}
                 />
@@ -392,7 +393,7 @@ export default function MeetingDetailScreen({ route, navigation }: Props) {
                         setMeetings((current) => current.filter((item) => item.id !== meetingId));
                         navigation.goBack();
                       })
-                      .catch(() => Alert.alert('Could not delete meeting', API_USER_MESSAGE))
+                      .catch(() => toast.error('Could not delete meeting', API_USER_MESSAGE))
                       .finally(() => setBusy(null));
                   },
                 },

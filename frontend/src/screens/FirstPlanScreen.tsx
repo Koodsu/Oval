@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
@@ -24,6 +24,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'FirstPlan'> & {
   onDone: () => void;
 };
@@ -89,7 +90,7 @@ export default function FirstPlanScreen({ navigation, onDone }: Props) {
         routes: [{ name: 'MainTabs' }, { name: 'PodDetail', params: { podId: pod.id } }],
       });
     } catch (error) {
-      Alert.alert('Could not join pod', getApiErrorMessage(error));
+      toast.error('Could not join pod', getApiErrorMessage(error));
     } finally {
       setBusyPodId(null);
     }

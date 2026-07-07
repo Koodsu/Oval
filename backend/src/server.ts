@@ -11,6 +11,7 @@ import path from 'path';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from './config/jwt';
+import { inputGuard } from './middleware/inputGuard';
 
 import prisma from './prisma';
 import authRoutes from './routes/auth';
@@ -62,7 +63,12 @@ app.use(helmet({
       ],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-      imgSrc: ["'self'", 'data:', 'https:'],
+      // SEC-2: restrict image sources to self + Supabase storage (avatars) instead of all of https:
+      imgSrc: [
+        "'self'",
+        'data:',
+        ...(process.env.SUPABASE_URL?.trim() ? [process.env.SUPABASE_URL.trim()] : []),
+      ],
       connectSrc: ["'self'"],
     },
   },
@@ -101,6 +107,11 @@ app.use(webRoutes);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(express.json({ limit: '64kb' }));
+
+// Structural input sanity guard — backstop behind per-route validation.
+// Rejects hostile shapes (deep nesting, huge arrays/strings, proto-pollution
+// keys, nested query objects) before they reach handlers or Prisma.
+app.use(inputGuard);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -223,7 +234,15 @@ app.use((_req: Request, res: Response) => {
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[error]', err.message, err.stack);
   const status = (err as Error & { status?: number }).status ?? 500;
-  res.status(status).json({ error: err.message || 'Internal server error' });
+  // SEC-1: never leak internal error strings (Prisma, stack details) to clients on 5xx.
+  // 4xx errors thrown intentionally (with a status) keep their message — those are
+  // written to be user-facing. Full detail always stays in the logs above.
+  const isServerError = status >= 500;
+  const message =
+    isServerError && process.env.NODE_ENV === 'production'
+      ? 'Something went wrong on our end. Please try again.'
+      : err.message || 'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 const PORT = process.env.PORT ?? 3000;

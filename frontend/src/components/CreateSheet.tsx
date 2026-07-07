@@ -114,8 +114,8 @@ export default function CreateSheet({
   const openActivities = () => {
     closeThen(() => {
       navigation.navigate('MainTabs', {
-        screen: 'Discover',
-        params: { segment: 'activities', startCreate: Date.now() },
+        screen: 'Explore',
+        params: { startCreate: Date.now() },
       });
     });
   };

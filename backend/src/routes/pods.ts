@@ -23,6 +23,7 @@ const EXPIRED = 'EXPIRED';
 const CANCELLED = 'CANCELLED';
 const PUBLIC_LOCATION_TYPE = 'public';
 const PRIVATE_LOCATION_TYPE = 'private';
+const MAX_LOCATION_LENGTH = 120;
 
 const OSU_CAMPUS_POLYGON = [
   // North - Lane Ave
@@ -465,6 +466,10 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       res.status(400).json({ error: 'Location is required. Please select a location before creating a pod.' });
       return;
     }
+    if (locationInput.length > MAX_LOCATION_LENGTH) {
+      res.status(400).json({ error: `Location cannot exceed ${MAX_LOCATION_LENGTH} characters` });
+      return;
+    }
 
     const moderation = await moderateTextContent([locationInput]);
     if (moderation) {
@@ -840,6 +845,10 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
       const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
       if (!locationInput) {
         res.status(400).json({ error: 'Location cannot be empty' });
+        return;
+      }
+      if (locationInput.length > MAX_LOCATION_LENGTH) {
+        res.status(400).json({ error: `Location cannot exceed ${MAX_LOCATION_LENGTH} characters` });
         return;
       }
       const moderation = await moderateTextContent([locationInput]);

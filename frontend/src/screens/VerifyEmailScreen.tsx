@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 export default function VerifyEmailScreen() {
   const styles = useStyles();
   const { colors, typography } = useTheme();
@@ -33,16 +34,16 @@ export default function VerifyEmailScreen() {
 
   const submit = useCallback(async () => {
     if (!/^\d{6}$/.test(code.trim())) {
-      Alert.alert('Verification code needed', 'Enter the 6-digit code from your school email.');
+      toast.error('Verification code needed', 'Enter the 6-digit code from your school email.');
       return;
     }
     setBusy(true);
     try {
       const response = await verifyEmail(code.trim());
       await updateUser(response.user);
-      Alert.alert('Verified', 'Your account is now cleared for the full Oval experience.');
+      toast.success('Verified', 'Your account is now cleared for the full Oval experience.');
     } catch (error) {
-      Alert.alert('Verification failed', getApiErrorMessage(error));
+      toast.error('Verification failed', getApiErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -60,9 +61,9 @@ export default function VerifyEmailScreen() {
     try {
       await resendVerification();
       setResendCooldown(30);
-      Alert.alert('Email sent', `A fresh code was sent to ${user?.email ?? 'your inbox'}.`);
+      toast.success('Email sent', `A fresh code was sent to ${user?.email ?? 'your inbox'}.`);
     } catch (error) {
-      Alert.alert('Could not resend', getApiErrorMessage(error));
+      toast.error('Could not resend', getApiErrorMessage(error));
     } finally {
       setResending(false);
     }

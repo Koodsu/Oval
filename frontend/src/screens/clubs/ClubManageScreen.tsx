@@ -49,6 +49,7 @@ import {
 } from '../../hooks/useClub';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubManage'>;
 type Panel = 'profile' | 'roles' | 'channels' | 'permissions' | 'outreach' | null;
 
@@ -217,7 +218,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Photo permission needed', 'Allow photo access to update the club image.');
+        toast.info('Photo permission needed', 'Allow photo access to update the club image.');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -230,7 +231,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       const uploaded = await uploadClubAvatar(clubId, result.assets[0].uri);
       setClub((current) => current ? { ...current, avatarUrl: uploaded.avatarUrl } : current);
     } catch {
-      Alert.alert('Could not update club photo', API_USER_MESSAGE);
+      toast.error('Could not update club photo', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -245,7 +246,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
 
   const saveProfile = async () => {
     if (!profileName.trim() || !profileDescription.trim()) {
-      Alert.alert('Missing profile details', 'Add a club name and description.');
+      toast.error('Missing profile details', 'Add a club name and description.');
       return;
     }
     setBusy(true);
@@ -258,7 +259,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       setClub((current) => current ? { ...current, ...updated } : current);
       setPanel(null);
     } catch {
-      Alert.alert('Could not update club profile', API_USER_MESSAGE);
+      toast.error('Could not update club profile', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -285,7 +286,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
     if (!roleName.trim()) return;
     const trimmedHex = roleHex.trim();
     if (trimmedHex && !HEX_COLOR_RE.test(trimmedHex)) {
-      Alert.alert('Check the hex color', 'Use # plus 6 digits.');
+      toast.error('Check the hex color', 'Use # plus 6 digits.');
       return;
     }
     const color = trimmedHex ? (trimmedHex as ClubRoleColor) : roleColor;
@@ -307,7 +308,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       resetRoleEditor();
       await refresh();
     } catch {
-      Alert.alert(editingRole ? 'Could not update role' : 'Could not create role', API_USER_MESSAGE);
+      toast.error(editingRole ? 'Could not update role' : 'Could not create role', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -358,7 +359,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       }
       resetChannelEditor();
     } catch {
-      Alert.alert(
+      toast.error(
         editingChannel ? 'Could not update channel' : 'Could not create channel',
         API_USER_MESSAGE,
       );
@@ -378,7 +379,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
           style: 'destructive',
           onPress: () => void deleteClubChannel(clubId, channel.id)
             .then(() => setChannels((current) => current.filter((row) => row.id !== channel.id)))
-            .catch(() => Alert.alert('Could not delete channel', API_USER_MESSAGE)),
+            .catch(() => toast.error('Could not delete channel', API_USER_MESSAGE)),
         },
       ],
     );
@@ -399,14 +400,14 @@ export default function ClubManageScreen({ route, navigation }: Props) {
   const previewOutreach = async () => {
     const selectedAudience = audience();
     if (!selectedAudience) {
-      Alert.alert('Choose an audience', 'Select a meeting or member tag first.');
+      toast.error('Choose an audience', 'Select a meeting or member tag first.');
       return;
     }
     setBusy(true);
     try {
       setPreview(await previewClubOutreach(clubId, selectedAudience));
     } catch {
-      Alert.alert('Could not preview audience', API_USER_MESSAGE);
+      toast.error('Could not preview audience', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -420,9 +421,9 @@ export default function ClubManageScreen({ route, navigation }: Props) {
       const result = await sendClubOutreach(clubId, selectedAudience, outreachText.trim());
       setOutreachText('');
       setPreview(result);
-      Alert.alert('Outreach sent', `${result.sent} notification${result.sent === 1 ? '' : 's'} queued.`);
+      toast.success('Outreach sent', `${result.sent} notification${result.sent === 1 ? '' : 's'} queued.`);
     } catch {
-      Alert.alert('Could not send outreach', API_USER_MESSAGE);
+      toast.error('Could not send outreach', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -587,7 +588,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                       style: 'destructive',
                       onPress: () => void deleteClub(clubId)
                         .then(() => navigation.popToTop())
-                        .catch(() => Alert.alert('Could not delete club', API_USER_MESSAGE)),
+                        .catch(() => toast.error('Could not delete club', API_USER_MESSAGE)),
                     },
                   ],
                 )}
@@ -728,7 +729,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                               style: 'destructive',
                               onPress: () => void deleteClubRole(clubId, role.id)
                                 .then(refresh)
-                                .catch(() => Alert.alert('Could not delete role', API_USER_MESSAGE)),
+                                .catch(() => toast.error('Could not delete role', API_USER_MESSAGE)),
                             },
                           ],
                         )}
@@ -839,7 +840,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                       : [...club.officerPermissions, permission.value];
                     void updateOfficerPermissions(clubId, next)
                       .then((updated) => setClub((current) => current ? { ...current, officerPermissions: updated.officerPermissions } : current))
-                      .catch(() => Alert.alert('Could not update permissions', API_USER_MESSAGE));
+                      .catch(() => toast.error('Could not update permissions', API_USER_MESSAGE));
                   }}
                   last
                 />

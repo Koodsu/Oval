@@ -43,6 +43,7 @@ import {
   ScreenHeader,
   Sheet,
   Sticker,
+  TypingIndicator,
 } from '../components/ui';
 import {
   BORDER_W,
@@ -56,6 +57,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatTime } from '../utils/format';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 const HEART_EMOJI = '❤️';
@@ -120,7 +122,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
       } catch (error) {
         setLoadError(getApiErrorMessage(error));
         if (showAlert) {
-          Alert.alert('Could not load thread', getApiErrorMessage(error));
+          toast.error('Could not load thread', getApiErrorMessage(error));
         }
       }
     },
@@ -143,7 +145,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
       });
       setHasMore(!!response.hasMore);
     } catch (error) {
-      Alert.alert('Could not load earlier messages', getApiErrorMessage(error));
+      toast.error('Could not load earlier messages', getApiErrorMessage(error));
     } finally {
       setLoadingEarlier(false);
     }
@@ -190,7 +192,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
       setReplyTo(null);
       setMessages((current) => [...current, sent]);
     } catch (error) {
-      Alert.alert('Could not send message', getApiErrorMessage(error));
+      toast.error('Could not send message', getApiErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -206,7 +208,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
         : await addDMReaction(threadId, message.id, emoji);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
     } catch (error) {
-      Alert.alert('Could not update reaction', getApiErrorMessage(error));
+      toast.error('Could not update reaction', getApiErrorMessage(error));
     }
   };
 
@@ -224,9 +226,9 @@ export default function ThreadScreen({ route, navigation }: Props) {
         targetUserId: message.sender.id,
         reason,
       });
-      Alert.alert('Report sent', 'Thanks. We logged this message for review.');
+      toast.success('Report sent', 'Thanks. We logged this message for review.');
     } catch (error) {
-      Alert.alert('Could not send report', getApiErrorMessage(error));
+      toast.error('Could not send report', getApiErrorMessage(error));
     }
   };
 
@@ -244,10 +246,10 @@ export default function ThreadScreen({ route, navigation }: Props) {
             void (async () => {
               try {
                 await blockUser(message.sender.id);
-                Alert.alert('User blocked', 'They can no longer message you.');
+                toast.success('User blocked', 'They can no longer message you.');
                 navigation.goBack();
               } catch (error) {
-                Alert.alert('Could not block user', getApiErrorMessage(error));
+                toast.error('Could not block user', getApiErrorMessage(error));
               }
             })();
           },
@@ -269,7 +271,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
               await deleteDMMessage(threadId, message.id);
               setMessages((current) => current.filter((item) => item.id !== message.id));
             } catch (error) {
-              Alert.alert('Could not delete message', getApiErrorMessage(error));
+              toast.error('Could not delete message', getApiErrorMessage(error));
             }
           })();
         },
@@ -310,15 +312,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
               />
             }
             ListHeaderComponent={
-              typingUserIds.length ? (
-                <Sticker
-                  label="typing…"
-                  tint={colors.successSoft}
-                  icon="ellipsis-horizontal"
-                  tilt={-2}
-                  small
-                />
-              ) : null
+              typingUserIds.length ? <TypingIndicator /> : null
             }
             ListFooterComponent={
               hasMore ? (

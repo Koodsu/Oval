@@ -75,6 +75,7 @@ import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
 
 const POD_STATUS_LABELS: Record<Pod['status'], string> = {
@@ -157,7 +158,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       } catch (error) {
         setLoadError(getApiErrorMessage(error));
         if (showAlert) {
-          Alert.alert('Could not load pod', getApiErrorMessage(error));
+          toast.error('Could not load pod', getApiErrorMessage(error));
         }
       }
     },
@@ -192,7 +193,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const handlePrimaryAction = async () => {
     if (!pod) return;
     if (!meInPod && pod.status !== 'FORMING') {
-      Alert.alert('Pod is not open', 'This pod is already locked, completed, or expired.');
+      toast.error('Pod is not open', 'This pod is already locked, completed, or expired.');
       return;
     }
     setActionBusy('primary');
@@ -208,7 +209,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       }
       await load(false);
     } catch (error) {
-      Alert.alert('Action failed', getApiErrorMessage(error));
+      toast.error('Action failed', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -221,7 +222,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       await leaveWaitlist(pod.id);
       await load(false);
     } catch (error) {
-      Alert.alert('Could not leave waitlist', getApiErrorMessage(error));
+      toast.error('Could not leave waitlist', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -234,7 +235,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       const updated = await (pod.status === 'LOCKED' ? unlockPod(pod.id) : lockPod(pod.id));
       setPod(updated);
     } catch (error) {
-      Alert.alert('Could not update pod', getApiErrorMessage(error));
+      toast.error('Could not update pod', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -247,7 +248,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       const updated = await updatePodPrivacy(pod.id, visibility);
       setPod(updated);
     } catch (error) {
-      Alert.alert('Could not update privacy', getApiErrorMessage(error));
+      toast.error('Could not update privacy', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -260,7 +261,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       await confirmAttendance(pod.id);
       await load(false);
     } catch (error) {
-      Alert.alert('Could not confirm attendance', getApiErrorMessage(error));
+      toast.error('Could not confirm attendance', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -306,7 +307,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                   // justCreated → the new pod shows the "bring someone new" share prompt (04 §3a)
                   navigation.navigate('PodDetail', { podId: response.id, justCreated: true });
                 } catch (error) {
-                  Alert.alert('Could not run it back', getApiErrorMessage(error));
+                  toast.error('Could not run it back', getApiErrorMessage(error));
                 } finally {
                   setActionBusy(null);
                 }
@@ -316,7 +317,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         ]);
       }
     } catch (error) {
-      Alert.alert('Could not submit recap', getApiErrorMessage(error));
+      toast.error('Could not submit recap', getApiErrorMessage(error));
     } finally {
       if (actionBusy !== 'chain') setActionBusy(null);
     }
@@ -339,7 +340,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       });
       navigation.replace('PodDetail', { podId: response.id, justCreated: true });
     } catch (error) {
-      Alert.alert('Could not start twin', getApiErrorMessage(error));
+      toast.error('Could not start twin', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -365,7 +366,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         void trackEvent('invite.shared', { surface: 'pod_detail', podId: pod.id });
       }
     } catch (error) {
-      Alert.alert('Could not open share sheet', getApiErrorMessage(error));
+      toast.error('Could not open share sheet', getApiErrorMessage(error));
     }
   };
 
@@ -374,9 +375,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     setActionBusy(`invite-${friend.id}`);
     try {
       await sendPodInvite(pod.id, friend.id);
-      Alert.alert('Invite sent', `${friend.name} will see it in their inbox.`);
+      toast.success('Invite sent', `${friend.name} will see it in their inbox.`);
     } catch (error) {
-      Alert.alert('Could not send invite', getApiErrorMessage(error));
+      toast.error('Could not send invite', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -387,9 +388,9 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     try {
       await sendFriendRequest(person.id);
       setPeopleYouMet((current) => current.filter((entry) => entry.id !== person.id));
-      Alert.alert('Request sent', `${person.name} now has your friend request.`);
+      toast.success('Request sent', `${person.name} now has your friend request.`);
     } catch (error) {
-      Alert.alert('Could not send request', getApiErrorMessage(error));
+      toast.error('Could not send request', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -412,7 +413,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 await reportNoShow(pod.id, userId);
                 await load(false);
               } catch (error) {
-                Alert.alert('Could not report no-show', getApiErrorMessage(error));
+                toast.error('Could not report no-show', getApiErrorMessage(error));
               } finally {
                 setActionBusy(null);
               }
@@ -433,7 +434,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const handleEditSave = async () => {
     if (!pod) return;
     if (!editLocation.trim()) {
-      Alert.alert('Add a meetup spot', 'The location cannot be empty.');
+      toast.error('Add a meetup spot', 'The location cannot be empty.');
       return;
     }
     setActionBusy('edit');
@@ -445,7 +446,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       setPod(updated);
       setEditOpen(false);
     } catch (error) {
-      Alert.alert('Could not update pod', getApiErrorMessage(error));
+      toast.error('Could not update pod', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -469,7 +470,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 setPod(updated);
                 setEditOpen(false);
               } catch (error) {
-                Alert.alert('Could not cancel pod', getApiErrorMessage(error));
+                toast.error('Could not cancel pod', getApiErrorMessage(error));
               } finally {
                 setActionBusy(null);
               }
@@ -494,7 +495,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
               const updated = await kickPodMember(pod.id, memberUserId);
               setPod(updated);
             } catch (error) {
-              Alert.alert('Could not remove member', getApiErrorMessage(error));
+              toast.error('Could not remove member', getApiErrorMessage(error));
             } finally {
               setActionBusy(null);
             }

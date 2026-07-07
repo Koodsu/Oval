@@ -50,6 +50,7 @@ import {
 } from '../theme';
 import { formatTime } from '../utils/format';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const MAX_TRUSTWORTHY_DISTANCE_MILES = 25;
@@ -214,7 +215,7 @@ export default function ExploreScreen({
           onPress: () => {
             void requestLocation().then((allowed) => {
               if (!allowed) {
-                Alert.alert(
+                toast.info(
                   'Location is off',
                   'No problem. You can still browse every activity and join pods normally.',
                 );
@@ -295,7 +296,7 @@ export default function ExploreScreen({
 
   const submitActivityRequest = async () => {
     if (!requestTitle.trim()) {
-      Alert.alert('Add a title', 'Name the activity you want added.');
+      toast.error('Add a title', 'Name the activity you want added.');
       return;
     }
     setRequestBusy(true);
@@ -311,7 +312,7 @@ export default function ExploreScreen({
       setRequestDefaultLocation('');
       setRequestSubmitted(true);
     } catch (error) {
-      Alert.alert('Could not submit request', getApiErrorMessage(error));
+      toast.error('Could not submit request', getApiErrorMessage(error));
     } finally {
       setRequestBusy(false);
     }
@@ -330,7 +331,7 @@ export default function ExploreScreen({
       setTemplateOpen(false);
       navigation.navigate('PodDetail', { podId: pod.id, justCreated: true });
     } catch (error) {
-      Alert.alert('Could not start pod', getApiErrorMessage(error));
+      toast.error('Could not start pod', getApiErrorMessage(error));
     } finally {
       setBusyTemplateId(null);
     }
@@ -357,7 +358,7 @@ export default function ExploreScreen({
         ),
       );
     } catch (error) {
-      Alert.alert('Could not update demand', getApiErrorMessage(error));
+      toast.error('Could not update demand', getApiErrorMessage(error));
     } finally {
       setDemandBusyId(null);
     }
@@ -390,7 +391,7 @@ export default function ExploreScreen({
           <View style={styles.masthead}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.kicker, { color: colors.accentText }]}>FIND YOUR PEOPLE</Text>
-              <Text style={styles.pageTitle}>Discover</Text>
+              <Text style={styles.pageTitle}>Explore</Text>
               <View style={styles.liveSummary}>
                 <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
                 <Text style={typography.caption}>

@@ -38,6 +38,7 @@ import {
   ScreenHeader,
   Sheet,
   Tag,
+  TypingIndicator,
 } from '../../components/ui';
 import {
   ClubScreenLoading,
@@ -55,6 +56,7 @@ import {
 } from '../../theme';
 import { formatDateTime } from '../../utils/format';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubChat'>;
 
 function channelSub(channel: ClubChannelRow): string {
@@ -167,7 +169,7 @@ export default function ClubChatScreen({ route, navigation }: Props) {
       setDraft('');
       setPingRoleIds([]);
     } catch {
-      Alert.alert('Could not send message', API_USER_MESSAGE);
+      toast.error('Could not send message', API_USER_MESSAGE);
     } finally {
       setSending(false);
     }
@@ -211,7 +213,7 @@ export default function ClubChatScreen({ route, navigation }: Props) {
             ? { clubOfficerMessageId: message.id }
             : { clubMessageId: message.id }),
           reason: 'HARASSMENT',
-        }).then(() => Alert.alert('Report sent', 'Thanks. We logged this message for review.')),
+        }).then(() => toast.success('Report sent', 'Thanks. We logged this message for review.')),
       });
     }
     if ((mine || canDelete) && channel) {
@@ -220,7 +222,7 @@ export default function ClubChatScreen({ route, navigation }: Props) {
         style: 'destructive',
         onPress: () => void deleteClubChannelMessage(clubId, channel.id, message.id)
           .then(() => setMessages((current) => current.filter((item) => item.id !== message.id)))
-          .catch(() => Alert.alert('Could not delete message', API_USER_MESSAGE)),
+          .catch(() => toast.error('Could not delete message', API_USER_MESSAGE)),
       });
     }
     Alert.alert(message.user.name, message.content, actions);
@@ -240,7 +242,7 @@ export default function ClubChatScreen({ route, navigation }: Props) {
       setTargetRoleIds([]);
       setComposerOpen(false);
     } catch {
-      Alert.alert('Could not post announcement', API_USER_MESSAGE);
+      toast.error('Could not post announcement', API_USER_MESSAGE);
     } finally {
       setSending(false);
     }
@@ -435,9 +437,10 @@ export default function ClubChatScreen({ route, navigation }: Props) {
           onEmptyAction={() => navigation.navigate('ClubDetail', { clubId })}
         />
         {typingIds.length ? (
-          <Text style={[typography.captionSmall, { color: colors.accentText, paddingHorizontal: spacing.xl }]}>
-            Someone is typing…
-          </Text>
+          <TypingIndicator
+            label="Someone is typing…"
+            style={{ paddingHorizontal: spacing.xl }}
+          />
         ) : null}
         {pingRoleIds.length ? (
           <View style={styles.pingBar}>

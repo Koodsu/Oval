@@ -76,11 +76,11 @@ function clubMeetingUrl(clubId: string, meetingId: string): string {
 }
 
 function discoverUrl(): string {
-  return 'oval://discover';
+  return 'oval://explore';
 }
 
 function plansUrl(): string {
-  return 'oval://plans';
+  return 'oval://pods';
 }
 
 function tokenList(to: ExpoPushMessage['to']): string[] {

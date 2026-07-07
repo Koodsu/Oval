@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -50,6 +50,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Mode = 'messages' | 'invites' | 'friends';
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Inbox'>,
@@ -169,7 +170,7 @@ export default function InboxScreen() {
       await load();
     } catch (error) {
       setInvites(previousInvites);
-      Alert.alert('Could not update invite', getApiErrorMessage(error));
+      toast.error('Could not update invite', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -188,7 +189,7 @@ export default function InboxScreen() {
       await load();
     } catch (error) {
       setRequests(previousRequests);
-      Alert.alert('Could not update request', getApiErrorMessage(error));
+      toast.error('Could not update request', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -203,7 +204,7 @@ export default function InboxScreen() {
       await load();
     } catch (error) {
       setOutgoingRequests(previousOutgoing);
-      Alert.alert('Could not cancel request', getApiErrorMessage(error));
+      toast.error('Could not cancel request', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -449,7 +450,7 @@ export default function InboxScreen() {
                 title="No invites waiting"
                 body="When pod creators invite you into something, it shows up here."
                 actionLabel="Browse activities"
-                onAction={() => navigation.navigate('MainTabs', { screen: 'Discover', params: { segment: 'activities' } })}
+                onAction={() => navigation.navigate('MainTabs', { screen: 'Explore' })}
               />
             )}
           </View>

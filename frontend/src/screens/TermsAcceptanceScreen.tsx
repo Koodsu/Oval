@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_USER_MESSAGE, getApiErrorMessage } from '../api';
@@ -15,6 +15,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 const SITE_URL = 'https://www.theovalapp.com';
 
 export default function TermsAcceptanceScreen() {
@@ -28,7 +29,7 @@ export default function TermsAcceptanceScreen() {
 
   const submit = async () => {
     if (!ageConfirmed || !termsAccepted) {
-      Alert.alert(
+      toast.error(
         'Confirmation required',
         'Confirm your age and accept the current policies to continue.',
       );
@@ -38,7 +39,7 @@ export default function TermsAcceptanceScreen() {
     try {
       await acceptGuidelines();
     } catch (error) {
-      Alert.alert('Could not save acceptance', getApiErrorMessage(error, API_USER_MESSAGE));
+      toast.error('Could not save acceptance', getApiErrorMessage(error, API_USER_MESSAGE));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type PodWithUnread = Pod & {
@@ -220,10 +221,7 @@ export default function PodsScreen() {
   const shownHistory = historyExpanded ? history : history.slice(0, 3);
 
   const openDiscover = useCallback(() => {
-    navigation.navigate('MainTabs', {
-      screen: 'Discover',
-      params: { segment: 'activities' },
-    });
+    navigation.navigate('MainTabs', { screen: 'Explore' });
   }, [navigation]);
 
   const handleInvite = async (inviteId: string, accept: boolean) => {
@@ -240,7 +238,7 @@ export default function PodsScreen() {
       await load();
     } catch (error) {
       setInvites(previousInvites);
-      Alert.alert('Could not update invite', getApiErrorMessage(error));
+      toast.error('Could not update invite', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }
@@ -324,7 +322,7 @@ export default function PodsScreen() {
                     </View>
                     <View style={styles.rowCopy}>
                       <View style={styles.titleLine}>
-                        <Text style={typography.heading} numberOfLines={1}>
+                        <Text style={[typography.heading, { flexShrink: 1 }]} numberOfLines={1}>
                           {displayPodTitle(pod)}
                         </Text>
                         {unreadCount > 0 ? <CountBubble count={unreadCount} /> : null}

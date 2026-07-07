@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../../App';
@@ -9,6 +9,7 @@ import { CLUB_CATEGORIES } from '../../constants/clubCategories';
 import { clubCategoryVisual } from '../../constants/clubVisuals';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateClub'>;
 
 const GUIDELINES = [
@@ -51,7 +52,7 @@ export default function CreateClubScreen({ navigation }: Props) {
       navigation.replace('ClubDetail', { clubId: club.id, justCreated: true });
     } catch (e) {
       setBusy(false);
-      Alert.alert('Could not create club', getApiErrorMessage(e));
+      toast.error('Could not create club', getApiErrorMessage(e));
     }
   };
 
