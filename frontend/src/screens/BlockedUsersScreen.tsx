@@ -16,6 +16,7 @@ import {
 import { Theme, createThemedStyles, spacing, useTheme } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'BlockedUsers'>;
 
 type BlockedUser = Awaited<ReturnType<typeof getBlockedUsers>>[number];
@@ -58,7 +59,7 @@ export default function BlockedUsersScreen({ navigation }: Props) {
             await unblockUser(user.id);
             setUsers((current) => current.filter((item) => item.id !== user.id));
           } catch (error) {
-            Alert.alert('Could not unblock user', getApiErrorMessage(error));
+            toast.error('Could not unblock user', getApiErrorMessage(error));
           } finally {
             setBusyId(null);
           }

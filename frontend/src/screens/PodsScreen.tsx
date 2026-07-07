@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type PodWithUnread = Pod & {
@@ -237,7 +238,7 @@ export default function PodsScreen() {
       await load();
     } catch (error) {
       setInvites(previousInvites);
-      Alert.alert('Could not update invite', getApiErrorMessage(error));
+      toast.error('Could not update invite', getApiErrorMessage(error));
     } finally {
       setBusyId(null);
     }

@@ -1,6 +1,5 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -48,6 +47,7 @@ import {
 import { formatTime } from '../../utils/format';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { toast } from '../../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Segment = 'mine' | 'discover';
 
@@ -146,7 +146,7 @@ export default function ClubsHomeScreen({ embedded }: { embedded?: boolean } = {
       await joinClub(club.id);
       await load();
     } catch (error) {
-      Alert.alert('Could not join club', getApiErrorMessage(error));
+      toast.error('Could not join club', getApiErrorMessage(error));
     } finally {
       setJoiningId(null);
     }

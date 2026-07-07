@@ -45,6 +45,7 @@ import {
 } from '../../theme';
 import { formatShortDate } from '../../utils/format';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 
 type ClubTab = 'pulse' | 'events' | 'people' | 'about';
@@ -104,7 +105,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       }
       await refresh();
     } catch {
-      Alert.alert('Could not update membership', API_USER_MESSAGE);
+      toast.error('Could not update membership', API_USER_MESSAGE);
     } finally {
       setMembershipBusy(false);
     }
@@ -123,7 +124,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       setMeetings((current) =>
         current.map((meeting) => meeting.id === nextMeeting.id ? { ...meeting, myRsvp: previous } : meeting),
       );
-      Alert.alert('Could not RSVP', API_USER_MESSAGE);
+      toast.error('Could not RSVP', API_USER_MESSAGE);
     }
   };
 
@@ -137,7 +138,7 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       }
       await refresh();
     } catch {
-      Alert.alert('Could not update role', API_USER_MESSAGE);
+      toast.error('Could not update role', API_USER_MESSAGE);
     } finally {
       setRoleBusyId(null);
     }
@@ -561,8 +562,8 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
           onPress={() => {
             setActionsOpen(false);
             void createReport({ clubId, reason: 'OTHER', details: `Club profile: ${club.name}` })
-              .then(() => Alert.alert('Report sent', 'Thanks. We logged this club for review.'))
-              .catch(() => Alert.alert('Could not send report', API_USER_MESSAGE));
+              .then(() => toast.success('Report sent', 'Thanks. We logged this club for review.'))
+              .catch(() => toast.error('Could not send report', API_USER_MESSAGE));
           }}
         />
         {club.isMember && club.myRole !== 'OWNER' ? (

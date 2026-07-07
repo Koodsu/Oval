@@ -25,6 +25,7 @@ import type { ClubMemberWithUser } from '../../types';
 import { spacing, useTheme } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMembers'>;
 
 export default function ClubMembersScreen({ route, navigation }: Props) {
@@ -64,7 +65,7 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
       setActive(null);
       await refresh();
     } catch {
-      Alert.alert('Could not update role', API_USER_MESSAGE);
+      toast.error('Could not update role', API_USER_MESSAGE);
     }
   };
 
@@ -79,7 +80,7 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
       setActive(null);
       await refresh();
     } catch {
-      Alert.alert('Could not update member tag', API_USER_MESSAGE);
+      toast.error('Could not update member tag', API_USER_MESSAGE);
     }
   };
 
@@ -179,7 +180,7 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
                         setActive(null);
                         return refresh();
                       })
-                      .catch(() => Alert.alert('Could not remove member', API_USER_MESSAGE)),
+                      .catch(() => toast.error('Could not remove member', API_USER_MESSAGE)),
                   },
                 ],
               );

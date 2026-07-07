@@ -23,6 +23,7 @@ import {
 } from '../components/ui';
 import { spacing, useTheme } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminActivityRequests'>;
 
 export default function AdminActivityRequestsScreen({ navigation }: Props) {
@@ -57,7 +58,7 @@ export default function AdminActivityRequestsScreen({ navigation }: Props) {
       await approveActivityRequest(request.id);
       setRequests((current) => current.filter((row) => row.id !== request.id));
     } catch {
-      Alert.alert('Could not approve request', API_USER_MESSAGE);
+      toast.error('Could not approve request', API_USER_MESSAGE);
     } finally {
       setBusyId(null);
     }
@@ -73,7 +74,7 @@ export default function AdminActivityRequestsScreen({ navigation }: Props) {
           setBusyId(request.id);
           void rejectActivityRequest(request.id)
             .then(() => setRequests((current) => current.filter((row) => row.id !== request.id)))
-            .catch(() => Alert.alert('Could not reject request', API_USER_MESSAGE))
+            .catch(() => toast.error('Could not reject request', API_USER_MESSAGE))
             .finally(() => setBusyId(null));
         },
       },

@@ -24,6 +24,7 @@ import { buildClubCalendarIcs } from '../../utils/calendar';
 import { exportTextFile } from '../../utils/fileExport';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubEvents'>;
 
 export default function ClubEventsScreen({ route, navigation }: Props) {
@@ -57,11 +58,11 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
 
   const createMeeting = async () => {
     if (!title.trim() || !location.trim()) {
-      Alert.alert('Missing meeting info', 'Add a title and location.');
+      toast.error('Missing meeting info', 'Add a title and location.');
       return;
     }
     if (time.getTime() <= Date.now() || time.getTime() > latestMeetingDate.getTime()) {
-      Alert.alert('Choose a valid time', 'Meetings must be scheduled within the next 12 months.');
+      toast.error('Choose a valid time', 'Meetings must be scheduled within the next 12 months.');
       return;
     }
     setBusy(true);
@@ -84,7 +85,7 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
       await refresh();
       navigation.navigate('ClubMeeting', { clubId, meetingId: created.id });
     } catch {
-      Alert.alert('Could not create meeting', API_USER_MESSAGE);
+      toast.error('Could not create meeting', API_USER_MESSAGE);
     } finally {
       setBusy(false);
     }

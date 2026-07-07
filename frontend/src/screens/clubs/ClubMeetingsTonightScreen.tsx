@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +28,7 @@ import {
   useTheme,
 } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMeetingsTonight'>;
 
 type MeetingStatus = 'live' | 'soon' | 'upcoming' | 'past';
@@ -87,7 +88,7 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
       const rows = await getClubsWeek();
       setMeetings(sortMeetings(rows));
     } catch (error) {
-      Alert.alert("Could not load this week's meetings", getApiErrorMessage(error));
+      toast.error("Could not load this week's meetings", getApiErrorMessage(error));
     }
   }, []);
 

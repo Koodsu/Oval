@@ -40,6 +40,7 @@ import {
   ScreenHeader,
   Sheet,
   Sticker,
+  TypingIndicator,
 } from '../components/ui';
 import {
   BORDER_W,
@@ -57,6 +58,7 @@ import { REACTION_EMOJIS } from '../constants/reactions';
 import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
 import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodChat'>;
 
 const HEART_EMOJI = '❤️';
@@ -161,7 +163,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
       });
       setHasMore(!!response.hasMore);
     } catch (error) {
-      Alert.alert('Could not load earlier messages', getApiErrorMessage(error));
+      toast.error('Could not load earlier messages', getApiErrorMessage(error));
     } finally {
       setLoadingEarlier(false);
     }
@@ -188,7 +190,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
       setReplyTo(null);
       setMessages((current) => [...current, sent]);
     } catch (error) {
-      Alert.alert('Could not send message', getApiErrorMessage(error));
+      toast.error('Could not send message', getApiErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -204,7 +206,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
         : await addPodMessageReaction(podId, message.id, emoji);
       setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
     } catch (error) {
-      Alert.alert('Could not update reaction', getApiErrorMessage(error));
+      toast.error('Could not update reaction', getApiErrorMessage(error));
     }
   };
 
@@ -217,9 +219,9 @@ export default function PodChatScreen({ route, navigation }: Props) {
         targetUserId: message.user.id,
         reason,
       });
-      Alert.alert('Report sent', 'Thanks. We logged this pod message for review.');
+      toast.success('Report sent', 'Thanks. We logged this pod message for review.');
     } catch (error) {
-      Alert.alert('Could not send report', getApiErrorMessage(error));
+      toast.error('Could not send report', getApiErrorMessage(error));
     }
   };
 
@@ -237,13 +239,13 @@ export default function PodChatScreen({ route, navigation }: Props) {
             void (async () => {
               try {
                 await blockUser(message.user.id);
-                Alert.alert(
+                toast.success(
                   'User blocked',
                   'They can no longer message you. Shared pods are separated for safety.',
                 );
                 navigation.goBack();
               } catch (error) {
-                Alert.alert('Could not block user', getApiErrorMessage(error));
+                toast.error('Could not block user', getApiErrorMessage(error));
               }
             })();
           },
@@ -265,7 +267,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
               await deletePodMessage(podId, message.id);
               setMessages((current) => current.filter((item) => item.id !== message.id));
             } catch (error) {
-              Alert.alert('Could not delete message', getApiErrorMessage(error));
+              toast.error('Could not delete message', getApiErrorMessage(error));
             }
           })();
         },
@@ -312,7 +314,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
       await confirmAttendance(pod.id);
       await load();
     } catch (error) {
-      Alert.alert('Could not confirm attendance', getApiErrorMessage(error));
+      toast.error('Could not confirm attendance', getApiErrorMessage(error));
     } finally {
       setConfirmBusy(false);
     }
@@ -364,9 +366,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
               </View>
             }
             ListHeaderComponent={
-              typingLabel ? (
-                <Text style={[typography.caption, { color: colors.accentText }]}>{typingLabel}</Text>
-              ) : null
+              typingLabel ? <TypingIndicator label={typingLabel} /> : null
             }
             ListFooterComponent={
               hasMore ? (

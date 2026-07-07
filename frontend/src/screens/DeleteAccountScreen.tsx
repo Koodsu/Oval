@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { deleteMyAccount, getApiErrorMessage } from '../api';
 import { spacing, useTheme } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'DeleteAccount'>;
 
 export default function DeleteAccountScreen({ navigation }: Props) {
@@ -26,7 +27,7 @@ export default function DeleteAccountScreen({ navigation }: Props) {
       setBusy(false);
       const message = getApiErrorMessage(e);
       setError(message);
-      Alert.alert('Could not delete account', message);
+      toast.error('Could not delete account', message);
     }
   };
 

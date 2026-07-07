@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -28,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import { getStoredReferral } from '../lib/referrals';
 import {
   AppBackdrop,
+  Banner,
   Button,
   Card,
   Chip,
@@ -50,6 +50,7 @@ import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 import { INTEREST_TAGS } from '../constants/interestTags';
 import { PURPOSE_OPTIONS } from '../constants/profileOptions';
 
+import { toast } from '../lib/toast';
 type Mode = 'login' | 'register' | 'reset';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -164,9 +165,9 @@ export default function AuthScreen() {
       await requestPasswordReset(email.trim());
       setResetCodeSent(true);
       void trackEvent('auth.password_reset_requested');
-      Alert.alert('Check your email', 'If that email is on Oval, a reset code is on the way.');
+      toast.success('Check your email', 'If that email is on Oval, a reset code is on the way.');
     } catch (error) {
-      Alert.alert('Reset issue', getApiErrorMessage(error, API_USER_MESSAGE));
+      setErrors({ form: getApiErrorMessage(error, API_USER_MESSAGE) });
     } finally {
       setBusy(false);
     }
@@ -196,9 +197,9 @@ export default function AuthScreen() {
       setNewPassword('');
       setResetCode('');
       setMode('login');
-      Alert.alert('Password updated', 'Sign in with your new password.');
+      toast.success('Password updated', 'Sign in with your new password.');
     } catch (error) {
-      Alert.alert('Reset issue', getApiErrorMessage(error, API_USER_MESSAGE));
+      setErrors({ form: getApiErrorMessage(error, API_USER_MESSAGE) });
     } finally {
       setBusy(false);
     }
@@ -269,7 +270,7 @@ export default function AuthScreen() {
         // local flag sync can retry later without blocking onboarding.
       }
       if (!profileSaved) {
-        Alert.alert(
+        toast.info(
           'Account created',
           'We could not save your interests right now — you can add them any time from Edit Profile.',
         );
@@ -282,10 +283,7 @@ export default function AuthScreen() {
         referredBy: referredBy ?? undefined,
       });
     } catch (error) {
-      Alert.alert(
-        mode === 'login' ? 'Sign-in issue' : 'Could not create account',
-        getApiErrorMessage(error, API_USER_MESSAGE),
-      );
+      setErrors({ form: getApiErrorMessage(error, API_USER_MESSAGE) });
     } finally {
       setBusy(false);
     }
@@ -359,6 +357,7 @@ export default function AuthScreen() {
             ) : null}
 
             <View style={styles.form}>
+              {errors.form ? <Banner message={errors.form} kind="error" /> : null}
               {mode === 'reset' ? (
                 <>
                   <Field

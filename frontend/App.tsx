@@ -46,6 +46,7 @@ import CreateClubScreen from './src/screens/clubs/CreateClubScreen';
 import ClubApplyScreen from './src/screens/clubs/ClubApplyScreen';
 import ClubApplicationsScreen from './src/screens/clubs/ClubApplicationsScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import { ToastHost } from './src/components/ToastHost';
 import { initMonitoring, wrapApp } from './src/lib/monitoring';
 
 initMonitoring();
@@ -632,6 +633,7 @@ function App() {
                   <ThemedApp />
                 </AuthProvider>
               </ErrorBoundary>
+              <ToastHost />
             </ThemeReadyGate>
           </ThemeProvider>
         </SafeAreaProvider>

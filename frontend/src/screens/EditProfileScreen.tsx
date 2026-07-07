@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -32,6 +31,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { CLASS_YEAR_OPTIONS } from '../constants/classYears';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
 export default function EditProfileScreen({ navigation }: Props) {
@@ -54,7 +54,7 @@ export default function EditProfileScreen({ navigation }: Props) {
     setCampusZones((current) => {
       if (current.includes(zone)) return current.filter((item) => item !== zone);
       if (current.length >= MAX_CAMPUS_ZONES) {
-        Alert.alert('Zone limit', `You can pick up to ${MAX_CAMPUS_ZONES} campus zones.`);
+        toast.error('Zone limit', `You can pick up to ${MAX_CAMPUS_ZONES} campus zones.`);
         return current;
       }
       return [...current, zone];
@@ -65,7 +65,7 @@ export default function EditProfileScreen({ navigation }: Props) {
     setInterestTags((current) => {
       if (current.includes(tag)) return current.filter((item) => item !== tag);
       if (current.length >= 5) {
-        Alert.alert('Interest limit', 'You can select up to 5 interest tags.');
+        toast.error('Interest limit', 'You can select up to 5 interest tags.');
         return current;
       }
       return [...current, tag];
@@ -86,9 +86,9 @@ export default function EditProfileScreen({ navigation }: Props) {
         clubInterests: clubInterests.trim() || null,
       });
       await updateUser(updated);
-      Alert.alert('Saved', 'Your profile now matches the new experience.');
+      toast.success('Saved', 'Your profile now matches the new experience.');
     } catch (error) {
-      Alert.alert('Could not save', error instanceof Error ? error.message : 'Please try again.');
+      toast.error('Could not save', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setBusy(false);
     }
@@ -99,7 +99,7 @@ export default function EditProfileScreen({ navigation }: Props) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert(
+        toast.info(
           'Photos permission needed',
           'Allow photo access so you can upload a profile picture.',
         );
@@ -117,9 +117,9 @@ export default function EditProfileScreen({ navigation }: Props) {
 
       const response = await uploadAvatar(result.assets[0].uri);
       await updateUser({ avatarUrl: response.avatarUrl });
-      Alert.alert('Profile photo updated', 'Your avatar is now live.');
+      toast.success('Profile photo updated', 'Your avatar is now live.');
     } catch (error) {
-      Alert.alert(
+      toast.error(
         'Could not update photo',
         error instanceof Error ? error.message : 'Please try again.',
       );
@@ -133,9 +133,9 @@ export default function EditProfileScreen({ navigation }: Props) {
     try {
       await deleteAvatar();
       await updateUser({ avatarUrl: null });
-      Alert.alert('Profile photo removed', 'Your avatar has been removed.');
+      toast.success('Profile photo removed', 'Your avatar has been removed.');
     } catch (error) {
-      Alert.alert(
+      toast.error(
         'Could not remove photo',
         error instanceof Error ? error.message : 'Please try again.',
       );

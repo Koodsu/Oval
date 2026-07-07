@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type {
   NativeStackNavigationProp,
@@ -51,6 +51,7 @@ import {
   useTheme,
 } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -81,7 +82,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         setLoadError(null);
       } catch (error) {
         setLoadError(getApiErrorMessage(error));
-        if (showAlert) Alert.alert('Could not load profile', getApiErrorMessage(error));
+        if (showAlert) toast.error('Could not load profile', getApiErrorMessage(error));
       }
     },
     [userId],
@@ -117,7 +118,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       if (action === 'unfriend') await unfriend(userId);
       await refreshRelationship();
     } catch (error) {
-      Alert.alert('Could not update friendship', getApiErrorMessage(error));
+      toast.error('Could not update friendship', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -129,7 +130,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       const thread = await getThreadByUser(userId);
       nav.navigate('Thread', { threadId: thread.id, title: thread.otherUser.name });
     } catch (error) {
-      Alert.alert('Could not open messages', getApiErrorMessage(error));
+      toast.error('Could not open messages', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -143,7 +144,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
       else await blockUser(userId);
       await refreshRelationship();
     } catch (error) {
-      Alert.alert(
+      toast.error(
         isBlocked ? 'Could not unblock user' : 'Could not block user',
         getApiErrorMessage(error),
       );
@@ -161,9 +162,9 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         details: reportDetails.trim() || undefined,
       });
       setReportDetails('');
-      Alert.alert('Report sent', 'Thanks. We logged your report for review.');
+      toast.success('Report sent', 'Thanks. We logged your report for review.');
     } catch (error) {
-      Alert.alert('Could not send report', getApiErrorMessage(error));
+      toast.error('Could not send report', getApiErrorMessage(error));
     } finally {
       setBusyAction(null);
     }

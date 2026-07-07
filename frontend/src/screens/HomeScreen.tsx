@@ -58,6 +58,7 @@ import { useJoinPod } from '../hooks/useJoinPod';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
+import { toast } from '../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function greetingForNow(): string {
@@ -171,7 +172,7 @@ export default function HomeScreen() {
           onPress: () => {
             void requestLocation().then((allowed) => {
               if (!allowed) {
-                Alert.alert(
+                toast.info(
                   'Location is off',
                   'You can still use Oval. Turn on location later if you want nearby pod sorting.',
                 );
@@ -201,7 +202,7 @@ export default function HomeScreen() {
             }
             void requestNotifications().then((allowed) => {
               if (!allowed) {
-                Alert.alert(
+                toast.info(
                   'Alerts are off',
                   'No problem. Oval still works normally without notifications.',
                 );

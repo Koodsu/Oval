@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../../App';
@@ -8,6 +8,7 @@ import { getApplyInfo, getApiErrorMessage, submitApplication } from '../../api';
 import type { ApplyInfo } from '../../types';
 import { spacing, useTheme } from '../../theme';
 
+import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubApply'>;
 
 const STAGE_LABELS: Record<string, string> = {
@@ -45,7 +46,7 @@ export default function ClubApplyScreen({ navigation, route }: Props) {
   const submit = async () => {
     if (!info?.openCycle) return;
     if (answers.some((a) => !a.trim())) {
-      Alert.alert('Answer every question', 'Please fill in all fields before submitting.');
+      toast.error('Answer every question', 'Please fill in all fields before submitting.');
       return;
     }
     setBusy(true);
@@ -53,7 +54,7 @@ export default function ClubApplyScreen({ navigation, route }: Props) {
       const result = await submitApplication(clubId, info.openCycle.id, answers.map((a) => a.trim()));
       setSubmittedStage(result.stage);
     } catch (e) {
-      Alert.alert('Could not submit application', getApiErrorMessage(e));
+      toast.error('Could not submit application', getApiErrorMessage(e));
     } finally {
       setBusy(false);
     }

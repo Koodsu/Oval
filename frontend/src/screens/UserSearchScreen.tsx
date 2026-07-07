@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, searchUsers, sendFriendRequest } from '../api';
@@ -16,6 +16,7 @@ import {
 } from '../components/ui';
 import { Theme, createThemedStyles, spacing, useTheme } from '../theme';
 
+import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'UserSearch'>;
 
 export default function UserSearchScreen({ navigation }: Props) {
@@ -41,7 +42,7 @@ export default function UserSearchScreen({ navigation }: Props) {
           if (!cancelled) setResults(users);
         })
         .catch((error) => {
-          if (!cancelled) Alert.alert('Could not search users', getApiErrorMessage(error));
+          if (!cancelled) toast.error('Could not search users', getApiErrorMessage(error));
         });
     }, 250);
 
@@ -62,7 +63,7 @@ export default function UserSearchScreen({ navigation }: Props) {
         next.delete(userId);
         return next;
       });
-      Alert.alert('Could not send request', getApiErrorMessage(error));
+      toast.error('Could not send request', getApiErrorMessage(error));
     } finally {
       setBusyUserId(null);
     }
