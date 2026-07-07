@@ -43,10 +43,13 @@ describe('Inbox summary', () => {
         status: 'FORMING',
       },
     });
+    // joinedAt explicitly in the past: message.createdAt must be strictly > joinedAt
+    // to count as unread, and both default to now() at ms precision (flaky otherwise).
+    const joinedAt = new Date(Date.now() - 60_000);
     await prisma.podMember.createMany({
       data: [
-        { podId: pod.id, userId: me.id },
-        { podId: pod.id, userId: friend.id },
+        { podId: pod.id, userId: me.id, joinedAt },
+        { podId: pod.id, userId: friend.id, joinedAt },
       ],
     });
     await prisma.message.create({
