@@ -176,7 +176,6 @@ export default function ExploreScreen({
   const [requestTitle, setRequestTitle] = useState('');
   const [requestCategory, setRequestCategory] = useState(CATEGORIES[0]);
   const [requestDescription, setRequestDescription] = useState('');
-  const [requestDefaultLocation, setRequestDefaultLocation] = useState('');
   const [requestBusy, setRequestBusy] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -301,15 +300,15 @@ export default function ExploreScreen({
     }
     setRequestBusy(true);
     try {
+      // No location here on purpose: catalog entries describe *what* the
+      // activity is; each pod picks *where* it meets when it's created.
       await requestActivity({
         title: requestTitle.trim(),
         category: requestCategory,
         description: requestDescription.trim() || undefined,
-        defaultLocation: requestDefaultLocation.trim() || undefined,
       });
       setRequestTitle('');
       setRequestDescription('');
-      setRequestDefaultLocation('');
       setRequestSubmitted(true);
     } catch (error) {
       toast.error('Could not submit request', getApiErrorMessage(error));
@@ -734,12 +733,6 @@ export default function ExploreScreen({
               ))}
             </View>
           </View>
-          <Field
-            label="Location"
-            value={requestDefaultLocation}
-            onChangeText={setRequestDefaultLocation}
-            placeholder="The Oval"
-          />
           <Field
             label="Details"
             value={requestDescription}

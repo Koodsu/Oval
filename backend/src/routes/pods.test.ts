@@ -125,6 +125,40 @@ describe('Pods API (integration)', () => {
         })
         .expect(400);
     });
+
+    it('rejects off-campus pins and accepts pins on core campus (the Oval)', async () => {
+      // East of High St (off-campus bars block) — outside the fence. Runs
+      // first so the rejected request doesn't trip the one-active-pod rule.
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+          latitude: 39.9989,
+          longitude: -83.002,
+        })
+        .expect(400);
+
+      // The Oval itself — regression guard: the pre-2026-07 polygon's east
+      // edge sat west of High St and rejected this exact point.
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+          latitude: 39.9989,
+          longitude: -83.0131,
+        })
+        .expect(201);
+    });
   });
 
   describe('PATCH /pods/:id/privacy', () => {

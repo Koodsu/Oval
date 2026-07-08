@@ -409,6 +409,7 @@ export default function HomeScreen() {
               uri: member.user.avatarUrl,
             }))}
             size={28}
+            onColor
           />
           {hero.mine ? (
             <View style={[styles.heroPill, { backgroundColor: colors.onPrimary }]}>
@@ -722,6 +723,11 @@ export default function HomeScreen() {
                     rotateEnabled={false}
                     pitchEnabled={false}
                   >
+                    <Polygon
+                      coordinates={OSU_CAMPUS_POLYGON}
+                      fillColor="rgba(200,16,46,0.06)"
+                      strokeColor="rgba(200,16,46,0.3)"
+                    />
                     {mappablePods.map((pod) => (
                       <Marker
                         key={pod.id}

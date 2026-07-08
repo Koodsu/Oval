@@ -1063,7 +1063,15 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
     const isSelf = req.user!.userId === targetId;
     const isFriend = isSelf ? true : await areFriends(req.user!.userId, targetId);
 
-    const [podsJoined, noShowPods, friendCount, sharedPodCount] = await Promise.all([
+    // podsJoined counts every membership the user ever took, whatever the pod's
+    // fate — a user who joined three pods that later expired has still "joined
+    // 3 pods". Attendance and reliability stay strictly completed-pod based:
+    // you can't attend (or flake on) a pod that never happened, so those come
+    // from completedPodsJoined below. Before this split, podsJoined also only
+    // counted COMPLETED pods, which read as "0 pods joined" right next to a
+    // nonzero "people met" for any user whose pods hadn't completed yet.
+    const [podsJoined, completedPodsJoined, noShowPods, friendCount, sharedPodCount] = await Promise.all([
+      prisma.podMember.count({ where: { userId: targetId } }),
       prisma.podMember.count({ where: { userId: targetId, pod: { status: 'COMPLETED' } } }),
       prisma.noShowReport.groupBy({ by: ['podId'], where: { targetUserId: targetId } }),
       // Count friendships for this user (appears as userA or userB)
@@ -1085,9 +1093,9 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
     ]);
 
     const noShowPodCount = noShowPods.length;
-    const podsAttended = podsJoined - noShowPodCount;
+    const podsAttended = Math.max(0, completedPodsJoined - noShowPodCount);
     const reliabilityScore =
-      podsJoined > 0 ? Math.round((podsAttended / podsJoined) * 100) : null;
+      completedPodsJoined > 0 ? Math.round((podsAttended / completedPodsJoined) * 100) : null;
 
     res.json({
       id: user.id,

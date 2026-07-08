@@ -44,7 +44,12 @@ import {
   Sticker,
 } from '../components/ui';
 import PodTemplatePicker from '../components/PodTemplatePicker';
-import { OSU_CAMPUS_CENTER, OSU_CAMPUS_DELTA, OSU_CAMPUS_POLYGON } from '../constants/campusMap';
+import {
+  OSU_CAMPUS_CENTER,
+  OSU_CAMPUS_DELTA,
+  OSU_CAMPUS_POLYGON,
+  isCampusCoordinate,
+} from '../constants/campusMap';
 import {
   PodTemplate,
   customCreateDefaults,
@@ -254,6 +259,16 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
 
   const handleMapPress = async (event: MapPressEvent) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
+    // Same fence the server enforces — reject off-campus pins at tap time
+    // instead of letting the create call fail later.
+    if (!isCampusCoordinate(latitude, longitude)) {
+      setLocationMessage(null);
+      toast.error(
+        'Keep it on campus',
+        'Pods meet on campus — drop your pin inside the highlighted area.',
+      );
+      return;
+    }
     const locationBeforeLookup = latestLocationRef.current;
     setSelectedPin({ latitude, longitude });
     setResolvingAddress(true);
