@@ -51,12 +51,13 @@ import { toast } from '../../lib/toast';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Segment = 'mine' | 'discover';
 
-function meetingSignal(club: ClubDirectoryEntry, meeting?: ClubMeetingToday) {
+function meetingSignal(club: ClubDirectoryEntry, meeting?: ClubMeetingToday): string | null {
   if (meeting) return `tonight ${formatTime(meeting.meetingTime)}`;
   if (club.upcomingMeetingCount) {
     return `${club.upcomingMeetingCount} upcoming meeting${club.upcomingMeetingCount === 1 ? '' : 's'}`;
   }
-  return 'schedule pending';
+  // Nothing scheduled: say nothing. "schedule pending" read like an error state.
+  return null;
 }
 
 function myClubSignal(row: MyClubMembershipRow) {

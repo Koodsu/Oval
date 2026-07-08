@@ -327,5 +327,31 @@ describe('Attendance API', () => {
       expect(res.body.podsAttended).toBe(1);
       expect(res.body.reliabilityScore).toBe(100);
     });
+
+    it('counts a still-forming pod in podsJoined without touching attendance or reliability', async () => {
+      // user1 starts a pod that never completes — it stays FORMING.
+      await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token1}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: 'Thompson Library',
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .get(`/users/${userId1}`)
+        .set('Authorization', `Bearer ${token1}`)
+        .expect(200);
+
+      // Joining is counted immediately; attendance and reliability wait for
+      // the pod to actually complete.
+      expect(res.body.podsJoined).toBe(1);
+      expect(res.body.podsAttended).toBe(0);
+      expect(res.body.reliabilityScore).toBeNull();
+    });
   });
 });

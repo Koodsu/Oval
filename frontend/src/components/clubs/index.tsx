@@ -183,7 +183,8 @@ export function ClubRow({
   joining,
 }: {
   club: ClubDirectoryEntry;
-  signal: string;
+  /** Optional meeting hint ("tonight 7:00 PM"). Row omits it when null. */
+  signal: string | null;
   onPress: () => void;
   onJoin?: () => void;
   joining?: boolean;
@@ -207,7 +208,8 @@ export function ClubRow({
           {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
         </View>
         <Text style={typography.captionSmall} numberOfLines={1}>
-          {club.category} · {club.memberCount} member{club.memberCount === 1 ? '' : 's'} · {signal}
+          {club.category} · {club.memberCount} member{club.memberCount === 1 ? '' : 's'}
+          {signal ? ` · ${signal}` : ''}
         </Text>
       </View>
       {!club.isMember && onJoin ? (

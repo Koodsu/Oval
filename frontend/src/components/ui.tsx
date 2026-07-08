@@ -756,12 +756,22 @@ export function Avatar({
   size = 44,
   tilt = 0,
   style,
+  backgroundColor,
+  initialsColor,
+  borderColor,
 }: {
   name?: string | null;
   uri?: string | null;
   size?: number;
   tilt?: number;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Overrides for saturated surfaces (e.g. the scarlet hero slab), where the
+   * seeded pastel fill and hairline border disappear into the background.
+   */
+  backgroundColor?: string;
+  initialsColor?: string;
+  borderColor?: string;
 }) {
   const { colors } = useTheme();
   const resolved = resolveAvatarUrl(uri);
@@ -781,8 +791,8 @@ export function Avatar({
           width: size,
           height: size,
           borderRadius: size * 0.34,
-          backgroundColor: accent.soft,
-          borderColor: colors.border,
+          backgroundColor: backgroundColor ?? accent.soft,
+          borderColor: borderColor ?? colors.border,
         },
         style,
       ]}
@@ -797,7 +807,7 @@ export function Avatar({
         <Text
           style={[
             avatarStyles.initials,
-            { color: accent.tint, fontSize: Math.max(11, size * 0.34) },
+            { color: initialsColor ?? accent.tint, fontSize: Math.max(11, size * 0.34) },
           ]}
         >
           {initials}
@@ -906,12 +916,18 @@ export function AvatarStack({
   max = 4,
   overflowCount,
   style,
+  onColor = false,
 }: {
   names: { name?: string | null; uri?: string | null }[];
   size?: number;
   max?: number;
   overflowCount?: number;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Render for a solid primary-colored surface: solid onPrimary chips with
+   * primary initials, so the stack doesn't vanish red-on-red on the hero slab.
+   */
+  onColor?: boolean;
 }) {
   const { colors } = useTheme();
   const shown = names.slice(0, max);
@@ -924,6 +940,9 @@ export function AvatarStack({
           name={member.name}
           uri={member.uri}
           size={size}
+          backgroundColor={onColor ? colors.onPrimary : undefined}
+          initialsColor={onColor ? colors.primary : undefined}
+          borderColor={onColor ? colors.onPrimary : undefined}
           style={{ marginLeft: index === 0 ? 0 : -size * 0.3 }}
         />
       ))}
@@ -936,12 +955,17 @@ export function AvatarStack({
               height: size,
               borderRadius: size * 0.32,
               marginLeft: -size * 0.3,
-              backgroundColor: colors.surfaceAlt,
-              borderColor: colors.border,
+              backgroundColor: onColor ? colors.onPrimary : colors.surfaceAlt,
+              borderColor: onColor ? colors.onPrimary : colors.border,
             },
           ]}
         >
-          <Text style={[avatarStyles.initials, { color: colors.sub, fontSize: size * 0.34 }]}>
+          <Text
+            style={[
+              avatarStyles.initials,
+              { color: onColor ? colors.primary : colors.sub, fontSize: size * 0.34 },
+            ]}
+          >
             +{extra}
           </Text>
         </View>
