@@ -1,9 +1,6 @@
 {
   "version": 2,
   "buildCommand": "npx prisma migrate deploy && npm run build",
-  "env": {
-    "TZ": "America/New_York"
-  },
   "functions": {
     "src/server.ts": {
       "maxDuration": 30
