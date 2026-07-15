@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma';
 import { requireVerifiedAuth as requireAuth, AuthRequest } from '../middleware/auth';
-import { getLocationsForCategory } from '../config/locations';
+import { getLocationsForCategory, getCoordinatesForLocation } from '../config/locations';
 import { getInterestCategories } from '../config/interestTags';
 import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { NotificationService } from '../lib/NotificationService';
@@ -61,8 +61,9 @@ const OSU_CAMPUS_POLYGON = [
   { latitude: 40.0006, longitude: -83.0428 }, // Kenny & Kinnear Rd
 ];
 
-// Ray-casting point-in-polygon check
-function isInsideCampus(lat: number, lng: number): boolean {
+// Ray-casting point-in-polygon check. Exported so tests can assert every
+// LOCATION_COORDINATES entry sits inside the fence.
+export function isInsideCampus(lat: number, lng: number): boolean {
   let inside = false;
   const n = OSU_CAMPUS_POLYGON.length;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -531,6 +532,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       }
     }
 
+    // No pin dropped: fill coordinates from the named-location table so
+    // suggested-spot and template pods still show up on the map. Table entries
+    // are verified on-campus by locations.test.ts, so no fence re-check needed.
+    const namedCoords = hasCoords ? null : getCoordinatesForLocation(locationInput);
+
     const newPod = await prisma.pod.create({
       data: {
         activityId,
@@ -541,8 +547,8 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
         maxMembers,
         status: FORMING,
         creatorId: userId,
-        latitude: hasCoords ? rawLat : null,
-        longitude: hasCoords ? rawLng : null,
+        latitude: hasCoords ? rawLat : namedCoords?.latitude ?? null,
+        longitude: hasCoords ? rawLng : namedCoords?.longitude ?? null,
       },
     });
 

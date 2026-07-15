@@ -126,6 +126,43 @@ describe('Pods API (integration)', () => {
         .expect(400);
     });
 
+    it('fills coordinates from the named-location table when no pin is dropped', async () => {
+      const res = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: 'Thompson Library', // suggested chip, no map pin
+        })
+        .expect(201);
+
+      // Suggested-spot pods used to save null coords and never show on the map.
+      expect(res.body.latitude).toBeCloseTo(39.9992, 3);
+      expect(res.body.longitude).toBeCloseTo(-83.0155, 3);
+    });
+
+    it('keeps explicit pin coordinates over the named-location table', async () => {
+      const res = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          minMembers: 2,
+          maxMembers: 4,
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: 'Thompson Library',
+          latitude: 39.9989,
+          longitude: -83.0131, // pin on the Oval, not the library
+        })
+        .expect(201);
+
+      expect(res.body.latitude).toBeCloseTo(39.9989, 4);
+      expect(res.body.longitude).toBeCloseTo(-83.0131, 4);
+    });
+
     it('rejects off-campus pins and accepts pins on core campus (the Oval)', async () => {
       // East of High St (off-campus bars block) — outside the fence. Runs
       // first so the rejected request doesn't trip the one-active-pod rule.

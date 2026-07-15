@@ -28,6 +28,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import * as fs from 'fs';
+import { getCoordinatesForLocation } from '../src/config/locations';
 import * as path from 'path';
 import { CURRENT_TERMS_VERSION } from '../src/config/legal';
 
@@ -182,8 +183,12 @@ async function main() {
   }
 
   // --- Pods (first one gets a full chat thread) ---
-  const ovalLat = 40.0076;
-  const ovalLng = -83.0306;
+  // Fallback anchor: center of the Oval. Real pins come from the named-location
+  // table; never fan pods out from a fake anchor — the old `40.0076, -83.0306 +
+  // index * 0.001` hack put "Lincoln Tower Fields" ~1.7km north of the actual
+  // park (and outside the campus fence entirely).
+  const ovalLat = 39.999;
+  const ovalLng = -83.0129;
   // Spread across the next 7 days so the upcoming-week view looks alive.
   const podSpecs = [
     { actIdx: 1, location: 'The Lounge – High Street', inHours: 18, size: 4, max: 4, chat: true },
@@ -204,6 +209,10 @@ async function main() {
   for (let i = 0; i < podSpecs.length; i++) {
     const s = podSpecs[i];
     const memberIdxs = shuffled(POOL_SIZE).slice(0, s.size);
+    // Pin each pod at its named location; tiny jitter so same-spot pods
+    // (e.g. the two Lincoln Tower Fields pods) don't stack into one marker.
+    const coords = getCoordinatesForLocation(s.location);
+    const jitter = () => (Math.random() - 0.5) * 0.0006; // ~±30m
     const pod = await prisma.pod.create({
       data: {
         activityId: activityIds[s.actIdx],
@@ -213,8 +222,8 @@ async function main() {
         maxMembers: s.max,
         status: 'FORMING',
         creatorId: users[memberIdxs[0]].id,
-        latitude: ovalLat + (i - 2) * 0.001,
-        longitude: ovalLng + (i - 2) * 0.001,
+        latitude: (coords?.latitude ?? ovalLat) + jitter(),
+        longitude: (coords?.longitude ?? ovalLng) + jitter(),
         members: { create: memberIdxs.map((m) => ({ userId: users[m].id, confirmedAt: new Date() })) },
       },
     });
