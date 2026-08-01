@@ -56,9 +56,9 @@ export default function PrivacyPolicy() {
 
         <Section id="scope" title="Scope And Operator">
           <p>
-            This policy explains how Brady Van Bibber, doing business as Oval ("Oval," "we,"
-            "us"), handles personal information through the Oval mobile app, theovalapp.com,
-            waitlists, and related support and moderation services.
+            This policy explains how Oval Technologies LLC ("Oval," "we," "us") handles
+            personal information through the Oval mobile app, theovalapp.com, waitlists, and
+            related support and moderation services.
           </p>
           <p>
             Oval is an independent service and is not affiliated with or endorsed by The Ohio

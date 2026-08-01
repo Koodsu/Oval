@@ -44,7 +44,7 @@ export default function TermsOfUse() {
         <Section id="agreement" title="Agreement">
           <p>
             These Terms govern your use of the Oval mobile app, theovalapp.com, and related
-            services operated by Brady Van Bibber, doing business as Oval ("Oval," "we," "us").
+            services operated by Oval Technologies LLC ("Oval," "we," "us").
             By creating an account or using Oval, you agree to these Terms, the Privacy Policy,
             and the Community Guidelines. If you do not agree, do not use Oval.
           </p>

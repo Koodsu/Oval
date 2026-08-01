@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from '../lib/router'
 
 function scrollToWaitlist() {
   document.getElementById('waitlist')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
