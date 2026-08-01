@@ -3,6 +3,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../server';
 import prisma from '../prisma';
+import { getJwtSecret } from '../config/jwt';
 import { createTestUser, getAuthToken } from '../test/helpers';
 
 describe('Web / invite-link routes (public)', () => {
@@ -230,7 +231,7 @@ describe('Web / invite-link routes (public)', () => {
     function makeDeletionToken(userId: string, overrides: Record<string, unknown> = {}) {
       return jwt.sign(
         { purpose: 'account-deletion', userId, ...overrides },
-        process.env.JWT_SECRET as string,
+        getJwtSecret(),
         { expiresIn: '1h' },
       );
     }
