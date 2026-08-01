@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-
-const API_BASE =
-  import.meta.env.VITE_BRIDGE_API_URL ?? import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+import { useParams, Link } from '../lib/router'
+import { API_BASE } from '../lib/apiBase'
 
 const SCARLET = '#CC0000'
 const CREAM = '#F5F0E8'
@@ -45,7 +43,7 @@ export default function PodInvitePage() {
     setPod(null)
     setErrorMessage('')
 
-    const url = `${API_BASE.replace(/\/$/, '')}/pods/${podId}/public`
+    const url = `${API_BASE}/pods/${podId}/public`
 
     fetch(url)
       .then(async (res) => {
@@ -77,8 +75,7 @@ export default function PodInvitePage() {
       })
       .catch(() => {
         if (!cancelled) {
-          setStatus('error')
-          setErrorMessage('Pod not found')
+          setStatus('offline')
         }
       })
 
@@ -94,18 +91,25 @@ export default function PodInvitePage() {
     >
       <div className="flex-1 w-full max-w-[480px] mx-auto px-6 py-12 flex flex-col">
         <header className="flex items-center gap-3 mb-10">
-          <div
-            className="w-9 h-9 flex items-center justify-center flex-shrink-0 font-display text-white text-lg leading-none"
-            style={{ backgroundColor: SCARLET }}
-          >
-            B
-          </div>
+          <img src="/oval-logo.png" alt="Oval" className="w-9 h-9 rounded-md flex-shrink-0" />
           <span className="font-display text-ink text-3xl tracking-[0.12em] leading-none">OVAL</span>
         </header>
 
         {status === 'loading' && (
           <div className="flex-1 flex items-center justify-center py-20">
             <p className="text-warm-gray text-base">Loading…</p>
+          </div>
+        )}
+
+        {status === 'offline' && (
+          <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-lg font-semibold text-ink mb-2">Couldn&apos;t reach the server</p>
+            <p className="text-warm-gray text-sm mb-8">
+              Check your connection and try again in a moment.
+            </p>
+            <Link to="/" className="text-[#CC0000] font-semibold underline underline-offset-2">
+              Back to home
+            </Link>
           </div>
         )}
 

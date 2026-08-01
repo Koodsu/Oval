@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from '../lib/router'
 
 const LINK_CLASS = 'text-[12px] font-medium text-white/30 no-underline transition-colors duration-150 hover:text-white/70'
 
@@ -29,7 +29,7 @@ export default function Footer() {
       </div>
 
       <div className="relative mx-auto mt-10 flex max-w-[1280px] flex-col gap-2 border-t border-white/[0.06] pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[11px] text-white/25">© 2026 Oval. Made for Buckeyes.</p>
+        <p className="text-[11px] text-white/25">© 2026 Oval Technologies LLC. Made for Buckeyes.</p>
         <p className="text-[11px] text-white/25">Not affiliated with The Ohio State University.</p>
       </div>
     </footer>

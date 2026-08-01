@@ -7,6 +7,8 @@ import type {
   ClubDetail,
   ClubMeetingWithMeta,
 } from '../types';
+import { clubExperienceFixture } from '../dev/clubExperienceFixtures';
+import { getUiPreviewMode } from '../dev/previewMode';
 
 export const CLUB_PERMISSION_OPTIONS = [
   { value: 'MANAGE_MEMBERS', title: 'Manage members', body: 'Remove members and update roster access.' },
@@ -39,15 +41,29 @@ export function roleRank(role: string | null | undefined) {
 }
 
 export function useClub(clubId: string) {
-  const cached = cache.get(clubId);
-  const [club, setClubState] = useState<ClubDetail | null>(cached?.club ?? null);
-  const [meetings, setMeetingsState] = useState<ClubMeetingWithMeta[]>(cached?.meetings ?? []);
-  const [announcements, setAnnouncementsState] = useState<ClubAnnouncementRow[]>(
-    cached?.announcements ?? [],
+  const previewMode = useMemo(() => getUiPreviewMode(), []);
+  const preview = useMemo(
+    () => clubExperienceFixture(previewMode),
+    [previewMode],
   );
-  const [channels, setChannelsState] = useState<ClubChannelRow[]>(cached?.channels ?? []);
-  const [loading, setLoading] = useState(!cached);
-  const [error, setError] = useState<string | null>(null);
+  const previewLoadError = previewMode === 'club-load-error';
+  const cached = cache.get(clubId);
+  const [club, setClubState] = useState<ClubDetail | null>(
+    previewLoadError ? null : preview?.club ?? cached?.club ?? null,
+  );
+  const [meetings, setMeetingsState] = useState<ClubMeetingWithMeta[]>(
+    preview?.meetings ?? cached?.meetings ?? [],
+  );
+  const [announcements, setAnnouncementsState] = useState<ClubAnnouncementRow[]>(
+    preview?.announcements ?? cached?.announcements ?? [],
+  );
+  const [channels, setChannelsState] = useState<ClubChannelRow[]>(
+    preview?.channels ?? cached?.channels ?? [],
+  );
+  const [loading, setLoading] = useState(!previewLoadError && !preview && !cached);
+  const [error, setError] = useState<string | null>(
+    previewLoadError ? 'Could not load this club. Check your connection and try again.' : null,
+  );
 
   const writeCache = useCallback(
     (
@@ -70,6 +86,21 @@ export function useClub(clubId: string) {
 
   const load = useCallback(
     async (force = false) => {
+      if (preview) {
+        if (previewLoadError) {
+          setClubState(null);
+          setLoading(false);
+          setError('Could not load this club. Check your connection and try again.');
+          return;
+        }
+        setClubState(preview.club);
+        setMeetingsState(preview.meetings);
+        setAnnouncementsState(preview.announcements);
+        setChannelsState(preview.channels);
+        setLoading(false);
+        setError(null);
+        return;
+      }
       const current = cache.get(clubId);
       if (!force && current && Date.now() - current.loadedAt < CACHE_MS) {
         setClubState(current.club);
@@ -108,7 +139,7 @@ export function useClub(clubId: string) {
         setLoading(false);
       }
     },
-    [clubId],
+    [clubId, preview, previewLoadError],
   );
 
   useFocusEffect(
@@ -163,10 +194,13 @@ export function useClub(clubId: string) {
       return new Set(CLUB_PERMISSION_OPTIONS.map((permission) => permission.value));
     }
     if (club?.myRole === 'OFFICER') {
-      return new Set([...DEFAULT_OFFICER_PERMISSIONS, ...(club.officerPermissions ?? [])]);
+      return new Set(
+        club.myPermissions
+        ?? [...DEFAULT_OFFICER_PERMISSIONS, ...(club.officerPermissions ?? [])],
+      );
     }
     return new Set<string>();
-  }, [club?.myRole, club?.officerPermissions]);
+  }, [club?.myRole, club?.myPermissions, club?.officerPermissions]);
 
   const can = useCallback((permission: string) => permissions.has(permission), [permissions]);
   const isLeader = roleRank(club?.myRole) >= roleRank('OFFICER');

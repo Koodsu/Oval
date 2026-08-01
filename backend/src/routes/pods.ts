@@ -24,6 +24,9 @@ const CANCELLED = 'CANCELLED';
 const PUBLIC_LOCATION_TYPE = 'public';
 const PRIVATE_LOCATION_TYPE = 'private';
 const MAX_LOCATION_LENGTH = 120;
+const MAX_POD_TITLE_LENGTH = 60;
+const MAX_POD_NOTE_LENGTH = 120;
+const MAX_LOCATION_ADDRESS_LENGTH = 180;
 
 /**
  * OSU campus geofence. Roads, clockwise from the northwest corner:
@@ -388,18 +391,26 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const userId = req.user!.userId;
-    const memberPodIds = new Set(
-      (
-        await prisma.podMember.findMany({
-          where: { userId, podId: { in: result.map((p) => p.id) } },
-          select: { podId: true },
-        })
-      ).map((m) => m.podId)
-    );
+    const podIds = result.map((p) => p.id);
+    const [memberRows, waitlistRows] = await Promise.all([
+      prisma.podMember.findMany({
+        where: { userId, podId: { in: podIds } },
+        select: { podId: true },
+      }),
+      prisma.podWaitlist.findMany({
+        where: { userId, podId: { in: podIds }, status: { in: ['WAITING', 'NOTIFIED'] } },
+        select: { podId: true, position: true },
+      }),
+    ]);
+    const memberPodIds = new Set(memberRows.map((m) => m.podId));
+    const waitlistPositions = new Map(waitlistRows.map((w) => [w.podId, w.position]));
 
     res.json(
       result.map((p) => {
-        const parsed = parsePodMembers(p);
+        const parsed = {
+          ...parsePodMembers(p),
+          myWaitlistPosition: waitlistPositions.get(p.id) ?? null,
+        };
         if (!memberPodIds.has(p.id)) return approximateCoords(parsed);
         return parsed;
       })
@@ -459,7 +470,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
 
     const minMembers = Math.max(2, Math.min(10, Number(req.body.minMembers) || 2));
     const maxMembers = Math.max(minMembers, Math.min(10, Number(req.body.maxMembers) || 4));
+    const titleInput = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const noteInput = typeof req.body.note === 'string' ? req.body.note.trim() : '';
     const locationInput = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    const locationAddressInput =
+      typeof req.body.locationAddress === 'string' ? req.body.locationAddress.trim() : '';
     const visibilityInput =
       typeof req.body.visibility === 'string'
         ? req.body.visibility.trim().toLowerCase()
@@ -480,8 +495,27 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       res.status(400).json({ error: `Location cannot exceed ${MAX_LOCATION_LENGTH} characters` });
       return;
     }
+    if (titleInput.length > MAX_POD_TITLE_LENGTH) {
+      res.status(400).json({ error: `Pod title cannot exceed ${MAX_POD_TITLE_LENGTH} characters` });
+      return;
+    }
+    if (noteInput.length > MAX_POD_NOTE_LENGTH) {
+      res.status(400).json({ error: `Pod note cannot exceed ${MAX_POD_NOTE_LENGTH} characters` });
+      return;
+    }
+    if (locationAddressInput.length > MAX_LOCATION_ADDRESS_LENGTH) {
+      res.status(400).json({
+        error: `Location address cannot exceed ${MAX_LOCATION_ADDRESS_LENGTH} characters`,
+      });
+      return;
+    }
 
-    const moderation = await moderateTextContent([locationInput]);
+    const moderation = await moderateTextContent([
+      titleInput,
+      noteInput,
+      locationInput,
+      locationAddressInput,
+    ]);
     if (moderation) {
       res.status(moderation.status).json({ error: moderation.message });
       return;
@@ -540,8 +574,11 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     const newPod = await prisma.pod.create({
       data: {
         activityId,
+        title: titleInput || null,
+        note: noteInput || null,
         meetupTime,
         location: locationInput,
+        locationAddress: locationAddressInput || null,
         locationType: visibilityInput,
         minMembers,
         maxMembers,
@@ -1064,17 +1101,17 @@ router.get('/:id/public', async (req: Request, res: Response): Promise<void> => 
     }
 
     if (pod.status === EXPIRED) {
-      res.json({ expired: true, podName: pod.activity.title });
+      res.json({ expired: true, podName: pod.title?.trim() || pod.activity.title });
       return;
     }
 
-    const title = pod.activity.title;
+    const title = pod.title?.trim() || pod.activity.title;
     const category = pod.activity.category;
     res.json({
       expired: false,
       podName: title,
-      activityName: title,
-      activityEmoji: getActivityEmoji(title, category),
+      activityName: pod.activity.title,
+      activityEmoji: getActivityEmoji(pod.activity.title, category),
       meetupTime: pod.meetupTime.toISOString(),
       location: pod.location,
       memberCount: pod._count.members,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../lib/router'
 import WaitlistForm from './WaitlistForm'
 
 const FEED_CARDS = [

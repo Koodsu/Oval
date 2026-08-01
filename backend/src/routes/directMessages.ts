@@ -87,7 +87,32 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
   try {
     const thread = await prisma.directMessageThread.findUnique({
       where: { id: threadId },
-      select: { userAId: true, userBId: true, userALastReadAt: true, userBLastReadAt: true },
+      select: {
+        userAId: true,
+        userBId: true,
+        userALastReadAt: true,
+        userBLastReadAt: true,
+        userA: {
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            verifiedUniversity: true,
+          },
+        },
+        userB: {
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            verifiedUniversity: true,
+          },
+        },
+      },
     });
     if (!thread) {
       res.status(404).json({ error: 'Thread not found' });
@@ -177,9 +202,14 @@ router.get('/threads/:id', async (req: AuthRequest, res: Response): Promise<void
     const typingUserIds = getTypingUserIds('dm', threadId, userId);
     const otherLastReadAt =
       thread.userAId === userId ? thread.userBLastReadAt : thread.userALastReadAt;
+    const otherUser = withDisplayName(
+      thread.userAId === userId ? thread.userB : thread.userA,
+      'full',
+    );
 
     res.json({
       messages: messages.map(formatDmMessage),
+      otherUser,
       typingUserIds,
       otherLastReadAt: otherLastReadAt?.toISOString() ?? null,
       hasMore,

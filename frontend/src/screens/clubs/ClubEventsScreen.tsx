@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   API_USER_MESSAGE,
   createClubMeeting,
+  rsvpClubMeeting,
   type ClubVisibility,
 } from '../../api';
 import type { RootStackParamList } from '../../../App';
@@ -13,12 +14,16 @@ import {
   Button,
   Chip,
   DateTimeField,
-  EmptyState,
   Field,
   ScreenHeader,
   Sheet,
 } from '../../components/ui';
-import { ClubScreenLoading, MeetingCard, RoleTargetPicker } from '../../components/clubs';
+import {
+  ClubEmptyState,
+  ClubScreenLoading,
+  MeetingCard,
+  RoleTargetPicker,
+} from '../../components/clubs';
 import { useClub } from '../../hooks/useClub';
 import { buildClubCalendarIcs } from '../../utils/calendar';
 import { exportTextFile } from '../../utils/fileExport';
@@ -32,29 +37,92 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
   const { club, meetings, can, loading, refresh } = useClub(clubId);
   const { typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const [composerOpen, setComposerOpen] = useState(Boolean(startCreate));
+  const [composerOpen, setComposerOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [time, setTime] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000));
   const [visibility, setVisibility] = useState<ClubVisibility>('PUBLIC');
   const [targetRoleIds, setTargetRoleIds] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const canCreate = can('CREATE_MEETINGS');
+
+  useEffect(() => {
+    if (!startCreate) return;
+    if (__DEV__ && club?.id === 'preview-photography') {
+      setTitle('Photo Critique Night');
+      setLocation('Media Center Room 204');
+      setDescription('Share your work, get thoughtful feedback, and level up your photography. All skill levels welcome.');
+      const previewTime = new Date();
+      previewTime.setDate(previewTime.getDate() + 3);
+      previewTime.setHours(19, 0, 0, 0);
+      setTime(previewTime);
+    }
+    const timer = setTimeout(() => setComposerOpen(true), 250);
+    return () => clearTimeout(timer);
+  }, [club?.id, startCreate]);
   const latestMeetingDate = useMemo(() => {
     const latest = new Date();
     latest.setFullYear(latest.getFullYear() + 1);
     return latest;
   }, []);
 
-  const groups = useMemo(() => {
-    const result = new Map<string, typeof meetings>();
-    for (const meeting of meetings) {
-      const key = new Date(meeting.meetingTime).toLocaleDateString([], { month: 'long', year: 'numeric' });
-      result.set(key, [...(result.get(key) ?? []), meeting]);
+  const months = useMemo(() => {
+    const result: Array<{ key: string; label: string }> = [];
+    const cursor = new Date();
+    cursor.setDate(1);
+    for (let index = 0; index < 6; index += 1) {
+      const month = new Date(cursor.getFullYear(), cursor.getMonth() + index, 1);
+      result.push({
+        key: `${month.getFullYear()}-${month.getMonth()}`,
+        label: month.toLocaleDateString([], { month: 'short' }),
+      });
     }
-    return [...result.entries()];
-  }, [meetings]);
+    return result;
+  }, []);
+
+  const activeMonth = selectedMonth ?? months[0]?.key ?? null;
+  const visibleMeetings = useMemo(() => meetings.filter((meeting) => {
+    const date = new Date(meeting.meetingTime);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    const normalizedQuery = query.trim().toLowerCase();
+    return monthKey === activeMonth && (
+      !normalizedQuery
+      || meeting.title.toLowerCase().includes(normalizedQuery)
+      || meeting.location.toLowerCase().includes(normalizedQuery)
+    );
+  }), [activeMonth, meetings, query]);
+
+  const groups = useMemo(() => {
+    const tonight: typeof meetings = [];
+    const upcoming: typeof meetings = [];
+    const today = new Date();
+    for (const meeting of visibleMeetings) {
+      const date = new Date(meeting.meetingTime);
+      const sameDay = date.getFullYear() === today.getFullYear()
+        && date.getMonth() === today.getMonth()
+        && date.getDate() === today.getDate();
+      (sameDay ? tonight : upcoming).push(meeting);
+    }
+    return [
+      ...(tonight.length ? [['TONIGHT', tonight] as const] : []),
+      ...(upcoming.length ? [['UPCOMING', upcoming] as const] : []),
+    ];
+  }, [meetings, visibleMeetings]);
+
+  const updateRsvp = async (
+    meetingId: string,
+    status: 'GOING' | 'MAYBE' | 'NOT_GOING',
+  ) => {
+    try {
+      await rsvpClubMeeting(meetingId, status);
+      await refresh();
+    } catch {
+      toast.error('Could not RSVP', API_USER_MESSAGE);
+    }
+  };
 
   const createMeeting = async () => {
     if (!title.trim() || !location.trim()) {
@@ -124,10 +192,31 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
           onBack={() => navigation.goBack()}
           right={
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              {meetings.length ? <Button label=".ics" size="sm" variant="secondary" onPress={() => void exportCalendar()} /> : null}
+              {meetings.length ? <Button label="Export" icon="calendar-outline" size="sm" variant="secondary" onPress={() => void exportCalendar()} /> : null}
               {canCreate ? <Button label="+ New" size="sm" onPress={() => setComposerOpen(true)} /> : null}
             </View>
           }
+        />
+        <ScrollView
+          horizontal
+          style={{ flexGrow: 0 }}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: spacing.sm }}
+        >
+          {months.map((month) => (
+            <Chip
+              key={month.key}
+              label={month.label}
+              selected={activeMonth === month.key}
+              onPress={() => setSelectedMonth(month.key)}
+            />
+          ))}
+        </ScrollView>
+        <Field
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search meetings or locations"
+          autoCapitalize="none"
         />
         {groups.length ? groups.map(([month, rows]) => (
           <View key={month} style={{ gap: spacing.sm }}>
@@ -137,18 +226,23 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
                 key={meeting.id}
                 meeting={meeting}
                 onPress={() => navigation.navigate('ClubMeeting', { clubId, meetingId: meeting.id })}
+                onRsvp={club?.isMember
+                  ? (status) => void updateRsvp(meeting.id, status)
+                  : undefined}
               />
             ))}
           </View>
         )) : (
-          <EmptyState
-            icon="calendar-outline"
+          <ClubEmptyState
+            variant="calendar"
             title="No upcoming meetings"
-            body="Scheduled club events will appear here."
-            actionLabel={canCreate ? 'Create meeting' : 'Back to club'}
+            body="When leaders post the next gathering, it will show up here."
+            actionLabel={canCreate ? 'Create meeting' : query ? 'Clear search' : 'Back to club'}
             onAction={() => {
               if (canCreate) {
                 setComposerOpen(true);
+              } else if (query) {
+                setQuery('');
               } else {
                 navigation.navigate('ClubDetail', { clubId });
               }
@@ -164,8 +258,8 @@ export default function ClubEventsScreen({ route, navigation }: Props) {
         scrollable
       >
         <View style={{ gap: spacing.md }}>
-          <Field label="Title" value={title} onChangeText={setTitle} placeholder="Combat bot build night" />
-          <Field label="Location" value={location} onChangeText={setLocation} placeholder="Scott Lab E040" />
+          <Field label="Title" value={title} onChangeText={setTitle} placeholder="Photo Critique Night" />
+          <Field label="Location" value={location} onChangeText={setLocation} placeholder="Media Center Room 204" />
           <Field label="Description" value={description} onChangeText={setDescription} multiline placeholder="What should members know?" />
           <DateTimeField
             value={time}

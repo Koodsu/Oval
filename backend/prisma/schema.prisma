@@ -59,29 +59,32 @@ model User {
   waitlistEntries        PodWaitlist[]
   podReadStates          PodReadState[]
 
-  sentFriendRequests     FriendRequest[]       @relation("FriendRequestSender")
-  receivedFriendRequests FriendRequest[]       @relation("FriendRequestReceiver")
-  friendshipsAsA         Friendship[]          @relation("FriendshipUserA")
-  friendshipsAsB         Friendship[]          @relation("FriendshipUserB")
-  dmThreadsAsA           DirectMessageThread[] @relation("DMThreadUserA")
-  dmThreadsAsB           DirectMessageThread[] @relation("DMThreadUserB")
-  directMessages         DirectMessage[]
-  sentPodInvites         PodInvite[]           @relation("PodInviteSender")
-  receivedPodInvites     PodInvite[]           @relation("PodInviteReceiver")
-  clubsCreated           Club[]                @relation("ClubCreator")
-  clubMemberships        ClubMember[]
-  clubRolesCreated       ClubRole[]            @relation("ClubRoleCreator")
-  clubMeetingsCreated    ClubMeeting[]         @relation("MeetingCreator")
-  clubMeetingAttendees   ClubMeetingAttendee[]
-  clubAnnouncements      ClubAnnouncement[]
-  clubMessages           ClubMessage[]
-  clubOfficerMessages    ClubOfficerMessage[]
-  clubChannelReadStates  ClubChannelReadState[]
-  clubFollows            ClubFollower[]
-  clubClaims             ClubClaim[]
-  clubApplications       ClubApplication[]
-  activityRequests       ActivityRequest[]
-  analyticsEvents        AnalyticsEvent[]
+  sentFriendRequests         FriendRequest[]         @relation("FriendRequestSender")
+  receivedFriendRequests     FriendRequest[]         @relation("FriendRequestReceiver")
+  friendshipsAsA             Friendship[]            @relation("FriendshipUserA")
+  friendshipsAsB             Friendship[]            @relation("FriendshipUserB")
+  dmThreadsAsA               DirectMessageThread[]   @relation("DMThreadUserA")
+  dmThreadsAsB               DirectMessageThread[]   @relation("DMThreadUserB")
+  directMessages             DirectMessage[]
+  sentPodInvites             PodInvite[]             @relation("PodInviteSender")
+  receivedPodInvites         PodInvite[]             @relation("PodInviteReceiver")
+  clubsCreated               Club[]                  @relation("ClubCreator")
+  clubMemberships            ClubMember[]
+  clubRolesCreated           ClubRole[]              @relation("ClubRoleCreator")
+  clubMeetingsCreated        ClubMeeting[]           @relation("MeetingCreator")
+  clubMeetingAttendees       ClubMeetingAttendee[]
+  clubAnnouncements          ClubAnnouncement[]
+  clubMessages               ClubMessage[]
+  clubMessageReactions       ClubMessageReaction[]
+  clubOfficerMessages        ClubOfficerMessage[]
+  clubChannelReadStates      ClubChannelReadState[]
+  clubFollows                ClubFollower[]
+  clubClaims                 ClubClaim[]
+  clubApplications           ClubApplication[]
+  clubOwnershipTransfersFrom ClubOwnershipTransfer[] @relation("ClubOwnershipTransferFrom")
+  clubOwnershipTransfersTo   ClubOwnershipTransfer[] @relation("ClubOwnershipTransferTo")
+  activityRequests           ActivityRequest[]
+  analyticsEvents            AnalyticsEvent[]
 }
 
 model Block {
@@ -106,7 +109,7 @@ model Activity {
   defaultLocation String
   createdAt       DateTime @default(now())
 
-  pods Pod[]
+  pods    Pod[]
   demands PodDemand[]
 }
 
@@ -133,8 +136,11 @@ model ActivityRequest {
 model Pod {
   id                   String    @id @default(uuid())
   activityId           String
+  title                String?
+  note                 String?
   meetupTime           DateTime
   location             String
+  locationAddress      String?
   locationType         String    @default("public") // "public" | "private"
   minMembers           Int       @default(2)
   maxMembers           Int       @default(4)
@@ -162,11 +168,11 @@ model Pod {
 }
 
 model PodMember {
-  id          String    @id @default(uuid())
-  podId       String
-  userId      String
-  joinedAt    DateTime  @default(now())
-  confirmedAt DateTime?
+  id                  String    @id @default(uuid())
+  podId               String
+  userId              String
+  joinedAt            DateTime  @default(now())
+  confirmedAt         DateTime?
   firstPodNudgeSentAt DateTime?
 
   pod  Pod  @relation(fields: [podId], references: [id], onDelete: Cascade)
@@ -487,8 +493,9 @@ model Club {
   category           String
   emoji              String   @default("🎓")
   avatarUrl          String?
+  coverUrl           String?
   isVerified         Boolean  @default(false) // legacy, dropped in Phase 4 (see CLUB_LIFECYCLE_IMPLEMENTATION.md)
-  isPublic           Boolean  @default(true)   // legacy, dropped in Phase 4
+  isPublic           Boolean  @default(true) // legacy, dropped in Phase 4
   university         String   @default("OSU")
   createdById        String
   officerPermissions String   @default("[]")
@@ -496,10 +503,11 @@ model Club {
   updatedAt          DateTime @updatedAt
 
   // --- Club lifecycle: four orthogonal axes ---
-  isDiscoverable     Boolean  @default(false)
-  verification       String   @default("UNVERIFIED") // UNVERIFIED | PENDING_REVIEW | VERIFIED
-  joinPolicy         String   @default("OPEN") // OPEN | REQUEST | APPLICATION | INVITE_ONLY
-  status             String   @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
+  isDiscoverable Boolean @default(false)
+  discoveryPreference String @default("CAMPUS") // CAMPUS | INVITE_ONLY
+  verification   String  @default("UNVERIFIED") // UNVERIFIED | PENDING_REVIEW | VERIFIED
+  joinPolicy     String  @default("OPEN") // OPEN | REQUEST | APPLICATION | INVITE_ONLY
+  status         String  @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
 
   // verification metadata
   verificationMethod String? // INSTAGRAM | OFFICIAL_EMAIL | DIRECTORY | MANUAL
@@ -510,26 +518,45 @@ model Club {
   lastReaffirmedAt   DateTime?
 
   // bookkeeping
-  discoverableSince  DateTime?
-  suspendedAt        DateTime?
-  suspendedReason    String?
+  discoverableSince DateTime?
+  suspendedAt       DateTime?
+  suspendedReason   String?
 
-  createdBy       User                 @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  members         ClubMember[]
-  roles           ClubRole[]
-  meetings        ClubMeeting[]
-  announcements   ClubAnnouncement[]
-  messages        ClubMessage[]
-  officerMessages ClubOfficerMessage[]
-  channels        ClubChannel[]
-  followers       ClubFollower[]
-  claims          ClubClaim[]
-  invites         ClubInvite[]
-  appCycles       ClubApplicationCycle[]
+  createdBy          User                    @relation("ClubCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members            ClubMember[]
+  roles              ClubRole[]
+  meetings           ClubMeeting[]
+  announcements      ClubAnnouncement[]
+  messages           ClubMessage[]
+  officerMessages    ClubOfficerMessage[]
+  channels           ClubChannel[]
+  followers          ClubFollower[]
+  claims             ClubClaim[]
+  invites            ClubInvite[]
+  appCycles          ClubApplicationCycle[]
+  ownershipTransfers ClubOwnershipTransfer[]
 
   @@index([isPublic, category])
   @@index([isDiscoverable, status, category])
   @@index([university, isDiscoverable])
+}
+
+/// Immutable audit trail for the high-impact owner handoff operation.
+/// User references become null after account deletion while the transfer record remains.
+model ClubOwnershipTransfer {
+  id         String   @id @default(uuid())
+  clubId     String
+  fromUserId String?
+  toUserId   String?
+  createdAt  DateTime @default(now())
+
+  club     Club  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  fromUser User? @relation("ClubOwnershipTransferFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toUser   User? @relation("ClubOwnershipTransferTo", fields: [toUserId], references: [id], onDelete: SetNull)
+
+  @@index([clubId, createdAt])
+  @@index([fromUserId])
+  @@index([toUserId])
 }
 
 model ClubChannel {
@@ -569,11 +596,13 @@ model ClubChannelReadState {
 }
 
 model ClubMember {
-  id       String   @id @default(uuid())
-  clubId   String
-  userId   String
-  role     String   @default("MEMBER")
-  joinedAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  clubId      String
+  userId      String
+  role        String   @default("MEMBER")
+  /// Optional JSON permission override for this individual officer.
+  permissions String?
+  joinedAt    DateTime @default(now())
 
   club        Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -592,6 +621,7 @@ model ClubRole {
   /// Named accent from the app palette (e.g. "blue", "violet"); null = neutral
   color            String?
   isSelfAssignable Boolean  @default(false)
+  position         Int      @default(0)
   createdById      String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -602,6 +632,7 @@ model ClubRole {
 
   @@unique([clubId, name])
   @@index([clubId])
+  @@index([clubId, position])
 }
 
 model ClubMemberRole {
@@ -641,9 +672,10 @@ model ClubMeeting {
   rsvpReminderCount  Int       @default(0)
   rsvpReminderError  String?
 
-  club      Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  createdBy User                  @relation("MeetingCreator", fields: [createdById], references: [id])
-  attendees ClubMeetingAttendee[]
+  club          Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy     User                  @relation("MeetingCreator", fields: [createdById], references: [id])
+  attendees     ClubMeetingAttendee[]
+  announcements ClubAnnouncement[]
 
   @@index([clubId, meetingTime])
   @@index([meetingTime])
@@ -672,12 +704,16 @@ model ClubAnnouncement {
   content       String
   visibility    String   @default("PUBLIC")
   targetRoleIds String?
+  meetingId     String?
+  notifyMembers Boolean  @default(true)
   createdAt     DateTime @default(now())
 
-  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meeting ClubMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
   @@index([clubId, createdAt])
+  @@index([meetingId])
 }
 
 model ClubMessage {
@@ -687,16 +723,37 @@ model ClubMessage {
   channelId      String?
   userId         String
   content        String
+  /// Moderated club-chat image stored in managed club media storage.
+  imageUrl       String?
   /// JSON array of ClubRole ids pinged in this message
   mentionRoleIds String?
+  replyToId      String?
   createdAt      DateTime @default(now())
 
-  club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  channel ClubChannel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club      Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  channel   ClubChannel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replyTo   ClubMessage?          @relation("ClubMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ClubMessage[]         @relation("ClubMessageReplies")
+  reactions ClubMessageReaction[]
 
   @@index([clubId, createdAt])
   @@index([channelId, createdAt])
+  @@index([userId])
+}
+
+model ClubMessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message ClubMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
   @@index([userId])
 }
 

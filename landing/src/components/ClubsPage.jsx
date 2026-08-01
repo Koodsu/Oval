@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../lib/router'
 import { useScrollReveal } from '../hooks/useScrollReveal'
-
-const API_URL = import.meta.env.VITE_BRIDGE_API_URL ?? 'http://localhost:3000'
+import { API_BASE as API_URL } from '../lib/apiBase'
 
 const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`
 

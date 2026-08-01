@@ -52,6 +52,12 @@ export interface PublicProfile {
   friendCount?: number;
   /** Pods the viewer and this user were both in (0 on own profile). */
   sharedPodCount?: number;
+  mutualFriendCount?: number;
+  mutualFriends?: Array<{
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  }>;
   classYear?: string | null;
   major?: string | null;
   bio?: string | null;
@@ -60,6 +66,22 @@ export interface PublicProfile {
   interestTags?: string[];
   purpose?: string | null;
   campusZones?: string[];
+  clubCount?: number;
+  clubMemberships?: Array<{
+    id: string;
+    name: string;
+    emoji: string;
+    avatarUrl?: string | null;
+    category: string;
+  }>;
+  upcomingPods?: Array<{
+    id: string;
+    title: string;
+    meetupTime: string;
+    location: string;
+    memberCount: number;
+    maxMembers: number;
+  }>;
 }
 
 export type FriendRelationshipStatus =
@@ -82,6 +104,10 @@ export interface FriendUser {
   lastName?: string;
   avatarUrl?: string | null;
   verifiedUniversity: boolean;
+  classYear?: string | null;
+  major?: string | null;
+  mutualFriendCount?: number;
+  sharedInterests?: string[];
 }
 
 export interface FriendRequest {
@@ -206,7 +232,15 @@ export interface ClubMessage {
   channelId?: string | null;
   userId: string;
   content: string;
+  imageUrl?: string | null;
   mentionRoleIds?: string[];
+  reactions?: Array<{ emoji: string; userId: string }>;
+  replyTo?: {
+    id: string;
+    content: string;
+    userId: string;
+    user: { id: string; name: string };
+  } | null;
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
 }
@@ -281,6 +315,7 @@ export interface ClubMemberWithUser {
   clubId: string;
   userId: string;
   role: string;
+  permissions?: string[] | null;
   joinedAt: string;
   user: {
     id: string;
@@ -316,6 +351,7 @@ export interface ClubRole {
   permissions: string[];
   color?: ClubRoleColor | null;
   isSelfAssignable?: boolean;
+  position: number;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -353,6 +389,8 @@ export interface MyClubMembershipRow {
     createdById: string;
     createdAt: string;
   } | null;
+  /** Latest announcement the viewer can see, used by Home and club previews. */
+  latestAnnouncement?: ClubAnnouncementRow | null;
 }
 
 export interface ClubAnnouncementRow {
@@ -362,6 +400,14 @@ export interface ClubAnnouncementRow {
   content: string;
   visibility: 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
   targetRoleIds?: string[];
+  meetingId?: string | null;
+  notifyMembers?: boolean;
+  meeting?: {
+    id: string;
+    title: string;
+    location: string;
+    meetingTime: string;
+  } | null;
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
 }
@@ -408,8 +454,38 @@ export interface ClubApplicationCycle {
 export interface ApplyInfo {
   joinPolicy: string;
   isMember: boolean;
+  club?: {
+    id: string;
+    name: string;
+    category: string;
+    emoji: string;
+    avatarUrl?: string | null;
+    coverUrl?: string | null;
+    memberCount: number;
+  };
   openCycle: ClubApplicationCycle | null;
-  myApplication: { id: string; stage: ApplicationStage } | null;
+  myApplication: {
+    id: string;
+    stage: ApplicationStage;
+    createdAt: string;
+    answerCount: number;
+    cycle: ClubApplicationCycle;
+  } | null;
+}
+
+export interface TransferClubOwnershipResponse {
+  ok: true;
+  previousOwner: { userId: string; role: 'ADMIN' };
+  newOwner: ClubMemberWithUser;
+  transfer: { id: string; createdAt: string };
+}
+
+export interface ClubOwnershipTransfer {
+  id: string;
+  clubId: string;
+  createdAt: string;
+  fromUser: { id: string; name: string; avatarUrl?: string | null } | null;
+  toUser: { id: string; name: string; avatarUrl?: string | null } | null;
 }
 
 export interface ClubApplicationRow {
@@ -433,11 +509,13 @@ export interface ClubDetail {
   category: string;
   emoji: string;
   avatarUrl?: string | null;
+  coverUrl?: string | null;
   isVerified: boolean;
   isPublic: boolean;
   verification?: string;
   joinPolicy?: string;
   isDiscoverable?: boolean;
+  discoveryPreference?: 'CAMPUS' | 'INVITE_ONLY';
   status?: string;
   followerCount?: number;
   isFollower?: boolean;
@@ -448,6 +526,7 @@ export interface ClubDetail {
   updatedAt: string;
   isMember: boolean;
   myRole: string | null;
+  myPermissions?: string[];
   roles?: ClubRole[];
   members: ClubMemberWithUser[];
   meetings: Array<{
@@ -478,20 +557,14 @@ export interface PodMember {
   user: { id: string; name: string; avatarUrl?: string | null; interestTags?: string[]; classYear?: string | null; major?: string | null };
 }
 
-export interface PodRecap {
-  id: string;
-  podId: string;
-  userId: string;
-  rating: 1 | 2 | 3;
-  note?: string | null;
-  createdAt: string;
-}
-
 export interface Pod {
   id: string;
   activityId: string;
+  title?: string | null;
+  note?: string | null;
   meetupTime: string;
   location: string;
+  locationAddress?: string | null;
   locationType: 'public' | 'private';
   minMembers: number;
   maxMembers: number;
@@ -503,8 +576,6 @@ export interface Pod {
   members: PodMember[];
   noShowUserIds?: string[];
   recommended?: boolean;
-  averageRating?: number | null;
-  myRecap?: PodRecap | null;
   waitlistCount?: number;
   myWaitlistPosition?: number | null;
   latitude?: number | null;

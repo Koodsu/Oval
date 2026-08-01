@@ -1,29 +1,35 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../../App';
 import {
   AppBackdrop,
+  Avatar,
   Banner,
   Button,
   Card,
+  DateTimeField,
   Field,
   ScreenHeader,
+  Segmented,
   Sheet,
   SkeletonCard,
 } from '../../components/ui';
 import {
   createApplicationCycle,
+  getClubShareUrl,
   getApiErrorMessage,
   getApplicationCycles,
   getCycleApplications,
   updateApplication,
   updateApplicationCycle,
 } from '../../api';
+import { ClubEmptyState } from '../../components/clubs';
 import type { ApplicationStage, ClubApplicationCycle, ClubApplicationRow } from '../../types';
 import { spacing, useTheme } from '../../theme';
+import { getUiPreviewMode } from '../../dev/previewMode';
 
 import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubApplications'>;
@@ -36,9 +42,84 @@ const STAGE_TINT: Record<ApplicationStage, string> = {
   WITHDRAWN: 'faint',
 };
 
+function previewApplicationData(mode?: string): {
+  cycle: ClubApplicationCycle | null;
+  applications: ClubApplicationRow[];
+} | null {
+  if (!mode?.startsWith('club-applications')) return null;
+  if (mode === 'club-applications-create') return { cycle: null, applications: [] };
+  const cycle: ClubApplicationCycle = {
+    id: 'preview-cycle-fall',
+    title: 'Fall 2026 Creative Team',
+    questions: [
+      'What do you love photographing?',
+      'What would you like to learn with the club?',
+      'Tell us about a photo you are proud of.',
+    ],
+    status: 'OPEN',
+    opensAt: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+    closesAt: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+    createdAt: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+    applicationCount: mode === 'club-applications-empty' ? 0 : 3,
+  };
+  const applications: ClubApplicationRow[] =
+    mode === 'club-applications-empty'
+      ? []
+      : [
+          {
+            id: 'preview-application-jordan',
+            stage: 'APPLIED',
+            reviewNote: null,
+            createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+            answers: [
+              'Street portraits and the small moments people usually miss.',
+              'I want to become more confident directing portraits.',
+              'A rainy-night portrait where the reflections became part of the story.',
+            ],
+            user: {
+              id: 'preview-applicant-jordan',
+              name: 'Jordan Kim',
+              avatarUrl: null,
+              major: 'Visual Communication Design',
+              classYear: 'Sophomore',
+            },
+          },
+          {
+            id: 'preview-application-sam',
+            stage: 'APPLIED',
+            reviewNote: null,
+            createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+            answers: ['Campus life', 'Editing', 'A family portrait'],
+            user: {
+              id: 'preview-applicant-sam',
+              name: 'Sam Rivera',
+              avatarUrl: null,
+              major: 'Journalism',
+              classYear: 'Junior',
+            },
+          },
+          {
+            id: 'preview-application-morgan',
+            stage: 'INTERVIEW',
+            reviewNote: 'Strong portfolio; ask about weekly availability.',
+            createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+            answers: ['Live music', 'Lighting', 'A concert photo'],
+            user: {
+              id: 'preview-applicant-morgan',
+              name: 'Morgan Lee',
+              avatarUrl: null,
+              major: 'Marketing',
+              classYear: 'Senior',
+            },
+          },
+        ];
+  return { cycle, applications };
+}
+
 export default function ClubApplicationsScreen({ navigation, route }: Props) {
   const { clubId } = route.params;
   const { colors, typography } = useTheme();
+  const [previewMode] = useState(getUiPreviewMode);
 
   const [loading, setLoading] = useState(true);
   const [openCycle, setOpenCycle] = useState<ClubApplicationCycle | null>(null);
@@ -48,13 +129,45 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
   // create form
   const [title, setTitle] = useState('');
   const [newQuestions, setNewQuestions] = useState<string[]>(['']);
+  const [closesAt, setClosesAt] = useState(
+    () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  );
   const [busy, setBusy] = useState(false);
+  const [stageFilter, setStageFilter] = useState<'NEW' | 'REVIEWING' | 'DECIDED'>('NEW');
 
   // applicant detail sheet
   const [selected, setSelected] = useState<ClubApplicationRow | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
   const [stageBusy, setStageBusy] = useState(false);
+  const visibleApplications = applications.filter((application) => {
+    if (stageFilter === 'NEW') return application.stage === 'APPLIED';
+    if (stageFilter === 'REVIEWING') return application.stage === 'INTERVIEW';
+    return ['ACCEPTED', 'REJECTED', 'WITHDRAWN'].includes(application.stage);
+  });
+
+  useEffect(() => {
+    if (previewMode !== 'club-applications-create') return;
+    setTitle('Fall 2026 Applications');
+    setNewQuestions([
+      'What kind of photography are you most excited to explore with us?',
+      'What do you hope to contribute to the Photography Club?',
+      'How did you hear about the Photography Club?',
+    ]);
+    const previewClose = new Date();
+    previewClose.setDate(previewClose.getDate() + 30);
+    previewClose.setHours(23, 59, 0, 0);
+    setClosesAt(previewClose);
+  }, [previewMode]);
 
   const load = useCallback(async () => {
+    const preview = previewApplicationData(previewMode);
+    if (preview) {
+      setOpenCycle(preview.cycle);
+      setApplications(preview.applications);
+      setQuestions(preview.cycle?.questions ?? []);
+      setLoading(false);
+      return;
+    }
     try {
       const cycles = await getApplicationCycles(clubId);
       const open = cycles.find((c) => c.status === 'OPEN') ?? null;
@@ -72,7 +185,13 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [clubId]);
+  }, [clubId, previewMode]);
+
+  useEffect(() => {
+    if (previewMode !== 'club-applications-review' || !applications.length) return;
+    const timer = setTimeout(() => openApplicant(applications[0]), 250);
+    return () => clearTimeout(timer);
+  }, [applications, previewMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +218,11 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
     }
     setBusy(true);
     try {
-      await createApplicationCycle(clubId, { title: title.trim(), questions: qs });
+      await createApplicationCycle(clubId, {
+        title: title.trim(),
+        questions: qs,
+        closesAt: closesAt.toISOString(),
+      });
       setTitle('');
       setNewQuestions(['']);
       await load();
@@ -127,14 +250,23 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
     if (!selected) return;
     setStageBusy(true);
     try {
-      await updateApplication(clubId, selected.id, { stage });
+      await updateApplication(clubId, selected.id, {
+        stage,
+        reviewNote: reviewNote.trim(),
+      });
       setSelected(null);
+      setReviewNote('');
       await load();
     } catch (e) {
       toast.error('Could not update', getApiErrorMessage(e));
     } finally {
       setStageBusy(false);
     }
+  };
+
+  const openApplicant = (application: ClubApplicationRow) => {
+    setSelected(application);
+    setReviewNote(application.reviewNote ?? '');
   };
 
   return (
@@ -154,6 +286,14 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                 <Text style={[typography.caption, { marginTop: 4, color: colors.success }]}>
                   OPEN · {applications.length} applicant{applications.length === 1 ? '' : 's'}
                 </Text>
+                {openCycle.closesAt ? (
+                  <Text style={[typography.captionSmall, { marginTop: 3 }]}>
+                    Closes {new Date(openCycle.closesAt).toLocaleDateString([], {
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                ) : null}
                 <Button
                   label="Close applications"
                   variant="secondary"
@@ -165,11 +305,21 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
               </Card>
 
               {applications.length ? (
-                <Card>
-                  {applications.map((app, i) => (
+                <>
+                  <Segmented
+                    value={stageFilter}
+                    onChange={setStageFilter}
+                    options={[
+                      { value: 'NEW', label: 'New' },
+                      { value: 'REVIEWING', label: 'Reviewing' },
+                      { value: 'DECIDED', label: 'Decided' },
+                    ]}
+                  />
+                  <Card>
+                  {visibleApplications.map((app, i) => (
                     <Pressable
                       key={app.id}
-                      onPress={() => setSelected(app)}
+                      onPress={() => openApplicant(app)}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -180,6 +330,7 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                         borderTopColor: colors.borderSoft,
                       }}
                     >
+                      <Avatar name={app.user.name} uri={app.user.avatarUrl} size={42} />
                       <View style={{ flex: 1 }}>
                         <Text style={typography.subheading} numberOfLines={1}>
                           {app.user.name}
@@ -200,9 +351,32 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                       </Text>
                     </Pressable>
                   ))}
-                </Card>
+                  {!visibleApplications.length ? (
+                    <Text style={[typography.caption, { padding: spacing.md }]}>
+                      No applications in this stage.
+                    </Text>
+                  ) : null}
+                  </Card>
+                  {visibleApplications.length ? (
+                    <Button
+                      label="Review next"
+                      icon="arrow-forward"
+                      onPress={() => openApplicant(visibleApplications[0])}
+                    />
+                  ) : null}
+                </>
               ) : (
-                <Banner kind="info" message="No applicants yet. Share your club to get applications." />
+                <ClubEmptyState
+                  variant="applications"
+                  title="No applications yet"
+                  body="Share your club page so interested students can apply."
+                  actionLabel="Share club"
+                  onAction={() =>
+                    void Share.share({
+                      message: `Apply to join our club on Oval\n${getClubShareUrl(clubId)}`,
+                    })
+                  }
+                />
               )}
             </>
           ) : (
@@ -220,6 +394,16 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                   placeholder="Fall 2026 Applications"
                   style={{ marginTop: spacing.md }}
                 />
+                <View style={{ marginTop: spacing.md }}>
+                  <Text style={[typography.kicker, { marginBottom: spacing.sm }]}>
+                    CLOSES
+                  </Text>
+                  <DateTimeField
+                    value={closesAt}
+                    minimumDate={new Date()}
+                    onChange={setClosesAt}
+                  />
+                </View>
                 <Text style={[typography.kicker, { marginTop: spacing.md, marginBottom: 6 }]}>
                   Questions
                 </Text>
@@ -272,11 +456,32 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
 
       <Sheet
         visible={selected != null}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null);
+          setReviewNote('');
+        }}
         title={selected?.user.name}
         kicker="APPLICANT"
         scrollable
       >
+        {selected ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.sm,
+              marginBottom: spacing.md,
+            }}
+          >
+            <Avatar name={selected.user.name} uri={selected.user.avatarUrl} size={48} />
+            <View style={{ flex: 1 }}>
+              <Text style={typography.subheading}>{selected.user.name}</Text>
+              <Text style={typography.captionSmall}>
+                {[selected.user.major, selected.user.classYear].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         {selected
           ? questions.map((question, index) => (
               <View key={index} style={{ marginBottom: spacing.md }}>
@@ -285,6 +490,16 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
               </View>
             ))
           : null}
+        {selected ? (
+          <Field
+            label="Private review note"
+            value={reviewNote}
+            onChangeText={setReviewNote}
+            placeholder="Add context for the officer team"
+            multiline
+            maxLength={500}
+          />
+        ) : null}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
           <View style={{ flex: 1 }}>
             <Button
@@ -305,6 +520,14 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
           loading={stageBusy}
           style={{ marginTop: 8 }}
         />
+        <Text
+          style={[
+            typography.captionSmall,
+            { textAlign: 'center', marginTop: spacing.md, color: colors.sub },
+          ]}
+        >
+          Only club officers can see these answers.
+        </Text>
       </Sheet>
     </AppBackdrop>
   );

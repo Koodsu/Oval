@@ -1,11 +1,16 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import prisma from '../prisma';
+import { getJwtSecret } from '../config/jwt';
+import { deleteUserAccount } from '../lib/accountDeletion';
+import { sendAccountDeletionEmail } from '../lib/emailService';
 
 const router = Router();
 const APP_HOST = 'www.theovalapp.com';
 const IOS_APP_ID = process.env.IOS_APP_ID?.trim() || 'com.bradyvb.ovalapp';
-const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.bradyvb.ovalapp';
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE?.trim() || 'com.theovalapp.app';
 const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID?.trim() || '687FPU46UV';
 const ANDROID_SHA256 = process.env.ANDROID_SHA256_CERT_FINGERPRINT?.trim();
 
@@ -102,8 +107,8 @@ router.get('/pod/:podId', async (req: Request, res: Response) => {
       const dayPart = meetup.toLocaleDateString('en-US', { weekday: 'short' });
       const timePart = meetup.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
-      const activityTitle = pod.activity?.title ?? 'A pod';
-      ogTitle = `${activityTitle} · ${dayPart} ${timePart}`;
+      const podTitle = pod.title?.trim() || pod.activity?.title || 'A pod';
+      ogTitle = `${podTitle} · ${dayPart} ${timePart}`;
       ogDescription =
         pod.status === 'FORMING' && spotsLeft > 0
           ? `${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'} left · ${pod.members.length} in — join on Oval`
@@ -508,5 +513,178 @@ router.get('/pod/:podId', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
 });
+
+// ── Public account deletion (Google Play requirement) ─────────────────────────
+// Users must be able to request account deletion from the web without the app.
+// Flow: landing page form → POST /delete-account/request {email} → tokenized
+// confirmation email → GET /delete-account/confirm renders a confirm page →
+// POST /delete-account/confirm performs the same deletion as DELETE /users/me.
+//
+// This router mounts BEFORE express.json() in server.ts, so body parsers are
+// attached per-route here.
+
+const API_PUBLIC_URL =
+  process.env.API_PUBLIC_URL?.trim().replace(/\/$/, '') || 'https://api.theovalapp.com';
+const DELETION_TOKEN_PURPOSE = 'account-deletion';
+
+const deletionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ''),
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+function verifyDeletionToken(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, getJwtSecret()) as {
+      purpose?: string;
+      userId?: string;
+    };
+    if (payload.purpose !== DELETION_TOKEN_PURPOSE || !payload.userId) return null;
+    return payload.userId;
+  } catch {
+    return null;
+  }
+}
+
+function deletionPage(title: string, bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>${title} · Oval</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F4F2; color: #111317; margin: 0; padding: 24px; display: flex; justify-content: center; }
+    .card { background: #fff; border: 1px solid #E7E6E3; border-radius: 16px; padding: 32px; max-width: 440px; width: 100%; margin-top: 48px; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    p { line-height: 1.5; color: #5B5E66; }
+    .danger { color: #C01731; font-weight: 600; }
+    button { background: #D90429; color: #fff; font-size: 16px; font-weight: 700; border: none; border-radius: 10px; padding: 14px 24px; width: 100%; cursor: pointer; margin-top: 16px; }
+    a { color: #D90429; }
+  </style>
+</head>
+<body>
+  <div class="card">${bodyHtml}</div>
+</body>
+</html>`;
+}
+
+// Step 1: request a deletion link. Always responds identically whether or not
+// the email matches an account (no user enumeration).
+router.post(
+  '/delete-account/request',
+  deletionLimiter,
+  express.json({ limit: '4kb' }),
+  async (req: Request, res: Response) => {
+    const rawEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    // Respond the same way regardless of outcome.
+    res.json({ ok: true });
+    if (!rawEmail || rawEmail.length > 254 || !rawEmail.includes('@')) return;
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email: rawEmail },
+        select: { id: true, email: true },
+      });
+      if (!user) return;
+
+      const token = jwt.sign(
+        { purpose: DELETION_TOKEN_PURPOSE, userId: user.id },
+        getJwtSecret(),
+        { expiresIn: '1h' },
+      );
+      const confirmUrl = `${API_PUBLIC_URL}/delete-account/confirm?token=${encodeURIComponent(token)}`;
+      await sendAccountDeletionEmail(user.email, confirmUrl);
+    } catch (err) {
+      console.error('[web] Failed to process deletion request:', err);
+    }
+  },
+);
+
+// Step 2: the emailed link lands here. Render a confirmation page — deletion
+// only happens on the explicit POST below, so link prefetchers can't trigger it.
+router.get('/delete-account/confirm', (req: Request, res: Response) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  const userId = token ? verifyDeletionToken(token) : null;
+
+  res.setHeader('Content-Type', 'text/html');
+  if (!userId) {
+    res.status(400).send(
+      deletionPage(
+        'Link expired',
+        `<h1>This link is invalid or expired</h1>
+         <p>Deletion links expire after 1 hour. You can request a new one at
+         <a href="https://theovalapp.com/delete-account">theovalapp.com/delete-account</a>.</p>`,
+      ),
+    );
+    return;
+  }
+
+  res.send(
+    deletionPage(
+      'Confirm deletion',
+      `<h1>Permanently delete your Oval account?</h1>
+       <p>This removes your profile, messages, pods, club memberships, and friend
+       connections. <span class="danger">This cannot be undone.</span></p>
+       <form method="POST" action="/delete-account/confirm">
+         <input type="hidden" name="token" value="${token.replace(/"/g, '&quot;')}" />
+         <button type="submit">Permanently delete my account</button>
+       </form>
+       <p>Changed your mind? Just close this page — nothing happens without the button.</p>`,
+    ),
+  );
+});
+
+// Step 3: perform the deletion.
+router.post(
+  '/delete-account/confirm',
+  deletionLimiter,
+  express.urlencoded({ extended: false, limit: '8kb' }),
+  async (req: Request, res: Response) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    const userId = token ? verifyDeletionToken(token) : null;
+
+    res.setHeader('Content-Type', 'text/html');
+    if (!userId) {
+      res.status(400).send(
+        deletionPage(
+          'Link expired',
+          `<h1>This link is invalid or expired</h1>
+           <p>Deletion links expire after 1 hour. You can request a new one at
+           <a href="https://theovalapp.com/delete-account">theovalapp.com/delete-account</a>.</p>`,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await deleteUserAccount(userId);
+      // Deleted now or already gone — either way the account no longer exists.
+      res.send(
+        deletionPage(
+          'Account deleted',
+          `<h1>Your account has been deleted</h1>
+           <p>Your Oval account and personal data have been permanently removed.
+           Thanks for giving Oval a try — you're welcome back any time.</p>`,
+        ),
+      );
+    } catch (err) {
+      console.error('[web] Failed to delete account via web flow:', err);
+      res.status(500).send(
+        deletionPage(
+          'Something went wrong',
+          `<h1>Something went wrong</h1>
+           <p>Your account was not deleted. Please try the link again, or contact
+           <a href="mailto:contactus@theovalapp.com">contactus@theovalapp.com</a>.</p>`,
+        ),
+      );
+    }
+  },
+);
 
 export default router;

@@ -26,6 +26,6 @@ Expo / React Native (Expo SDK 56, RN 0.85, React 19) iOS-first app. Entry: `App.
 - **Notifications:** handler + Android channel are set at module scope in `App.tsx`; token registration is `registerTokenIfGranted()` (called from AuthContext on every authed launch). Don't add a second registration path.
 - **Chat lists are inverted FlatLists**; KeyboardAvoidingView is expected on every input screen.
 - **expo-blur doesn't really blur on Android** — it renders a tint. Prefer solid theme surfaces for cards (see AUDIT_2026 D1).
-- **Theme default is dark** and the stored preference loads async — beware of reintroducing the light-mode launch flash (AUDIT_2026 L8).
+- **Theme default is light** (changed July 2026; was dark) and the stored preference loads async — beware of launch flash for users with a saved dark preference (AUDIT_2026 L8).
 - Icon-only Pressables need `accessibilityLabel`.
 - Web is a secondary target (`react-native-web`); platform-split files use `.web.tsx` (e.g. `CampusMap.web.tsx`). Guard native-only APIs with `Platform.OS !== 'web'`.

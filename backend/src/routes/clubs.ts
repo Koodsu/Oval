@@ -11,11 +11,13 @@ import { NotificationService } from '../lib/NotificationService';
 import { isSupabaseStorageConfigured, supabaseStorage } from '../lib/supabaseStorage';
 import { moderateImageContent, moderateTextContent } from '../lib/contentModeration';
 import { consumeDurableRateLimit } from '../lib/durableRateLimit';
+import { isValidReactionEmoji } from '../lib/reactionEmojis';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
 const CLUB_AVATAR_BUCKET = 'club-avatars';
 const CLUB_AVATAR_UPLOAD_DIR = path.join(__dirname, '../../uploads/club-avatars');
+const CLUB_MESSAGE_MEDIA_FOLDER = 'messages';
 
 const clubAvatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -56,6 +58,29 @@ async function cleanupClubAvatarUrl(avatarUrl: string | null | undefined): Promi
   const oldObjectName = clubSupabaseObjectNameFromPublicUrl(avatarUrl);
   if (oldObjectName) {
     await supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).remove([oldObjectName]).catch(() => {});
+  }
+}
+
+function isManagedClubMessageImageUrl(url: string, clubId: string): boolean {
+  const encodedPrefix = `/${CLUB_AVATAR_BUCKET}/${CLUB_MESSAGE_MEDIA_FOLDER}/${clubId}/`;
+  const localPrefix = `/uploads/club-avatars/${CLUB_MESSAGE_MEDIA_FOLDER}/${clubId}/`;
+  return url.includes(encodedPrefix) || url.startsWith(localPrefix);
+}
+
+async function cleanupClubMessageImageUrl(imageUrl: string | null | undefined): Promise<void> {
+  if (!imageUrl) return;
+  if (imageUrl.startsWith('/uploads/club-avatars/')) {
+    const relativePath = imageUrl.slice('/uploads/club-avatars/'.length);
+    const absolutePath = path.resolve(CLUB_AVATAR_UPLOAD_DIR, relativePath);
+    if (absolutePath.startsWith(`${path.resolve(CLUB_AVATAR_UPLOAD_DIR)}${path.sep}`)) {
+      await fs.promises.unlink(absolutePath).catch(() => {});
+    }
+    return;
+  }
+  if (!isSupabaseStorageConfigured()) return;
+  const objectName = clubSupabaseObjectNameFromPublicUrl(imageUrl);
+  if (objectName?.startsWith(`${CLUB_MESSAGE_MEDIA_FOLDER}/`)) {
+    await supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).remove([objectName]).catch(() => {});
   }
 }
 
@@ -258,10 +283,21 @@ function basePermissions(role: string): Set<string> {
   return new Set();
 }
 
-function permissionsForMembership(membership: { role: string; club?: { officerPermissions?: string | null } }): Set<string> {
-  const permissions = basePermissions(membership.role);
+function permissionsForMembership(membership: {
+  role: string;
+  permissions?: string | null;
+  club?: { officerPermissions?: string | null };
+}): Set<string> {
+  const permissions =
+    membership.role === ROLE_OFFICER && membership.permissions != null
+      ? new Set<string>()
+      : basePermissions(membership.role);
   if (membership.role === ROLE_OFFICER) {
-    for (const permission of parseStringList(membership.club?.officerPermissions)) {
+    const configured =
+      membership.permissions != null
+        ? parseStringList(membership.permissions)
+        : parseStringList(membership.club?.officerPermissions);
+    for (const permission of configured) {
       if (CLUB_PERMISSIONS.has(permission)) permissions.add(permission);
     }
   }
@@ -269,7 +305,11 @@ function permissionsForMembership(membership: { role: string; club?: { officerPe
 }
 
 function hasClubPermission(
-  membership: { role: string; club?: { officerPermissions?: string | null } } | null | undefined,
+  membership: {
+    role: string;
+    permissions?: string | null;
+    club?: { officerPermissions?: string | null };
+  } | null | undefined,
   permission: string
 ): boolean {
   if (!membership) return false;
@@ -551,10 +591,23 @@ async function isEligibleForDiscovery(club: { id: string; verification: string }
 async function maybeAutoEnableDiscovery(clubId: string): Promise<void> {
   const club = await prisma.club.findUnique({
     where: { id: clubId },
-    select: { id: true, isDiscoverable: true, discoverableSince: true, status: true },
+    select: {
+      id: true,
+      isDiscoverable: true,
+      discoveryPreference: true,
+      discoverableSince: true,
+      status: true,
+    },
   });
   if (!club) return;
-  if (club.isDiscoverable || club.discoverableSince || club.status !== CLUB_STATUS_ACTIVE) return;
+  if (
+    club.discoveryPreference === 'INVITE_ONLY' ||
+    club.isDiscoverable ||
+    club.discoverableSince ||
+    club.status !== CLUB_STATUS_ACTIVE
+  ) {
+    return;
+  }
   const qualifying = await countQualifyingMembers(clubId);
   if (qualifying < CLUB_PUBLISH_THRESHOLD) return;
   await prisma.club.update({
@@ -1028,6 +1081,12 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
     }
 
     const unreadByClub = new Map<string, number>();
+    const latestAnnouncementByClub = new Map<
+      string,
+      Awaited<ReturnType<typeof prisma.clubAnnouncement.findMany>>[number] & {
+        user: { id: string; name: string; avatarUrl: string | null };
+      }
+    >();
     await Promise.all(
       rows.map(async (row) => {
         const myRoleIds = roleIdsByClub.get(row.clubId) ?? new Set<string>();
@@ -1047,6 +1106,19 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
           )
         );
         unreadByClub.set(row.clubId, counts.reduce((sum, count) => sum + count, 0));
+
+        const recentAnnouncements = await prisma.clubAnnouncement.findMany({
+          where: { clubId: row.clubId },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        });
+        const latestVisible = recentAnnouncements.find(
+          (announcement) =>
+            canAccessVisibility(announcement.visibility, true, row.role) &&
+            canAccessTargetRoles(announcement.targetRoleIds, myRoleIds, membershipLike)
+        );
+        if (latestVisible) latestAnnouncementByClub.set(row.clubId, latestVisible);
       })
     );
 
@@ -1071,6 +1143,14 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response): Promise<
           memberCount: r.club._count.members,
         },
         nextMeeting: nextByClub.get(r.clubId) ?? null,
+        latestAnnouncement: latestAnnouncementByClub.has(r.clubId)
+          ? {
+              ...latestAnnouncementByClub.get(r.clubId)!,
+              targetRoleIds: parseStringList(
+                latestAnnouncementByClub.get(r.clubId)!.targetRoleIds
+              ),
+            }
+          : null,
       }))
     );
   } catch (err) {
@@ -1201,7 +1281,7 @@ router.get('/today', requireAuth, async (req: AuthRequest, res: Response): Promi
 router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const body = req.body ?? {};
-  const { name, description, category, emoji } = body;
+  const { name, description, category, emoji, discoveryPreference } = body;
 
   if (typeof name !== 'string' || !name.trim()) {
     res.status(400).json({ error: 'name is required' });
@@ -1218,6 +1298,16 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   // Emoji is optional — an empty emoji renders the club's initials instead.
   if (emoji !== undefined && emoji !== null && typeof emoji !== 'string') {
     res.status(400).json({ error: 'emoji must be a string' });
+    return;
+  }
+  const normalizedDiscoveryPreference =
+    discoveryPreference === 'INVITE_ONLY' ? 'INVITE_ONLY' : 'CAMPUS';
+  if (
+    discoveryPreference !== undefined &&
+    discoveryPreference !== 'CAMPUS' &&
+    discoveryPreference !== 'INVITE_ONLY'
+  ) {
+    res.status(400).json({ error: 'discoveryPreference must be CAMPUS or INVITE_ONLY' });
     return;
   }
   const clubModeration = await moderateTextContent([name, description]);
@@ -1269,6 +1359,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
           emoji: typeof emoji === 'string' ? emoji.trim() : '',
           isPublic: false,
           isDiscoverable: false,
+          discoveryPreference: normalizedDiscoveryPreference,
           verification: VERIFICATION_UNVERIFIED,
           joinPolicy: JOIN_OPEN,
           status: CLUB_STATUS_ACTIVE,
@@ -1294,7 +1385,12 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
         announcements: {
           orderBy: { createdAt: 'desc' },
           take: 20,
-          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true } },
+            meeting: {
+              select: { id: true, title: true, location: true, meetingTime: true },
+            },
+          },
         },
       },
     });
@@ -1452,7 +1548,12 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
     const allItems = await prisma.clubAnnouncement.findMany({
       where: { clubId },
       orderBy: { createdAt: 'desc' },
-      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+        meeting: {
+          select: { id: true, title: true, location: true, meetingTime: true },
+        },
+      },
     });
 
     const visibleItems = allItems.filter((item) =>
@@ -1479,7 +1580,7 @@ router.get('/:id/announcements', requireAuth, async (req: AuthRequest, res: Resp
 router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId } = req.params;
-  const { content, visibility, targetRoleIds } = req.body ?? {};
+  const { content, visibility, targetRoleIds, meetingId, notifyMembers } = req.body ?? {};
 
   if (typeof content !== 'string' || !content.trim()) {
     res.status(400).json({ error: 'content is required' });
@@ -1494,6 +1595,14 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
   const parsedVisibility = visibility === undefined ? VISIBILITY_PUBLIC : parseVisibility(visibility);
   if (!parsedVisibility) {
     res.status(400).json({ error: 'visibility must be PUBLIC, MEMBERS, or OFFICERS' });
+    return;
+  }
+  if (meetingId !== undefined && meetingId !== null && typeof meetingId !== 'string') {
+    res.status(400).json({ error: 'meetingId must be a string' });
+    return;
+  }
+  if (notifyMembers !== undefined && typeof notifyMembers !== 'boolean') {
+    res.status(400).json({ error: 'notifyMembers must be a boolean' });
     return;
   }
 
@@ -1517,6 +1626,16 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
       res.status(400).json({ error: 'targetRoleIds must be club role ids' });
       return;
     }
+    const attachedMeeting = meetingId
+      ? await prisma.clubMeeting.findFirst({
+        where: { id: meetingId, clubId },
+        select: { id: true },
+      })
+      : null;
+    if (meetingId && !attachedMeeting) {
+      res.status(400).json({ error: 'meetingId must belong to this club' });
+      return;
+    }
 
     const announcement = await prisma.clubAnnouncement.create({
       data: {
@@ -1525,11 +1644,20 @@ router.post('/:id/announcements', requireAuth, async (req: AuthRequest, res: Res
         content: content.trim(),
         visibility: parsedVisibility,
         targetRoleIds: parsedTargetRoleIds.length ? stringifyStringList(parsedTargetRoleIds) : null,
+        meetingId: attachedMeeting?.id ?? null,
+        notifyMembers: notifyMembers !== false,
       },
-      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+        meeting: {
+          select: { id: true, title: true, location: true, meetingTime: true },
+        },
+      },
     });
 
-    NotificationService.notifyClubAnnouncementCreated(announcement.id, userId).catch(() => {});
+    if (announcement.notifyMembers) {
+      NotificationService.notifyClubAnnouncementCreated(announcement.id, userId).catch(() => {});
+    }
 
     res.status(201).json({
       ...announcement,
@@ -2322,18 +2450,19 @@ router.delete('/:id/messages/:messageId', requireAuth, async (req: AuthRequest, 
       where: { clubId_userId: { clubId, userId } },
       include: { club: { select: { officerPermissions: true } } },
     });
-    if (!membership || !canDeleteMessages(membership)) {
-      res.status(403).json({ error: 'You do not have permission to delete messages' });
-      return;
-    }
 
     const message = await prisma.clubMessage.findFirst({ where: { id: messageId, clubId } });
     if (!message) {
       res.status(404).json({ error: 'Message not found' });
       return;
     }
+    if (!membership || (message.userId !== userId && !canDeleteMessages(membership))) {
+      res.status(403).json({ error: 'You do not have permission to delete this message' });
+      return;
+    }
 
     await prisma.clubMessage.delete({ where: { id: messageId } });
+    await cleanupClubMessageImageUrl(message.imageUrl);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -2594,6 +2723,51 @@ router.post('/:id/channels', requireAuth, async (req: AuthRequest, res: Response
   }
 });
 
+// PATCH /clubs/:id/channels/reorder — reorder custom channels (MANAGE_CLUB)
+router.patch('/:id/channels/reorder', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const channelIds: string[] | null = Array.isArray(req.body?.channelIds)
+    ? req.body.channelIds.filter((id: unknown): id is string => typeof id === 'string')
+    : null;
+  if (!channelIds || channelIds.length !== new Set(channelIds).size) {
+    res.status(400).json({ error: 'channelIds must be a unique array' });
+    return;
+  }
+
+  try {
+    const membership = await getMembershipWithRoles(clubId, userId);
+    if (!membership || !hasClubPermission(membership, PERMISSION_MANAGE_CLUB)) {
+      res.status(403).json({ error: 'You do not have permission to manage channels' });
+      return;
+    }
+    const customChannels = await prisma.clubChannel.findMany({
+      where: { clubId, kind: CHANNEL_CUSTOM },
+      select: { id: true },
+    });
+    if (
+      customChannels.length !== channelIds.length
+      || customChannels.some((channel) => !channelIds.includes(channel.id))
+    ) {
+      res.status(400).json({ error: 'channelIds must include every custom channel exactly once' });
+      return;
+    }
+
+    await prisma.$transaction(
+      channelIds.map((channelId, index) =>
+        prisma.clubChannel.update({
+          where: { id: channelId },
+          data: { position: 10 + index },
+        })
+      )
+    );
+    res.json({ channelIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PATCH /clubs/:id/channels/:channelId — edit a custom channel (MANAGE_CLUB)
 router.patch('/:id/channels/:channelId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
@@ -2736,7 +2910,18 @@ router.get('/:id/channels/:channelId/messages', requireAuth, async (req: AuthReq
       const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
       const rows = await prisma.clubMessage.findMany({
         where: { clubId, channelId: channelFilter },
-        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true } },
+          reactions: { select: { emoji: true, userId: true } },
+          replyTo: {
+            select: {
+              id: true,
+              content: true,
+              userId: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
         orderBy: { createdAt: 'asc' },
       });
       messages = rows.map((row) => ({ ...row, mentionRoleIds: parseStringList(row.mentionRoleIds) }));
@@ -2758,22 +2943,99 @@ router.get('/:id/channels/:channelId/messages', requireAuth, async (req: AuthReq
   }
 });
 
+// POST /clubs/:id/channels/:channelId/messages/media — upload moderated chat media
+router.post(
+  '/:id/channels/:channelId/messages/media',
+  requireAuth,
+  clubAvatarUpload.single('image'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, channelId } = req.params;
+    if (!req.file) {
+      res.status(400).json({ error: 'image is required' });
+      return;
+    }
+
+    try {
+      const membership = await getMembershipWithRoles(clubId, userId);
+      const channel = await prisma.clubChannel.findFirst({ where: { id: channelId, clubId } });
+      if (!channel) {
+        res.status(404).json({ error: 'Channel not found' });
+        return;
+      }
+      const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+      if (
+        !membership ||
+        channel.kind === CHANNEL_ANNOUNCEMENTS ||
+        channel.kind === CHANNEL_OFFICERS ||
+        !canPostToChannel(channel, membership, myRoleIds)
+      ) {
+        res.status(403).json({ error: 'You cannot attach images in this channel' });
+        return;
+      }
+      if (!isSupabaseStorageConfigured() && process.env.NODE_ENV === 'production') {
+        res.status(500).json({ error: 'Club media storage is not configured' });
+        return;
+      }
+
+      const moderation = await moderateImageContent(req.file.buffer, req.file.mimetype);
+      if (moderation) {
+        res.status(moderation.status).json({ error: moderation.message });
+        return;
+      }
+
+      const objectName = `${CLUB_MESSAGE_MEDIA_FOLDER}/${clubId}/${crypto.randomUUID()}.${clubAvatarExtension(req.file.mimetype)}`;
+      let imageUrl: string;
+      if (isSupabaseStorageConfigured()) {
+        const { error: uploadError } = await supabaseStorage.storage
+          .from(CLUB_AVATAR_BUCKET)
+          .upload(objectName, req.file.buffer, {
+            contentType: req.file.mimetype,
+            upsert: false,
+          });
+        if (uploadError) {
+          res.status(500).json({ error: 'Failed to upload chat image' });
+          return;
+        }
+        imageUrl = supabaseStorage.storage.from(CLUB_AVATAR_BUCKET).getPublicUrl(objectName).data.publicUrl;
+      } else {
+        const absolutePath = path.join(CLUB_AVATAR_UPLOAD_DIR, objectName);
+        await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+        await fs.promises.writeFile(absolutePath, req.file.buffer);
+        imageUrl = `/uploads/club-avatars/${objectName}`;
+      }
+
+      res.status(201).json({ imageUrl });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+);
+
 // POST /clubs/:id/channels/:channelId/messages — send to a chat channel (supports @role pings)
 router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id: clubId, channelId } = req.params;
-  const { content, mentionRoleIds } = req.body ?? {};
+  const { content, mentionRoleIds, replyToId, imageUrl } = req.body ?? {};
 
   const trimmed = typeof content === 'string' ? content.trim() : '';
-  if (!trimmed) {
-    res.status(400).json({ error: 'content is required' });
+  const normalizedImageUrl = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+  if (!trimmed && !normalizedImageUrl) {
+    res.status(400).json({ error: 'content or imageUrl is required' });
+    return;
+  }
+  if (normalizedImageUrl && !isManagedClubMessageImageUrl(normalizedImageUrl, clubId)) {
+    res.status(400).json({ error: 'imageUrl must reference uploaded club media' });
     return;
   }
   if (trimmed.length > MAX_CLUB_MESSAGE_LENGTH) {
     res.status(400).json({ error: `Message cannot exceed ${MAX_CLUB_MESSAGE_LENGTH} characters` });
     return;
   }
-  const moderation = await moderateTextContent([trimmed], { allowProfanity: true });
+  const moderation = trimmed
+    ? await moderateTextContent([trimmed], { allowProfanity: true })
+    : null;
   if (moderation) {
     res.status(moderation.status).json({ error: moderation.message });
     return;
@@ -2788,6 +3050,10 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
     }
     if (channel.kind === CHANNEL_ANNOUNCEMENTS) {
       res.status(400).json({ error: 'Use the announcements endpoints for this channel' });
+      return;
+    }
+    if (replyToId !== undefined && replyToId !== null && typeof replyToId !== 'string') {
+      res.status(400).json({ error: 'replyToId must be a string' });
       return;
     }
     const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
@@ -2817,15 +3083,39 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       });
     } else {
+      const channelMessageId = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+      const replyTo = replyToId
+        ? await prisma.clubMessage.findFirst({
+          where: { id: replyToId, clubId, channelId: channelMessageId },
+          select: { id: true },
+        })
+        : null;
+      if (replyToId && !replyTo) {
+        res.status(400).json({ error: 'replyToId must reference a message in this channel' });
+        return;
+      }
       const created = await prisma.clubMessage.create({
         data: {
           clubId,
-          channelId: channel.kind === CHANNEL_GENERAL ? null : channel.id,
+          channelId: channelMessageId,
           userId,
           content: trimmed,
+          imageUrl: normalizedImageUrl || null,
           mentionRoleIds: pingRoleIds.length ? stringifyStringList(pingRoleIds) : null,
+          replyToId: replyTo?.id ?? null,
         },
-        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true } },
+          reactions: { select: { emoji: true, userId: true } },
+          replyTo: {
+            select: {
+              id: true,
+              content: true,
+              userId: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
       });
       message = { ...created, mentionRoleIds: pingRoleIds };
     }
@@ -2838,7 +3128,13 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
     });
 
     if (pingRoleIds.length > 0) {
-      void NotificationService.notifyClubRolePing(clubId, userId, pingRoleIds, channel.name, trimmed);
+      void NotificationService.notifyClubRolePing(
+        clubId,
+        userId,
+        pingRoleIds,
+        channel.name,
+        trimmed || 'Shared a photo',
+      );
     }
 
     res.status(201).json(message);
@@ -2847,6 +3143,127 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// POST/DELETE /clubs/:id/channels/:channelId/messages/:messageId/reactions
+router.post(
+  '/:id/channels/:channelId/messages/:messageId/reactions',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, channelId, messageId } = req.params;
+    const emoji = typeof req.body?.emoji === 'string' ? req.body.emoji : '';
+    if (!isValidReactionEmoji(emoji)) {
+      res.status(400).json({ error: 'Invalid reaction emoji' });
+      return;
+    }
+    try {
+      const [membership, channel] = await Promise.all([
+        getMembershipWithRoles(clubId, userId),
+        prisma.clubChannel.findFirst({ where: { id: channelId, clubId } }),
+      ]);
+      if (!channel || channel.kind === CHANNEL_ANNOUNCEMENTS || channel.kind === CHANNEL_OFFICERS) {
+        res.status(404).json({ error: 'Message not found' });
+        return;
+      }
+      const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+      if (!membership || !canSeeChannel(channel, membership, myRoleIds)) {
+        res.status(403).json({ error: 'You do not have access to this channel' });
+        return;
+      }
+      const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+      const message = await prisma.clubMessage.findFirst({
+        where: { id: messageId, clubId, channelId: channelFilter },
+        select: { id: true },
+      });
+      if (!message) {
+        res.status(404).json({ error: 'Message not found' });
+        return;
+      }
+      await prisma.clubMessageReaction
+        .create({ data: { messageId, userId, emoji } })
+        .catch((err: any) => {
+          if (err?.code !== 'P2002') throw err;
+        });
+      const updated = await prisma.clubMessage.findUniqueOrThrow({
+        where: { id: messageId },
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true } },
+          reactions: { select: { emoji: true, userId: true } },
+          replyTo: {
+            select: {
+              id: true,
+              content: true,
+              userId: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      res.json({ ...updated, mentionRoleIds: parseStringList(updated.mentionRoleIds) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.delete(
+  '/:id/channels/:channelId/messages/:messageId/reactions',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, channelId, messageId } = req.params;
+    const emoji = typeof req.query.emoji === 'string' ? req.query.emoji : '';
+    if (!isValidReactionEmoji(emoji)) {
+      res.status(400).json({ error: 'Invalid reaction emoji' });
+      return;
+    }
+    try {
+      const [membership, channel] = await Promise.all([
+        getMembershipWithRoles(clubId, userId),
+        prisma.clubChannel.findFirst({ where: { id: channelId, clubId } }),
+      ]);
+      if (!channel || channel.kind === CHANNEL_ANNOUNCEMENTS || channel.kind === CHANNEL_OFFICERS) {
+        res.status(404).json({ error: 'Message not found' });
+        return;
+      }
+      const myRoleIds = new Set(membership?.customRoles.map((assignment) => assignment.roleId) ?? []);
+      if (!membership || !canSeeChannel(channel, membership, myRoleIds)) {
+        res.status(403).json({ error: 'You do not have access to this channel' });
+        return;
+      }
+      const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
+      const message = await prisma.clubMessage.findFirst({
+        where: { id: messageId, clubId, channelId: channelFilter },
+        select: { id: true },
+      });
+      if (!message) {
+        res.status(404).json({ error: 'Message not found' });
+        return;
+      }
+      await prisma.clubMessageReaction.deleteMany({ where: { messageId, userId, emoji } });
+      const updated = await prisma.clubMessage.findUniqueOrThrow({
+        where: { id: messageId },
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true } },
+          reactions: { select: { emoji: true, userId: true } },
+          replyTo: {
+            select: {
+              id: true,
+              content: true,
+              userId: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      res.json({ ...updated, mentionRoleIds: parseStringList(updated.mentionRoleIds) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
 
 // DELETE /clubs/:id/channels/:channelId/messages/:messageId — DELETE_MESSAGES permission
 router.delete(
@@ -2858,8 +3275,8 @@ router.delete(
 
     try {
       const membership = await getMembershipWithRoles(clubId, userId);
-      if (!membership || !canDeleteMessages(membership)) {
-        res.status(403).json({ error: 'You do not have permission to delete messages' });
+      if (!membership) {
+        res.status(403).json({ error: 'You must be a member to delete messages' });
         return;
       }
 
@@ -2875,6 +3292,10 @@ router.delete(
           res.status(404).json({ error: 'Message not found' });
           return;
         }
+        if (message.userId !== userId && !canDeleteMessages(membership)) {
+          res.status(403).json({ error: 'You do not have permission to delete this message' });
+          return;
+        }
         await prisma.clubOfficerMessage.delete({ where: { id: messageId } });
       } else {
         const channelFilter = channel.kind === CHANNEL_GENERAL ? null : channel.id;
@@ -2885,7 +3306,12 @@ router.delete(
           res.status(404).json({ error: 'Message not found' });
           return;
         }
+        if (message.userId !== userId && !canDeleteMessages(membership)) {
+          res.status(403).json({ error: 'You do not have permission to delete this message' });
+          return;
+        }
         await prisma.clubMessage.delete({ where: { id: messageId } });
+        await cleanupClubMessageImageUrl(message.imageUrl);
       }
       res.json({ ok: true });
     } catch (err) {
@@ -2968,7 +3394,7 @@ router.get('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): P
 
     const roles = await prisma.clubRole.findMany({
       where: { clubId },
-      orderBy: { name: 'asc' },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
       include: { _count: { select: { assignments: true } } },
     });
 
@@ -3036,6 +3462,11 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
       return;
     }
 
+    const lastRole = await prisma.clubRole.findFirst({
+      where: { clubId },
+      orderBy: [{ position: 'desc' }, { createdAt: 'desc' }],
+      select: { position: true },
+    });
     const role = await prisma.clubRole.create({
       data: {
         clubId,
@@ -3043,6 +3474,7 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
         createdById: userId,
         color: parsedColor ?? null,
         isSelfAssignable: isSelfAssignable === true,
+        position: (lastRole?.position ?? -1) + 1,
       },
     });
     res.status(201).json({ ...role, permissions: [] });
@@ -3051,6 +3483,50 @@ router.post('/:id/roles', requireAuth, async (req: AuthRequest, res: Response): 
       res.status(400).json({ error: 'A role with that name already exists' });
       return;
     }
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /clubs/:id/roles/reorder — reorder named member roles
+router.patch('/:id/roles/reorder', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const { id: clubId } = req.params;
+  const roleIds: string[] | null = Array.isArray(req.body?.roleIds)
+    ? req.body.roleIds.filter((id: unknown): id is string => typeof id === 'string')
+    : null;
+  if (!roleIds || roleIds.length !== new Set(roleIds).size) {
+    res.status(400).json({ error: 'roleIds must be a unique array' });
+    return;
+  }
+
+  try {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_userId: { clubId, userId } },
+      include: { club: { select: { officerPermissions: true } } },
+    });
+    if (!membership || !hasClubPermission(membership, PERMISSION_MANAGE_ROLES)) {
+      res.status(403).json({ error: 'You do not have permission to manage roles' });
+      return;
+    }
+    const roles = await prisma.clubRole.findMany({
+      where: { clubId },
+      select: { id: true },
+    });
+    if (
+      roles.length !== roleIds.length
+      || roles.some((role) => !roleIds.includes(role.id))
+    ) {
+      res.status(400).json({ error: 'roleIds must include every role exactly once' });
+      return;
+    }
+    await prisma.$transaction(
+      roleIds.map((roleId, index) =>
+        prisma.clubRole.update({ where: { id: roleId }, data: { position: index } })
+      )
+    );
+    res.json({ roleIds });
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -3370,6 +3846,229 @@ router.patch('/:id/officer-permissions', requireAuth, async (req: AuthRequest, r
   }
 });
 
+// PATCH /clubs/:id/members/:memberUserId/permissions — per-officer override
+router.patch(
+  '/:id/members/:memberUserId/permissions',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, memberUserId } = req.params;
+    const permissions = normalizePermissionList((req.body ?? {}).permissions);
+    if (!permissions || permissions.includes(PERMISSION_TRANSFER_OWNERSHIP)) {
+      res.status(400).json({ error: 'permissions must be valid club permissions' });
+      return;
+    }
+
+    try {
+      const [actor, target] = await Promise.all([
+        prisma.clubMember.findUnique({
+          where: { clubId_userId: { clubId, userId } },
+        }),
+        prisma.clubMember.findUnique({
+          where: { clubId_userId: { clubId, userId: memberUserId } },
+        }),
+      ]);
+      if (!actor || ![ROLE_OWNER, ROLE_ADMIN].includes(actor.role)) {
+        res.status(403).json({ error: 'Only owners and admins can update officer permissions' });
+        return;
+      }
+      if (!target || target.role !== ROLE_OFFICER) {
+        res.status(400).json({ error: 'Choose an officer to configure' });
+        return;
+      }
+
+      const updated = await prisma.clubMember.update({
+        where: { id: target.id },
+        data: { permissions: stringifyStringList(permissions) },
+        select: { userId: true, permissions: true },
+      });
+      res.json({
+        userId: updated.userId,
+        permissions: parseStringList(updated.permissions),
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// GET /clubs/:id/ownership-history — current OWNER/ADMIN only
+router.get(
+  '/:id/ownership-history',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId } = req.params;
+
+    try {
+      const membership = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId, userId } },
+      });
+      if (!membership || ![ROLE_OWNER, ROLE_ADMIN].includes(membership.role)) {
+        res.status(403).json({ error: 'Only owners and admins can view ownership history' });
+        return;
+      }
+
+      const items = await prisma.clubOwnershipTransfer.findMany({
+        where: { clubId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: {
+          fromUser: { select: { id: true, name: true, avatarUrl: true } },
+          toUser: { select: { id: true, name: true, avatarUrl: true } },
+        },
+      });
+      res.json({ items });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// POST /clubs/:id/transfer-ownership — OWNER only, atomically appoint one new owner
+router.post(
+  '/:id/transfer-ownership',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId } = req.params;
+    const newOwnerUserId =
+      typeof (req.body ?? {}).newOwnerUserId === 'string'
+        ? req.body.newOwnerUserId.trim()
+        : '';
+
+    if (!newOwnerUserId) {
+      res.status(400).json({ error: 'newOwnerUserId is required' });
+      return;
+    }
+    if (newOwnerUserId === userId) {
+      res.status(400).json({ error: 'Choose another club member as the new owner' });
+      return;
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const [actor, target, existingOwners] = await Promise.all([
+          tx.clubMember.findUnique({
+            where: { clubId_userId: { clubId, userId } },
+          }),
+          tx.clubMember.findUnique({
+            where: { clubId_userId: { clubId, userId: newOwnerUserId } },
+            include: {
+              user: { select: MEMBER_USER_SELECT },
+              customRoles: {
+                include: { role: true },
+                orderBy: { createdAt: 'asc' },
+              },
+            },
+          }),
+          tx.clubMember.findMany({
+            where: { clubId, role: ROLE_OWNER },
+            select: { userId: true },
+          }),
+        ]);
+
+        if (!actor || !hasClubPermission(actor, PERMISSION_TRANSFER_OWNERSHIP)) {
+          return {
+            ok: false as const,
+            status: 403,
+            error: 'Only the current club owner can transfer ownership',
+          };
+        }
+        if (!target) {
+          return {
+            ok: false as const,
+            status: 404,
+            error: 'The new owner must already be a club member',
+          };
+        }
+        if (target.role === ROLE_OWNER) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: 'That member is already a club owner',
+          };
+        }
+
+        // The conditional write is the concurrency gate: after one transfer
+        // demotes the actor, a competing request can no longer commit.
+        const actorDemotion = await tx.clubMember.updateMany({
+          where: { id: actor.id, role: ROLE_OWNER },
+          data: { role: ROLE_ADMIN },
+        });
+        if (actorDemotion.count !== 1) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: 'Club ownership changed before this transfer completed',
+          };
+        }
+
+        // Repair legacy co-owners while preserving their club access as admins.
+        await tx.clubMember.updateMany({
+          where: {
+            clubId,
+            role: ROLE_OWNER,
+            userId: { not: newOwnerUserId },
+          },
+          data: { role: ROLE_ADMIN },
+        });
+        const newOwner = await tx.clubMember.update({
+          where: { id: target.id },
+          data: { role: ROLE_OWNER },
+          include: {
+            user: { select: MEMBER_USER_SELECT },
+            customRoles: {
+              include: { role: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        });
+        await tx.club.update({
+          where: { id: clubId },
+          data: { createdById: newOwnerUserId },
+        });
+        const audit = await tx.clubOwnershipTransfer.create({
+          data: {
+            clubId,
+            fromUserId: userId,
+            toUserId: newOwnerUserId,
+          },
+        });
+
+        return {
+          ok: true as const,
+          previousOwner: { userId, role: ROLE_ADMIN },
+          newOwner: parseMemberTags(newOwner),
+          transfer: { id: audit.id, createdAt: audit.createdAt },
+          demotedOwnerIds: existingOwners
+            .map((owner) => owner.userId)
+            .filter((ownerId) => ownerId !== newOwnerUserId),
+        };
+      });
+
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+
+      const { demotedOwnerIds, ...payload } = result;
+      await Promise.allSettled([
+        NotificationService.notifyClubRoleChange(newOwnerUserId, clubId, ROLE_OWNER),
+        ...demotedOwnerIds.map((ownerId) =>
+          NotificationService.notifyClubRoleChange(ownerId, clubId, ROLE_ADMIN)
+        ),
+      ]);
+      res.json(payload);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // PATCH /clubs/:id/members/:memberUserId — leadership only (assign primary leadership role)
 router.patch(
   '/:id/members/:memberUserId',
@@ -3591,7 +4290,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 });
 
-// PATCH /clubs/:id — update club profile or upload an avatar
+// PATCH /clubs/:id — update club profile or upload an avatar/cover
 router.patch(
   '/:id',
   requireAuth,
@@ -3603,6 +4302,7 @@ router.patch(
     const hasProfileFields =
       Object.prototype.hasOwnProperty.call(body, 'name') ||
       Object.prototype.hasOwnProperty.call(body, 'description') ||
+      Object.prototype.hasOwnProperty.call(body, 'category') ||
       Object.prototype.hasOwnProperty.call(body, 'isPublic');
 
     if (!req.file && !hasProfileFields) {
@@ -3613,8 +4313,10 @@ router.patch(
     const updates: {
       name?: string;
       description?: string;
+      category?: string;
       isPublic?: boolean;
       avatarUrl?: string;
+      coverUrl?: string;
     } = {};
 
     if (Object.prototype.hasOwnProperty.call(body, 'name')) {
@@ -3631,6 +4333,13 @@ router.patch(
       }
       updates.description = body.description.trim();
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'category')) {
+      if (typeof body.category !== 'string' || !body.category.trim()) {
+        res.status(400).json({ error: 'category is required' });
+        return;
+      }
+      updates.category = body.category.trim();
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'isPublic')) {
       if (typeof body.isPublic !== 'boolean') {
         res.status(400).json({ error: 'isPublic must be a boolean' });
@@ -3642,6 +4351,7 @@ router.patch(
     const profileModeration = await moderateTextContent([
       updates.name ?? null,
       updates.description ?? null,
+      updates.category ?? null,
     ]);
     if (profileModeration) {
       res.status(profileModeration.status).json({ error: profileModeration.message });
@@ -3649,7 +4359,10 @@ router.patch(
     }
 
     try {
-      const club = await prisma.club.findUnique({ where: { id: clubId }, select: { id: true, avatarUrl: true } });
+      const club = await prisma.club.findUnique({
+        where: { id: clubId },
+        select: { id: true, avatarUrl: true, coverUrl: true },
+      });
       if (!club) {
         res.status(404).json({ error: 'Club not found' });
         return;
@@ -3680,7 +4393,8 @@ router.patch(
           return;
         }
 
-        const filename = `${clubId}-${Date.now()}.${clubAvatarExtension(req.file.mimetype)}`;
+        const imageKind = body.imageKind === 'cover' ? 'cover' : 'avatar';
+        const filename = `${clubId}-${imageKind}-${Date.now()}.${clubAvatarExtension(req.file.mimetype)}`;
 
         if (isSupabaseStorageConfigured()) {
           const { error: uploadError } = await supabaseStorage.storage
@@ -3699,11 +4413,13 @@ router.patch(
             .from(CLUB_AVATAR_BUCKET)
             .getPublicUrl(filename);
 
-          updates.avatarUrl = publicUrlData.publicUrl;
+          if (imageKind === 'cover') updates.coverUrl = publicUrlData.publicUrl;
+          else updates.avatarUrl = publicUrlData.publicUrl;
         } else {
           await fs.promises.mkdir(CLUB_AVATAR_UPLOAD_DIR, { recursive: true });
           await fs.promises.writeFile(path.join(CLUB_AVATAR_UPLOAD_DIR, filename), req.file.buffer);
-          updates.avatarUrl = `/uploads/club-avatars/${filename}`;
+          if (imageKind === 'cover') updates.coverUrl = `/uploads/club-avatars/${filename}`;
+          else updates.avatarUrl = `/uploads/club-avatars/${filename}`;
         }
       }
 
@@ -3714,13 +4430,15 @@ router.patch(
           id: true,
           name: true,
           description: true,
+          category: true,
           isPublic: true,
           avatarUrl: true,
+          coverUrl: true,
         },
       });
 
       if (req.file) {
-        await cleanupClubAvatarUrl(club.avatarUrl);
+        await cleanupClubAvatarUrl(body.imageKind === 'cover' ? club.coverUrl : club.avatarUrl);
       }
 
       res.json(updated);
@@ -3748,7 +4466,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
           },
           orderBy: { joinedAt: 'asc' },
         },
-        roles: { orderBy: { name: 'asc' } },
+        roles: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
         meetings: {
           where: { meetingTime: { gt: now } },
           orderBy: { meetingTime: 'asc' },
@@ -3812,6 +4530,8 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       members: club.members.map((member) =>
         parseMemberTags({
           ...member,
+          permissions:
+            member.permissions == null ? null : parseStringList(member.permissions),
           customRoles: member.customRoles.map((assignment) => ({
             id: assignment.id,
             roleId: assignment.roleId,
@@ -3825,6 +4545,13 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
       ),
       isMember: !!myMembership,
       myRole: myMembership?.role ?? null,
+      myPermissions: myMembership
+        ? Array.from(permissionsForMembership({
+          role: myMembership.role,
+          permissions: myMembership.permissions,
+          club: { officerPermissions: club.officerPermissions },
+        }))
+        : [],
       followerCount,
       isFollower: !!myFollow,
     });
@@ -4199,6 +4926,10 @@ router.post('/:id/application-cycles', requireAuth, async (req: AuthRequest, res
         .map((q: unknown) => (typeof q === 'string' ? q.trim() : ''))
         .filter((q: string) => q.length > 0)
     : [];
+  const closesAt =
+    typeof body.closesAt === 'string' && body.closesAt.trim()
+      ? new Date(body.closesAt)
+      : null;
 
   if (!title) {
     res.status(400).json({ error: 'title is required' });
@@ -4206,6 +4937,10 @@ router.post('/:id/application-cycles', requireAuth, async (req: AuthRequest, res
   }
   if (!questions.length) {
     res.status(400).json({ error: 'Add at least one application question' });
+    return;
+  }
+  if (closesAt && (Number.isNaN(closesAt.getTime()) || closesAt.getTime() <= Date.now())) {
+    res.status(400).json({ error: 'closesAt must be a future date' });
     return;
   }
 
@@ -4227,6 +4962,7 @@ router.post('/:id/application-cycles', requireAuth, async (req: AuthRequest, res
           questionsJson: JSON.stringify(questions),
           status: CYCLE_STATUS_OPEN,
           opensAt: new Date(),
+          closesAt,
         },
       });
       await tx.club.update({ where: { id: clubId }, data: { joinPolicy: JOIN_APPLICATION } });
@@ -4256,13 +4992,30 @@ router.patch('/:id/application-cycles/:cycleId', requireAuth, async (req: AuthRe
       return;
     }
 
-    const data: { title?: string; questionsJson?: string; status?: string } = {};
+    const data: {
+      title?: string;
+      questionsJson?: string;
+      status?: string;
+      closesAt?: Date | null;
+    } = {};
     if (typeof body.title === 'string' && body.title.trim()) data.title = body.title.trim();
     if (Array.isArray(body.questions)) {
       const qs = body.questions
         .map((q: unknown) => (typeof q === 'string' ? q.trim() : ''))
         .filter((q: string) => q.length > 0);
       if (qs.length) data.questionsJson = JSON.stringify(qs);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'closesAt')) {
+      if (body.closesAt === null || body.closesAt === '') {
+        data.closesAt = null;
+      } else if (typeof body.closesAt === 'string') {
+        const closesAt = new Date(body.closesAt);
+        if (Number.isNaN(closesAt.getTime()) || closesAt.getTime() <= Date.now()) {
+          res.status(400).json({ error: 'closesAt must be a future date' });
+          return;
+        }
+        data.closesAt = closesAt;
+      }
     }
     let reopen = false;
     if (typeof body.status === 'string') {
@@ -4301,6 +5054,14 @@ router.get('/:id/application-cycles', requireAuth, async (req: AuthRequest, res:
       res.status(403).json({ error: 'Only officers and admins can manage applications' });
       return;
     }
+    await prisma.clubApplicationCycle.updateMany({
+      where: {
+        clubId,
+        status: CYCLE_STATUS_OPEN,
+        closesAt: { lte: new Date() },
+      },
+      data: { status: CYCLE_STATUS_CLOSED },
+    });
     const cycles = await prisma.clubApplicationCycle.findMany({
       where: { clubId },
       orderBy: { createdAt: 'desc' },
@@ -4320,29 +5081,58 @@ router.get('/:id/apply', requireAuth, async (req: AuthRequest, res: Response): P
   try {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { id: true, status: true, joinPolicy: true },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        emoji: true,
+        avatarUrl: true,
+        coverUrl: true,
+        status: true,
+        joinPolicy: true,
+        _count: { select: { members: true } },
+      },
     });
     if (!club || club.status === CLUB_STATUS_ARCHIVED) {
       res.status(404).json({ error: 'Club not found' });
       return;
     }
     const openCycle = await prisma.clubApplicationCycle.findFirst({
-      where: { clubId, status: CYCLE_STATUS_OPEN },
+      where: {
+        clubId,
+        status: CYCLE_STATUS_OPEN,
+        OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }],
+      },
       orderBy: { createdAt: 'desc' },
     });
     const [myApplication, membership] = await Promise.all([
-      openCycle
-        ? prisma.clubApplication.findUnique({
-            where: { cycleId_userId: { cycleId: openCycle.id, userId } },
-          })
-        : Promise.resolve(null),
+      prisma.clubApplication.findFirst({
+        where: { userId, cycle: { clubId } },
+        orderBy: { createdAt: 'desc' },
+        include: { cycle: true },
+      }),
       prisma.clubMember.findUnique({ where: { clubId_userId: { clubId, userId } } }),
     ]);
     res.json({
       joinPolicy: club.joinPolicy,
       isMember: !!membership,
+      club: {
+        id: club.id,
+        name: club.name,
+        category: club.category,
+        emoji: club.emoji,
+        avatarUrl: club.avatarUrl,
+        coverUrl: club.coverUrl,
+        memberCount: club._count.members,
+      },
       openCycle: openCycle ? serializeCycle(openCycle, 0) : null,
-      myApplication: myApplication ? { id: myApplication.id, stage: myApplication.stage } : null,
+      myApplication: myApplication ? {
+        id: myApplication.id,
+        stage: myApplication.stage,
+        createdAt: myApplication.createdAt,
+        answerCount: parseJsonStringArray(myApplication.answersJson).length,
+        cycle: serializeCycle(myApplication.cycle, 0),
+      } : null,
     });
   } catch (err) {
     console.error(err);
@@ -4372,7 +5162,10 @@ router.post(
         res.status(404).json({ error: 'Application cycle not found' });
         return;
       }
-      if (cycle.status !== CYCLE_STATUS_OPEN) {
+      if (
+        cycle.status !== CYCLE_STATUS_OPEN
+        || (cycle.closesAt != null && cycle.closesAt.getTime() <= Date.now())
+      ) {
         res.status(409).json({ error: 'Applications are closed.' });
         return;
       }
@@ -4394,6 +5187,38 @@ router.post(
         data: { cycleId, userId, answersJson: JSON.stringify(answers), stage: APP_STAGE_APPLIED },
       });
       res.status(201).json({ id: application.id, stage: application.stage });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// PATCH /clubs/:id/applications/:applicationId/withdraw — applicant withdraws their own application
+router.patch(
+  '/:id/applications/:applicationId/withdraw',
+  requireAuth,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { id: clubId, applicationId } = req.params;
+    try {
+      const application = await prisma.clubApplication.findFirst({
+        where: { id: applicationId, userId, cycle: { clubId } },
+        select: { id: true, stage: true },
+      });
+      if (!application) {
+        res.status(404).json({ error: 'Application not found' });
+        return;
+      }
+      if (![APP_STAGE_APPLIED, APP_STAGE_INTERVIEW].includes(application.stage)) {
+        res.status(409).json({ error: 'This application can no longer be withdrawn' });
+        return;
+      }
+      await prisma.clubApplication.update({
+        where: { id: application.id },
+        data: { stage: APP_STAGE_WITHDRAWN },
+      });
+      res.json({ ok: true, stage: APP_STAGE_WITHDRAWN });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Internal server error' });

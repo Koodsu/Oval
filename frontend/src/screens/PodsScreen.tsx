@@ -1,5 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,35 +14,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   acceptPodInvite,
   declinePodInvite,
+  fetchFeed,
   getApiErrorMessage,
   getFriends,
   getMyPodHistory,
   getMyPods,
   getPodInvites,
 } from '../api';
-import { RootStackParamList } from '../../App';
-import { FriendUser, Pod, PodInvite } from '../types';
-import CreateSheet from '../components/CreateSheet';
+import type { RootStackParamList } from '../../App';
+import type { FriendUser, Pod, PodInvite } from '../types';
 import {
   AppBackdrop,
-  Avatar,
   AvatarStack,
   Banner,
   Button,
+  ContentImage,
   CountBubble,
-  EmptyState,
-  IconButton,
-  SectionHeader,
   SkeletonCard,
   Slab,
-  StatusTag,
-  accentForSeed,
+  SpotIllustration,
+  Sticker,
+  useDockClearance,
 } from '../components/ui';
-import { formatShortDate, formatTime } from '../utils/format';
-import { sortUpcomingPods } from '../utils/experience';
+import { podDayLabel, podTimeLabel } from '../components/pulse';
+import { activityImageFor } from '../constants/contentImages';
+import { useJoinPod } from '../hooks/useJoinPod';
+import { getPodTitle, sortUpcomingPods } from '../utils/experience';
 import {
   BORDER_W,
-  DOCK_CLEARANCE,
   Theme,
   createThemedStyles,
   fonts,
@@ -45,9 +50,21 @@ import {
   spacing,
   useTheme,
 } from '../theme';
-
 import { toast } from '../lib/toast';
+
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type DensityState = 'zero' | 'low' | 'recommended' | 'mine';
+
+const firstPlanSpot = require('../../assets/illustrations/spot/cold-start/03-pods-first-plan.png');
+const openWeekSpot = require('../../assets/illustrations/spot/cold-start/08-no-upcoming-personal.png');
+
+export type PodsPreviewData = {
+  activePods: Pod[];
+  historyPods: Pod[];
+  feed: Pod[];
+  friends?: FriendUser[];
+  invites?: PodInvite[];
+};
 
 type PodWithUnread = Pod & {
   unreadCount?: number;
@@ -56,19 +73,7 @@ type PodWithUnread = Pod & {
 };
 
 function displayPodTitle(pod: Pod) {
-  return pod.activity?.title ?? 'Pod';
-}
-
-function podIcon(pod: Pod): keyof typeof Ionicons.glyphMap {
-  const source = `${pod.activity?.title ?? ''} ${pod.activity?.category ?? ''} ${pod.location}`;
-  if (/basketball|hoops|volleyball|soccer|frisbee|tennis|sports|fitness/i.test(source)) {
-    return 'basketball-outline';
-  }
-  if (/study|exam|homework|library|academic/i.test(source)) return 'book-outline';
-  if (/jog|walk|trail|outdoor|lake/i.test(source)) return 'walk-outline';
-  if (/coffee|boba|lunch|picnic|cooking|food|drink/i.test(source)) return 'cafe-outline';
-  if (/music|movie|show|entertainment/i.test(source)) return 'musical-notes-outline';
-  return 'people-outline';
+  return getPodTitle(pod);
 }
 
 function memberAvatars(pod: Pod) {
@@ -78,137 +83,647 @@ function memberAvatars(pod: Pod) {
   }));
 }
 
-function podWhenLine(pod: Pod) {
-  return `${pod.location} · ${formatShortDate(pod.meetupTime)} at ${formatTime(pod.meetupTime)}`;
-}
-
-function historyWhenLine(pod: Pod) {
-  return `${formatShortDate(pod.meetupTime)} at ${formatTime(pod.meetupTime)} · ${pod.members.length} went`;
-}
-
 function unreadCountForPod(pod: Pod) {
   const candidate = pod as PodWithUnread;
   const value = candidate.unreadCount ?? candidate.chatUnreadCount ?? candidate.unreadChatCount;
   return typeof value === 'number' && value > 0 ? value : 0;
 }
 
-function friendCountForPod(pod: Pod | undefined, friends: FriendUser[]) {
-  if (!pod) return 0;
-  const friendIds = new Set(friends.map((friend) => friend.id));
+function friendCountForPod(pod: Pod, friendIds: Set<string>) {
   return pod.members.filter((member) => friendIds.has(member.userId)).length;
-}
-
-function inviteContextLine(invite: PodInvite, friends: FriendUser[]) {
-  const mutuals = friendCountForPod(invite.pod, friends);
-  if (mutuals > 0) {
-    return `${mutuals} mutual friend${mutuals === 1 ? '' : 's'}`;
-  }
-  if (invite.pod) {
-    return podWhenLine(invite.pod);
-  }
-  return 'Pod invite';
 }
 
 function recentHistory(pods: Pod[]) {
   return [...pods]
-    .filter((pod) => pod.status === 'COMPLETED' || pod.status === 'EXPIRED' || pod.status === 'CANCELLED')
+    .filter(
+      (pod) =>
+        pod.status === 'COMPLETED' ||
+        pod.status === 'EXPIRED' ||
+        pod.status === 'CANCELLED',
+    )
     .sort((a, b) => new Date(b.meetupTime).getTime() - new Date(a.meetupTime).getTime());
 }
 
-function CircleAction({
+export function podsDensityState(myPodCount: number, globalPodCount: number): DensityState {
+  if (myPodCount > 0) return 'mine';
+  if (globalPodCount === 0) return 'zero';
+  if (globalPodCount < 10) return 'low';
+  return 'recommended';
+}
+
+function PodThumbnail({ pod, size = 58 }: { pod: Pod; size?: number }) {
+  return (
+    <ContentImage
+      source={activityImageFor(pod.activity)}
+      seed={pod.activity?.id ?? pod.activityId}
+      accessibilityLabel={`${displayPodTitle(pod)} activity image`}
+      aspectRatio={1}
+      style={{ width: size, height: size, flexShrink: 0 }}
+    />
+  );
+}
+
+function ActionRow({
   icon,
-  label,
+  title,
+  body,
   onPress,
-  primary,
-  disabled,
+  trailing = 'chevron-forward',
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string;
+  title: string;
+  body?: string;
   onPress: () => void;
-  primary?: boolean;
-  disabled?: boolean;
+  trailing?: keyof typeof Ionicons.glyphMap;
 }) {
-  const { colors } = useTheme();
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
   return (
     <Slab
       onPress={onPress}
-      disabled={disabled}
-      color={primary ? colors.primary : colors.surfaceAlt}
-      radius={radii.pill}
       raised={false}
-      faceStyle={circleActionStyles.face}
-      accessibilityLabel={label}
+      faceStyle={styles.actionRow}
+      accessibilityLabel={title}
     >
-      <Ionicons
-        name={icon}
-        size={18}
-        color={primary ? colors.onPrimary : colors.sub}
-      />
+      <Ionicons name={icon} size={24} color={colors.ink} />
+      <View style={styles.actionCopy}>
+        <Text style={[typography.heading, { color: colors.ink }]}>{title}</Text>
+        {body ? (
+          <Text style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
+        ) : null}
+      </View>
+      <Ionicons name={trailing} size={19} color={colors.sub} />
     </Slab>
   );
 }
 
-const circleActionStyles = {
-  face: {
-    width: 38,
-    height: 38,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-};
-
-export default function PodsScreen() {
-  const navigation = useNavigation<Nav>();
+function PlanRow({
+  pod,
+  past,
+  onOpen,
+}: {
+  pod: Pod;
+  past?: boolean;
+  onOpen: () => void;
+}) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const unreadCount = unreadCountForPod(pod);
+
+  return (
+    <Slab
+      onPress={onOpen}
+      raised={false}
+      faceStyle={styles.planRow}
+      accessibilityLabel={`Open ${displayPodTitle(pod)}`}
+    >
+      <PodThumbnail pod={pod} size={58} />
+      <View style={styles.planCopy}>
+        <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+          {displayPodTitle(pod)}
+        </Text>
+        <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+          {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)} · {pod.location}
+        </Text>
+        <AvatarStack names={memberAvatars(pod)} size={20} max={4} />
+      </View>
+      <View style={styles.planTrailing}>
+        {unreadCount > 0 ? (
+          <View style={styles.unreadWrap}>
+            <Ionicons name="chatbubble-outline" size={20} color={colors.ink} />
+            <CountBubble count={unreadCount} style={styles.unreadBubble} />
+          </View>
+        ) : null}
+        <Ionicons name="chevron-forward" size={18} color={colors.sub} />
+      </View>
+    </Slab>
+  );
+}
+
+function RecommendationRow({
+  pod,
+  friendIds,
+  joining,
+  onOpen,
+  onJoin,
+}: {
+  pod: Pod;
+  friendIds: Set<string>;
+  joining: boolean;
+  onOpen: () => void;
+  onJoin: () => void;
+}) {
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
+  const friendCount = friendCountForPod(pod, friendIds);
+  const reason = pod.recommended
+    ? `Matches your ${pod.activity?.category ?? 'interests'}`
+    : friendCount
+      ? `${friendCount} ${friendCount === 1 ? 'friend is' : 'friends are'} going`
+      : 'Popular on campus';
+
+  return (
+    <Slab
+      raised={false}
+      faceStyle={styles.recommendationShell}
+    >
+      <View style={styles.recommendationRow}>
+        <Pressable
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${displayPodTitle(pod)}`}
+          style={({ pressed }) => [
+            styles.recommendationOpen,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <PodThumbnail pod={pod} size={64} />
+          <View style={styles.recommendationCopy}>
+            <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+              {displayPodTitle(pod)}
+            </Text>
+            <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+              {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)} · {pod.location}
+            </Text>
+            <View style={styles.reasonRow}>
+              <Sticker
+                label={reason}
+                tint={pod.recommended ? colors.blueSoft : colors.greenSoft}
+                textColor={pod.recommended ? colors.blue : colors.green}
+                small
+              />
+            </View>
+            <View style={styles.goingRow}>
+              <AvatarStack names={memberAvatars(pod)} size={18} max={3} />
+              <Text style={[typography.captionSmall, { color: colors.sub }]}>
+                {pod.members.length} going
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+        <Button
+          label={joining ? 'Joining…' : 'Join'}
+          onPress={onJoin}
+          disabled={joining}
+          size="sm"
+        />
+      </View>
+    </Slab>
+  );
+}
+
+function InviteSection({
+  invites,
+  friends,
+  busyId,
+  onRespond,
+  onOpen,
+}: {
+  invites: PodInvite[];
+  friends: FriendUser[];
+  busyId: string | null;
+  onRespond: (inviteId: string, accept: boolean) => void;
+  onOpen: (podId: string) => void;
+}) {
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
+  const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
+  if (!invites.length) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: colors.ink }]}>Invites</Text>
+      {invites.map((invite) => {
+        const pod = invite.pod;
+        const friendCount = pod ? friendCountForPod(pod, friendIds) : 0;
+        const acceptBusy = busyId === `accept-${invite.id}`;
+        return (
+          <Slab
+            key={invite.id}
+            raised={false}
+            faceStyle={styles.inviteShell}
+          >
+            <View style={styles.inviteRow}>
+              <Pressable
+                onPress={() => onOpen(invite.podId)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open invite for ${pod ? displayPodTitle(pod) : 'pod'}`}
+                style={({ pressed }) => [
+                  styles.inviteOpen,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                {pod ? <PodThumbnail pod={pod} size={58} /> : null}
+                <View style={styles.planCopy}>
+                  <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+                    {pod ? displayPodTitle(pod) : 'Pod invite'}
+                  </Text>
+                  <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                    {invite.sender?.name ?? 'Someone'} invited you
+                  </Text>
+                  <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                    {friendCount
+                      ? `${friendCount} mutual ${friendCount === 1 ? 'friend' : 'friends'}`
+                      : pod
+                        ? `${podDayLabel(pod.meetupTime)} · ${podTimeLabel(pod.meetupTime)}`
+                        : 'Tap to see the plan'}
+                  </Text>
+                </View>
+              </Pressable>
+              <View style={styles.inviteButtons}>
+                <Pressable
+                  onPress={() => onRespond(invite.id, true)}
+                  disabled={Boolean(busyId)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Accept invite"
+                  style={({ pressed }) => [
+                    styles.inviteButton,
+                    {
+                      backgroundColor: colors.primary,
+                      opacity: pressed ? 0.68 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={acceptBusy ? 'ellipsis-horizontal' : 'checkmark'}
+                    size={18}
+                    color={colors.onPrimary}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => onRespond(invite.id, false)}
+                  disabled={Boolean(busyId)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decline invite"
+                  style={({ pressed }) => [
+                    styles.inviteButton,
+                    {
+                      backgroundColor: colors.surfaceAlt,
+                      opacity: pressed ? 0.68 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="close" size={18} color={colors.sub} />
+                </Pressable>
+              </View>
+            </View>
+          </Slab>
+        );
+      })}
+    </View>
+  );
+}
+
+function EmptyPodsState() {
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
+
+  return (
+    <Animated.View entering={FadeInDown.duration(motion.durBase)} style={styles.stateStack}>
+      <View style={styles.heroIntro}>
+        <SpotIllustration
+          source={firstPlanSpot}
+          accessibilityLabel="A student planning a first pod"
+          height={142}
+          style={styles.stateIllustration}
+        />
+        <Text style={[styles.stateTitle, { color: colors.ink }]}>
+          Your first plan can be simple
+        </Text>
+        <Text style={[styles.stateBody, { color: colors.sub }]}>
+          Start with one idea. We’ll help you turn it into a pod.
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Three easy steps</Text>
+        <Slab raised={false} faceStyle={styles.stepList}>
+          {[
+            ['checkmark-circle-outline', '1. Choose an idea', 'Pick a topic or activity you care about.'],
+            ['time-outline', '2. Pick a time', 'Find a time that works for you.'],
+            ['person-add-outline', '3. Invite people', 'Bring classmates into the conversation.'],
+          ].map(([icon, title, body], index) => (
+            <View
+              key={title}
+              style={[
+                styles.stepRow,
+                index > 0 && { borderTopColor: colors.borderSoft, borderTopWidth: BORDER_W },
+              ]}
+            >
+              <View style={[styles.stepIcon, { backgroundColor: colors.surfaceAlt }]}>
+                <Ionicons
+                  name={icon as keyof typeof Ionicons.glyphMap}
+                  size={21}
+                  color={colors.sub}
+                />
+              </View>
+              <View style={styles.actionCopy}>
+                <Text style={[typography.subheading, { color: colors.ink }]}>{title}</Text>
+                <Text style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
+              </View>
+            </View>
+          ))}
+        </Slab>
+      </View>
+
+    </Animated.View>
+  );
+}
+
+function DiscoveryState({
+  density,
+  pods,
+  friends,
+  busyPodId,
+  onOpen,
+  onJoin,
+}: {
+  density: 'low' | 'recommended';
+  pods: Pod[];
+  friends: FriendUser[];
+  busyPodId: string | null;
+  onOpen: (pod: Pod) => void;
+  onJoin: (pod: Pod) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
+  const low = density === 'low';
+  const visible = pods.slice(0, low ? 2 : 3);
+
+  return (
+    <Animated.View entering={FadeInDown.duration(motion.durBase)} style={styles.stateStack}>
+      <View style={styles.heroIntro}>
+        <SpotIllustration
+          source={openWeekSpot}
+          accessibilityLabel="A student checking an open calendar"
+          height={136}
+          style={styles.stateIllustration}
+        />
+        <Text style={[styles.stateTitle, { color: colors.ink }]}>
+          {low ? 'Nothing on your calendar yet' : 'Your week is still open'}
+        </Text>
+        <Text style={[styles.stateBody, { color: colors.sub }]}>
+          {low
+            ? 'You aren’t in any pods right now. Here are a couple you might like.'
+            : 'You don’t have any upcoming pods. Here are some picks for you.'}
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>
+          {low ? 'Two good fits' : 'Recommended for you'}
+        </Text>
+        <View style={styles.cardStack}>
+          {visible.map((pod) => (
+            <RecommendationRow
+              key={pod.id}
+              pod={pod}
+              friendIds={friendIds}
+              joining={busyPodId === pod.id}
+              onOpen={() => onOpen(pod)}
+              onJoin={() => onJoin(pod)}
+            />
+          ))}
+        </View>
+      </View>
+
+    </Animated.View>
+  );
+}
+
+function NextUpHero({
+  pod,
+  onOpen,
+  onChat,
+}: {
+  pod: Pod;
+  onOpen: () => void;
+  onChat: () => void;
+}) {
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
+  return (
+    <View style={[styles.nextUp, { backgroundColor: colors.primary }]}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Open next pod, ${displayPodTitle(pod)}`}
+        style={({ pressed }) => [
+          styles.nextUpMain,
+          { opacity: pressed ? 0.82 : 1 },
+        ]}
+      >
+        <View style={styles.nextUpCopy}>
+          <Text style={[typography.kicker, { color: colors.onPrimary }]}>Next up</Text>
+          <Text style={[styles.nextUpTitle, { color: colors.onPrimary }]} numberOfLines={2}>
+            {displayPodTitle(pod)}
+          </Text>
+          <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+            {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
+          </Text>
+          <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+            {pod.location}
+          </Text>
+        </View>
+        <View style={styles.nextUpVisual}>
+          <PodThumbnail pod={pod} size={78} />
+          <AvatarStack
+            names={memberAvatars(pod)}
+            size={28}
+            max={3}
+            onColor
+            style={styles.nextUpAvatars}
+          />
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={onChat}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${displayPodTitle(pod)} chat`}
+        style={({ pressed }) => [
+          styles.chatButton,
+          {
+            backgroundColor: colors.onPrimary,
+            opacity: pressed ? 0.78 : 1,
+          },
+        ]}
+      >
+        <Text style={[typography.button, { color: colors.primary }]}>Open chat</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function MyPodsState({
+  upcoming,
+  onOpen,
+  onChat,
+}: {
+  upcoming: Pod[];
+  onOpen: (pod: Pod) => void;
+  onChat: (pod: Pod) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const nextPod = upcoming[0];
+
+  return (
+    <Animated.View entering={FadeInDown.duration(motion.durBase)} style={styles.stateStack}>
+      {nextPod ? (
+        <NextUpHero
+          pod={nextPod}
+          onOpen={() => onOpen(nextPod)}
+          onChat={() => onChat(nextPod)}
+        />
+      ) : null}
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Upcoming pods</Text>
+        <View style={styles.cardStack}>
+          {upcoming.length ? (
+            upcoming.map((pod) => (
+              <PlanRow
+                key={pod.id}
+                pod={pod}
+                onOpen={() => onOpen(pod)}
+              />
+            ))
+          ) : (
+            <View style={[styles.inlineEmpty, { borderColor: colors.border }]}>
+              <Text style={[styles.stateBody, { color: colors.sub }]}>
+                No upcoming pods right now.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+function PastPodsSection({
+  pods,
+  onOpen,
+}: {
+  pods: Pod[];
+  onOpen: (pod: Pod) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  if (!pods.length) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: colors.ink }]}>Past pods</Text>
+      <View style={styles.cardStack}>
+        {pods.map((pod) => (
+          <PlanRow
+            key={pod.id}
+            pod={pod}
+            past
+            onOpen={() => onOpen(pod)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function PodActions({
+  onExplore,
+  onCreate,
+  onInvite,
+}: {
+  onExplore: () => void;
+  onCreate: () => void;
+  onInvite: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: colors.ink }]}>More to do</Text>
+      <View style={styles.cardStack}>
+        <ActionRow
+          icon="search-outline"
+          title="Explore pods"
+          body="Find something happening around campus."
+          onPress={onExplore}
+        />
+        <ActionRow
+          icon="add-circle-outline"
+          title="Create a pod"
+          body="Choose an activity and make a plan."
+          onPress={onCreate}
+        />
+        <ActionRow
+          icon="person-add-outline"
+          title="Invite friends"
+          body="Bring someone along."
+          onPress={onInvite}
+        />
+      </View>
+    </View>
+  );
+}
+
+export default function PodsScreen({ previewData }: { previewData?: PodsPreviewData }) {
+  const navigation = useNavigation<Nav>();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const dockClearance = useDockClearance();
   const [refreshing, setRefreshing] = useState(false);
-  const [activePods, setActivePods] = useState<Pod[]>([]);
-  const [historyPods, setHistoryPods] = useState<Pod[]>([]);
-  const [invites, setInvites] = useState<PodInvite[]>([]);
-  const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [activePods, setActivePods] = useState<Pod[]>(previewData?.activePods ?? []);
+  const [historyPods, setHistoryPods] = useState<Pod[]>(previewData?.historyPods ?? []);
+  const [feed, setFeed] = useState<Pod[]>(previewData?.feed ?? []);
+  const [invites, setInvites] = useState<PodInvite[]>(previewData?.invites ?? []);
+  const [friends, setFriends] = useState<FriendUser[]>(previewData?.friends ?? []);
+  const [loaded, setLoaded] = useState(Boolean(previewData));
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
+  const { join, busyPodId } = useJoinPod();
 
   const load = useCallback(async () => {
-    const [mineResult, historyResult, inviteResult, friendResult] = await Promise.allSettled([
-      getMyPods(),
-      getMyPodHistory(),
-      getPodInvites(),
-      getFriends(),
-    ]);
+    if (previewData) {
+      setActivePods(previewData.activePods);
+      setHistoryPods(previewData.historyPods);
+      setFeed(previewData.feed);
+      setInvites(previewData.invites ?? []);
+      setFriends(previewData.friends ?? []);
+      setLoaded(true);
+      setRefreshing(false);
+      return;
+    }
 
-    if (mineResult.status === 'fulfilled') {
-      setActivePods(mineResult.value);
-    }
-    if (historyResult.status === 'fulfilled') {
-      setHistoryPods(historyResult.value);
-    }
-    if (inviteResult.status === 'fulfilled') {
-      setInvites(inviteResult.value);
-    }
-    if (friendResult.status === 'fulfilled') {
-      setFriends(friendResult.value);
-    }
+    const [mineResult, historyResult, feedResult, inviteResult, friendResult] =
+      await Promise.allSettled([
+        getMyPods(),
+        getMyPodHistory(),
+        fetchFeed({ limit: 50 }),
+        getPodInvites(),
+        getFriends(),
+      ]);
+
+    if (mineResult.status === 'fulfilled') setActivePods(mineResult.value);
+    if (historyResult.status === 'fulfilled') setHistoryPods(historyResult.value);
+    if (feedResult.status === 'fulfilled') setFeed(feedResult.value);
+    if (inviteResult.status === 'fulfilled') setInvites(inviteResult.value);
+    if (friendResult.status === 'fulfilled') setFriends(friendResult.value);
 
     const failedSections = [
-      mineResult.status === 'rejected' ? 'active plans' : null,
-      historyResult.status === 'rejected' ? 'history' : null,
+      mineResult.status === 'rejected' ? 'your pods' : null,
+      feedResult.status === 'rejected' ? 'recommendations' : null,
       inviteResult.status === 'rejected' ? 'invites' : null,
-      friendResult.status === 'rejected' ? 'friends' : null,
     ].filter((section): section is string => section != null);
-
     setLoadWarning(
-      failedSections.length
-        ? `Some plans could not refresh: ${failedSections.join(', ')}.`
-        : null,
+      failedSections.length ? `Some sections could not refresh: ${failedSections.join(', ')}.` : null,
     );
     setLoaded(true);
     setRefreshing(false);
-  }, []);
+  }, [previewData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -218,14 +733,52 @@ export default function PodsScreen() {
 
   const currentPods = useMemo(() => sortUpcomingPods(activePods), [activePods]);
   const history = useMemo(() => recentHistory(historyPods), [historyPods]);
-  const shownHistory = historyExpanded ? history : history.slice(0, 3);
+  const discoveryPods = useMemo(() => {
+    const mineIds = new Set(currentPods.map((pod) => pod.id));
+    return feed.filter((pod) => !mineIds.has(pod.id));
+  }, [currentPods, feed]);
+  const density = podsDensityState(currentPods.length, feed.length);
 
-  const openDiscover = useCallback(() => {
+  const openPod = useCallback(
+    (pod: Pod) => navigation.navigate('PodDetail', { podId: pod.id }),
+    [navigation],
+  );
+  const openChat = useCallback(
+    (pod: Pod) => navigation.navigate('PodChat', { podId: pod.id }),
+    [navigation],
+  );
+  const openPeople = useCallback(() => navigation.navigate('UserSearch'), [navigation]);
+  const openExplore = useCallback(() => {
+    if (previewData) {
+      (
+        navigation as unknown as {
+          navigate: (screen: 'Explore') => void;
+        }
+      ).navigate('Explore');
+      return;
+    }
     navigation.navigate('MainTabs', { screen: 'Explore' });
-  }, [navigation]);
-
+  }, [navigation, previewData]);
+  const openCreate = useCallback(() => {
+    const params = { startCreate: Date.now() };
+    if (previewData) {
+      (
+        navigation as unknown as {
+          navigate: (
+            screen: 'Explore',
+            routeParams: { startCreate: number },
+          ) => void;
+        }
+      ).navigate('Explore', params);
+      return;
+    }
+    navigation.navigate('MainTabs', {
+      screen: 'Explore',
+      params,
+    });
+  }, [navigation, previewData]);
   const handleInvite = async (inviteId: string, accept: boolean) => {
-    setBusyId(`${accept ? 'accept' : 'decline'}-${inviteId}`);
+    setBusyInviteId(`${accept ? 'accept' : 'decline'}-${inviteId}`);
     const previousInvites = invites;
     setInvites((current) => current.filter((invite) => invite.id !== inviteId));
     try {
@@ -240,14 +793,17 @@ export default function PodsScreen() {
       setInvites(previousInvites);
       toast.error('Could not update invite', getApiErrorMessage(error));
     } finally {
-      setBusyId(null);
+      setBusyInviteId(null);
     }
   };
 
   return (
     <AppBackdrop>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.md, paddingBottom: dockClearance },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -259,275 +815,69 @@ export default function PodsScreen() {
             tintColor={colors.primary}
           />
         }
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
       >
-        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
-          <View style={styles.masthead}>
-            <View style={{ flex: 1 }}>
-              <Text style={[typography.kicker, { color: colors.accentText }]}>ON YOUR CALENDAR</Text>
-              <Text style={styles.pageTitle}>Plans</Text>
-            </View>
-            <IconButton
-              icon="add"
-              size={48}
-              color={colors.primary}
-              iconColor={colors.onPrimary}
-              accessibilityLabel="Start a pod"
-              onPress={() => setCreateOpen(true)}
-            />
-          </View>
-        </Animated.View>
+        <View style={styles.masthead}>
+          <Text style={[styles.pageTitle, { color: colors.ink }]}>My Pods</Text>
+          <Pressable
+            onPress={openPeople}
+            accessibilityRole="button"
+            accessibilityLabel="Invite friends"
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.headerButton,
+              { opacity: pressed ? 0.65 : 1 },
+            ]}
+          >
+            <Ionicons name="person-add-outline" size={23} color={colors.ink} />
+          </Pressable>
+        </View>
 
-        {loadWarning ? (
-          <View style={{ gap: spacing.sm }}>
-            <Banner message={loadWarning} kind="info" />
-            <Button label="Try again" size="sm" variant="secondary" onPress={() => void load()} />
-          </View>
-        ) : null}
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader title="Active" />
-          {!loaded ? (
-            <>
-              <SkeletonCard compact />
-              <SkeletonCard compact />
-            </>
-          ) : currentPods.length ? (
-            currentPods.map((pod, index) => {
-              const accent = accentForSeed(colors, displayPodTitle(pod));
-              const unreadCount = unreadCountForPod(pod);
-              return (
-                <Animated.View
-                  key={pod.id}
-                  entering={FadeInDown.delay(Math.min(index, 5) * motion.stagger).duration(
-                    motion.durBase,
-                  )}
-                >
-                  <Slab
-                    onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                    faceStyle={styles.planRowFace}
-                    accessibilityLabel={displayPodTitle(pod)}
-                  >
-                    <View
-                      style={[
-                        styles.iconWell,
-                        { backgroundColor: accent.soft, borderColor: colors.border },
-                      ]}
-                    >
-                      <Ionicons name={podIcon(pod)} size={20} color={accent.tint} />
-                    </View>
-                    <View style={styles.rowCopy}>
-                      <View style={styles.titleLine}>
-                        <Text style={[typography.heading, { flexShrink: 1 }]} numberOfLines={1}>
-                          {displayPodTitle(pod)}
-                        </Text>
-                        {unreadCount > 0 ? <CountBubble count={unreadCount} /> : null}
-                      </View>
-                      <Text style={typography.caption} numberOfLines={1}>
-                        {podWhenLine(pod)}
-                      </Text>
-                      <View style={styles.memberLine}>
-                        <AvatarStack names={memberAvatars(pod)} size={24} max={3} />
-                        <Text style={typography.captionSmall} numberOfLines={1}>
-                          {pod.members.length} of {pod.maxMembers} in
-                        </Text>
-                      </View>
-                    </View>
-                    <StatusTag status={pod.status} style={styles.statusTag} />
-                  </Slab>
-                </Animated.View>
-              );
-            })
-          ) : (
-            <View style={styles.emptyActions}>
-              <EmptyState
-                icon="calendar-outline"
-                title="Nothing planned yet"
-                body="Find something forming nearby or start a pod when you have a spot in mind."
-                actionLabel="Find a pod"
-                onAction={openDiscover}
-                style={styles.emptyState}
-              />
-              <Button
-                label="Start one"
-                variant="secondary"
-                icon="add"
-                onPress={() => setCreateOpen(true)}
-                style={styles.secondaryEmptyAction}
-              />
-            </View>
-          )}
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader title="Invites" />
-          {!loaded ? (
+        {!loaded ? (
+          <View style={styles.cardStack}>
+            <SkeletonCard />
             <SkeletonCard compact />
-          ) : invites.length ? (
-            invites.map((invite, index) => {
-              const title = invite.pod ? displayPodTitle(invite.pod) : 'Pod invite';
-              const acceptBusy = busyId === `accept-${invite.id}`;
-              const declineBusy = busyId === `decline-${invite.id}`;
-              return (
-                <Animated.View
-                  key={invite.id}
-                  entering={FadeInDown.delay(Math.min(index, 5) * motion.stagger).duration(
-                    motion.durBase,
-                  )}
-                >
-                  <Slab
-                    onPress={() => navigation.navigate('PodDetail', { podId: invite.podId })}
-                    faceStyle={styles.inviteFace}
-                    accessibilityLabel={`Open invite for ${title}`}
-                  >
-                    <Avatar
-                      name={invite.sender?.name ?? 'Someone'}
-                      uri={invite.sender?.avatarUrl}
-                      size={44}
-                    />
-                    <View style={styles.rowCopy}>
-                      <Text style={typography.heading} numberOfLines={1}>
-                        {title}
-                      </Text>
-                      <Text style={typography.caption} numberOfLines={1}>
-                        {invite.sender?.name ?? 'Someone'} invited you
-                      </Text>
-                      <Text style={typography.captionSmall} numberOfLines={1}>
-                        {inviteContextLine(invite, friends)}
-                      </Text>
-                    </View>
-                    <View style={styles.inviteActions}>
-                      <CircleAction
-                        icon={acceptBusy ? 'ellipsis-horizontal' : 'checkmark'}
-                        label={`Accept invite for ${title}`}
-                        primary
-                        disabled={Boolean(busyId)}
-                        onPress={() => void handleInvite(invite.id, true)}
-                      />
-                      <CircleAction
-                        icon={declineBusy ? 'ellipsis-horizontal' : 'close'}
-                        label={`Decline invite for ${title}`}
-                        disabled={Boolean(busyId)}
-                        onPress={() => void handleInvite(invite.id, false)}
-                      />
-                    </View>
-                  </Slab>
-                </Animated.View>
-              );
-            })
-          ) : (
-            <EmptyState
-              icon="mail-open-outline"
-              title="No pod invites"
-              body="Invites from friends will stay here until you answer."
-              actionLabel="Find people"
-              onAction={() => navigation.navigate('UserSearch')}
-              tint={colors.surfaceAlt}
-              style={styles.compactEmptyState}
-            />
-          )}
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
-          style={styles.section}
-        >
-          <SectionHeader
-            title="History"
-            actionLabel={
-              history.length > 3
-                ? historyExpanded
-                  ? 'Show less'
-                  : 'View all'
-                : undefined
-            }
-            onAction={() => setHistoryExpanded((expanded) => !expanded)}
-          />
-          {!loaded ? (
             <SkeletonCard compact />
-          ) : shownHistory.length ? (
-            shownHistory.map((pod, index) => {
-              const needsRecap = pod.status === 'COMPLETED' && !pod.myRecap;
-              return (
-                <Animated.View
-                  key={pod.id}
-                  entering={FadeInDown.delay(Math.min(index, 5) * motion.stagger).duration(
-                    motion.durBase,
-                  )}
-                >
-                  <Slab
-                    onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                    faceStyle={styles.planRowFace}
-                    accessibilityLabel={displayPodTitle(pod)}
-                  >
-                    <View
-                      style={[
-                        styles.iconWell,
-                        { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
-                      ]}
-                    >
-                      <Ionicons
-                        name={pod.status === 'COMPLETED' ? 'checkmark-circle-outline' : 'time-outline'}
-                        size={20}
-                        color={pod.status === 'COMPLETED' ? colors.success : colors.sub}
-                      />
-                    </View>
-                    <View style={styles.rowCopy}>
-                      <Text style={typography.heading} numberOfLines={1}>
-                        {displayPodTitle(pod)}
-                      </Text>
-                      <Text style={typography.caption} numberOfLines={1}>
-                        {pod.location}
-                      </Text>
-                      <Text style={typography.captionSmall} numberOfLines={1}>
-                        {historyWhenLine(pod)}
-                      </Text>
-                    </View>
-                    <View style={styles.historyRight}>
-                      <StatusTag status={pod.status} style={styles.statusTag} />
-                      {needsRecap ? (
-                        <Pressable
-                          onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Rate ${displayPodTitle(pod)}`}
-                          hitSlop={8}
-                          style={({ pressed }) => [
-                            styles.rateChip,
-                            {
-                              backgroundColor: colors.primarySoft,
-                              opacity: pressed ? 0.62 : 1,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.rateText, { color: colors.accentText }]}>Rate it</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  </Slab>
-                </Animated.View>
-              );
-            })
-          ) : (
-            <EmptyState
-              icon="time-outline"
-              title="No history yet"
-              body="Completed and expired plans will collect here."
-              actionLabel="Find a pod"
-              onAction={openDiscover}
-              tint={colors.surfaceAlt}
-              style={styles.compactEmptyState}
+          </View>
+        ) : (
+          <>
+            <InviteSection
+              invites={invites}
+              friends={friends}
+              busyId={busyInviteId}
+              onRespond={(inviteId, accept) => void handleInvite(inviteId, accept)}
+              onOpen={(podId) => navigation.navigate('PodDetail', { podId })}
             />
-          )}
-        </Animated.View>
+
+            {density === 'zero' ? (
+              <EmptyPodsState />
+            ) : density === 'low' || density === 'recommended' ? (
+              <DiscoveryState
+                density={density}
+                pods={discoveryPods}
+                friends={friends}
+                busyPodId={busyPodId}
+                onOpen={openPod}
+                onJoin={(pod) => void join(pod)}
+              />
+            ) : (
+              <MyPodsState
+                upcoming={currentPods}
+                onOpen={openPod}
+                onChat={openChat}
+              />
+            )}
+
+            <PastPodsSection pods={history} onOpen={openPod} />
+            <PodActions
+              onExplore={openExplore}
+              onCreate={openCreate}
+              onInvite={openPeople}
+            />
+          </>
+        )}
       </ScrollView>
-      <CreateSheet visible={createOpen} onClose={() => setCreateOpen(false)} />
     </AppBackdrop>
   );
 }
@@ -535,99 +885,229 @@ export default function PodsScreen() {
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
     flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: DOCK_CLEARANCE,
+    paddingHorizontal: spacing.lg,
     gap: spacing.lg,
   },
   masthead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing.md,
+    justifyContent: 'space-between' as const,
   },
   pageTitle: {
     fontFamily: fonts.display,
     fontWeight: '800' as const,
-    fontSize: 30,
-    lineHeight: 36,
-    letterSpacing: 0,
-    color: t.colors.ink,
-    marginTop: 4,
+    fontSize: 28,
+    lineHeight: 34,
   },
-  section: {
-    gap: spacing.md,
-  },
-  planRowFace: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  inviteFace: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  iconWell: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    borderWidth: BORDER_W,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  rowCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
-  titleLine: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    minWidth: 0,
-  },
-  memberLine: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-    marginTop: 2,
-  },
-  statusTag: {
-    flexShrink: 0,
-  },
-  inviteActions: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.sm,
-  },
-  historyRight: {
-    alignItems: 'flex-end' as const,
-    gap: spacing.sm,
-  },
-  rateChip: {
-    minHeight: 30,
-    paddingHorizontal: 11,
+  headerButton: {
+    width: 42,
+    height: 42,
     borderRadius: radii.pill,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  rateText: {
-    fontFamily: fonts.semibold,
-    fontWeight: '600' as const,
-    fontSize: 12,
+  stateStack: {
+    gap: spacing.lg,
   },
-  emptyActions: {
+  heroIntro: {
     alignItems: 'center' as const,
+    gap: spacing.sm,
   },
-  emptyState: {
-    paddingBottom: spacing.md,
+  stateIllustration: {
+    width: '100%' as const,
+    marginBottom: -spacing.sm,
   },
-  compactEmptyState: {
-    paddingVertical: spacing.xxl,
+  stateTitle: {
+    fontFamily: fonts.display,
+    fontWeight: '800' as const,
+    fontSize: 22,
+    lineHeight: 28,
+    textAlign: 'center' as const,
   },
-  secondaryEmptyAction: {
-    alignSelf: 'center' as const,
-    minWidth: 180,
+  stateBody: {
+    fontFamily: fonts.body,
+    fontWeight: '400' as const,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center' as const,
+    maxWidth: 330,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    fontFamily: fonts.bold,
+    fontWeight: '700' as const,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  cardStack: {
+    gap: spacing.sm,
+  },
+  stepList: {
+    padding: 0,
+    overflow: 'hidden' as const,
+  },
+  stepRow: {
+    minHeight: 66,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  stepIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  actionRow: {
+    minHeight: 66,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  actionCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  recommendationShell: {
+    padding: 0,
+    overflow: 'hidden' as const,
+  },
+  recommendationRow: {
+    minHeight: 98,
+    padding: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  recommendationOpen: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  recommendationCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  reasonRow: {
+    marginTop: 2,
+  },
+  goingRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  nextUp: {
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    overflow: 'hidden' as const,
+  },
+  nextUpMain: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  nextUpCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  nextUpTitle: {
+    fontFamily: fonts.display,
+    fontWeight: '800' as const,
+    fontSize: 22,
+    lineHeight: 27,
+  },
+  nextUpVisual: {
+    alignItems: 'flex-end' as const,
+  },
+  nextUpAvatars: {
+    marginTop: -12,
+    marginRight: 4,
+  },
+  chatButton: {
+    alignSelf: 'flex-start' as const,
+    minWidth: 156,
+    height: 42,
+    borderRadius: radii.button,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  planRow: {
+    minHeight: 86,
+    padding: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  planCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  planTrailing: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  unreadWrap: {
+    position: 'relative' as const,
+    width: 28,
+    height: 28,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  unreadBubble: {
+    position: 'absolute' as const,
+    right: -5,
+    top: -5,
+  },
+  inlineEmpty: {
+    minHeight: 94,
+    borderRadius: radii.md,
+    borderWidth: BORDER_W,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    padding: spacing.lg,
+  },
+  inviteShell: {
+    padding: 0,
+    overflow: 'hidden' as const,
+  },
+  inviteRow: {
+    minHeight: 86,
+    padding: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  inviteOpen: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  inviteButtons: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  },
+  inviteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
 }));

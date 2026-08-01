@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../App';
 import { AppBackdrop, Card, Chip, ListRow, ScreenHeader } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
 import {
   AppearancePreference,
   Theme,
@@ -25,6 +26,7 @@ const APPEARANCE_OPTIONS: Array<{ value: AppearancePreference; label: string; ic
 export default function SettingsScreen({ navigation }: Props) {
   const styles = useStyles();
   const { colors, typography, preference, setPreference } = useTheme();
+  const { signOut } = useAuth();
   const insets = useSafeAreaInsets();
 
   return (
@@ -69,7 +71,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <ListRow
             icon="shield-checkmark"
             title="Privacy & Data"
-            sub="Download your data, control notifications and connected accounts, or delete your account."
+            sub="Download your data and control notifications and connected accounts."
             tint={colors.tealSoft}
             last
             onPress={() => navigation.navigate('PrivacyData')}
@@ -108,6 +110,24 @@ export default function SettingsScreen({ navigation }: Props) {
             tint={colors.pinkSoft}
             last
             onPress={() => void Linking.openURL('mailto:contactus@theovalapp.com')}
+          />
+        </Card>
+
+        <Text style={typography.kicker}>SESSION</Text>
+        <Card padded={false} faceStyle={{ paddingHorizontal: spacing.lg }}>
+          <ListRow
+            icon="trash"
+            title="Delete account"
+            sub="Review what will be removed before confirming."
+            destructive
+            onPress={() => navigation.navigate('DeleteAccount')}
+          />
+          <ListRow
+            icon="log-out"
+            title="Log out"
+            destructive
+            last
+            onPress={() => void signOut()}
           />
         </Card>
       </ScrollView>

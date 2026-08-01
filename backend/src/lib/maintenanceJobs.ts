@@ -10,7 +10,6 @@ export async function runMaintenanceJobs() {
     pushReceipts,
     ,
     ,
-    ,
     firstPodNudges,
     demandPrompts,
     weeklyRecaps,
@@ -19,7 +18,6 @@ export async function runMaintenanceJobs() {
   ] = await Promise.all([
     NotificationService.checkPushReceipts(),
     NotificationService.sendMeetupReminders(),
-    NotificationService.sendRecapPrompts(),
     NotificationService.expireStaleWaitlistEntries(),
     NotificationService.sendFirstPodNudges(),
     NotificationService.sendDemandConversionPrompts(),

@@ -93,7 +93,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
   const [reportTarget, setReportTarget] = useState<Message | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
-  const [dismissedCard, setDismissedCard] = useState<'confirm' | 'recap' | null>(null);
+  const [confirmCardDismissed, setConfirmCardDismissed] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<Message[]>([]);
@@ -299,13 +299,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
     msUntilMeetup <= 2 * 60 * 60 * 1000 &&
     msUntilMeetup > -30 * 60 * 1000 &&
     !myMember?.confirmedAt &&
-    dismissedCard !== 'confirm';
-  const showRecapCard =
-    !showConfirmCard &&
-    isMember &&
-    pod?.status === 'COMPLETED' &&
-    !pod.myRecap &&
-    dismissedCard !== 'recap';
+    !confirmCardDismissed;
 
   const handleConfirmAttendance = async () => {
     if (!pod || confirmBusy) return;
@@ -500,7 +494,16 @@ export default function PodChatScreen({ route, navigation }: Props) {
                             size={15}
                             color={hasHeart ? colors.pink : colors.faint}
                           />
-                          {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
+                          {heartCount ? (
+                            <Text
+                              style={[
+                                styles.heartCount,
+                                hasHeart && { color: colors.pink },
+                              ]}
+                            >
+                              {heartCount}
+                            </Text>
+                          ) : null}
                         </Pressable>
                         {!mine ? (
                           <Pressable
@@ -554,7 +557,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => setDismissedCard('confirm')}
+                onPress={() => setConfirmCardDismissed(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss"
                 hitSlop={10}
@@ -563,48 +566,6 @@ export default function PodChatScreen({ route, navigation }: Props) {
               </Pressable>
             </View>
           ) : null}
-          {showRecapCard && pod ? (
-            <View
-              style={[
-                styles.contextCard,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={typography.subheading}>How was it?</Text>
-                <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
-                  A quick rating keeps the good plans coming.
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => navigation.navigate('PodDetail', { podId })}
-                accessibilityRole="button"
-                accessibilityLabel="Post recap"
-                style={({ pressed }) => [
-                  styles.contextAction,
-                  {
-                    backgroundColor: colors.surface,
-                    borderWidth: BORDER_W,
-                    borderColor: colors.primary,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.contextActionText, { color: colors.accentText }]}>
-                  Post recap
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setDismissedCard('recap')}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss"
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={18} color={colors.sub} />
-              </Pressable>
-            </View>
-          ) : null}
-
           {isMember ? (
             <View
               style={[

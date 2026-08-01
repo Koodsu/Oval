@@ -107,6 +107,52 @@ export async function sendPasswordResetEmail(to: string, code: string): Promise<
   console.log(`[emailService] Password reset email sent successfully to ${to} (id: ${result.data?.id}) at ${new Date().toISOString()}`);
 }
 
+export async function sendAccountDeletionEmail(to: string, confirmUrl: string): Promise<void> {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Oval] Account deletion link for ${to}: ${confirmUrl}`);
+  }
+
+  if (process.env.NODE_ENV === 'test') {
+    console.log('[emailService] Test environment detected — deletion email not sent. Use link above.');
+    return;
+  }
+
+  const resend = getResendClient();
+  if (!resend) {
+    console.log('[emailService] No RESEND_API_KEY set — deletion email not sent. Use link above.');
+    return;
+  }
+
+  const from = getFromEmail();
+  const result = await resend.emails.send({
+    from,
+    to,
+    subject: 'Confirm your Oval account deletion',
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #111827;">Delete your Oval account</h2>
+        <p>We received a request to permanently delete the Oval account for ${escapeHtml(to)}.</p>
+        <p>If this was you, confirm below. This permanently removes your profile, messages,
+        pods, club memberships, and friend connections. <strong>This cannot be undone.</strong></p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${escapeHtml(confirmUrl)}"
+             style="display: inline-block; background: #D90429; color: #ffffff; font-weight: 700; padding: 14px 28px; border-radius: 10px; text-decoration: none;">
+            Confirm deletion
+          </a>
+        </div>
+        <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour. If you did not request
+        deletion, ignore this email — your account is safe and nothing will happen.</p>
+      </div>
+    `,
+  });
+
+  if (result.error) {
+    throw new Error(`Resend API error for ${to}: ${result.error.message}`);
+  }
+
+  console.log(`[emailService] Deletion email sent successfully to ${to} (id: ${result.data?.id}) at ${new Date().toISOString()}`);
+}
+
 export interface ModerationReportEmailPayload {
   id: string;
   severity: string;

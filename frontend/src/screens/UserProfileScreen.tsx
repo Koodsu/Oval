@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type {
   NativeStackNavigationProp,
@@ -32,11 +32,12 @@ import {
   Card,
   Chip,
   EmptyState,
+  IconButton,
+  ListRow,
   ScreenHeader,
+  Sheet,
   SkeletonCard,
   Slab,
-  StatSlab,
-  Sticker,
   Tag,
   accentForSeed,
 } from '../components/ui';
@@ -52,26 +53,38 @@ import {
 } from '../theme';
 
 import { toast } from '../lib/toast';
+import { formatDateTime } from '../utils/format';
 type Props = NativeStackScreenProps<RootStackParamList, 'UserProfile'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-export default function UserProfileScreen({ route, navigation }: Props) {
+export default function UserProfileScreen({
+  route,
+  navigation,
+  previewData,
+}: Props & {
+  previewData?: {
+    profile: PublicProfile;
+    relationship: Awaited<ReturnType<typeof getFriendRelationship>>;
+  };
+}) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const { userId } = route.params;
   const nav = useNavigation<Nav>();
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [profile, setProfile] = useState<PublicProfile | null>(previewData?.profile ?? null);
   const [relationship, setRelationship] = useState<Awaited<
     ReturnType<typeof getFriendRelationship>
-  > | null>(null);
+  > | null>(previewData?.relationship ?? null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>('HARASSMENT');
   const [reportDetails, setReportDetails] = useState('');
+  const [safetyOpen, setSafetyOpen] = useState(false);
 
   const load = useCallback(
     async (showAlert = false) => {
+      if (previewData) return;
       try {
         const [profileResponse, relationshipResponse] = await Promise.all([
           getUserProfile(userId),
@@ -85,7 +98,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         if (showAlert) toast.error('Could not load profile', getApiErrorMessage(error));
       }
     },
-    [userId],
+    [previewData, userId],
   );
 
   useFocusEffect(
@@ -94,7 +107,6 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     }, [load]),
   );
 
-  const clubTags = useMemo(() => (profile?.clubs ?? []).slice(0, 4), [profile?.clubs]);
   const interestTags = useMemo(() => profile?.interestTags ?? [], [profile?.interestTags]);
 
   const refreshRelationship = async () => {
@@ -170,57 +182,117 @@ export default function UserProfileScreen({ route, navigation }: Props) {
     }
   };
 
+  const confirmUnfriend = () => {
+    if (!profile) return;
+    setSafetyOpen(false);
+    Alert.alert(
+      `Unfriend ${profile.name}?`,
+      'You will need to send another friend request before messaging again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unfriend',
+          style: 'destructive',
+          onPress: () => void handleFriendAction('unfriend'),
+        },
+      ],
+    );
+  };
+
+  const confirmBlock = () => {
+    if (!profile) return;
+    setSafetyOpen(false);
+    Alert.alert(
+      `Block ${profile.name}?`,
+      'They will not be able to message, invite, or view you. You can unblock them later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: () => void handleBlockToggle(),
+        },
+      ],
+    );
+  };
+
   const relationshipActions = () => {
     if (!relationship) return null;
     switch (relationship.status) {
       case 'NONE':
         return (
-          <Button
-            label="Send friend request"
-            icon="person-add"
-            onPress={() => void handleFriendAction('send')}
-            loading={busyAction === 'send'}
-          />
+          <View style={styles.actionRow}>
+            <Button
+              label="Add friend"
+              icon="person-add-outline"
+              onPress={() => void handleFriendAction('send')}
+              loading={busyAction === 'send'}
+              style={{ flex: 1 }}
+            />
+            <Button
+              label="Message"
+              icon="chatbubble-outline"
+              variant="secondary"
+              disabled
+              onPress={() => {}}
+              style={{ flex: 1 }}
+            />
+          </View>
         );
       case 'PENDING_SENT':
         return (
-          <Button
-            label="Cancel request"
-            variant="secondary"
-            onPress={() => void handleFriendAction('cancel')}
-            loading={busyAction === 'cancel'}
-          />
+          <View style={styles.actionRow}>
+            <Button
+              label="Request sent"
+              icon="checkmark"
+              variant="secondary"
+              disabled
+              onPress={() => {}}
+              style={{ flex: 1 }}
+            />
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onPress={() => void handleFriendAction('cancel')}
+              loading={busyAction === 'cancel'}
+              style={{ flex: 1 }}
+            />
+          </View>
         );
       case 'PENDING_RECEIVED':
         return (
-          <View style={styles.buttonStack}>
+          <View style={styles.actionRow}>
             <Button
-              label="Accept friend request"
+              label="Accept"
               onPress={() => void handleFriendAction('accept')}
               loading={busyAction === 'accept'}
+              style={{ flex: 1 }}
             />
             <Button
-              label="Decline request"
+              label="Decline"
               variant="secondary"
               onPress={() => void handleFriendAction('decline')}
               loading={busyAction === 'decline'}
+              style={{ flex: 1 }}
             />
           </View>
         );
       case 'FRIENDS':
         return (
-          <View style={styles.buttonStack}>
+          <View style={styles.actionRow}>
             <Button
               label="Message"
-              icon="chatbox"
+              icon="chatbubble-outline"
               onPress={() => void handleMessage()}
               loading={busyAction === 'message'}
+              style={{ flex: 1 }}
             />
             <Button
-              label="Unfriend"
+              label="Friends"
+              icon="people-outline"
               variant="secondary"
-              onPress={() => void handleFriendAction('unfriend')}
-              loading={busyAction === 'unfriend'}
+              onPress={() => setSafetyOpen(true)}
+              style={{ flex: 1 }}
             />
           </View>
         );
@@ -228,7 +300,7 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         return (
           <Card padded>
             <Text style={typography.body}>
-              There is a block on this relationship. Unblock if you were the one who set it.
+              This profile is blocked. Unblock them to reconnect.
             </Text>
             <Button
               label="Unblock"
@@ -239,6 +311,8 @@ export default function UserProfileScreen({ route, navigation }: Props) {
             />
           </Card>
         );
+      case 'SELF':
+        return null;
       default:
         return null;
     }
@@ -280,39 +354,52 @@ export default function UserProfileScreen({ route, navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        <ScreenHeader title="Profile" kicker="STUDENT" onBack={() => navigation.goBack()} />
+        <ScreenHeader
+          title=""
+          onBack={() => navigation.goBack()}
+          right={
+            <IconButton
+              icon="ellipsis-horizontal"
+              onPress={() => setSafetyOpen(true)}
+              accessibilityLabel="Profile actions"
+            />
+          }
+        />
         {profile ? (
           <>
-            {/* Identity */}
             <Card padded>
               <View style={styles.identityRow}>
-                <Avatar name={profile.name} uri={profile.avatarUrl} size={78} tilt={-3} />
+                <Avatar name={profile.name} uri={profile.avatarUrl} size={82} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                  <Text style={styles.profileName} numberOfLines={2}>
-                    {profile.name}
-                  </Text>
-                  <Text style={typography.subheading}>
-                    {profile.major ?? 'Ohio State student'}
-                  </Text>
-                  <Text style={typography.captionSmall}>
-                    {profile.classYear ?? 'Class year not listed'}
-                    {profile.instagramHandle ? ` • @${profile.instagramHandle}` : ''}
-                  </Text>
-                  <View style={{ flexDirection: 'row', marginTop: 2 }}>
-                    <Sticker
-                      label={profile.verifiedUniversity ? 'Verified student' : 'Student'}
-                      tint={profile.verifiedUniversity ? colors.successSoft : colors.surfaceAlt}
-                      icon={profile.verifiedUniversity ? 'checkmark-circle' : 'school'}
-                      small
-                      tilt={-2}
-                    />
+                  <View style={styles.nameRow}>
+                    <Text style={styles.profileName} numberOfLines={2}>
+                      {profile.name}
+                    </Text>
+                    {profile.verifiedUniversity ? (
+                      <Ionicons name="checkmark-circle" size={19} color={colors.blue} />
+                    ) : null}
                   </View>
+                  <Text style={typography.captionSmall}>
+                    {[profile.major, profile.classYear].filter(Boolean).join(' · ') ||
+                      'Ohio State student'}
+                  </Text>
                 </View>
               </View>
               {profile.bio ? (
-                <Text style={[typography.body, { color: colors.sub, marginTop: spacing.md }]}>
+                <Text style={[typography.body, { marginTop: spacing.md }]}>
                   {profile.bio}
                 </Text>
+              ) : null}
+              {interestTags.length ? (
+                <View style={styles.tagWrap}>
+                  {interestTags.slice(0, 5).map((tag) => (
+                    <Tag
+                      key={tag}
+                      label={INTEREST_TAG_META[tag]?.label ?? tag}
+                      tint={accentForSeed(colors, tag).soft}
+                    />
+                  ))}
+                </View>
               ) : null}
               {profile.purpose || profile.campusZones?.length ? (
                 <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
@@ -326,133 +413,133 @@ export default function UserProfileScreen({ route, navigation }: Props) {
                     .join(' • ')}
                 </Text>
               ) : null}
+              {profile.instagramHandle ? (
+                <Text style={[typography.captionSmall, { marginTop: spacing.xs }]}>
+                  @{profile.instagramHandle}
+                </Text>
+              ) : null}
             </Card>
 
             {relationshipActions()}
 
-            {/* Stats — D-5: reliability/on-time stats are private to the person
-                themselves and never shown on someone else's profile. */}
-            <View style={styles.statRow}>
-              <StatSlab
-                label="PODS JOINED"
-                value={String(profile.podsJoined)}
-                icon="flash"
-                tint={colors.amberSoft}
-              />
-              <StatSlab
-                label="ATTENDED"
-                value={String(profile.podsAttended)}
-                icon="checkmark-circle"
-                tint={colors.greenSoft}
-              />
-              <StatSlab
-                label="TOGETHER"
-                value={String(profile.sharedPodCount ?? 0)}
-                icon="people"
-                tint={colors.pinkSoft}
-              />
-            </View>
-
-            {/* Reconnect prompt (04 §3b): the graph of real meetings */}
-            {(profile.sharedPodCount ?? 0) >= 2 ? (
-              <Card padded>
-                <Text style={typography.subheading}>
-                  You and {profile.firstName || profile.name.split(' ')[0]} have been to{' '}
-                  {profile.sharedPodCount} pods together
-                </Text>
-                <Text style={[typography.captionSmall, { marginTop: 2 }]}>
-                  Down for another one this week?
-                </Text>
-                <Button
-                  label="Start a plan"
-                  icon="sparkles"
-                  size="sm"
-                  onPress={() =>
-                    navigation.navigate('MainTabs', {
-                      screen: 'Explore',
-                      params: { startCreate: Date.now() },
-                    })
-                  }
-                  style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}
-                />
-              </Card>
-            ) : null}
-
-            {interestTags.length ? (
-              <Card padded>
-                <Text style={typography.title}>Interests</Text>
-                <View style={styles.tagWrap}>
-                  {interestTags.map((tag) => (
-                    <Tag
-                      key={tag}
-                      label={INTEREST_TAG_META[tag]?.label ?? tag}
-                      tint={accentForSeed(colors, tag).soft}
-                    />
-                  ))}
-                </View>
-              </Card>
-            ) : null}
-
-            {clubTags.length ? (
-              <Card padded>
-                <Text style={typography.title}>Clubs</Text>
-                <View style={styles.tagWrap}>
-                  {clubTags.map((club) => (
-                    <Tag key={club} label={club} />
-                  ))}
-                </View>
-              </Card>
-            ) : null}
-
-            {/* Safety */}
-            <Card padded>
-              <Text style={typography.title}>Safety tools</Text>
-              <Text style={[typography.caption, { marginTop: 4 }]}>
-                Use this if something about this person or their behavior needs review.
-              </Text>
-              <View style={styles.tagWrap}>
-                {REPORT_REASONS.map((reason) => (
-                  <Chip
-                    key={reason}
-                    label={REPORT_REASON_LABELS[reason]}
-                    selected={selectedReason === reason}
-                    tint={colors.dangerSoft}
-                    onPress={() => setSelectedReason(reason)}
-                  />
-                ))}
-              </View>
-              <TextInput
-                value={reportDetails}
-                onChangeText={setReportDetails}
-                placeholder="Optional details that would help a review…"
-                placeholderTextColor={colors.faint}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.surfaceAlt,
-                    borderColor: colors.border,
-                    color: colors.ink,
-                  },
-                ]}
-                multiline
-              />
-              <View style={[styles.buttonStack, { marginTop: spacing.md }]}>
-                <Button
-                  label="Submit report"
-                  variant="secondary"
-                  onPress={() => void handleReport()}
-                  loading={busyAction === 'report'}
-                />
-                {relationship?.status !== 'BLOCKED' ? (
-                  <Button
-                    label="Block user"
-                    variant="danger"
-                    onPress={() => void handleBlockToggle()}
-                    loading={busyAction === 'block'}
-                  />
-                ) : null}
+            <Card padded={false}>
+              <View style={styles.statRow}>
+                <ProfileStat value={profile.podsJoined} label="Pods" />
+                <ProfileStat value={profile.clubCount ?? 0} label="Clubs" />
+                <ProfileStat value={profile.mutualFriendCount ?? 0} label="Mutual" last />
               </View>
             </Card>
+
+            {profile.mutualFriends?.length ? (
+              <View style={styles.section}>
+                <Text style={typography.kicker}>MUTUAL FRIENDS</Text>
+                <Card padded>
+                  <View style={styles.mutualRow}>
+                    <View style={styles.avatarStack}>
+                      {profile.mutualFriends.slice(0, 4).map((friend, index) => (
+                        <Pressable
+                          key={friend.id}
+                          onPress={() =>
+                            navigation.push('UserProfile', { userId: friend.id })
+                          }
+                          style={[styles.stackedAvatar, index > 0 && { marginLeft: -10 }]}
+                        >
+                          <Avatar name={friend.name} uri={friend.avatarUrl} size={38} />
+                        </Pressable>
+                      ))}
+                    </View>
+                    <Text style={[typography.captionSmall, { flex: 1, textAlign: 'right' }]}>
+                      {profile.mutualFriendCount} mutual{' '}
+                      {profile.mutualFriendCount === 1 ? 'friend' : 'friends'}
+                    </Text>
+                  </View>
+                </Card>
+              </View>
+            ) : null}
+
+            {profile.upcomingPods?.length ? (
+              <View style={styles.section}>
+                <Text style={typography.kicker}>UPCOMING PODS</Text>
+                {profile.upcomingPods.map((pod) => (
+                  <Slab
+                    key={pod.id}
+                    onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
+                    accessibilityLabel={`Open ${pod.title}`}
+                    faceStyle={{ padding: spacing.lg }}
+                  >
+                    <View style={styles.podRow}>
+                      <View
+                        style={[styles.podIcon, { backgroundColor: colors.primarySoft }]}
+                      >
+                        <Ionicons name="calendar-outline" size={22} color={colors.accentText} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <Text style={typography.heading} numberOfLines={1}>
+                          {pod.title}
+                        </Text>
+                        <Text style={typography.captionSmall} numberOfLines={1}>
+                          {formatDateTime(pod.meetupTime)}
+                        </Text>
+                        <Text style={typography.captionSmall} numberOfLines={1}>
+                          {pod.location}
+                        </Text>
+                      </View>
+                      <Text style={typography.captionSmall}>
+                        {Math.max(0, pod.maxMembers - pod.memberCount)} spots
+                      </Text>
+                    </View>
+                  </Slab>
+                ))}
+              </View>
+            ) : null}
+
+            {profile.clubMemberships?.length ? (
+              <View style={styles.section}>
+                <Text style={typography.kicker}>CLUBS</Text>
+                <Card padded={false}>
+                  {profile.clubMemberships.map((club, index) => (
+                    <Pressable
+                      key={club.id}
+                      onPress={() => navigation.navigate('ClubDetail', { clubId: club.id })}
+                      style={[
+                        styles.clubRow,
+                        { borderBottomColor: colors.borderSoft },
+                        index === profile.clubMemberships!.length - 1 && {
+                          borderBottomWidth: 0,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.clubIcon, { backgroundColor: colors.surfaceAlt }]}>
+                        <Text style={{ fontSize: 18 }}>{club.emoji}</Text>
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={typography.subheading} numberOfLines={1}>
+                          {club.name}
+                        </Text>
+                        <Text style={typography.captionSmall}>{club.category}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={17} color={colors.sub} />
+                    </Pressable>
+                  ))}
+                </Card>
+              </View>
+            ) : null}
+
+            {!profile.mutualFriends?.length &&
+            !profile.upcomingPods?.length &&
+            !profile.clubMemberships?.length ? (
+              <Card padded>
+                <View style={styles.sparseState}>
+                  <View style={[styles.sparseIcon, { backgroundColor: colors.surfaceAlt }]}>
+                    <Ionicons name="git-network-outline" size={28} color={colors.ink} />
+                  </View>
+                  <Text style={typography.title}>Nothing shared yet</Text>
+                  <Text style={[typography.caption, { textAlign: 'center' }]}>
+                    When you join the same pods or clubs, you’ll see that context here.
+                  </Text>
+                </View>
+              </Card>
+            ) : null}
           </>
         ) : (
           <>
@@ -462,7 +549,88 @@ export default function UserProfileScreen({ route, navigation }: Props) {
           </>
         )}
       </ScrollView>
+      <Sheet
+        visible={safetyOpen}
+        onClose={() => setSafetyOpen(false)}
+        title="Profile actions"
+        kicker="SAFETY & CONNECTION"
+        scrollable
+      >
+        <View style={{ gap: spacing.lg }}>
+          {relationship?.status === 'FRIENDS' ? (
+            <ListRow icon="person-remove-outline" title="Unfriend" onPress={confirmUnfriend} />
+          ) : null}
+          <View>
+            <Text style={typography.kicker}>REPORT REASON</Text>
+            <View style={styles.tagWrap}>
+              {REPORT_REASONS.map((reason) => (
+                <Chip
+                  key={reason}
+                  label={REPORT_REASON_LABELS[reason]}
+                  selected={selectedReason === reason}
+                  tint={colors.dangerSoft}
+                  onPress={() => setSelectedReason(reason)}
+                />
+              ))}
+            </View>
+            <TextInput
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              placeholder="Optional details that would help a review…"
+              placeholderTextColor={colors.faint}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surfaceAlt,
+                  borderColor: colors.border,
+                  color: colors.ink,
+                },
+              ]}
+              multiline
+            />
+            <Button
+              label="Submit report"
+              variant="secondary"
+              onPress={() => void handleReport()}
+              loading={busyAction === 'report'}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
+          {relationship?.status !== 'BLOCKED' && relationship?.status !== 'SELF' ? (
+            <Button
+              label="Block user"
+              variant="danger"
+              onPress={confirmBlock}
+              loading={busyAction === 'block'}
+            />
+          ) : null}
+        </View>
+      </Sheet>
     </AppBackdrop>
+  );
+}
+
+function ProfileStat({
+  value,
+  label,
+  last = false,
+}: {
+  value: number;
+  label: string;
+  last?: boolean;
+}) {
+  const styles = useStyles();
+  const { colors, typography } = useTheme();
+  return (
+    <View
+      style={[
+        styles.statItem,
+        !last && { borderRightWidth: BORDER_W, borderRightColor: colors.borderSoft },
+      ]}
+    >
+      <Text style={typography.title}>{value}</Text>
+      <Text style={typography.captionSmall}>{label}</Text>
+    </View>
   );
 }
 
@@ -479,14 +647,29 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   profileName: {
     fontFamily: fonts.display,
-    fontSize: 21,
-    lineHeight: 26,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: '800' as const,
     letterSpacing: -0.5,
     color: t.colors.ink,
+    flexShrink: 1,
+  },
+  nameRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.xs,
+  },
+  actionRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
   },
   statRow: {
     flexDirection: 'row' as const,
-    gap: spacing.md,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center' as const,
+    paddingVertical: spacing.md,
   },
   tagWrap: {
     flexDirection: 'row' as const,
@@ -494,8 +677,60 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
-  buttonStack: {
+  section: {
     gap: spacing.sm,
+  },
+  mutualRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  avatarStack: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  stackedAvatar: {
+    borderRadius: radii.pill,
+  },
+  podRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
+  podIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  clubRow: {
+    minHeight: 62,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    borderBottomWidth: BORDER_W,
+  },
+  clubIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  sparseState: {
+    minHeight: 180,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing.sm,
+  },
+  sparseIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   input: {
     minHeight: 96,

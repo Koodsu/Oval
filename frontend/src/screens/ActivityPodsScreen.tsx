@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
@@ -37,24 +36,21 @@ import {
   Chip,
   DateTimeField,
   EmptyState,
+  Field,
   ScreenHeader,
   SectionHeader,
+  Sheet,
   SkeletonCard,
   Slab,
   Sticker,
 } from '../components/ui';
-import PodTemplatePicker from '../components/PodTemplatePicker';
 import {
   OSU_CAMPUS_CENTER,
   OSU_CAMPUS_DELTA,
   OSU_CAMPUS_POLYGON,
   isCampusCoordinate,
 } from '../constants/campusMap';
-import {
-  PodTemplate,
-  customCreateDefaults,
-  templateCreateOptions,
-} from '../constants/podTemplates';
+import { customCreateDefaults } from '../constants/podTemplates';
 import { formatDateTime } from '../utils/format';
 import {
   BORDER_W,
@@ -67,7 +63,10 @@ import {
 } from '../theme';
 
 import { toast } from '../lib/toast';
-type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'>;
+import { useAuth } from '../context/AuthContext';
+type Props = NativeStackScreenProps<RootStackParamList, 'ActivityPods'> & {
+  preview?: boolean;
+};
 
 function dedupeLocations(locations: string[]) {
   const seen = new Set<string>();
@@ -83,36 +82,37 @@ function dedupeLocations(locations: string[]) {
   });
 }
 
-export default function ActivityPodsScreen({ route, navigation }: Props) {
+export default function ActivityPodsScreen({ route, navigation, preview = false }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { activity, startCreate } = route.params;
   const [pods, setPods] = useState<Pod[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState(activity.title);
+  const [note, setNote] = useState('');
   const [location, setLocation] = useState('');
+  const [locationAddress, setLocationAddress] = useState('');
   const [meetupTime, setMeetupTime] = useState(() => new Date(customCreateDefaults().meetupTime ?? Date.now()));
   const [maxMembers, setMaxMembers] = useState(4);
   const [selectedPin, setSelectedPin] = useState<{ latitude: number; longitude: number } | null>(
     null,
   );
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
-  const [composerExpanded, setComposerExpanded] = useState(false);
-  const [templateOpen, setTemplateOpen] = useState(!!startCreate);
-  const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
+  const [locationSheetVisible, setLocationSheetVisible] = useState(false);
+  const [draftLocation, setDraftLocation] = useState('');
+  const [draftAddress, setDraftAddress] = useState('');
+  const [draftPin, setDraftPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [composerExpanded, setComposerExpanded] = useState(Boolean(startCreate));
   const [demandCount, setDemandCount] = useState(activity.demandCount ?? 0);
   const [myDemanded, setMyDemanded] = useState(Boolean(activity.myDemanded));
   const [demandBusy, setDemandBusy] = useState(false);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(preview);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
-  const latestLocationRef = useRef(location);
-
-  useEffect(() => {
-    latestLocationRef.current = location;
-  }, [location]);
 
   useEffect(() => {
     setDemandCount(activity.demandCount ?? 0);
@@ -120,6 +120,10 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   }, [activity.demandCount, activity.id, activity.myDemanded]);
 
   const load = useCallback(async () => {
+    if (preview) {
+      setLoaded(true);
+      return;
+    }
     try {
       const response = await getPodsByActivity(activity.id);
       setPods(response);
@@ -129,7 +133,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     } finally {
       setLoaded(true);
     }
-  }, [activity.id]);
+  }, [activity.id, preview]);
 
   useFocusEffect(
     useCallback(() => {
@@ -138,6 +142,10 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   );
 
   useEffect(() => {
+    if (preview) {
+      setLocationSuggestions(['The Oval', 'Mirror Lake', 'Thompson Library']);
+      return;
+    }
     let active = true;
     getActivityLocations(activity.id)
       .then((locations) => {
@@ -149,7 +157,7 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [activity.id]);
+  }, [activity.id, preview]);
 
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null),
@@ -177,21 +185,14 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
   };
 
   const handleCreate = async () => {
-    if (!location.trim()) {
-      toast.error(
-        'Add a meetup spot',
-        'Choose a suggested spot or drop a pin for a custom campus location.',
-      );
+    if (!title.trim()) {
+      toast.error('Add a pod title', 'Give people a quick, clear reason to join.');
       return;
     }
-    if (
-      !selectedPin &&
-      locationSuggestions.length > 0 &&
-      !locationSuggestions.includes(location.trim())
-    ) {
+    if (!location.trim() || !locationAddress.trim()) {
       toast.error(
-        'Drop a pin for custom spots',
-        'Custom meetup notes need a campus map pin. Choose a suggested spot, or tap the map to save coordinates.',
+        'Add a meetup spot',
+        'Choose an address and add the short display name people will see.',
       );
       return;
     }
@@ -205,7 +206,10 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     setCreating(true);
     try {
       const response = await createPod(activity.id, {
+        title: title.trim(),
+        note: note.trim() || undefined,
         location: location.trim(),
+        locationAddress: locationAddress.trim(),
         meetupTime: meetupTime.toISOString(),
         minMembers: 2,
         maxMembers,
@@ -219,27 +223,6 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
     } finally {
       setCreating(false);
     }
-  };
-
-  const handleTemplateCreate = async (template: PodTemplate) => {
-    setBusyTemplateId(template.id);
-    try {
-      const response = await createPod(activity.id, templateCreateOptions(template));
-      setTemplateOpen(false);
-      navigation.replace('PodDetail', { podId: response.id, justCreated: true });
-    } catch (error) {
-      toast.error('Could not start pod', getApiErrorMessage(error));
-    } finally {
-      setBusyTemplateId(null);
-    }
-  };
-
-  const openCustomComposer = () => {
-    const defaults = customCreateDefaults();
-    setTemplateOpen(false);
-    if (defaults.meetupTime) setMeetupTime(new Date(defaults.meetupTime));
-    setMaxMembers(defaults.maxMembers ?? 4);
-    setComposerExpanded(true);
   };
 
   const toggleDemand = async () => {
@@ -269,51 +252,84 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
       );
       return;
     }
-    const locationBeforeLookup = latestLocationRef.current;
-    setSelectedPin({ latitude, longitude });
+    setDraftPin({ latitude, longitude });
     setResolvingAddress(true);
-    setLocationMessage('Pin saved. Looking for an address you can edit.');
+    setLocationMessage('Pin saved. Looking up its address…');
     try {
       const result = await Location.reverseGeocodeAsync({ latitude, longitude });
       const first = result[0];
       if (first) {
         const street = [first.name, first.street].filter(Boolean).join(' ').trim();
-        const locality = [first.city, first.region].filter(Boolean).join(', ').trim();
-        const resolved = [street, locality].filter(Boolean).join(' • ');
+        const locality = [first.city, first.region, first.postalCode].filter(Boolean).join(', ').trim();
+        const resolved = [street, locality].filter(Boolean).join(', ');
         if (resolved) {
-          if (latestLocationRef.current === locationBeforeLookup) {
-            latestLocationRef.current = resolved;
-            setLocation(resolved);
-            setLocationMessage(
-              'Pin saved and location filled in. Edit it if you want a clearer meetup note.',
-            );
-          } else {
-            setLocationMessage('Pin saved. Keeping the location you typed.');
+          setDraftAddress(resolved);
+          if (!draftLocation.trim()) {
+            setDraftLocation(first.name || first.street || 'Meetup spot');
           }
+          setLocationMessage('Address found. Add a simple display name, then save.');
         } else {
-          setLocationMessage(
-            'Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.',
-          );
+          setLocationMessage('Pin saved. Type the street address before saving.');
         }
       } else {
-        setLocationMessage(
-          'Pin saved, but we could not find a readable address. Type the meetup spot and you can still create the pod.',
-        );
+        setLocationMessage('Pin saved. Type the street address before saving.');
       }
     } catch {
-      setLocationMessage(
-        'Pin saved, but we could not look up the address. Type the meetup spot and you can still create the pod.',
-      );
+      setLocationMessage('Pin saved. Type the street address before saving.');
     } finally {
       setResolvingAddress(false);
     }
   };
 
-  const toggleComposer = () => {
-    if (!composerExpanded) {
-      setTemplateOpen(true);
+  const openLocationSheet = () => {
+    setDraftLocation(location);
+    setDraftAddress(locationAddress);
+    setDraftPin(selectedPin);
+    setLocationMessage(null);
+    setLocationSheetVisible(true);
+  };
+
+  const saveLocation = async () => {
+    const displayName = draftLocation.trim();
+    const address = draftAddress.trim();
+    if (!displayName || !address) {
+      setLocationMessage('Add both a display name and an address.');
       return;
     }
+
+    let resolvedPin = draftPin;
+    if (!resolvedPin) {
+      setResolvingAddress(true);
+      setLocationMessage('Finding that address on campus…');
+      try {
+        const results = await Location.geocodeAsync(address);
+        resolvedPin =
+          results.find((candidate) =>
+            isCampusCoordinate(candidate.latitude, candidate.longitude),
+          ) ?? null;
+      } catch {
+        resolvedPin = null;
+      } finally {
+        setResolvingAddress(false);
+      }
+    }
+
+    const isKnownSpot = locationSuggestions.includes(displayName);
+    if (!resolvedPin && !isKnownSpot) {
+      setLocationMessage(
+        'We could not place that address on OSU campus. Try a fuller address or drop a pin.',
+      );
+      return;
+    }
+
+    setLocation(displayName);
+    setLocationAddress(address);
+    setSelectedPin(resolvedPin);
+    setLocationMessage(null);
+    setLocationSheetVisible(false);
+  };
+
+  const toggleComposer = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setComposerExpanded((current) => !current);
   };
@@ -334,25 +350,50 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-        <ScreenHeader title="Pods" kicker={activity.category} onBack={() => navigation.goBack()} />
+        <ScreenHeader
+          title={composerExpanded ? 'Create a pod' : 'Pods'}
+          kicker={activity.category}
+          onBack={() => navigation.goBack()}
+        />
         {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
-        <View style={styles.heroBlock}>
-          <Text style={styles.heroTitle}>{activity.title}</Text>
-          {activity.description ? (
-            <Text style={[typography.body, { color: colors.sub }]}>{activity.description}</Text>
-          ) : null}
-        </View>
+        {composerExpanded ? (
+          <View style={styles.heroBlock}>
+            <View style={styles.progressRow}>
+              <View style={[styles.progressDot, { backgroundColor: colors.primary }]} />
+              <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+              <View style={[styles.progressDot, { backgroundColor: colors.sunken }]} />
+              <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+              <View style={[styles.progressDot, { backgroundColor: colors.sunken }]} />
+            </View>
+            <Text style={styles.heroTitle}>Make a plan</Text>
+            <Text style={[typography.body, { color: colors.sub }]}>
+              Bring people together around something simple.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.heroBlock}>
+            <Text style={styles.heroTitle}>{activity.title}</Text>
+            {activity.description ? (
+              <Text style={[typography.body, { color: colors.sub }]}>{activity.description}</Text>
+            ) : null}
+          </View>
+        )}
 
         {/* Composer */}
-        <Card padded={false}>
+        <Card padded={false} faceStyle={composerExpanded ? styles.composerCard : undefined}>
           <Pressable
             style={styles.composerToggle}
             onPress={toggleComposer}
             accessibilityRole="button"
             accessibilityLabel={composerExpanded ? 'Collapse create pod' : 'Expand create pod'}
           >
-            <Text style={typography.title}>Start a pod</Text>
+            <View>
+              <Text style={typography.title}>{composerExpanded ? 'Pod details' : 'Start a pod'}</Text>
+              {!composerExpanded ? (
+                <Text style={typography.captionSmall}>Turn {activity.title.toLowerCase()} into a plan.</Text>
+              ) : null}
+            </View>
             <View
               style={[
                 styles.toggleBadge,
@@ -368,66 +409,16 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
           </Pressable>
           {composerExpanded ? (
             <View style={[styles.composerBody, { borderTopColor: colors.borderSoft }]}>
-              <Text style={typography.caption}>
-                Choose a suggested campus spot, or tap the map to save coordinates for a custom
-                meetup note.
-              </Text>
+              <Field
+                label="Pod title"
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Sunrise hike & coffee"
+                maxLength={60}
+              />
 
               <View style={{ gap: 6 }}>
-                <Text style={typography.kicker}>Location</Text>
-                <View
-                  style={[
-                    styles.locationWell,
-                    { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
-                  ]}
-                >
-                  <TextInput
-                    value={location}
-                    onChangeText={(value) => {
-                      latestLocationRef.current = value;
-                      setLocation(value);
-                      if (locationMessage) setLocationMessage(null);
-                    }}
-                    placeholder="Choose below, or drop a map pin first…"
-                    placeholderTextColor={colors.faint}
-                    style={[styles.locationInput, { color: colors.ink }]}
-                    multiline
-                  />
-                </View>
-                <Text style={typography.captionSmall}>
-                  {resolvingAddress
-                    ? 'Finding an address for the pin…'
-                    : (locationMessage ??
-                      (selectedPin
-                        ? 'Pin coordinates will be saved with this location.'
-                        : 'Custom spots require a map pin.'))}
-                </Text>
-              </View>
-
-              {locationSuggestions.length ? (
-                <View style={{ gap: spacing.sm }}>
-                  <Text style={typography.kicker}>Suggested spots</Text>
-                  <View style={styles.chipWrap}>
-                    {locationSuggestions.slice(0, 8).map((suggestion) => (
-                      <Chip
-                        key={suggestion}
-                        label={suggestion}
-                        selected={location.trim() === suggestion && !selectedPin}
-                        tint={colors.tealSoft}
-                        onPress={() => {
-                          latestLocationRef.current = suggestion;
-                          setLocation(suggestion);
-                          setSelectedPin(null);
-                          setLocationMessage('Using a suggested campus spot.');
-                        }}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-
-              <View style={{ gap: 6 }}>
-                <Text style={typography.kicker}>Meetup time</Text>
+                <Text style={typography.captionSmall}>Date & time</Text>
                 <View
                   style={[
                     styles.dateWell,
@@ -443,10 +434,45 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                 </View>
               </View>
 
+              <View style={{ gap: 6 }}>
+                <Text style={typography.captionSmall}>Where</Text>
+                <Pressable
+                  onPress={openLocationSheet}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose pod location"
+                  style={({ pressed }) => [
+                    styles.locationPicker,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.locationIcon, { backgroundColor: colors.primarySoft }]}>
+                    <Ionicons name="location-outline" size={19} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={[typography.bodyMedium, { color: location ? colors.ink : colors.faint }]}
+                      numberOfLines={1}
+                    >
+                      {location || 'Choose an address'}
+                    </Text>
+                    {locationAddress && locationAddress !== location ? (
+                      <Text style={typography.captionSmall} numberOfLines={1}>
+                        {locationAddress}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.sub} />
+                </Pressable>
+              </View>
+
               <View style={styles.memberRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={typography.subheading}>Max members</Text>
-                  <Text style={typography.captionSmall}>2 to 10 people.</Text>
+                  <Text style={typography.captionSmall}>Spots</Text>
+                  <Text style={typography.bodyMedium}>Keep the group small.</Text>
                 </View>
                 <View style={styles.stepper}>
                   <Pressable
@@ -493,46 +519,44 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                 </View>
               </View>
 
-              <Button label="Start pod" onPress={handleCreate} loading={creating} size="lg" icon="flash" />
+              <Field
+                label="Note (optional)"
+                value={note}
+                onChangeText={setNote}
+                placeholder="Easy pace. Coffee after!"
+                maxLength={120}
+                multiline
+                inputStyle={styles.noteInput}
+              />
 
-              <View style={[styles.mapWrap, { borderColor: colors.border }]}>
-                <MapView
-                  provider={PROVIDER_DEFAULT}
-                  style={styles.map}
-                  initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
-                  onPress={(event) => {
-                    void handleMapPress(event);
-                  }}
-                >
-                  <Polygon
-                    coordinates={OSU_CAMPUS_POLYGON}
-                    fillColor="rgba(200,16,46,0.06)"
-                    strokeColor="rgba(200,16,46,0.3)"
-                  />
-                  {mappablePods.map((pod) => (
-                    <Marker
-                      key={pod.id}
-                      coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
-                      title={activity.title}
-                      description={pod.location}
-                    />
-                  ))}
-                  {selectedPin ? (
-                    <Marker
-                      coordinate={selectedPin}
-                      title="New pod"
-                      description={location.trim() || 'Pinned meetup spot'}
-                      pinColor={colors.primary}
-                    />
-                  ) : null}
-                </MapView>
+              <View style={[styles.preview, { borderColor: colors.border }]}>
+                <View style={styles.previewHeading}>
+                  <Text style={typography.subheading}>Live preview</Text>
+                  <Sticker label={activity.category} tint={colors.greenSoft} small />
+                </View>
+                <Text style={typography.captionSmall}>
+                  {formatDateTime(meetupTime.toISOString())}
+                </Text>
+                <Text style={typography.captionSmall}>
+                  {location || 'Choose a meetup spot'} · {maxMembers} spots
+                </Text>
+                <Text style={[typography.title, { marginTop: spacing.sm }]}>
+                  {title.trim() || activity.title}
+                </Text>
+                {note.trim() ? <Text style={typography.caption}>{note.trim()}</Text> : null}
+              </View>
+
+              <Button label="Create pod" onPress={handleCreate} loading={creating} size="lg" />
+              <View style={styles.privateHint}>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.sub} />
+                <Text style={typography.captionSmall}>Only invited members can see private pods.</Text>
               </View>
             </View>
           ) : null}
         </Card>
 
         {/* Available pods */}
-        <View style={styles.section}>
+        {!composerExpanded ? <View style={styles.section}>
           <SectionHeader kicker="Join one" title="Available pods" />
           {!loaded ? (
             <>
@@ -543,6 +567,8 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
             pods.map((pod) => {
               const isOpen = pod.status === 'FORMING';
               const isFull = pod.members.length >= pod.maxMembers;
+              const isMember = pod.members.some((member) => member.userId === user?.id);
+              const onWaitlist = pod.myWaitlistPosition != null;
               return (
                 <Slab
                   key={pod.id}
@@ -579,12 +605,24 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                     {pod.members.length}/{pod.maxMembers} joined
                   </Text>
                   <Button
-                    label={isOpen ? (isFull ? 'Join waitlist' : 'Join pod') : 'View details'}
+                    label={
+                      isMember
+                        ? 'Open pod'
+                        : onWaitlist
+                          ? `On waitlist · #${pod.myWaitlistPosition}`
+                          : isOpen
+                            ? isFull
+                              ? 'Join waitlist'
+                              : 'Join pod'
+                            : 'View details'
+                    }
                     onPress={() =>
-                      isOpen ? void handleJoin(pod) : navigation.navigate('PodDetail', { podId: pod.id })
+                      isOpen && !isMember && !onWaitlist
+                        ? void handleJoin(pod)
+                        : navigation.navigate('PodDetail', { podId: pod.id })
                     }
                     loading={busyId === pod.id}
-                    variant={isOpen ? 'primary' : 'secondary'}
+                    variant={isOpen && !isMember && !onWaitlist ? 'primary' : 'secondary'}
                     size="sm"
                     style={{ alignSelf: 'flex-start', marginTop: 4 }}
                   />
@@ -622,23 +660,112 @@ export default function ActivityPodsScreen({ route, navigation }: Props) {
                 title="No pods yet"
                 body="Start the first one and set the tone for this activity."
                 actionLabel="Start pod"
-                onAction={() => setTemplateOpen(true)}
+                onAction={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setComposerExpanded(true);
+                }}
               />
             </>
           )}
-        </View>
+        </View> : null}
         </ScrollView>
       </KeyboardAvoidingView>
-      <PodTemplatePicker
-        visible={templateOpen}
-        title={`Start ${activity.title}`}
-        activities={[activity]}
-        activity={activity}
-        busyTemplateId={busyTemplateId}
-        onClose={() => setTemplateOpen(false)}
-        onTemplate={(choice) => void handleTemplateCreate(choice.template)}
-        onCustom={openCustomComposer}
-      />
+      <Sheet
+        visible={locationSheetVisible}
+        onClose={() => setLocationSheetVisible(false)}
+        title="Choose location"
+        kicker="Meetup spot"
+        scrollable
+      >
+        <View style={styles.locationSheet}>
+          <Text style={typography.caption}>
+            Pick the address, then add the short name people should see in the pod.
+          </Text>
+          <Field
+            label="Display name"
+            value={draftLocation}
+            onChangeText={(value) => {
+              setDraftLocation(value);
+              setLocationMessage(null);
+            }}
+            placeholder="Hillside Nature Trail"
+            maxLength={120}
+          />
+          <Field
+            label="Address"
+            value={draftAddress}
+            onChangeText={(value) => {
+              setDraftAddress(value);
+              setDraftPin(null);
+              setLocationMessage(null);
+            }}
+            placeholder="1739 N High St, Columbus, OH"
+            autoCapitalize="words"
+            maxLength={180}
+          />
+          {locationSuggestions.length ? (
+            <View style={{ gap: spacing.sm }}>
+              <Text style={typography.captionSmall}>Campus favorites</Text>
+              <View style={styles.chipWrap}>
+                {locationSuggestions.slice(0, 6).map((suggestion) => (
+                  <Chip
+                    key={suggestion}
+                    label={suggestion}
+                    selected={draftLocation === suggestion}
+                    tint={colors.tealSoft}
+                    onPress={() => {
+                      setDraftLocation(suggestion);
+                      setDraftAddress(suggestion);
+                      setDraftPin(null);
+                      setLocationMessage('Campus spot selected. You can replace it with a street address.');
+                    }}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+          <View style={[styles.mapWrap, { borderColor: colors.border }]}>
+            <MapView
+              provider={PROVIDER_DEFAULT}
+              style={styles.map}
+              initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
+              onPress={(event) => void handleMapPress(event)}
+            >
+              <Polygon
+                coordinates={OSU_CAMPUS_POLYGON}
+                fillColor="rgba(200,16,46,0.06)"
+                strokeColor="rgba(200,16,46,0.3)"
+              />
+              {mappablePods.map((pod) => (
+                <Marker
+                  key={pod.id}
+                  coordinate={{ latitude: pod.latitude ?? 0, longitude: pod.longitude ?? 0 }}
+                  title={pod.title || activity.title}
+                  description={pod.location}
+                />
+              ))}
+              {draftPin ? (
+                <Marker
+                  coordinate={draftPin}
+                  title={draftLocation || 'New pod'}
+                  description={draftAddress || 'Pinned meetup spot'}
+                  pinColor={colors.primary}
+                />
+              ) : null}
+            </MapView>
+          </View>
+          <Text style={[typography.captionSmall, locationMessage ? { color: colors.sub } : null]}>
+            {resolvingAddress
+              ? 'Looking up the location…'
+              : (locationMessage ?? 'Tap the map to choose a precise campus address.')}
+          </Text>
+          <Button
+            label={resolvingAddress ? 'Finding address…' : 'Save location'}
+            onPress={() => void saveLocation()}
+            disabled={resolvingAddress}
+          />
+        </View>
+      </Sheet>
     </AppBackdrop>
   );
 }
@@ -666,6 +793,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  composerCard: {
+    borderRadius: radii.md,
+  },
   toggleBadge: {
     width: 34,
     height: 34,
@@ -679,23 +809,42 @@ const useStyles = createThemedStyles((t: Theme) => ({
     padding: spacing.lg,
     gap: spacing.lg,
   },
-  locationWell: {
-    borderWidth: BORDER_W,
-    borderRadius: radii.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  locationInput: {
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    minHeight: 44,
-    padding: 0,
-    textAlignVertical: 'top' as const,
-  },
   chipWrap: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: spacing.sm,
+  },
+  progressRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    width: 154,
+    marginBottom: spacing.xs,
+  },
+  progressDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+  },
+  progressLine: {
+    height: 2,
+    flex: 1,
+  },
+  locationPicker: {
+    minHeight: 58,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  locationIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   dateWell: {
     borderWidth: BORDER_W,
@@ -727,6 +876,32 @@ const useStyles = createThemedStyles((t: Theme) => ({
     minWidth: 26,
     textAlign: 'center' as const,
     color: t.colors.ink,
+  },
+  noteInput: {
+    minHeight: 52,
+  },
+  preview: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: 3,
+  },
+  previewHeading: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  privateHint: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing.xs,
+  },
+  locationSheet: {
+    gap: spacing.md,
+    paddingBottom: spacing.md,
   },
   mapWrap: {
     borderWidth: BORDER_W,

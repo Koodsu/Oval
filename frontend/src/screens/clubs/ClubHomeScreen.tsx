@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -20,8 +20,6 @@ import {
   Button,
   Card,
   Chip,
-  ClubMark,
-  EmptyState,
   IconButton,
   ListRow,
   ScreenHeader,
@@ -30,12 +28,16 @@ import {
   SkeletonCard,
   Slab,
 } from '../../components/ui';
-import { MeetingCard, MemberRow, roleAccent } from '../../components/clubs';
+import {
+  ClubEmptyState,
+  ClubIdentityHero,
+  MeetingCard,
+  roleAccent,
+} from '../../components/clubs';
 import ClubVerifyPrompt from './ClubVerifyPrompt';
 import { useClub, roleRank } from '../../hooks/useClub';
 import { useAuth } from '../../context/AuthContext';
 import {
-  BORDER_W,
   Theme,
   createThemedStyles,
   fonts,
@@ -46,9 +48,10 @@ import {
 import { formatShortDate } from '../../utils/format';
 
 import { toast } from '../../lib/toast';
+import { getUiPreviewMode } from '../../dev/previewMode';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubDetail'>;
 
-type ClubTab = 'pulse' | 'events' | 'people' | 'about';
+type ClubTab = 'home' | 'chat' | 'about';
 
 export default function ClubHomeScreen({ route, navigation }: Props) {
   const { clubId, justCreated } = route.params;
@@ -68,14 +71,26 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
   const { colors, typography } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const [previewMode] = useState(getUiPreviewMode);
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(false);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const [tab, setTab] = useState<ClubTab>('pulse');
+  const [tab, setTab] = useState<ClubTab>(
+    previewMode === 'club-home-about' ? 'about' : 'home',
+  );
   const [verifyOpen, setVerifyOpen] = useState(Boolean(justCreated));
   const nextMeeting = meetings[0] ?? null;
+
+  useEffect(() => {
+    if (previewMode !== 'club-home-actions' && previewMode !== 'club-verify') return;
+    const timer = setTimeout(() => {
+      if (previewMode === 'club-home-actions') setActionsOpen(true);
+      if (previewMode === 'club-verify') setVerifyOpen(true);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [previewMode]);
 
   const myMember = useMemo(
     () => club?.members.find((member) => member.userId === user?.id) ?? null,
@@ -164,12 +179,14 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
       <AppBackdrop>
         <View style={[styles.content, { paddingTop: insets.top + spacing.md }]}>
           <ScreenHeader title="Club" onBack={() => navigation.goBack()} />
-          <EmptyState
-            icon="alert-circle"
+          <ClubEmptyState
+            variant="recovery"
             title="Could not load club"
-            body={error ?? 'Try again.'}
+            body={error ?? 'The connection dropped before this club finished loading.'}
             actionLabel="Try again"
             onAction={() => void refresh()}
+            secondaryLabel="Go back"
+            onSecondary={() => navigation.goBack()}
           />
         </View>
       </AppBackdrop>
@@ -225,59 +242,45 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Cover + identity ── */}
-        <View style={[styles.coverWrap, { marginTop: -(insets.top + spacing.md) }]}>
-          <View style={[styles.cover, { paddingTop: insets.top + spacing.xs }]}>
-            <View style={styles.coverChrome}>
-              <IconButton
-                icon="arrow-back"
-                accessibilityLabel="Go back"
-                onPress={() => navigation.goBack()}
-              />
-              <IconButton
-                icon="ellipsis-horizontal"
-                accessibilityLabel="Club actions"
-                onPress={() => setActionsOpen(true)}
-              />
-            </View>
-          </View>
-          <View style={styles.identity}>
-            <ClubMark
-              name={club.name}
-              emoji={club.emoji}
-              uri={club.avatarUrl}
-              size={64}
-              style={[styles.mark, { borderColor: colors.bg }]}
-            />
-            <View style={styles.identityText}>
-              <View style={styles.nameLine}>
-                <Text style={styles.clubName} numberOfLines={1}>
-                  {club.name}
-                </Text>
-                {club.isVerified ? (
-                  <Ionicons name="checkmark-circle" size={17} color={colors.accentText} />
-                ) : null}
-              </View>
-              <Text style={typography.caption} numberOfLines={1}>
-                {club.category} · {club.members.length} member{club.members.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-          </View>
+        {/* ── Photo-first identity, shared across light and dark mode ── */}
+        <View style={[styles.heroWrap, { marginTop: -(insets.top + spacing.md) }]}>
+          <ClubIdentityHero
+            club={club}
+            role={club.myRole}
+            topInset={insets.top}
+            squareBottom
+            onBack={() => navigation.goBack()}
+            onActions={() => setActionsOpen(true)}
+            onRolePress={
+              club.isMember && selfAssignableRoles.length
+                ? () => setRolesOpen(true)
+                : undefined
+              }
+          />
+          <View
+            pointerEvents="none"
+            style={[styles.heroCutover, { backgroundColor: colors.bg }]}
+          />
         </View>
 
         {/* ── In-page tabs ── */}
         <Segmented
           value={tab}
-          onChange={setTab}
+          onChange={(next) => {
+            if (next === 'chat' && generalChannel) {
+              openChannel(generalChannel.id);
+              return;
+            }
+            setTab(next);
+          }}
           options={[
-            { value: 'pulse', label: 'Pulse' },
-            { value: 'events', label: 'Events' },
-            { value: 'people', label: 'People' },
+            { value: 'home', label: 'Home' },
+            { value: 'chat', label: 'Chat' },
             { value: 'about', label: 'About' },
           ]}
         />
 
-        {tab === 'pulse' ? (
+        {tab === 'home' ? (
           <>
         {/* ── Home feed: what's happening now ── */}
         {latestAnnouncement ? (
@@ -306,7 +309,27 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
               </Text>
             </Card>
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={typography.title}>Latest</Text>
+            </View>
+            <ClubEmptyState
+              variant="chat"
+              compact
+              title="No announcements yet"
+              body="Official club updates will appear here."
+              actionLabel={generalChannel ? 'Open club chat' : 'See club details'}
+              onAction={() => {
+                if (generalChannel) {
+                  openChannel(generalChannel.id);
+                } else {
+                  setTab('about');
+                }
+              }}
+            />
+          </View>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHead}>
@@ -328,10 +351,14 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
               onRsvp={club.isMember ? (status) => void handleRsvp(status) : undefined}
             />
           ) : (
-            <EmptyState
-              icon="calendar-outline"
+            <ClubEmptyState
+              variant="calendar"
               title="No upcoming meetings"
-              body={can('CREATE_MEETINGS') ? 'Put the next club gathering on the calendar.' : 'New events will appear here.'}
+              body={
+                can('CREATE_MEETINGS')
+                  ? 'Put the next club gathering on the calendar.'
+                  : 'When leaders post the next gathering, it will show up here.'
+              }
               actionLabel={can('CREATE_MEETINGS') ? 'Create meeting' : 'View calendar'}
               onAction={() =>
                 navigation.navigate('ClubEvents', {
@@ -382,65 +409,6 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
           </>
         ) : null}
 
-        {tab === 'events' ? (
-          <View style={styles.section}>
-            {can('CREATE_MEETINGS') ? (
-              <Button
-                label="Create meeting"
-                icon="add"
-                onPress={() => navigation.navigate('ClubEvents', { clubId, startCreate: true })}
-              />
-            ) : null}
-            {meetings.length ? (
-              meetings.map((meeting) => (
-                <MeetingCard
-                  key={meeting.id}
-                  meeting={meeting}
-                  onPress={() =>
-                    navigation.navigate('ClubMeeting', { clubId, meetingId: meeting.id })
-                  }
-                  onRsvp={club.isMember ? (status) => void handleRsvp(status) : undefined}
-                />
-              ))
-            ) : (
-              <EmptyState
-                icon="calendar-outline"
-                title="No upcoming meetings"
-                body="New events will appear here."
-                actionLabel={can('CREATE_MEETINGS') ? 'Create meeting' : 'View calendar'}
-                onAction={() =>
-                  navigation.navigate('ClubEvents', {
-                    clubId,
-                    startCreate: can('CREATE_MEETINGS'),
-                  })
-                }
-              />
-            )}
-          </View>
-        ) : null}
-
-        {tab === 'people' ? (
-          <View style={styles.section}>
-            {isLeader ? (
-              <Text
-                style={[styles.link, { color: colors.accentText, alignSelf: 'flex-end' }]}
-                onPress={() => navigation.navigate('ClubMembers', { clubId })}
-              >
-                Manage members →
-              </Text>
-            ) : null}
-            {[...club.members]
-              .sort((a, b) => roleRank(b.role) - roleRank(a.role))
-              .map((member) => (
-              <MemberRow
-                key={member.userId}
-                member={member}
-                onPress={() => navigation.navigate('UserProfile', { userId: member.userId })}
-              />
-            ))}
-          </View>
-        ) : null}
-
         {tab === 'about' ? (
           <View style={styles.section}>
             <Text style={[typography.body, { color: colors.sub }]}>{club.description}</Text>
@@ -452,9 +420,43 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
                 title={`${club.members.length} member${club.members.length === 1 ? '' : 's'}`}
                 sub={club.isVerified ? 'Verified club' : 'Community'}
                 tint={colors.tealSoft}
+                onPress={() => navigation.navigate('ClubMembers', { clubId })}
                 last
               />
             </Card>
+            <View style={styles.sectionHead}>
+              <Text style={typography.title}>Leadership</Text>
+              <Text
+                style={[styles.link, { color: colors.accentText }]}
+                onPress={() => navigation.navigate('ClubMembers', { clubId })}
+              >
+                All members
+              </Text>
+            </View>
+            <View style={styles.leadershipRow}>
+              {[...club.members]
+                .filter((member) => roleRank(member.role) >= roleRank('OFFICER'))
+                .sort((a, b) => roleRank(b.role) - roleRank(a.role))
+                .slice(0, 4)
+                .map((member) => (
+                  <View key={member.userId} style={styles.leader}>
+                    <Avatar
+                      name={member.user.name}
+                      uri={member.user.avatarUrl}
+                      size={54}
+                    />
+                    <Text style={typography.captionSmall} numberOfLines={1}>
+                      {member.user.name.split(' ')[0]}
+                    </Text>
+                    <Text
+                      style={[typography.captionSmall, { color: colors.sub }]}
+                      numberOfLines={1}
+                    >
+                      {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
+                    </Text>
+                  </View>
+                ))}
+            </View>
             {club.isMember && selfAssignableRoles.length ? (
               <>
                 <Text style={typography.title}>Join a role</Text>
@@ -528,6 +530,14 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
         title={club.name}
         kicker="CLUB ACTIONS"
       >
+        <ListRow
+          icon="share-outline"
+          title="Share club"
+          onPress={() => {
+            setActionsOpen(false);
+            void Share.share({ message: `${club.name}\n${getClubShareUrl(club.id)}` });
+          }}
+        />
         {isLeader && !club.isVerified ? (
           <ListRow
             icon="ribbon-outline"
@@ -548,14 +558,6 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
             }}
           />
         ) : null}
-        <ListRow
-          icon="share-outline"
-          title="Share club"
-          onPress={() => {
-            setActionsOpen(false);
-            void Share.share({ message: `${club.name}\n${getClubShareUrl(club.id)}` });
-          }}
-        />
         <ListRow
           icon="flag-outline"
           title="Report club"
@@ -580,6 +582,40 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
         ) : null}
       </Sheet>
 
+      <Sheet
+        visible={rolesOpen}
+        onClose={() => setRolesOpen(false)}
+        title="Join a role"
+        kicker="FIND YOUR PLACE"
+        scrollable
+      >
+        <View style={{ gap: spacing.md }}>
+          <Text style={typography.caption}>
+            Roles connect you with the teams and conversations you care about.
+          </Text>
+          {selfAssignableRoles.map((role) => {
+            const has = myRoleIds.has(role.id);
+            const accent = roleAccent(colors, role.color);
+            return (
+              <ListRow
+                key={role.id}
+                icon={has ? 'checkmark-circle' : 'ellipse-outline'}
+                title={role.name}
+                sub={has ? 'Joined' : 'Tap to join this role'}
+                tint={accent.tint}
+                onPress={
+                  roleBusyId === role.id
+                    ? undefined
+                    : () => void toggleSelfRole(role.id, has)
+                }
+                last
+              />
+            );
+          })}
+          <Button label="Done" onPress={() => setRolesOpen(false)} />
+        </View>
+      </Sheet>
+
       <ClubVerifyPrompt
         visible={verifyOpen}
         onClose={() => setVerifyOpen(false)}
@@ -593,32 +629,18 @@ export default function ClubHomeScreen({ route, navigation }: Props) {
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: { flexGrow: 1, paddingHorizontal: spacing.xl, gap: spacing.lg },
-  coverWrap: { marginHorizontal: -spacing.xl },
-  cover: {
-    height: 132,
-    paddingHorizontal: spacing.xl,
+  heroWrap: {
+    marginHorizontal: -spacing.xl,
+    position: 'relative' as const,
   },
-  coverChrome: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  identity: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-    marginTop: -32,
-  },
-  mark: { borderWidth: 3 },
-  identityText: { flex: 1, minWidth: 0, paddingBottom: 4, gap: 2 },
-  nameLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
-  clubName: {
-    fontFamily: fonts.display,
-    fontSize: 21,
-    letterSpacing: -0.5,
-    color: t.colors.ink,
-    flexShrink: 1,
+  heroCutover: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: -1,
+    height: 18,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
   },
   section: { gap: spacing.md },
   sectionHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
@@ -628,6 +650,16 @@ const useStyles = createThemedStyles((t: Theme) => ({
   activityRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
   activityDot: { width: 8, height: 8, borderRadius: 4 },
   roleChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
+  leadershipRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+    justifyContent: 'space-between' as const,
+  },
+  leader: {
+    width: 72,
+    alignItems: 'center' as const,
+    gap: 3,
+  },
   stickyBar: {
     position: 'absolute' as const,
     left: 0,

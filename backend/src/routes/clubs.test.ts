@@ -33,7 +33,7 @@ describe('Clubs API (integration)', () => {
       const res = await request(app)
         .post('/clubs')
         .set('Authorization', `Bearer ${token}`)
-        .send(validCreateBody())
+        .send({ ...validCreateBody(), discoveryPreference: 'INVITE_ONLY' })
         .expect(201);
       await prisma.club.update({ where: { id: res.body.id }, data: { isDiscoverable: true } });
 
@@ -48,6 +48,8 @@ describe('Clubs API (integration)', () => {
         where: { clubId_userId: { clubId: res.body.id, userId } },
       });
       expect(row?.role).toBe('OWNER');
+      const club = await prisma.club.findUnique({ where: { id: res.body.id } });
+      expect(club?.discoveryPreference).toBe('INVITE_ONLY');
     });
 
     it('returns 400 when required fields are missing', async () => {
@@ -365,6 +367,12 @@ describe('Clubs API (integration)', () => {
         .expect(200);
       expect(applyInfo.body.openCycle.id).toBe(cycle.body.id);
       expect(applyInfo.body.isMember).toBe(false);
+      expect(applyInfo.body.club).toMatchObject({
+        id: clubId,
+        name: create.body.name,
+        category: create.body.category,
+        memberCount: 1,
+      });
 
       await request(app)
         .post(`/clubs/${clubId}/application-cycles/${cycle.body.id}/apply`)
@@ -438,6 +446,58 @@ describe('Clubs API (integration)', () => {
         .send({ answers: ['x'] })
         .expect(409);
     });
+
+    it('keeps application status visible after a cycle closes and lets the applicant withdraw', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const cycle = await request(app)
+        .post(`/clubs/${create.body.id}/application-cycles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title: 'Fall 2026',
+          questions: ['Why join?', 'What do you hope to learn?'],
+          closesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .expect(201);
+      const applicant = await registerAndGetToken(
+        'Status Applicant',
+        `status-applicant-${Date.now()}@example.com`,
+        'password123'
+      );
+      const applied = await request(app)
+        .post(`/clubs/${create.body.id}/application-cycles/${cycle.body.id}/apply`)
+        .set('Authorization', `Bearer ${applicant.token}`)
+        .send({ answers: ['Community', 'Portrait lighting'] })
+        .expect(201);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/application-cycles/${cycle.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'CLOSED' })
+        .expect(200);
+
+      const info = await request(app)
+        .get(`/clubs/${create.body.id}/apply`)
+        .set('Authorization', `Bearer ${applicant.token}`)
+        .expect(200);
+      expect(info.body.openCycle).toBeNull();
+      expect(info.body.myApplication).toMatchObject({
+        id: applied.body.id,
+        stage: 'APPLIED',
+        answerCount: 2,
+        cycle: { id: cycle.body.id, title: 'Fall 2026' },
+      });
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}/applications/${applied.body.id}/withdraw`)
+        .set('Authorization', `Bearer ${applicant.token}`)
+        .expect(200);
+      expect(
+        (await prisma.clubApplication.findUnique({ where: { id: applied.body.id } }))?.stage
+      ).toBe('WITHDRAWN');
+    });
   });
 
   describe('GET /clubs/my', () => {
@@ -461,6 +521,13 @@ describe('Clubs API (integration)', () => {
         where: { id: create.body.id },
         data: { avatarUrl: '/uploads/club-avatars/chess.png' },
       });
+      await prisma.clubAnnouncement.create({
+        data: {
+          clubId: create.body.id,
+          userId,
+          content: 'Bring your student ID to the next meeting.',
+        },
+      });
 
       const res = await request(app)
         .get('/clubs/my')
@@ -473,6 +540,58 @@ describe('Clubs API (integration)', () => {
       expect(row!.club.memberCount).toBe(1);
       expect(row!.club.avatarUrl).toBe('/uploads/club-avatars/chess.png');
       expect(row!.nextMeeting.title).toBe('First');
+      expect(row!.latestAnnouncement.content).toBe(
+        'Bring your student ID to the next meeting.'
+      );
+      expect(row!.latestAnnouncement.user.id).toBe(userId);
+    });
+
+    it('returns the latest announcement visible to the member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const { token: memberToken } = await registerAndGetToken(
+        'Announcement Member',
+        `home-announcement-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(201);
+
+      await prisma.clubAnnouncement.create({
+        data: {
+          clubId: create.body.id,
+          userId,
+          content: 'Public update',
+          visibility: 'PUBLIC',
+          createdAt: new Date(Date.now() - 60_000),
+        },
+      });
+      await prisma.clubAnnouncement.create({
+        data: {
+          clubId: create.body.id,
+          userId,
+          content: 'Officer update',
+          visibility: 'OFFICERS',
+        },
+      });
+
+      const res = await request(app)
+        .get('/clubs/my')
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(200);
+
+      const row = res.body.find((item: { club: { id: string } }) => item.club.id === create.body.id);
+      expect(row!.latestAnnouncement.content).toBe('Public update');
     });
   });
 
@@ -1011,6 +1130,45 @@ describe('Clubs API (integration)', () => {
       expect(res.body.user.name).toBeDefined();
     });
 
+    it('attaches a club meeting and can publish without notifying members', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const meeting = await prisma.clubMeeting.create({
+        data: {
+          clubId: create.body.id,
+          title: 'Photo Critique Night',
+          location: 'Media Center',
+          meetingTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          createdById: userId,
+        },
+      });
+
+      const res = await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          content: 'Bring your favorite shots.',
+          meetingId: meeting.id,
+          notifyMembers: false,
+        })
+        .expect(201);
+      expect(res.body.notifyMembers).toBe(false);
+      expect(res.body.meeting).toMatchObject({
+        id: meeting.id,
+        title: 'Photo Critique Night',
+        location: 'Media Center',
+      });
+
+      const listed = await request(app)
+        .get(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(listed.body.items[0].meeting.id).toBe(meeting.id);
+    });
+
     it('returns 403 for MEMBER', async () => {
       const create = await request(app)
         .post('/clubs')
@@ -1170,6 +1328,367 @@ describe('Clubs API (integration)', () => {
         .set('Authorization', `Bearer ${t2}`)
         .send({ role: 'MEMBER' })
         .expect(400);
+    });
+  });
+
+  describe('POST /clubs/:id/transfer-ownership', () => {
+    it('transfers sole ownership, creator linkage, and audit history to a member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const { token: memberToken, user: member } = await registerAndGetToken(
+        'Next Owner',
+        `next-owner-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(201);
+
+      const transferred = await request(app)
+        .post(`/clubs/${create.body.id}/transfer-ownership`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ newOwnerUserId: member.id })
+        .expect(200);
+
+      expect(transferred.body.previousOwner).toEqual({
+        userId,
+        role: 'ADMIN',
+      });
+      expect(transferred.body.newOwner.userId).toBe(member.id);
+      expect(transferred.body.newOwner.role).toBe('OWNER');
+      expect(transferred.body.transfer.id).toEqual(expect.any(String));
+      expect(transferred.body.transfer.createdAt).toEqual(expect.any(String));
+
+      const memberships = await prisma.clubMember.findMany({
+        where: { clubId: create.body.id },
+        select: { userId: true, role: true },
+      });
+      expect(memberships.find((row) => row.userId === userId)?.role).toBe('ADMIN');
+      expect(memberships.find((row) => row.userId === member.id)?.role).toBe('OWNER');
+      expect(memberships.filter((row) => row.role === 'OWNER')).toHaveLength(1);
+
+      const club = await prisma.club.findUnique({
+        where: { id: create.body.id },
+        select: { createdById: true },
+      });
+      expect(club?.createdById).toBe(member.id);
+
+      const audit = await prisma.clubOwnershipTransfer.findMany({
+        where: { clubId: create.body.id },
+      });
+      expect(audit).toHaveLength(1);
+      expect(audit[0]).toMatchObject({
+        fromUserId: userId,
+        toUserId: member.id,
+      });
+
+      const history = await request(app)
+        .get(`/clubs/${create.body.id}/ownership-history`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(history.body.items).toHaveLength(1);
+      expect(history.body.items[0].fromUser.name).toBeTruthy();
+      expect(history.body.items[0].toUser.name).toBe('Next Owner');
+    });
+
+    it('rejects transfer attempts from an ADMIN', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const { token: adminToken, user: admin } = await registerAndGetToken(
+        'Club Admin',
+        `transfer-admin-${Date.now()}@example.com`,
+        'password123'
+      );
+      const { token: memberToken, user: member } = await registerAndGetToken(
+        'Transfer Target',
+        `transfer-target-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(201);
+      await prisma.clubMember.update({
+        where: { clubId_userId: { clubId: create.body.id, userId: admin.id } },
+        data: { role: 'ADMIN' },
+      });
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/transfer-ownership`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ newOwnerUserId: member.id })
+        .expect(403);
+
+      const currentOwner = await prisma.clubMember.findUnique({
+        where: { clubId_userId: { clubId: create.body.id, userId } },
+      });
+      expect(currentOwner?.role).toBe('OWNER');
+    });
+
+    it('requires the new owner to be another existing member', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/transfer-ownership`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ newOwnerUserId: userId })
+        .expect(400);
+
+      const { user: outsider } = await registerAndGetToken(
+        'Outside Owner',
+        `outside-owner-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/transfer-ownership`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ newOwnerUserId: outsider.id })
+        .expect(404);
+    });
+
+    it('allows only one of two concurrent transfers to commit', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+
+      const first = await registerAndGetToken(
+        'First Candidate',
+        `transfer-first-${Date.now()}@example.com`,
+        'password123'
+      );
+      const second = await registerAndGetToken(
+        'Second Candidate',
+        `transfer-second-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${first.token}`)
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${second.token}`)
+        .expect(201);
+
+      const responses = await Promise.all([
+        request(app)
+          .post(`/clubs/${create.body.id}/transfer-ownership`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ newOwnerUserId: first.user.id }),
+        request(app)
+          .post(`/clubs/${create.body.id}/transfer-ownership`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ newOwnerUserId: second.user.id }),
+      ]);
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+
+      const owners = await prisma.clubMember.findMany({
+        where: { clubId: create.body.id, role: 'OWNER' },
+        select: { userId: true },
+      });
+      expect(owners).toHaveLength(1);
+      const club = await prisma.club.findUnique({
+        where: { id: create.body.id },
+        select: { createdById: true },
+      });
+      expect(club?.createdById).toBe(owners[0].userId);
+      expect(
+        await prisma.clubOwnershipTransfer.count({ where: { clubId: create.body.id } })
+      ).toBe(1);
+    });
+
+    it('keeps the transferred owner in charge when the former owner deletes their account', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+      const next = await registerAndGetToken(
+        'Durable Owner',
+        `durable-owner-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${next.token}`)
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/transfer-ownership`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ newOwnerUserId: next.user.id })
+        .expect(200);
+
+      await request(app)
+        .delete('/users/me')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ password: 'password123' })
+        .expect(204);
+
+      const club = await prisma.club.findUnique({
+        where: { id: create.body.id },
+        include: { members: { where: { role: 'OWNER' } } },
+      });
+      expect(club?.createdById).toBe(next.user.id);
+      expect(club?.members.map((member) => member.userId)).toEqual([next.user.id]);
+      expect(
+        await prisma.clubOwnershipTransfer.count({ where: { clubId: create.body.id } })
+      ).toBe(1);
+    });
+
+    it('hides ownership history from regular members', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+      const member = await registerAndGetToken(
+        'History Reader',
+        `history-reader-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${member.token}`)
+        .expect(201);
+      await request(app)
+        .get(`/clubs/${create.body.id}/ownership-history`)
+        .set('Authorization', `Bearer ${member.token}`)
+        .expect(403);
+    });
+  });
+
+  describe('PATCH /clubs/:id/members/:userId/permissions', () => {
+    it('stores an individual officer permission override and enforces it', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+      const officer = await registerAndGetToken(
+        'Events Officer',
+        `events-officer-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${officer.token}`)
+        .expect(201);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${officer.user.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ role: 'OFFICER' })
+        .expect(200);
+
+      const permissions = await request(app)
+        .patch(`/clubs/${create.body.id}/members/${officer.user.id}/permissions`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ permissions: ['CREATE_MEETINGS'] })
+        .expect(200);
+      expect(permissions.body.permissions).toEqual(['CREATE_MEETINGS']);
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/meetings`)
+        .set('Authorization', `Bearer ${officer.token}`)
+        .send({
+          title: 'Officer-created meeting',
+          location: 'Ohio Union',
+          meetingTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .expect(201);
+      await request(app)
+        .post(`/clubs/${create.body.id}/announcements`)
+        .set('Authorization', `Bearer ${officer.token}`)
+        .send({ content: 'This permission was not granted.' })
+        .expect(403);
+
+      const detail = await request(app)
+        .get(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(
+        detail.body.members.find((member: { userId: string }) => member.userId === officer.user.id)
+          .permissions
+      ).toEqual(['CREATE_MEETINGS']);
+      const officerDetail = await request(app)
+        .get(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${officer.token}`)
+        .expect(200);
+      expect(officerDetail.body.myPermissions).toEqual(['CREATE_MEETINGS']);
+    });
+
+    it('rejects overrides for non-officers and regular-member actors', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      await prisma.club.update({
+        where: { id: create.body.id },
+        data: { isDiscoverable: true },
+      });
+      const member = await registerAndGetToken(
+        'Permission Member',
+        `permission-member-${Date.now()}@example.com`,
+        'password123'
+      );
+      await request(app)
+        .post(`/clubs/${create.body.id}/join`)
+        .set('Authorization', `Bearer ${member.token}`)
+        .expect(201);
+
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${member.user.id}/permissions`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ permissions: ['CREATE_MEETINGS'] })
+        .expect(400);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/members/${userId}/permissions`)
+        .set('Authorization', `Bearer ${member.token}`)
+        .send({ permissions: ['CREATE_MEETINGS'] })
+        .expect(403);
     });
   });
 
@@ -1501,6 +2020,62 @@ describe('Clubs API (integration)', () => {
   });
 
   describe('Club member tags', () => {
+    it('persists role and custom-channel ordering', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const firstRole = await request(app)
+        .post(`/clubs/${create.body.id}/roles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Photo Team' })
+        .expect(201);
+      const secondRole = await request(app)
+        .post(`/clubs/${create.body.id}/roles`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Editors' })
+        .expect(201);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/roles/reorder`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ roleIds: [secondRole.body.id, firstRole.body.id] })
+        .expect(200);
+      const roles = await request(app)
+        .get(`/clubs/${create.body.id}/roles`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(roles.body.map((role: { id: string }) => role.id)).toEqual([
+        secondRole.body.id,
+        firstRole.body.id,
+      ]);
+
+      const firstChannel = await request(app)
+        .post(`/clubs/${create.body.id}/channels`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'photo-team' })
+        .expect(201);
+      const secondChannel = await request(app)
+        .post(`/clubs/${create.body.id}/channels`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'editors' })
+        .expect(201);
+      await request(app)
+        .patch(`/clubs/${create.body.id}/channels/reorder`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ channelIds: [secondChannel.body.id, firstChannel.body.id] })
+        .expect(200);
+      const channels = await request(app)
+        .get(`/clubs/${create.body.id}/channels`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(
+        channels.body.channels
+          .filter((channel: { kind: string }) => channel.kind === 'CUSTOM')
+          .map((channel: { id: string }) => channel.id)
+      ).toEqual([secondChannel.body.id, firstChannel.body.id]);
+    });
+
     it('lets leadership create, assign, target, and delete member tags', async () => {
       const create = await request(app)
         .post('/clubs')
@@ -1619,6 +2194,27 @@ describe('Clubs API (integration)', () => {
       expect(row?.avatarUrl).toMatch(/\/uploads\/club-avatars\//);
     });
 
+    it('allows leadership to upload a separate cover image', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+
+      const res = await request(app)
+        .patch(`/clubs/${create.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .field('imageKind', 'cover')
+        .attach('image', minimalPng, { filename: 'cover.png', contentType: 'image/png' })
+        .expect(200);
+
+      expect(res.body.coverUrl).toMatch(/\/uploads\/club-avatars\//);
+      expect(res.body.avatarUrl).toBeNull();
+      const row = await prisma.club.findUnique({ where: { id: create.body.id } });
+      expect(row?.coverUrl).toBe(res.body.coverUrl);
+      expect(row?.avatarUrl).toBeNull();
+    });
+
     it('updates identity fields without requiring an image', async () => {
       const create = await request(app)
         .post('/clubs')
@@ -1633,6 +2229,7 @@ describe('Clubs API (integration)', () => {
         .send({
           name: 'Scarlet Chess',
           description: 'Competitive and casual chess on campus.',
+          category: 'Academic',
           isPublic: false,
         })
         .expect(200);
@@ -1640,6 +2237,7 @@ describe('Clubs API (integration)', () => {
       expect(res.body).toMatchObject({
         name: 'Scarlet Chess',
         description: 'Competitive and casual chess on campus.',
+        category: 'Academic',
         isPublic: false,
       });
     });
@@ -1742,6 +2340,88 @@ describe('Clubs API (integration)', () => {
   });
 
   describe('Club visibility and officer channels', () => {
+    it('supports replies and reactions in club chat channels', async () => {
+      const create = await request(app)
+        .post('/clubs')
+        .set('Authorization', `Bearer ${token}`)
+        .send(validCreateBody())
+        .expect(201);
+      const channels = await request(app)
+        .get(`/clubs/${create.body.id}/channels`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const general = channels.body.channels.find(
+        (channel: { kind: string }) => channel.kind === 'GENERAL',
+      );
+      expect(general).toBeDefined();
+
+      const first = await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Good morning, everyone!' })
+        .expect(201);
+      const reply = await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Love this shot.', replyToId: first.body.id })
+        .expect(201);
+      expect(reply.body.replyTo).toMatchObject({
+        id: first.body.id,
+        content: 'Good morning, everyone!',
+      });
+      const managedImageUrl =
+        `https://example.supabase.co/storage/v1/object/public/club-avatars/messages/${create.body.id}/photo.jpg`;
+      const photo = await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: '', imageUrl: managedImageUrl })
+        .expect(201);
+      expect(photo.body).toMatchObject({ content: '', imageUrl: managedImageUrl });
+
+      await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ content: 'Untrusted image', imageUrl: 'https://tracker.example/photo.jpg' })
+        .expect(400);
+
+      const reacted = await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages/${first.body.id}/reactions`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ emoji: '❤️' })
+        .expect(200);
+      expect(reacted.body.reactions).toEqual([{ emoji: '❤️', userId }]);
+
+      const listed = await request(app)
+        .get(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(listed.body.messages[0].reactions).toHaveLength(1);
+      expect(listed.body.messages[1].replyTo.id).toBe(first.body.id);
+      expect(listed.body.messages[2].imageUrl).toBe(managedImageUrl);
+
+      const { token: memberToken, user: memberUser } = await registerAndGetToken(
+        'Chat Member',
+        `chat-member-${Date.now()}@example.com`,
+        'password123',
+      );
+      await prisma.clubMember.create({
+        data: { clubId: create.body.id, userId: memberUser.id, role: 'MEMBER' },
+      });
+      const memberMessage = await request(app)
+        .post(`/clubs/${create.body.id}/channels/${general.id}/messages`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ content: 'I can remove my own message.' })
+        .expect(201);
+      await request(app)
+        .delete(`/clubs/${create.body.id}/channels/${general.id}/messages/${memberMessage.body.id}`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(200);
+      await request(app)
+        .delete(`/clubs/${create.body.id}/channels/${general.id}/messages/${first.body.id}`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(403);
+    });
+
     it('filters officer-only announcements for regular members', async () => {
       const create = await request(app)
         .post('/clubs')

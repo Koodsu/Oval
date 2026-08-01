@@ -75,15 +75,27 @@ describe('Pods API (integration)', () => {
           minMembers: 2,
           maxMembers: 4,
           meetupTime: meetupTime.toISOString(),
+          title: 'Late-night study sprint',
+          note: 'Bring a laptop and headphones.',
           location: validLocation,
+          locationAddress: '1858 Neil Avenue, Columbus, OH 43210',
         })
         .expect(201);
 
       expect(res.body.id).toBeDefined();
       expect(res.body.status).toBe('FORMING');
+      expect(res.body.title).toBe('Late-night study sprint');
+      expect(res.body.note).toBe('Bring a laptop and headphones.');
+      expect(res.body.locationAddress).toBe('1858 Neil Avenue, Columbus, OH 43210');
       expect(res.body.creatorId).toBe(userId);
       expect(res.body.members).toHaveLength(1);
       expect(res.body.activity).toBeDefined();
+
+      const publicPreview = await request(app)
+        .get(`/pods/${res.body.id}/public`)
+        .expect(200);
+      expect(publicPreview.body.podName).toBe('Late-night study sprint');
+      expect(publicPreview.body.activityName).toBe(res.body.activity.title);
     });
 
     it('rejects without location', async () => {
@@ -577,6 +589,47 @@ describe('Pods API (integration)', () => {
         .get('/pods')
         .set('Authorization', `Bearer ${token}`)
         .expect(400);
+    });
+
+    it('includes myWaitlistPosition for pods the caller is waitlisted on', async () => {
+      const meetupTime = new Date(Date.now() + 86400000);
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          meetupTime: meetupTime.toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+      const podId = createRes.body.id as string;
+
+      const { token: waiter, user: waiterUser } = await registerAndGetToken(
+        'Waiter',
+        `waiter-list-${Date.now()}@example.com`,
+        'password123'
+      );
+      await prisma.podWaitlist.create({
+        data: { podId, userId: waiterUser.id, position: 1 },
+      });
+
+      const res = await request(app)
+        .get('/pods')
+        .query({ activityId })
+        .set('Authorization', `Bearer ${waiter}`)
+        .expect(200);
+
+      const listed = res.body.find((p: { id: string }) => p.id === podId);
+      expect(listed.myWaitlistPosition).toBe(1);
+
+      // Creator is not waitlisted — null for them.
+      const creatorRes = await request(app)
+        .get('/pods')
+        .query({ activityId })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const creatorListed = creatorRes.body.find((p: { id: string }) => p.id === podId);
+      expect(creatorListed.myWaitlistPosition).toBeNull();
     });
   });
 

@@ -4,6 +4,103 @@ import app from '../server';
 import prisma from '../prisma';
 import { registerAndGetToken } from '../test/helpers';
 
+describe('GET /users/:id/public', () => {
+  it('returns a minimal profile without authentication', async () => {
+    const { user } = await registerAndGetToken(
+      'Public Profile',
+      `public-profile-${Date.now()}@example.com`,
+      'password123'
+    );
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        bio: 'Always up for a study break.',
+        instagramHandle: 'private_handle',
+      },
+    });
+
+    const res = await request(app).get(`/users/${user.id}/public`).expect(200);
+
+    expect(res.body).toMatchObject({
+      id: user.id,
+      name: 'Public',
+      bio: 'Always up for a study break.',
+    });
+    expect(res.body).not.toHaveProperty('email');
+    expect(res.body).not.toHaveProperty('instagramHandle');
+    expect(res.body).not.toHaveProperty('verifiedUniversity');
+  });
+
+  it('rejects malformed IDs', async () => {
+    await request(app).get('/users/not-a-user/public').expect(400);
+  });
+
+  it('does not expose inactive profiles', async () => {
+    const { user } = await registerAndGetToken(
+      'Inactive Profile',
+      `inactive-profile-${Date.now()}@example.com`,
+      'password123'
+    );
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    await request(app).get(`/users/${user.id}/public`).expect(404);
+  });
+});
+
+describe('GET /users/discover', () => {
+  it('returns verified suggestions with real profile context and shared interests', async () => {
+    const stamp = Date.now();
+    const viewer = await registerAndGetToken(
+      'Discover Viewer',
+      `discover-viewer-${stamp}@example.com`,
+      'password123',
+    );
+    const candidate = await registerAndGetToken(
+      'Discover Candidate',
+      `discover-candidate-${stamp}@example.com`,
+      'password123',
+    );
+
+    await Promise.all([
+      prisma.user.update({
+        where: { id: viewer.user.id },
+        data: { interestTags: JSON.stringify(['Coffee', 'Music']) },
+      }),
+      prisma.user.update({
+        where: { id: candidate.user.id },
+        data: {
+          interestTags: JSON.stringify(['Music', 'Outdoors']),
+          major: 'Computer Science',
+          classYear: 'Junior',
+        },
+      }),
+    ]);
+
+    const res = await request(app)
+      .get('/users/discover')
+      .set('Authorization', `Bearer ${viewer.token}`)
+      .expect(200);
+
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: candidate.user.id,
+          name: 'Discover Candidate',
+          major: 'Computer Science',
+          classYear: 'Junior',
+          sharedInterests: ['Music'],
+          mutualFriendCount: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(res.body.every((row: { id: string }) => row.id !== viewer.user.id)).toBe(true);
+  });
+});
+
 describe('GET /users/:id', () => {
   it('returns public profile with podsAttended=0 for a verified user', async () => {
     const { token, user } = await registerAndGetToken(
@@ -23,6 +120,9 @@ describe('GET /users/:id', () => {
       verifiedUniversity: true,
       podsAttended: 0,
       joinedAt: expect.any(String),
+      mutualFriends: [],
+      upcomingPods: [],
+      clubMemberships: [],
     });
   });
 
