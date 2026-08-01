@@ -227,6 +227,16 @@ describe('activity requests', () => {
       expect(approved.body.request.status).toBe('APPROVED');
       expect(approved.body.activity.title).toBe(title);
 
+      const reviewed = await request(app)
+        .get('/admin/activity-requests?status=reviewed')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(200);
+      expect(reviewed.body.requests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: submitted.body.id, status: 'APPROVED' }),
+        ]),
+      );
+
       const duplicate = await request(app)
         .post('/activities/requests')
         .set('Authorization', `Bearer ${student.token}`)
@@ -269,6 +279,20 @@ describe('activity requests', () => {
 
       expect(rejected.body.request.status).toBe('REJECTED');
       expect(rejected.body.request.reviewNote).toBe('Too similar to the current catalog.');
+
+      const reviewed = await request(app)
+        .get('/admin/activity-requests?status=reviewed')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(200);
+      expect(reviewed.body.requests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: submitted.body.id,
+            status: 'REJECTED',
+            reviewNote: 'Too similar to the current catalog.',
+          }),
+        ]),
+      );
     } finally {
       if (previousAdmins === undefined) delete process.env.ADMIN_USER_IDS;
       else process.env.ADMIN_USER_IDS = previousAdmins;

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import app from '../server';
 import prisma from '../prisma';
+import { createTestUser, getAuthToken } from '../test/helpers';
 
 describe('Web / invite-link routes (public)', () => {
   describe('GET /.well-known/apple-app-site-association', () => {
@@ -81,7 +83,7 @@ describe('Web / invite-link routes (public)', () => {
       const packageNames: string[] = res.body.map(
         (entry: { target: { package_name: string } }) => entry.target.package_name
       );
-      expect(packageNames).toContain('com.bradyvb.ovalapp');
+      expect(packageNames).toContain('com.theovalapp.app');
     });
 
     it('requires no auth token', async () => {
@@ -221,6 +223,123 @@ describe('Web / invite-link routes (public)', () => {
       expect(res.text).not.toContain('Secret spot');
 
       await prisma.pod.delete({ where: { id: pod.id } });
+    });
+  });
+
+  describe('Web account deletion flow (public, Google Play requirement)', () => {
+    function makeDeletionToken(userId: string, overrides: Record<string, unknown> = {}) {
+      return jwt.sign(
+        { purpose: 'account-deletion', userId, ...overrides },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '1h' },
+      );
+    }
+
+    describe('POST /delete-account/request', () => {
+      it('returns ok for an unknown email (no user enumeration)', async () => {
+        const res = await request(app)
+          .post('/delete-account/request')
+          .send({ email: 'nobody-here@osu.edu' })
+          .expect(200);
+        expect(res.body).toEqual({ ok: true });
+      });
+
+      it('returns ok for a known email without deleting anything', async () => {
+        const user = await createTestUser();
+        const res = await request(app)
+          .post('/delete-account/request')
+          .send({ email: user.email })
+          .expect(200);
+        expect(res.body).toEqual({ ok: true });
+
+        const stillThere = await prisma.user.findUnique({ where: { id: user.id } });
+        expect(stillThere).not.toBeNull();
+        await prisma.user.delete({ where: { id: user.id } });
+      });
+
+      it('returns ok for malformed bodies', async () => {
+        const res = await request(app)
+          .post('/delete-account/request')
+          .send({ email: 12345 })
+          .expect(200);
+        expect(res.body).toEqual({ ok: true });
+      });
+    });
+
+    describe('GET /delete-account/confirm', () => {
+      it('rejects a missing token', async () => {
+        const res = await request(app).get('/delete-account/confirm').expect(400);
+        expect(res.text).toContain('invalid or expired');
+      });
+
+      it('rejects a garbage token', async () => {
+        const res = await request(app)
+          .get('/delete-account/confirm?token=not-a-real-token')
+          .expect(400);
+        expect(res.text).toContain('invalid or expired');
+      });
+
+      it('rejects an auth-session token (wrong purpose)', async () => {
+        const user = await createTestUser();
+        const sessionToken = getAuthToken(user.id, user.email);
+        const res = await request(app)
+          .get(`/delete-account/confirm?token=${encodeURIComponent(sessionToken)}`)
+          .expect(400);
+        expect(res.text).toContain('invalid or expired');
+        await prisma.user.delete({ where: { id: user.id } });
+      });
+
+      it('renders a confirmation form (not deletion) for a valid token', async () => {
+        const user = await createTestUser();
+        const token = makeDeletionToken(user.id);
+        const res = await request(app)
+          .get(`/delete-account/confirm?token=${encodeURIComponent(token)}`)
+          .expect(200);
+        expect(res.text).toContain('Permanently delete');
+        expect(res.text).toContain('method="POST"');
+
+        // GET must never delete — link prefetchers hit this URL.
+        const stillThere = await prisma.user.findUnique({ where: { id: user.id } });
+        expect(stillThere).not.toBeNull();
+        await prisma.user.delete({ where: { id: user.id } });
+      });
+    });
+
+    describe('POST /delete-account/confirm', () => {
+      it('deletes the account with a valid token', async () => {
+        const user = await createTestUser();
+        const token = makeDeletionToken(user.id);
+        const res = await request(app)
+          .post('/delete-account/confirm')
+          .type('form')
+          .send({ token })
+          .expect(200);
+        expect(res.text).toContain('has been deleted');
+
+        const gone = await prisma.user.findUnique({ where: { id: user.id } });
+        expect(gone).toBeNull();
+      });
+
+      it('rejects an invalid token without deleting', async () => {
+        await request(app)
+          .post('/delete-account/confirm')
+          .type('form')
+          .send({ token: 'garbage' })
+          .expect(400);
+      });
+
+      it('is idempotent for an already-deleted account', async () => {
+        const user = await createTestUser();
+        const token = makeDeletionToken(user.id);
+        await prisma.user.delete({ where: { id: user.id } });
+
+        const res = await request(app)
+          .post('/delete-account/confirm')
+          .type('form')
+          .send({ token })
+          .expect(200);
+        expect(res.text).toContain('has been deleted');
+      });
     });
   });
 });

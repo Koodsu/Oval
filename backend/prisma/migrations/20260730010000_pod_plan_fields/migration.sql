@@ -1,0 +1,7 @@
+ALTER TABLE "Pod"
+ADD COLUMN "title" TEXT,
+ADD COLUMN "note" TEXT,
+ADD COLUMN "locationAddress" TEXT;
+
+ALTER TABLE "Club"
+ADD COLUMN "discoveryPreference" TEXT NOT NULL DEFAULT 'CAMPUS';

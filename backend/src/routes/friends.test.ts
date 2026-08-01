@@ -308,13 +308,14 @@ describe('Direct Messages routes', () => {
   });
 
   it('GET /messages/threads/:id returns messages', async () => {
-    const { tokenA, thread } = await makeFriends();
+    const { b, tokenA, thread } = await makeFriends();
     const res = await request(app)
       .get(`/messages/threads/${thread.id}`)
       .set('Authorization', `Bearer ${tokenA}`)
       .expect(200);
     expect(Array.isArray(res.body.messages)).toBe(true);
     expect(Array.isArray(res.body.typingUserIds)).toBe(true);
+    expect(res.body.otherUser).toMatchObject({ id: b.id, name: 'Bob DM' });
   });
 
   it('POST /messages/threads/:id/messages sends a message', async () => {

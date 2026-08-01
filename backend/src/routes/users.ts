@@ -6,6 +6,8 @@ import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { requireAuth, requireVerifiedAuth, AuthRequest } from '../middleware/auth';
 import { isSupabaseStorageConfigured, supabaseStorage } from '../lib/supabaseStorage';
+import { USER_AVATAR_BUCKET, UPLOAD_DIR, cleanupAvatarUrl } from '../lib/avatarStorage';
+import { deleteUserAccount } from '../lib/accountDeletion';
 import { getBlockedUserIds } from '../lib/blocks';
 import { areFriends, normalizeUserPair } from '../lib/friendUtils';
 import {
@@ -21,6 +23,7 @@ const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] 
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
 const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_NOTIFICATION_PREFERENCES = {
   podJoin: true,
   newMessage: true,
@@ -50,63 +53,15 @@ function parseNotificationPreferences(raw: string | null | undefined) {
   }
 }
 
-function deletionSuccessorRank(role: string): number {
-  if (role === 'ADMIN') return 3;
-  if (role === 'OFFICER') return 2;
-  return 1;
-}
-
 const router = Router();
 
 // ── Avatar upload setup ────────────────────────────────────────────────────────
-
-const USER_AVATAR_BUCKET = 'user-avatars';
-const UPLOAD_DIR = path.join(__dirname, '../../uploads/avatars');
-// Resolved once at startup; used to guard against path traversal when deleting old avatars.
-const UPLOAD_DIR_RESOLVED = path.resolve(UPLOAD_DIR);
-try {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-} catch {
-  // Vercel read-only filesystem — ignore
-}
-
-/**
- * Safely unlinks an avatar file. Resolves the stored path and verifies it
- * lives inside UPLOAD_DIR before deleting — prevents path traversal if the
- * DB record were ever tampered with.
- */
-function safeUnlinkAvatar(storedUrl: string): void {
-  const fullPath = path.resolve(path.join(__dirname, '../../', storedUrl));
-  if (fullPath.startsWith(UPLOAD_DIR_RESOLVED + path.sep)) {
-    fs.unlink(fullPath, () => {}); // best-effort, ignore ENOENT
-  }
-}
+// (bucket constants + cleanup helpers live in lib/avatarStorage.ts)
 
 function avatarExtension(mimetype: string): string {
   if (mimetype === 'image/png') return 'png';
   if (mimetype === 'image/webp') return 'webp';
   return 'jpg';
-}
-
-function supabaseObjectNameFromPublicUrl(url: string, bucket: string): string | null {
-  const marker = `/storage/v1/object/public/${bucket}/`;
-  const index = url.indexOf(marker);
-  if (index === -1) return null;
-  return decodeURIComponent(url.slice(index + marker.length));
-}
-
-async function cleanupAvatarUrl(avatarUrl: string | null | undefined): Promise<void> {
-  if (!avatarUrl) return;
-
-  const objectName = isSupabaseStorageConfigured()
-    ? supabaseObjectNameFromPublicUrl(avatarUrl, USER_AVATAR_BUCKET)
-    : null;
-  if (objectName) {
-    await supabaseStorage.storage.from(USER_AVATAR_BUCKET).remove([objectName]);
-    return;
-  }
-
-  safeUnlinkAvatar(avatarUrl);
 }
 
 const avatarUpload = multer({
@@ -751,131 +706,7 @@ router.delete('/me', requireAuth, async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    await prisma.$transaction(async (tx) => {
-      const ownedClubs = await tx.club.findMany({
-        where: { createdById: userId },
-        include: {
-          members: {
-            where: { userId: { not: userId } },
-            select: { userId: true, role: true, joinedAt: true },
-          },
-        },
-      });
-
-      for (const club of ownedClubs) {
-        const successor = [...club.members].sort((a, b) => {
-          const rankDifference = deletionSuccessorRank(b.role) - deletionSuccessorRank(a.role);
-          return rankDifference || a.joinedAt.getTime() - b.joinedAt.getTime();
-        })[0];
-
-        if (!successor) {
-          await tx.club.delete({ where: { id: club.id } });
-          continue;
-        }
-
-        await tx.club.update({
-          where: { id: club.id },
-          data: { createdById: successor.userId },
-        });
-        await tx.clubMember.updateMany({
-          where: { clubId: club.id, userId: successor.userId },
-          data: { role: 'OWNER' },
-        });
-        await tx.clubRole.updateMany({
-          where: { clubId: club.id, createdById: userId },
-          data: { createdById: successor.userId },
-        });
-        await tx.clubMeeting.updateMany({
-          where: { clubId: club.id, createdById: userId },
-          data: { createdById: successor.userId },
-        });
-        await tx.clubMemberRole.updateMany({
-          where: { clubId: club.id, assignedById: userId },
-          data: { assignedById: successor.userId },
-        });
-      }
-
-      const clubsWithRemainingAuthorship = await tx.club.findMany({
-        where: {
-          OR: [
-            { roles: { some: { createdById: userId } } },
-            { meetings: { some: { createdById: userId } } },
-          ],
-        },
-        select: { id: true, createdById: true },
-      });
-
-      for (const club of clubsWithRemainingAuthorship) {
-        await tx.clubRole.updateMany({
-          where: { clubId: club.id, createdById: userId },
-          data: { createdById: club.createdById },
-        });
-        await tx.clubMeeting.updateMany({
-          where: { clubId: club.id, createdById: userId },
-          data: { createdById: club.createdById },
-        });
-      }
-
-      const assignmentClubIds = Array.from(new Set(
-        (await tx.clubMemberRole.findMany({
-          where: { assignedById: userId },
-          select: { clubId: true },
-        })).map((assignment) => assignment.clubId)
-      ));
-      for (const clubId of assignmentClubIds) {
-        const club = await tx.club.findUnique({ where: { id: clubId }, select: { createdById: true } });
-        if (club) {
-          await tx.clubMemberRole.updateMany({
-            where: { clubId, assignedById: userId },
-            data: { assignedById: club.createdById },
-          });
-        }
-      }
-
-      const [podMessageIds, directMessageIds, clubMessageIds, officerMessageIds, announcementIds] =
-        await Promise.all([
-          tx.message.findMany({ where: { userId }, select: { id: true } }),
-          tx.directMessage.findMany({ where: { senderId: userId }, select: { id: true } }),
-          tx.clubMessage.findMany({ where: { userId }, select: { id: true } }),
-          tx.clubOfficerMessage.findMany({ where: { userId }, select: { id: true } }),
-          tx.clubAnnouncement.findMany({ where: { userId }, select: { id: true } }),
-        ]);
-
-      await Promise.all([
-        tx.report.updateMany({
-          where: { messageId: { in: podMessageIds.map((item) => item.id) } },
-          data: { messageId: null },
-        }),
-        tx.report.updateMany({
-          where: { directMessageId: { in: directMessageIds.map((item) => item.id) } },
-          data: { directMessageId: null },
-        }),
-        tx.report.updateMany({
-          where: { clubMessageId: { in: clubMessageIds.map((item) => item.id) } },
-          data: { clubMessageId: null },
-        }),
-        tx.report.updateMany({
-          where: { clubOfficerMessageId: { in: officerMessageIds.map((item) => item.id) } },
-          data: { clubOfficerMessageId: null },
-        }),
-        tx.report.updateMany({
-          where: { clubAnnouncementId: { in: announcementIds.map((item) => item.id) } },
-          data: { clubAnnouncementId: null },
-        }),
-      ]);
-      await tx.noShowReport.deleteMany({
-        where: { OR: [{ reporterId: userId }, { targetUserId: userId }] },
-      });
-
-      await tx.message.deleteMany({ where: { userId } });
-      await tx.directMessage.deleteMany({ where: { senderId: userId } });
-      await tx.clubAnnouncement.deleteMany({ where: { userId } });
-      await tx.clubMessage.deleteMany({ where: { userId } });
-      await tx.clubOfficerMessage.deleteMany({ where: { userId } });
-      await tx.user.delete({ where: { id: userId } });
-    });
-
-    await cleanupAvatarUrl(existing.avatarUrl);
+    await deleteUserAccount(userId);
     res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -989,6 +820,116 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
   }
 });
 
+// GET /users/discover — suggested students ranked by shared interests and
+// mutual friends. Existing friends, pending requests, blocks, and self are
+// excluded so every row can truthfully offer an Add action.
+router.get('/discover', requireVerifiedAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const [viewer, blockedIds, friendships, pendingRequests] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { interestTags: true },
+      }),
+      getBlockedUserIds(userId),
+      prisma.friendship.findMany({
+        where: { OR: [{ userAId: userId }, { userBId: userId }] },
+        select: { userAId: true, userBId: true },
+      }),
+      prisma.friendRequest.findMany({
+        where: {
+          status: 'PENDING',
+          OR: [{ senderId: userId }, { receiverId: userId }],
+        },
+        select: { senderId: true, receiverId: true },
+      }),
+    ]);
+
+    const friendIds = new Set(
+      friendships.map((row) => (row.userAId === userId ? row.userBId : row.userAId)),
+    );
+    const pendingIds = new Set(
+      pendingRequests.map((row) => (row.senderId === userId ? row.receiverId : row.senderId)),
+    );
+    const excludedIds = new Set([userId, ...blockedIds, ...friendIds, ...pendingIds]);
+    const viewerInterests = new Set(parseJsonArray(viewer?.interestTags));
+
+    const candidates = await prisma.user.findMany({
+      where: {
+        id: { notIn: [...excludedIds] },
+        accountStatus: 'ACTIVE',
+        verifiedUniversity: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        verifiedUniversity: true,
+        classYear: true,
+        major: true,
+        interestTags: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 60,
+    });
+
+    const candidateIds = candidates.map((candidate) => candidate.id);
+    const candidateFriendships = candidateIds.length
+      ? await prisma.friendship.findMany({
+          where: {
+            OR: [{ userAId: { in: candidateIds } }, { userBId: { in: candidateIds } }],
+          },
+          select: { userAId: true, userBId: true },
+        })
+      : [];
+
+    const candidateFriendIds = new Map<string, Set<string>>();
+    for (const row of candidateFriendships) {
+      if (candidateIds.includes(row.userAId)) {
+        const ids = candidateFriendIds.get(row.userAId) ?? new Set<string>();
+        ids.add(row.userBId);
+        candidateFriendIds.set(row.userAId, ids);
+      }
+      if (candidateIds.includes(row.userBId)) {
+        const ids = candidateFriendIds.get(row.userBId) ?? new Set<string>();
+        ids.add(row.userAId);
+        candidateFriendIds.set(row.userBId, ids);
+      }
+    }
+
+    const suggestions = candidates
+      .map((candidate) => {
+        const sharedInterests = parseJsonArray(candidate.interestTags).filter((tag) =>
+          viewerInterests.has(tag),
+        );
+        const mutualFriendCount = [...(candidateFriendIds.get(candidate.id) ?? [])].filter((id) =>
+          friendIds.has(id),
+        ).length;
+        return {
+          ...withDisplayName(candidate, 'full'),
+          interestTags: undefined,
+          createdAt: undefined,
+          sharedInterests,
+          mutualFriendCount,
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.sharedInterests.length - a.sharedInterests.length ||
+          b.mutualFriendCount - a.mutualFriendCount,
+      )
+      .slice(0, 20);
+
+    res.json(suggestions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /users/search?q= — search users by name
 // NOTE: defined before /:id to avoid route conflict
 router.get('/search', requireVerifiedAuth, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -1020,6 +961,8 @@ router.get('/search', requireVerifiedAuth, async (req: AuthRequest, res: Respons
         lastName: true,
         avatarUrl: true,
         verifiedUniversity: true,
+        classYear: true,
+        major: true,
       },
       take: 20,
     });
@@ -1038,11 +981,69 @@ router.get('/blocked', requireVerifiedAuth, async (req: AuthRequest, res: Respon
     const blocks = await prisma.block.findMany({
       where: { blockerId: userId },
       include: {
-        blocked: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
+        blocked: {
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            classYear: true,
+            major: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
     res.json(blocks.map((b) => ({ ...withDisplayName(b.blocked, 'full'), blockedAt: b.createdAt })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /users/:id/public — minimal profile for shared web links.
+// This intentionally stays separate from the authenticated profile response below:
+// the landing page only needs enough information to identify the person safely.
+router.get('/:id/public', async (req, res: Response): Promise<void> => {
+  const targetId = req.params.id;
+  if (!UUID_REGEX.test(targetId)) {
+    res.status(400).json({ error: 'Invalid user ID' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        id: targetId,
+        accountStatus: 'ACTIVE',
+        verifiedUniversity: true,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        name: true,
+        avatarUrl: true,
+        classYear: true,
+        major: true,
+        bio: true,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'Profile not found' });
+      return;
+    }
+
+    res.json({
+      id: user.id,
+      name: getPublicName(user),
+      avatarUrl: user.avatarUrl ?? null,
+      classYear: user.classYear ?? null,
+      major: user.major ?? null,
+      bio: user.bio ?? null,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -1070,7 +1071,18 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
     // from completedPodsJoined below. Before this split, podsJoined also only
     // counted COMPLETED pods, which read as "0 pods joined" right next to a
     // nonzero "people met" for any user whose pods hadn't completed yet.
-    const [podsJoined, completedPodsJoined, noShowPods, friendCount, sharedPodCount] = await Promise.all([
+    const [
+      podsJoined,
+      completedPodsJoined,
+      noShowPods,
+      friendCount,
+      sharedPodCount,
+      viewerFriendships,
+      targetFriendships,
+      clubMemberships,
+      clubCount,
+      upcomingPods,
+    ] = await Promise.all([
       prisma.podMember.count({ where: { userId: targetId } }),
       prisma.podMember.count({ where: { userId: targetId, pod: { status: 'COMPLETED' } } }),
       prisma.noShowReport.groupBy({ by: ['podId'], where: { targetUserId: targetId } }),
@@ -1090,7 +1102,75 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
               ],
             },
           }),
+      isSelf
+        ? Promise.resolve([])
+        : prisma.friendship.findMany({
+            where: { OR: [{ userAId: req.user!.userId }, { userBId: req.user!.userId }] },
+            select: { userAId: true, userBId: true },
+          }),
+      isSelf
+        ? Promise.resolve([])
+        : prisma.friendship.findMany({
+            where: { OR: [{ userAId: targetId }, { userBId: targetId }] },
+            select: { userAId: true, userBId: true },
+          }),
+      prisma.clubMember.findMany({
+        where: {
+          userId: targetId,
+          club: { status: 'ACTIVE', isDiscoverable: true },
+        },
+        orderBy: { joinedAt: 'desc' },
+        take: 4,
+        include: {
+          club: {
+            select: { id: true, name: true, emoji: true, avatarUrl: true, category: true },
+          },
+        },
+      }),
+      prisma.clubMember.count({
+        where: {
+          userId: targetId,
+          club: { status: 'ACTIVE', isDiscoverable: true },
+        },
+      }),
+      prisma.pod.findMany({
+        where: {
+          meetupTime: { gte: new Date() },
+          status: { in: ['FORMING', 'LOCKED'] },
+          locationType: 'public',
+          members: { some: { userId: targetId } },
+        },
+        orderBy: { meetupTime: 'asc' },
+        take: 3,
+        include: {
+          activity: { select: { title: true } },
+          _count: { select: { members: true } },
+        },
+      }),
     ]);
+
+    const viewerFriendIds = new Set(
+      viewerFriendships.map((row) =>
+        row.userAId === req.user!.userId ? row.userBId : row.userAId,
+      ),
+    );
+    const mutualFriendIds = targetFriendships
+      .map((row) => (row.userAId === targetId ? row.userBId : row.userAId))
+      .filter((id) => viewerFriendIds.has(id));
+    const blockedIds = await getBlockedUserIds(req.user!.userId);
+    const visibleMutualIds = mutualFriendIds.filter((id) => !blockedIds.has(id)).slice(0, 8);
+    const mutualFriends = visibleMutualIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: visibleMutualIds }, accountStatus: 'ACTIVE' },
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        })
+      : [];
 
     const noShowPodCount = noShowPods.length;
     const podsAttended = Math.max(0, completedPodsJoined - noShowPodCount);
@@ -1110,6 +1190,8 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
       joinedAt: user.createdAt.toISOString(),
       friendCount,
       sharedPodCount,
+      mutualFriendCount: visibleMutualIds.length,
+      mutualFriends: mutualFriends.map((friend) => withDisplayName(friend, 'full')),
       classYear: user.classYear ?? null,
       major: user.major ?? null,
       bio: user.bio ?? null,
@@ -1118,6 +1200,16 @@ router.get('/:id', requireVerifiedAuth, async (req: AuthRequest, res: Response):
       interestTags: parseJsonArray(user.interestTags),
       purpose: user.purpose ?? null,
       campusZones: parseJsonArray(user.campusZones),
+      clubMemberships: clubMemberships.map(({ club }) => club),
+      clubCount,
+      upcomingPods: upcomingPods.map((pod) => ({
+        id: pod.id,
+        title: pod.title || pod.activity.title,
+        meetupTime: pod.meetupTime.toISOString(),
+        location: pod.location,
+        memberCount: pod._count.members,
+        maxMembers: pod.maxMembers,
+      })),
     });
   } catch (err) {
     console.error(err);

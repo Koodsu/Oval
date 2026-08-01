@@ -35,13 +35,16 @@ function serializeRequest(row: {
   };
 }
 
-// GET /admin/activity-requests — pending student activity suggestions.
-router.get('/', async (_req: AuthRequest, res: Response): Promise<void> => {
+// GET /admin/activity-requests — pending suggestions by default, or the
+// persisted approval/rejection history with ?status=reviewed.
+router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
+  const reviewed = req.query.status === 'reviewed';
   try {
     const requests = await prisma.activityRequest.findMany({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'asc' },
+      where: reviewed ? { status: { in: ['APPROVED', 'REJECTED'] } } : { status: 'PENDING' },
+      orderBy: { createdAt: reviewed ? 'desc' : 'asc' },
       include: { user: { select: { id: true, name: true } } },
+      take: reviewed ? 100 : undefined,
     });
     res.json({ requests: requests.map(serializeRequest) });
   } catch (err) {
@@ -126,4 +129,3 @@ router.post('/:id/reject', async (req: AuthRequest, res: Response): Promise<void
 });
 
 export default router;
-
