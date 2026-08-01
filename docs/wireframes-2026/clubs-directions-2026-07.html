@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Oval — Clubs screen, three directions (July 2026)</title>
+<style>
+  :root {
+    --bg: #F5F4F2; --surface: #FFFFFF; --surfaceAlt: #F3F2F0;
+    --ink: #111317; --sub: #5B5E66; --faint: #75787F;
+    --border: #E7E6E3; --borderSoft: #F0EFEC;
+    --primary: #D90429; --primarySoft: #FFE5EA; --onPrimary: #FFFFFF;
+    --success: #178A47; --successSoft: #DFEFE6;
+    --blueSoft: #E2E9FA; --pinkSoft: #F9E2EA; --amberSoft: #F5EBD8; --violetSoft: #EBE4F9; --greenSoft: #EAF3DE;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: #E9E7E3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; margin: 0 0 6px; }
+  .lede { font-size: 14px; color: var(--sub); line-height: 1.6; max-width: 760px; margin: 0 0 36px; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; align-items: start; }
+  .col > h2 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .col > .sub { font-size: 13px; color: var(--sub); line-height: 1.55; margin: 0 0 14px; min-height: 42px; }
+  .phone {
+    background: var(--bg); border: 1px solid #D8D6D2; border-radius: 30px;
+    padding: 14px 12px 18px; box-shadow: 0 10px 30px rgba(17,19,23,0.10);
+  }
+  .notch { width: 74px; height: 5px; border-radius: 99px; background: #D5D3CF; margin: 0 auto 12px; }
+  .mast { display:flex; align-items:center; justify-content:space-between; padding: 2px 4px 12px; }
+  .mast .t { font-size: 20px; font-weight: 600; letter-spacing: -0.4px; }
+  .kicker { font-size: 10px; letter-spacing: 0.08em; color: var(--primary); font-weight: 600; }
+  .sechead { font-size: 10px; letter-spacing: 0.08em; color: var(--faint); font-weight: 600; padding: 0 4px 7px; }
+  .card { background: var(--surface); border-radius: 18px; margin-bottom: 10px; }
+  .pad { padding: 12px; }
+  .row { display:flex; align-items:center; gap: 9px; }
+  .name { font-size: 13px; font-weight: 600; }
+  .meta { font-size: 11px; color: var(--faint); }
+  .body { font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+  .chip { font-size: 11px; padding: 5px 11px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); color: var(--sub); }
+  .chip.on { background: var(--primary); color: var(--onPrimary); border-color: var(--primary); }
+  .btn { font-size: 11px; font-weight: 600; padding: 6px 13px; border-radius: 99px; background: var(--primary); color: var(--onPrimary); }
+  .mark { width: 28px; height: 28px; border-radius: 9px; display:flex; align-items:center; justify-content:center; font-size: 15px; }
+  .faces { display:flex; }
+  .faces i { width: 19px; height: 19px; border-radius: 50%; border: 2px solid var(--surface); display:block; }
+  .faces i + i { margin-left: -7px; }
+  .notes { margin-top: 16px; background: rgba(255,255,255,0.6); border: 1px solid #DEDCD8; border-radius: 14px; padding: 14px 16px; }
+  .notes dt { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin-top: 10px; }
+  .notes dt:first-child { margin-top: 0; }
+  .notes dd { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--sub); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Clubs screen — three directions</h1>
+<p class="lede">
+  The current <code>ClubsHomeScreen</code> reads as a utility list: every club is a 42&nbsp;px mark, a name, one
+  administrative caption, and a chevron, behind a search bar, a segmented control, and a category chip row.
+  Nothing a club has actually <em>done</em> appears anywhere, and Discover is sorted by <code>memberCount</code>
+  descending — a static ranking, so the screen looks identical every time it opens. These three directions each
+  change the <strong>unit of content</strong>, not the styling.
+</p>
+
+<div class="cols">
+
+  <!-- ─────────── A ─────────── -->
+  <div class="col">
+    <h2>A · The feed</h2>
+    <p class="sub">Unit = a thing a club did. Clubs become authors, not rows. Chronological, mixed.</p>
+    <div class="phone">
+      <div class="notch"></div>
+
+      <div class="mast"><span class="t">Clubs</span><span style="color:var(--sub);font-size:15px">🔍&nbsp;&nbsp;+</span></div>
+      <div style="display:flex;gap:6px;padding:0 4px 12px">
+        <span class="chip on">All</span><span class="chip">My clubs</span><span class="chip">For you</span>
+      </div>
+
+      <div class="card pad">
+        <div class="row" style="margin-bottom:9px">
+          <div class="mark" style="background:var(--successSoft)">🥏</div>
+          <div><div class="name">Ultimate Frisbee</div><div class="meta">posted · 2h ago</div></div>
+        </div>
+        <div class="body" style="margin-bottom:10px">Pickup at the Oval tonight, 6pm. Bring a white shirt and a dark one.</div>
+        <div style="height:104px;border-radius:12px;background:var(--greenSoft);display:flex;align-items:center;justify-content:center;color:#3B6D11;font-size:13px">photo from last week</div>
+        <div class="row" style="margin-top:10px">
+          <span class="faces"><i style="background:#B5D4F4"></i><i style="background:#F7C1C1"></i><i style="background:#FAC775"></i></span>
+          <span style="font-size:11px;color:var(--success);font-weight:600">14 going</span>
+          <span style="margin-left:auto" class="btn">Join</span>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="row" style="margin-bottom:9px">
+          <div class="mark" style="background:var(--blueSoft)">🎬</div>
+          <div><div class="name">Film Society</div><div class="meta">new meeting · 5h ago</div></div>
+        </div>
+        <div style="border-left:3px solid var(--primary);padding-left:10px">
+          <div style="font-size:13px;font-weight:600">Kurosawa night</div>
+          <div style="font-size:11.5px;color:var(--sub)">Thu 7:00 PM · Journalism 251</div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="row">
+          <div class="mark" style="background:var(--pinkSoft)">🎸</div>
+          <div><div class="name">Jazz Collective</div><div class="meta">6 people joined this week</div></div>
+          <span style="margin-left:auto" class="btn">Join</span>
+        </div>
+      </div>
+
+    </div>
+    <dl class="notes">
+      <dt>Needs</dt><dd>A club post model + composer. Nothing like it exists today; announcements live inside club chat channels.</dd>
+      <dt>Fails when</dt><dd>Officers don't post. An empty feed is a much louder failure than an empty list.</dd>
+      <dt>Ceiling</dt><dd>Highest. This is the only direction that gets better as the app gets busier.</dd>
+    </dl>
+  </div>
+
+  <!-- ─────────── B ─────────── -->
+  <div class="col">
+    <h2>B · Campus board</h2>
+    <p class="sub">Unit = something happening at a time. Clubs are the venue, not the subject.</p>
+    <div class="phone">
+      <div class="notch"></div>
+
+      <div style="padding:2px 4px 12px">
+        <div class="kicker">SATURDAY</div>
+        <div class="mast t" style="font-size:20px;font-weight:600;letter-spacing:-0.4px">On campus</div>
+      </div>
+
+      <div class="card" style="background:var(--primary);padding:14px">
+        <div style="font-size:10px;letter-spacing:0.07em;color:var(--primarySoft);font-weight:600;margin-bottom:5px">STARTS IN 40 MIN</div>
+        <div style="font-size:19px;font-weight:600;color:#fff;letter-spacing:-0.4px">Pickup frisbee</div>
+        <div style="font-size:12px;color:var(--primarySoft);margin-top:3px">Ultimate Frisbee · The Oval</div>
+        <div class="row" style="margin-top:12px">
+          <span class="faces"><i style="background:#FFE5EA;border-color:var(--primary)"></i><i style="background:#FAC775;border-color:var(--primary)"></i><i style="background:#C0DD97;border-color:var(--primary)"></i></span>
+          <span style="font-size:11px;color:#fff;font-weight:600">14 going</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:600;padding:6px 14px;border-radius:99px;background:#fff;color:var(--primary)">I'm in</span>
+        </div>
+      </div>
+
+      <div class="sechead">LATER TODAY</div>
+      <div class="card pad row">
+        <div style="text-align:center;min-width:38px"><div style="font-size:14px;font-weight:600">7:00</div><div style="font-size:10px;color:var(--faint)">PM</div></div>
+        <div style="width:1px;height:32px;background:var(--borderSoft)"></div>
+        <div><div class="name">Kurosawa night</div><div class="meta">Film Society · JR 251</div></div>
+      </div>
+      <div class="card pad row">
+        <div style="text-align:center;min-width:38px"><div style="font-size:14px;font-weight:600">9:30</div><div style="font-size:10px;color:var(--faint)">PM</div></div>
+        <div style="width:1px;height:32px;background:var(--borderSoft)"></div>
+        <div><div class="name">Open mic</div><div class="meta">Jazz Collective · Hitchcock</div></div>
+      </div>
+
+      <div class="sechead" style="padding-top:6px">YOUR CLUBS</div>
+      <div style="display:flex;gap:9px;padding:0 4px">
+        <div style="width:52px;height:52px;border-radius:16px;background:var(--successSoft);display:flex;align-items:center;justify-content:center;font-size:22px">🥏</div>
+        <div style="width:52px;height:52px;border-radius:16px;background:var(--blueSoft);display:flex;align-items:center;justify-content:center;font-size:22px">🎬</div>
+        <div style="width:52px;height:52px;border-radius:16px;background:var(--surface);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:20px">+</div>
+      </div>
+
+    </div>
+    <dl class="notes">
+      <dt>Needs</dt><dd>Nothing new. <code>GET /clubs/today</code>, <code>/clubs/week</code>, <code>attendeeCount</code> and <code>nextMeeting</code> already return everything on this screen.</dd>
+      <dt>Fails when</dt><dd>No meetings are scheduled — but a day with nothing on it is a legible state, not a broken one.</dd>
+      <dt>Ceiling</dt><dd>Medium. Discovery of clubs themselves gets demoted below the fold.</dd>
+    </dl>
+  </div>
+
+  <!-- ─────────── C ─────────── -->
+  <div class="col">
+    <h2>C · Poster wall</h2>
+    <p class="sub">Unit stays the club, but rendered big, colored, and carrying a live signal.</p>
+    <div class="phone">
+      <div class="notch"></div>
+
+      <div class="mast"><span class="t">Discover</span><span style="color:var(--sub);font-size:15px">🔍</span></div>
+
+      <div class="card" style="overflow:hidden">
+        <div style="height:88px;background:var(--successSoft);display:flex;align-items:flex-end;justify-content:space-between;padding:11px">
+          <span style="font-size:36px">🥏</span>
+          <span style="font-size:10px;font-weight:600;padding:4px 9px;border-radius:99px;background:var(--success);color:#fff">LIVE NOW</span>
+        </div>
+        <div class="pad">
+          <div class="row" style="gap:5px"><span class="name" style="font-size:15px">Ultimate Frisbee</span><span style="color:var(--success);font-size:13px">✓</span></div>
+          <div style="font-size:12px;color:var(--sub);line-height:1.5;margin:5px 0 10px">Pickup on the Oval twice a week. No experience needed.</div>
+          <div class="row">
+            <span class="faces"><i style="background:#B5D4F4"></i><i style="background:#F7C1C1"></i><i style="background:#C0DD97"></i></span>
+            <span style="font-size:11px;color:var(--faint)">128 members</span>
+            <span style="margin-left:auto" class="btn">Join</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card" style="overflow:hidden;margin:0">
+          <div style="height:62px;background:var(--blueSoft);display:flex;align-items:center;justify-content:center;font-size:28px">🎬</div>
+          <div style="padding:10px"><div class="name">Film Society</div><div class="meta" style="margin-top:3px">Thu 7:00 PM</div></div>
+        </div>
+        <div class="card" style="overflow:hidden;margin:0">
+          <div style="height:62px;background:var(--pinkSoft);display:flex;align-items:center;justify-content:center;font-size:28px">🎸</div>
+          <div style="padding:10px"><div class="name">Jazz Collective</div><div class="meta" style="margin-top:3px">6 joined this week</div></div>
+        </div>
+        <div class="card" style="overflow:hidden;margin:0">
+          <div style="height:62px;background:var(--amberSoft);display:flex;align-items:center;justify-content:center;font-size:28px">♟️</div>
+          <div style="padding:10px"><div class="name">Chess Club</div><div class="meta" style="margin-top:3px">Meets Tuesdays</div></div>
+        </div>
+        <div class="card" style="overflow:hidden;margin:0">
+          <div style="height:62px;background:var(--violetSoft);display:flex;align-items:center;justify-content:center;font-size:28px">🧗</div>
+          <div style="padding:10px"><div class="name">Climbing</div><div class="meta" style="margin-top:3px">42 members</div></div>
+        </div>
+      </div>
+
+    </div>
+    <dl class="notes">
+      <dt>Needs</dt><dd>A cover color or image per club (derive from category today, let officers upload later) and a live-status field. Small.</dd>
+      <dt>Fails when</dt><dd>Never looks broken — but never looks alive either. It's a prettier catalog, not a pulse.</dd>
+      <dt>Ceiling</dt><dd>Lowest. Solves the "looks like Reminders" complaint without solving "feels dead."</dd>
+    </dl>
+  </div>
+
+</div>
+</div>
+</body>
+</html>

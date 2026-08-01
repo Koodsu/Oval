@@ -176,7 +176,7 @@ notifyDMMessage(thread, sender)    // → the other thread participant
 ```typescript
 export async function runMaintenanceJobs()
 // Invoked by GET /cron/maintenance from Vercel Cron every five minutes.
-// Runs pod expiry, one-hour meetup reminders, recap prompts, and stale
+// Runs pod expiry, one-hour meetup reminders, and stale
 // waitlist promotion outside the request-serving process.
 ```
 
