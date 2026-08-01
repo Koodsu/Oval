@@ -115,7 +115,6 @@ export default function CreateSheet({
     closeThen(() => {
       navigation.navigate('MainTabs', {
         screen: 'Explore',
-        params: { startCreate: Date.now() },
       });
     });
   };
@@ -130,7 +129,9 @@ export default function CreateSheet({
     try {
       const result = await Share.share({
         title: 'Oval',
-        message: `Join me on Oval: ${PUBLIC_SITE_URL}`,
+        // Link lives in `url` only — putting it in `message` too makes iOS
+        // texts show it twice, and only the first renders as the rich tappable card.
+        message: 'Join me on Oval!',
         url: PUBLIC_SITE_URL,
       });
       // Only count real shares — iOS reports dismissedAction when the user

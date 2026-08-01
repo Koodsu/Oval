@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage, resendVerification, verifyEmail } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { AppBackdrop, Button, Card, Sticker } from '../components/ui';
+import { AppBackdrop, Button, SpotIllustration } from '../components/ui';
+import { OnboardingTopBar, OvalWordmark } from '../components/OnboardingChrome';
 import {
   BORDER_W,
   Theme,
@@ -15,6 +16,8 @@ import {
 } from '../theme';
 
 import { toast } from '../lib/toast';
+const verificationSpot = require('../../assets/illustrations/spot/onboarding/03-verification.png');
+
 export default function VerifyEmailScreen() {
   const styles = useStyles();
   const { colors, typography } = useTheme();
@@ -25,6 +28,7 @@ export default function VerifyEmailScreen() {
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const submittedCodeRef = useRef<string | null>(null);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -71,95 +75,178 @@ export default function VerifyEmailScreen() {
 
   return (
     <AppBackdrop>
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl },
         ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Sticker label="Almost in" tint={colors.greenSoft} tilt={-2} icon="mail-unread" />
-        <Text style={styles.title}>Check your{'\n'}inbox.</Text>
-        <Text style={[typography.body, styles.sub]}>
-          We sent a 6-digit code to{' '}
-          <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>{' '}
-          — it keeps Oval students-only.
-        </Text>
+        <OnboardingTopBar label="Email verification" onBack={() => void signOut()} />
+        <OvalWordmark compact />
 
-        <Card padded>
-          <Text style={[typography.kicker, { marginBottom: spacing.sm }]}>Verification code</Text>
+        <View style={[styles.heroArt, { backgroundColor: colors.surfaceAlt }]}>
+          <SpotIllustration
+            source={verificationSpot}
+            accessibilityLabel="Two students celebrating a verified email"
+            height={178}
+            style={styles.heroImage}
+          />
+        </View>
+
+        <View style={styles.copy}>
+          <Text style={styles.title}>Verify your email</Text>
+          <Text style={[typography.body, styles.sub]}>
+            We sent a 6-digit code to{'\n'}
+            <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>
+          </Text>
+        </View>
+
+        <View style={styles.codeBlock}>
+          <Text style={[typography.kicker, styles.codeLabel]}>Verification code</Text>
+          <Pressable
+            onPress={() => inputRef.current?.focus()}
+            accessibilityRole="button"
+            accessibilityLabel={`Verification code, ${code.length} of 6 digits entered`}
+            style={styles.codeRow}
+          >
+            {Array.from({ length: 6 }, (_, index) => {
+              const digit = code[index] ?? '';
+              const active = code.length === index || (code.length === 6 && index === 5);
+              return (
+                <View
+                  key={index}
+                  style={[
+                    styles.codeCell,
+                    {
+                      borderColor: active ? colors.primary : colors.border,
+                      backgroundColor: colors.surface,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.codeDigit, { color: colors.ink }]}>{digit}</Text>
+                </View>
+              );
+            })}
+          </Pressable>
           <TextInput
+            ref={inputRef}
             value={code}
-            onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="••••••"
+            onChangeText={(value) => {
+              const nextCode = value.replace(/\D/g, '').slice(0, 6);
+              if (nextCode !== code) submittedCodeRef.current = null;
+              setCode(nextCode);
+            }}
             keyboardType="number-pad"
             textContentType="oneTimeCode"
             autoComplete="one-time-code"
             maxLength={6}
-            placeholderTextColor={colors.faint}
-            style={styles.codeInput}
+            style={styles.hiddenInput}
             accessibilityLabel="Verification code"
             onSubmitEditing={() => void submit()}
+            autoFocus
           />
-          <View style={styles.actions}>
-            <Button
-              label="Verify account"
-              onPress={submit}
-              loading={busy}
-              disabled={code.length !== 6}
-              size="lg"
-              icon="checkmark-circle"
-            />
-            <Button
-              label={resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend email'}
-              onPress={resend}
-              loading={resending}
-              disabled={resendCooldown > 0}
-              variant="ghost"
-            />
-            <Button
-              label="Use a different email"
-              onPress={() => void signOut()}
-              variant="ghost"
-            />
-          </View>
-        </Card>
-      </View>
+        </View>
+
+        <View style={styles.actions}>
+          <Button
+            label="Verify account"
+            onPress={submit}
+            loading={busy}
+            disabled={code.length !== 6}
+            size="lg"
+          />
+          <Button
+            label={
+              resendCooldown > 0
+                ? `Send a new code in ${resendCooldown}s`
+                : 'Send a new code'
+            }
+            onPress={resend}
+            loading={resending}
+            disabled={resendCooldown > 0}
+            variant="ghost"
+          />
+          <Button
+            label="Use a different email"
+            onPress={() => void signOut()}
+            variant="ghost"
+          />
+        </View>
+      </ScrollView>
     </AppBackdrop>
   );
 }
 
 const useStyles = createThemedStyles((t: Theme) => ({
   content: {
-    flex: 1,
-    justifyContent: 'center' as const,
+    flexGrow: 1,
     paddingHorizontal: spacing.xl,
     gap: spacing.lg,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center' as const,
+  },
+  heroArt: {
+    borderRadius: radii.lg,
+    overflow: 'hidden' as const,
+    minHeight: 168,
+    justifyContent: 'flex-end' as const,
+  },
+  heroImage: {
+    width: '106%',
+    marginLeft: '-3%',
+    marginBottom: -8,
+  },
+  copy: {
+    alignItems: 'center' as const,
   },
   title: {
     fontFamily: fonts.display,
-    fontSize: 31,
-    lineHeight: 37,
+    fontSize: 32,
+    lineHeight: 38,
     letterSpacing: -0.7,
     color: t.colors.ink,
+    textAlign: 'center' as const,
   },
   sub: {
     color: t.colors.sub,
-    maxWidth: 320,
-  },
-  codeInput: {
-    borderWidth: BORDER_W,
-    borderColor: t.colors.border,
-    borderRadius: radii.sm,
-    backgroundColor: t.colors.surfaceAlt,
-    paddingVertical: 16,
     textAlign: 'center' as const,
+    marginTop: spacing.sm,
+  },
+  codeBlock: {
+    gap: spacing.sm,
+  },
+  codeLabel: {
+    textAlign: 'center' as const,
+  },
+  codeRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+    justifyContent: 'center' as const,
+  },
+  codeCell: {
+    flex: 1,
+    maxWidth: 54,
+    minWidth: 42,
+    height: 60,
+    borderWidth: BORDER_W,
+    borderRadius: radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  codeDigit: {
     fontFamily: fonts.displayMedium,
     fontSize: 26,
-    letterSpacing: 10,
-    color: t.colors.ink,
+  },
+  hiddenInput: {
+    position: 'absolute' as const,
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
   actions: {
-    marginTop: spacing.lg,
     gap: spacing.sm,
   },
 }));

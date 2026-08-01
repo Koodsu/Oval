@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "888653538457",
+    "project_id": "theovalapp",
+    "storage_bucket": "theovalapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:888653538457:android:d698cc2d1f7e9057f74408",
+        "android_client_info": {
+          "package_name": "com.theovalapp.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAaVVRjf8MSJJWHPcECKaubmIA8RgG5i-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

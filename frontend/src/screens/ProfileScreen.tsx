@@ -215,17 +215,17 @@ export default function ProfileScreen() {
             onPress={() => navigation.navigate('Settings')}
           />
           <ListRow
-            icon="log-out"
-            title="Sign out"
-            destructive
-            onPress={() => void signOut()}
-          />
-          <ListRow
             icon="trash"
             title="Delete account"
             destructive
-            last
             onPress={() => navigation.navigate('DeleteAccount')}
+          />
+          <ListRow
+            icon="log-out"
+            title="Log out"
+            destructive
+            last
+            onPress={() => void signOut()}
           />
         </Card>
 

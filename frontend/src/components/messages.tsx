@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,13 +13,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BORDER_W, radii, spacing, useTheme } from '../theme';
 import { formatTime } from '../utils/format';
 import { EmptyState } from './ui';
+import { resolveAvatarUrl } from '../api';
+
+const PREVIEW_PHOTOGRAPHY_HERO = require('../../assets/content/clubs/photography-club-hero.png');
 
 export type MessageListItem = {
   id: string;
   userId: string;
   content: string;
+  imageUrl?: string | null;
   createdAt: string;
   user: { id: string; name: string; avatarUrl?: string | null };
+  reactions?: Array<{ emoji: string; userId: string }>;
+  replyTo?: {
+    id: string;
+    content: string;
+    userId: string;
+    user: { id: string; name: string };
+  } | null;
 };
 
 export function MessageList<T extends MessageListItem>({
@@ -27,12 +39,14 @@ export function MessageList<T extends MessageListItem>({
   onLongPress,
   emptyActionLabel,
   onEmptyAction,
+  onReact,
 }: {
   messages: T[];
   currentUserId?: string;
   onLongPress: (message: T) => void;
   emptyActionLabel: string;
   onEmptyAction: () => void;
+  onReact?: (message: T, emoji: string) => void;
 }) {
   const { colors, typography } = useTheme();
   const newestFirst = useMemo(() => [...messages].reverse(), [messages]);
@@ -47,6 +61,10 @@ export function MessageList<T extends MessageListItem>({
       keyboardShouldPersistTaps="handled"
       renderItem={({ item }) => {
         const mine = item.userId === currentUserId;
+        const heartCount = item.reactions?.filter((reaction) => reaction.emoji === '❤️').length ?? 0;
+        const hearted = item.reactions?.some(
+          (reaction) => reaction.emoji === '❤️' && reaction.userId === currentUserId,
+        ) ?? false;
         return (
           <Pressable
             onLongPress={() => onLongPress(item)}
@@ -65,9 +83,52 @@ export function MessageList<T extends MessageListItem>({
               {!mine ? (
                 <Text style={[typography.captionSmall, { color: colors.sub }]}>{item.user.name}</Text>
               ) : null}
-              <Text style={[typography.body, { color: mine ? colors.onPrimary : colors.ink }]}>
-                {item.content}
-              </Text>
+              {item.replyTo ? (
+                <View
+                  style={[
+                    styles.reply,
+                    {
+                      backgroundColor: mine ? 'rgba(255,255,255,0.13)' : colors.surfaceAlt,
+                      borderLeftColor: mine ? colors.onPrimary : colors.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      typography.captionSmall,
+                      { color: mine ? colors.onPrimary : colors.accentText },
+                    ]}
+                  >
+                    Replying to {item.replyTo.user.name}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      typography.captionSmall,
+                      { color: mine ? 'rgba(255,255,255,0.78)' : colors.sub },
+                    ]}
+                  >
+                    {item.replyTo.content}
+                  </Text>
+                </View>
+              ) : null}
+              {item.imageUrl ? (
+                <Image
+                  source={
+                    item.imageUrl === 'preview://photography-club-hero'
+                      ? PREVIEW_PHOTOGRAPHY_HERO
+                      : { uri: resolveAvatarUrl(item.imageUrl) ?? item.imageUrl }
+                  }
+                  resizeMode="cover"
+                  accessibilityLabel={`${item.user.name} shared a photo`}
+                  style={styles.messageImage}
+                />
+              ) : null}
+              {item.content ? (
+                <Text style={[typography.body, { color: mine ? colors.onPrimary : colors.ink }]}>
+                  {item.content}
+                </Text>
+              ) : null}
               <Text
                 style={[
                   typography.captionSmall,
@@ -76,6 +137,21 @@ export function MessageList<T extends MessageListItem>({
               >
                 {formatTime(item.createdAt)}
               </Text>
+              {heartCount ? (
+                <Pressable
+                  onPress={() => onReact?.(item, '❤️')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${hearted ? 'Remove' : 'Add'} heart reaction`}
+                  style={[
+                    styles.reaction,
+                    {
+                      backgroundColor: mine ? 'rgba(255,255,255,0.16)' : colors.primarySoft,
+                    },
+                  ]}
+                >
+                  <Text style={typography.captionSmall}>❤️ {heartCount}</Text>
+                </Pressable>
+              ) : null}
             </View>
           </Pressable>
         );
@@ -99,16 +175,20 @@ export function MessageComposer({
   onSend,
   sending,
   placeholder = 'Message members...',
+  onAttach,
+  hasAttachment = false,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   onSend: () => void;
   sending?: boolean;
   placeholder?: string;
+  onAttach?: () => void;
+  hasAttachment?: boolean;
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const canSend = Boolean(value.trim()) && !sending;
+  const canSend = (Boolean(value.trim()) || hasAttachment) && !sending;
 
   return (
     <View
@@ -121,6 +201,24 @@ export function MessageComposer({
         },
       ]}
     >
+      {onAttach ? (
+        <Pressable
+          onPress={onAttach}
+          disabled={sending}
+          accessibilityRole="button"
+          accessibilityLabel="Attach a photo"
+          style={[
+            styles.attach,
+            {
+              backgroundColor: colors.surfaceAlt,
+              borderColor: colors.border,
+              opacity: sending ? 0.5 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="image-outline" size={21} color={colors.accentText} />
+        </Pressable>
+      ) : null}
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -179,6 +277,26 @@ const styles = StyleSheet.create({
   bubbleTheirs: {
     borderBottomLeftRadius: radii.xs,
   },
+  reply: {
+    borderLeftWidth: 3,
+    borderRadius: radii.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  messageImage: {
+    width: 220,
+    height: 165,
+    borderRadius: radii.md,
+    marginTop: spacing.xs,
+  },
+  reaction: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    marginTop: spacing.xs,
+  },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -195,6 +313,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
+  },
+  attach: {
+    width: 44,
+    height: 44,
+    borderWidth: BORDER_W,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   send: {
     width: 44,

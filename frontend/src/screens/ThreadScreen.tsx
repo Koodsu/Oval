@@ -33,14 +33,14 @@ import * as Clipboard from 'expo-clipboard';
 import { mergeLatestPage } from '../utils/chat';
 import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
 import { RootStackParamList } from '../../App';
-import { DirectMessage } from '../types';
+import { DirectMessage, FriendUser } from '../types';
 import {
   AppBackdrop,
   Avatar,
   Banner,
   EmptyState,
+  IconButton,
   ListRow,
-  ScreenHeader,
   Sheet,
   Sticker,
   TypingIndicator,
@@ -76,7 +76,18 @@ function dayLabel(iso: string) {
     .toUpperCase();
 }
 
-export default function ThreadScreen({ route, navigation }: Props) {
+export default function ThreadScreen({
+  route,
+  navigation,
+  previewData,
+}: Props & {
+  previewData?: {
+    currentUserId: string;
+    otherUser: FriendUser;
+    messages: DirectMessage[];
+    typingUserIds?: string[];
+  };
+}) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -84,30 +95,35 @@ export default function ThreadScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   // Notification taps deep-link here without a title param — derive the other
   // person's name from the loaded messages instead of showing "Messages".
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const [messages, setMessages] = useState<DirectMessage[]>(previewData?.messages ?? []);
+  const [otherUser, setOtherUser] = useState<FriendUser | null>(previewData?.otherUser ?? null);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>(previewData?.typingUserIds ?? []);
   const [messageText, setMessageText] = useState('');
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSheet, setActiveSheet] = useState<DirectMessage | null>(null);
   const [reportTarget, setReportTarget] = useState<DirectMessage | null>(null);
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastReadMessageIdRef = useRef<string | null>(null);
   const messagesRef = useRef<DirectMessage[]>([]);
   messagesRef.current = messages;
-  const otherPartyName = useMemo(
-    () => messages.find((message) => message.sender.id !== user?.id)?.sender.name ?? null,
-    [messages, user?.id],
-  );
-  const title = titleParam ?? otherPartyName ?? 'Messages';
+  const currentUserId = previewData?.currentUserId ?? user?.id;
+  const otherPartyName =
+    otherUser?.name ??
+    messages.find((message) => message.sender.id !== currentUserId)?.sender.name ??
+    null;
+  const title = otherPartyName ?? titleParam ?? 'Messages';
 
   const load = useCallback(
     async (showAlert = false) => {
+      if (previewData) return;
       try {
         const response = await getThreadMessages(threadId, { limit: MESSAGE_PAGE_SIZE });
+        setOtherUser(response.otherUser);
         setMessages((current) => mergeLatestPage(current, response.messages));
         if (!messagesRef.current.length) setHasMore(!!response.hasMore);
         setTypingUserIds(response.typingUserIds);
@@ -126,7 +142,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
         }
       }
     },
-    [threadId],
+    [previewData, threadId],
   );
 
   const loadEarlier = useCallback(async () => {
@@ -157,6 +173,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      if (previewData) return undefined;
       void load();
       const interval = setInterval(
         () => {
@@ -168,7 +185,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
         clearInterval(interval);
         if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       };
-    }, [load, realtimeConnected]),
+    }, [load, previewData, realtimeConnected]),
   );
 
   const pingTyping = useCallback(
@@ -200,7 +217,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
 
   const handleReaction = async (message: DirectMessage, emoji: string) => {
     const hasReaction = !!message.reactions?.some(
-      (reaction) => reaction.userId === user?.id && reaction.emoji === emoji,
+      (reaction) => reaction.userId === currentUserId && reaction.emoji === emoji,
     );
     try {
       const updated = hasReaction
@@ -232,10 +249,10 @@ export default function ThreadScreen({ route, navigation }: Props) {
     }
   };
 
-  const confirmBlockSender = (message: DirectMessage) => {
+  const confirmBlockUser = (target: Pick<FriendUser, 'id' | 'name'>) => {
     setActiveSheet(null);
     Alert.alert(
-      `Block ${message.sender.name}?`,
+      `Block ${target.name}?`,
       'They will no longer be able to message you. You can unblock them later from Settings.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -245,7 +262,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
           onPress: () => {
             void (async () => {
               try {
-                await blockUser(message.sender.id);
+                await blockUser(target.id);
                 toast.success('User blocked', 'They can no longer message you.');
                 navigation.goBack();
               } catch (error) {
@@ -257,6 +274,8 @@ export default function ThreadScreen({ route, navigation }: Props) {
       ],
     );
   };
+
+  const confirmBlockSender = (message: DirectMessage) => confirmBlockUser(message.sender);
 
   const confirmDeleteMessage = (message: DirectMessage) => {
     setActiveSheet(null);
@@ -290,7 +309,46 @@ export default function ThreadScreen({ route, navigation }: Props) {
       >
         <View style={[styles.screen, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.header}>
-            <ScreenHeader title={title} kicker="DIRECT MESSAGE" onBack={() => navigation.goBack()} />
+            <View style={styles.threadHeader}>
+              <IconButton
+                icon="arrow-back"
+                onPress={() => navigation.goBack()}
+                accessibilityLabel="Go back"
+              />
+              <Pressable
+                style={styles.headerIdentity}
+                onPress={() =>
+                  otherUser
+                    ? navigation.navigate('UserProfile', { userId: otherUser.id })
+                    : undefined
+                }
+                disabled={!otherUser}
+                accessibilityRole="button"
+                accessibilityLabel={otherUser ? `View ${otherUser.name}'s profile` : title}
+              >
+                <Avatar
+                  name={title}
+                  uri={
+                    otherUser?.avatarUrl ??
+                    messages.find((message) => message.sender.id !== currentUserId)?.sender.avatarUrl
+                  }
+                  size={40}
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={typography.heading} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <Text style={typography.captionSmall}>
+                    {typingUserIds.length ? 'Typing…' : 'Friend'}
+                  </Text>
+                </View>
+              </Pressable>
+              <IconButton
+                icon="ellipsis-horizontal"
+                onPress={() => setThreadMenuOpen(true)}
+                accessibilityLabel="Conversation actions"
+              />
+            </View>
             {loadError ? <Banner message="Couldn't refresh — messages may be stale." kind="error" /> : null}
           </View>
 
@@ -304,11 +362,9 @@ export default function ThreadScreen({ route, navigation }: Props) {
             keyboardDismissMode="on-drag"
             ListEmptyComponent={
               <EmptyState
-                icon="chatbubble-ellipses"
-                title="No messages yet"
-                body="This conversation is ready whenever you are."
-                actionLabel="Back to inbox"
-                onAction={() => navigation.goBack()}
+                icon="chatbubble-ellipses-outline"
+                title="Start the conversation"
+                body="Say hi, share a plan, or send a pod when you’re ready."
               />
             }
             ListHeaderComponent={
@@ -331,7 +387,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
             }
             renderItem={({ item: message, index }) => {
               const previous = reversedMessages[index + 1];
-              const mine = message.sender.id === user?.id;
+              const mine = message.sender.id === currentUserId;
               const grouped =
                 previous?.sender.id === message.sender.id &&
                 new Date(message.createdAt).getTime() -
@@ -344,7 +400,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
               const heartCount =
                 message.reactions?.filter((reaction) => reaction.emoji === HEART_EMOJI).length ?? 0;
               const hasHeart = !!message.reactions?.some(
-                (reaction) => reaction.userId === user?.id && reaction.emoji === HEART_EMOJI,
+                (reaction) => reaction.userId === currentUserId && reaction.emoji === HEART_EMOJI,
               );
               const otherReactions = Object.values(
                 (message.reactions ?? [])
@@ -357,7 +413,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                         mine: false,
                       };
                       group.count += 1;
-                      if (reaction.userId === user?.id) group.mine = true;
+                      if (reaction.userId === currentUserId) group.mine = true;
                       acc[reaction.emoji] = group;
                       return acc;
                     },
@@ -392,7 +448,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                         style={[
                           styles.bubble,
                           {
-                            backgroundColor: mine ? colors.primary : colors.surfaceAlt,
+                            backgroundColor: mine ? colors.primarySoft : colors.surfaceAlt,
                             borderColor: colors.border,
                           },
                           mine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -402,13 +458,13 @@ export default function ThreadScreen({ route, navigation }: Props) {
                           <View
                             style={[
                               styles.replyPreview,
-                              { borderLeftColor: mine ? 'rgba(255,246,232,0.5)' : colors.faint },
+                              { borderLeftColor: mine ? colors.primary : colors.faint },
                             ]}
                           >
                             <Text
                               style={[
                                 styles.replyMeta,
-                                { color: mine ? 'rgba(255,246,232,0.8)' : colors.sub },
+                                { color: colors.sub },
                               ]}
                             >
                               Replying to {message.replyTo.sender.name}
@@ -416,7 +472,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                             <Text
                               style={[
                                 styles.replyBody,
-                                { color: mine ? 'rgba(255,246,232,0.7)' : colors.sub },
+                                { color: colors.sub },
                               ]}
                               numberOfLines={1}
                             >
@@ -427,7 +483,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                         <Text
                           style={[
                             styles.messageBody,
-                            { color: mine ? colors.onPrimary : colors.ink },
+                            { color: colors.ink },
                           ]}
                         >
                           {message.content}
@@ -447,7 +503,16 @@ export default function ThreadScreen({ route, navigation }: Props) {
                             size={15}
                             color={hasHeart ? colors.pink : colors.faint}
                           />
-                          {heartCount ? <Text style={styles.heartCount}>{heartCount}</Text> : null}
+                          {heartCount ? (
+                            <Text
+                              style={[
+                                styles.heartCount,
+                                hasHeart && { color: colors.pink },
+                              ]}
+                            >
+                              {heartCount}
+                            </Text>
+                          ) : null}
                         </Pressable>
                         {otherReactions.map((group) => (
                           <Pressable
@@ -521,7 +586,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                   setMessageText(value);
                   pingTyping(value);
                 }}
-                placeholder="Write a message…"
+                placeholder={`Message ${title.split(' ')[0]}…`}
                 placeholderTextColor={colors.faint}
                 style={[
                   styles.input,
@@ -546,7 +611,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 {sending ? (
                   <ActivityIndicator size="small" color={colors.onPrimary} />
                 ) : (
-                  <Ionicons name="arrow-up" size={18} color={colors.onPrimary} />
+                  <Ionicons name="paper-plane" size={18} color={colors.onPrimary} />
                 )}
               </Pressable>
             </View>
@@ -557,7 +622,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
       <Sheet
         visible={activeSheet != null}
         onClose={() => setActiveSheet(null)}
-        title={activeSheet?.sender.id === user?.id ? 'Your message' : activeSheet?.sender.name}
+        title={activeSheet?.sender.id === currentUserId ? 'Your message' : activeSheet?.sender.name}
         kicker="MESSAGE ACTIONS"
       >
         {activeSheet ? (
@@ -565,7 +630,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
             <View style={styles.reactionRow}>
               {REACTION_EMOJIS.map((emoji) => {
                 const selected = !!activeSheet.reactions?.some(
-                  (reaction) => reaction.userId === user?.id && reaction.emoji === emoji,
+                  (reaction) => reaction.userId === currentUserId && reaction.emoji === emoji,
                 );
                 return (
                   <Pressable
@@ -607,7 +672,7 @@ export default function ThreadScreen({ route, navigation }: Props) {
                 setActiveSheet(null);
               }}
             />
-            {activeSheet.sender.id === user?.id ? (
+            {activeSheet.sender.id === currentUserId ? (
               <ListRow
                 icon="trash-outline"
                 title="Delete message"
@@ -639,6 +704,35 @@ export default function ThreadScreen({ route, navigation }: Props) {
         ) : null}
       </Sheet>
       <Sheet
+        visible={threadMenuOpen}
+        onClose={() => setThreadMenuOpen(false)}
+        title={title}
+        kicker="CONVERSATION"
+      >
+        {otherUser ? (
+          <>
+            <ListRow
+              icon="person-outline"
+              title="View profile"
+              onPress={() => {
+                setThreadMenuOpen(false);
+                navigation.navigate('UserProfile', { userId: otherUser.id });
+              }}
+            />
+            <ListRow
+              icon="ban-outline"
+              title={`Block ${otherUser.name}`}
+              destructive
+              last
+              onPress={() => {
+                setThreadMenuOpen(false);
+                confirmBlockUser(otherUser);
+              }}
+            />
+          </>
+        ) : null}
+      </Sheet>
+      <Sheet
         visible={reportTarget != null}
         onClose={() => setReportTarget(null)}
         title="What's wrong with this message?"
@@ -666,6 +760,18 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   header: {
     paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  threadHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+  },
+  headerIdentity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.sm,
   },
   messageList: {
@@ -783,10 +889,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
     color: t.colors.sub,
   },
   composer: {
-    borderWidth: BORDER_W,
-    borderRadius: radii.md,
+    borderTopWidth: BORDER_W,
     overflow: 'hidden' as const,
-    marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
   },
   replyComposer: {

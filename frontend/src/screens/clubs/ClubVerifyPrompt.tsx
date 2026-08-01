@@ -9,6 +9,7 @@ import {
 } from '../../api';
 import type { ClubClaim } from '../../types';
 import { spacing, useTheme } from '../../theme';
+import { getUiPreviewMode } from '../../dev/previewMode';
 
 import { toast } from '../../lib/toast';
 const MEMBER_THRESHOLD = 5;
@@ -23,8 +24,18 @@ type Props = {
 
 export default function ClubVerifyPrompt({ visible, onClose, clubId, clubName, memberCount }: Props) {
   const { colors, typography } = useTheme();
-  const [handle, setHandle] = useState('');
-  const [claim, setClaim] = useState<ClubClaim | null>(null);
+  const [previewMode] = useState(getUiPreviewMode);
+  const isVerificationPreview = __DEV__ && previewMode === 'club-verify';
+  const [handle, setHandle] = useState(isVerificationPreview ? '@photographyclub' : '');
+  const [claim, setClaim] = useState<ClubClaim | null>(() => isVerificationPreview ? {
+    id: 'preview-club-claim',
+    method: 'INSTAGRAM',
+    handleOrEmail: 'photographyclub',
+    challengeCode: 'OVAL-4821',
+    status: 'PENDING',
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    instructions: 'DM this code to @oval from the official club account.',
+  } : null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [sentBusy, setSentBusy] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);

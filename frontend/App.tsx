@@ -12,7 +12,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import Animated, {
   useAnimatedStyle,
@@ -25,7 +24,6 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import FirstPlanScreen from './src/screens/FirstPlanScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import ClubsHomeScreen from './src/screens/clubs/ClubsHomeScreen';
 import PodsScreen from './src/screens/PodsScreen';
@@ -59,9 +57,31 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PrivacyDataScreen from './src/screens/PrivacyDataScreen';
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen';
 import TermsAcceptanceScreen from './src/screens/TermsAcceptanceScreen';
+import FoundationPreviewScreen from './src/dev/FoundationPreviewScreen';
+import {
+  clubsPreviewData,
+  explorePreviewData,
+  homePreviewData,
+  podsPreviewData,
+  type Stage2PreviewMode,
+} from './src/dev/stage2Fixtures';
+import { inboxPreviewData } from './src/dev/inboxFixtures';
+import {
+  previewActivityRequests,
+  previewBlockedUsers,
+  previewCurrentUserId,
+  previewDirectMessages,
+  previewFriendRequests,
+  previewOtherUser,
+  previewProfile,
+  previewRelationship,
+  previewReviewedRequests,
+  previewSuggestions,
+} from './src/dev/secondaryFixtures';
 import { Activity } from './src/types';
 import { getInboxSummary } from './src/api';
 import { BORDER_W, ThemeProvider, elevation, fonts, motion, radii, useTheme } from './src/theme';
+import { getUiPreviewMode } from './src/dev/previewMode';
 import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 import { REALTIME_INBOX_EVENTS, useRealtimeChannel } from './src/hooks/useRealtimeChannel';
@@ -91,10 +111,11 @@ if (Platform.OS === 'android') {
 
 export type MainTabParamList = {
   Home: undefined;
-  // startCreate is a nonce (Date.now()) rather than a boolean so repeated
-  // "[+] → Start a pod" taps re-trigger the template picker; a boolean param
-  // never changes value on the persistent tab screen after the first tap.
-  Explore: { startCreate?: number } | undefined;
+  // Create-a-pod callers use a nonce so repeated taps can reset Explore and
+  // surface the activity-first pod guidance on the persistent tab screen.
+  Explore:
+    | { startCreate?: number; category?: string; categoryNonce?: number }
+    | undefined;
   Pods: undefined;
   Clubs: undefined;
   Inbox: undefined;
@@ -111,7 +132,6 @@ type MainTabsParams =
 
 export type RootStackParamList = {
   MainTabs: MainTabsParams;
-  FirstPlan: undefined;
   ActivityPods: { activity: Activity; startCreate?: boolean };
   AdminActivityRequests: undefined;
   PodDetail: { podId: string; justCreated?: boolean };
@@ -222,8 +242,7 @@ const linking: LinkingOptions<RootStackParamList> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The Dock — full-width slab bar with a tilted scarlet sticker on the
-// active tab. Icons ride a spring; the sticker pops.
+// The Dock — compact floating chrome with familiar platform metaphors.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function tabIcon(
@@ -232,15 +251,15 @@ function tabIcon(
 ): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case 'Home':
-      return focused ? 'planet' : 'planet-outline';
+      return focused ? 'home' : 'home-outline';
     case 'Explore':
-      return focused ? 'telescope' : 'telescope-outline';
+      return 'search';
     case 'Pods':
-      return focused ? 'flash' : 'flash-outline';
+      return focused ? 'people' : 'people-outline';
     case 'Clubs':
-      return focused ? 'megaphone' : 'megaphone-outline';
+      return focused ? 'trophy' : 'trophy-outline';
     case 'Inbox':
-      return focused ? 'chatbox-ellipses' : 'chatbox-ellipses-outline';
+      return focused ? 'mail' : 'mail-outline';
   }
 }
 
@@ -267,7 +286,7 @@ function TabItem({
     pop.value = withSpring(focused ? 1 : 0, motion.springBouncy);
   }, [focused, pop]);
 
-  const stickerStyle = useAnimatedStyle(() => ({
+  const iconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 0.92 + pop.value * 0.08 }],
   }));
 
@@ -283,13 +302,7 @@ function TabItem({
       accessibilityState={{ selected: focused }}
       style={styles.tabSlot}
     >
-      <Animated.View
-        style={[
-          styles.tabSticker,
-          focused && { backgroundColor: colors.primarySoft },
-          stickerStyle,
-        ]}
-      >
+      <Animated.View style={[styles.tabIconWell, iconStyle]}>
         <Ionicons
           name={tabIcon(routeName, focused)}
           size={22}
@@ -430,36 +443,322 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore">
-        {({ route }) => <ExploreScreen startCreate={route.params?.startCreate} />}
+        {({ route }) => (
+          <ExploreScreen
+            startCreate={route.params?.startCreate}
+            initialCategory={route.params?.category}
+            initialCategoryNonce={route.params?.categoryNonce}
+          />
+        )}
       </Tab.Screen>
-      <Tab.Screen name="Pods" component={PodsScreen} />
+      <Tab.Screen name="Pods" component={PodsScreen} options={{ tabBarLabel: 'My Pods' }} />
       <Tab.Screen name="Clubs" component={ClubsHomeScreen} />
       <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarBadge: inboxBadge }} />
     </Tab.Navigator>
   );
 }
 
-const FIRST_RUN_DONE_KEY = 'oval.firstrun.done';
+function FoundationPreviewTabs() {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <OvalDock {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={FoundationPreviewScreen} />
+      <Tab.Screen name="Explore" component={FoundationPreviewScreen} />
+      <Tab.Screen
+        name="Pods"
+        component={FoundationPreviewScreen}
+        options={{ tabBarLabel: 'My Pods' }}
+      />
+      <Tab.Screen name="Clubs" component={FoundationPreviewScreen} />
+      <Tab.Screen
+        name="Inbox"
+        component={FoundationPreviewScreen}
+        options={{ tabBarBadge: 3 }}
+      />
+    </Tab.Navigator>
+  );
+}
 
-function AuthedApp({
-  showFirstPlan,
-  onFirstPlanDone,
-}: {
-  showFirstPlan: boolean;
-  onFirstPlanDone: () => void;
-}) {
+function Stage2PreviewTabs({ mode }: { mode: Stage2PreviewMode }) {
+  const HomePreview = React.useCallback(
+    () => <HomeScreen previewData={homePreviewData(mode)} />,
+    [mode],
+  );
+  const PodsPreview = React.useCallback(
+    () => <PodsScreen previewData={podsPreviewData(mode)} />,
+    [mode],
+  );
+  const ClubsPreview = React.useCallback(
+    () => <ClubsHomeScreen previewData={clubsPreviewData(mode)} />,
+    [mode],
+  );
+  const InboxPreview = React.useCallback(
+    () => <InboxScreen previewData={inboxPreviewData(mode)} />,
+    [mode],
+  );
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <OvalDock {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={HomePreview} />
+      <Tab.Screen name="Explore">
+        {({ route }) => (
+          <ExploreScreen
+            previewData={explorePreviewData(mode)}
+            initialCategory={route.params?.category}
+            initialCategoryNonce={route.params?.categoryNonce}
+          />
+        )}
+      </Tab.Screen>
+      <Tab.Screen
+        name="Pods"
+        component={PodsPreview}
+        options={{ tabBarLabel: 'My Pods' }}
+      />
+      <Tab.Screen name="Clubs" component={ClubsPreview} />
+      <Tab.Screen
+        name="Inbox"
+        component={InboxPreview}
+        options={{ tabBarBadge: 2 }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+function ClubExperiencePreview({ mode }: { mode: string }) {
+  const routeName: keyof RootStackParamList =
+    mode.startsWith('club-applications')
+      ? 'ClubApplications'
+      : mode.startsWith('club-apply')
+        ? 'ClubApply'
+        : mode.startsWith('club-chat') || mode.startsWith('club-announcements')
+          ? 'ClubChat'
+          : mode.startsWith('club-events')
+            ? 'ClubEvents'
+            : mode.startsWith('club-meeting')
+              ? 'ClubMeeting'
+              : mode.startsWith('club-members')
+                ? 'ClubMembers'
+                : mode.startsWith('club-manage')
+                  ? 'ClubManage'
+                  : 'ClubDetail';
+  const channelId = mode.includes('announcements')
+    ? 'preview-channel-announcements'
+    : 'preview-channel-general';
+
   return (
     <Stack.Navigator
-      initialRouteName={showFirstPlan ? 'FirstPlan' : 'MainTabs'}
+      initialRouteName={routeName}
+      screenOptions={{ headerShown: false, animation: 'none' }}
+    >
+      <Stack.Screen
+        name="ClubDetail"
+        component={ClubHomeScreen}
+        initialParams={{ clubId: 'preview-photography' }}
+      />
+      <Stack.Screen
+        name="ClubChat"
+        component={ClubChatScreen}
+        initialParams={{ clubId: 'preview-photography', channelId }}
+      />
+      <Stack.Screen
+        name="ClubEvents"
+        component={ClubEventsScreen}
+        initialParams={{
+          clubId: 'preview-photography',
+          startCreate: mode === 'club-events-create',
+        }}
+      />
+      <Stack.Screen
+        name="ClubMeeting"
+        component={MeetingDetailScreen}
+        initialParams={{
+          clubId: 'preview-photography',
+          meetingId: 'preview-meeting-sunrise',
+        }}
+      />
+      <Stack.Screen
+        name="ClubMembers"
+        component={ClubMembersScreen}
+        initialParams={{ clubId: 'preview-photography' }}
+      />
+      <Stack.Screen
+        name="ClubManage"
+        component={ClubManageScreen}
+        initialParams={{ clubId: 'preview-photography' }}
+      />
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen
+        name="ClubApply"
+        component={ClubApplyScreen}
+        initialParams={{ clubId: 'preview-photography' }}
+      />
+      <Stack.Screen
+        name="ClubApplications"
+        component={ClubApplicationsScreen}
+        initialParams={{ clubId: 'preview-photography' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+const createPodPreviewActivity: Activity = {
+  id: 'preview-outdoors',
+  title: 'Sunrise hike & coffee',
+  description: 'An easy morning loop with coffee afterward.',
+  category: 'Outdoors',
+  defaultLocation: 'The Oval',
+  createdAt: new Date().toISOString(),
+};
+
+function FormExperiencePreview({ mode }: { mode: string }) {
+  const routeName: keyof RootStackParamList =
+    mode === 'ui-create-club'
+      ? 'CreateClub'
+      : mode === 'ui-privacy'
+        ? 'PrivacyData'
+        : 'ActivityPods';
+
+  return (
+    <Stack.Navigator
+      initialRouteName={routeName}
+      screenOptions={{ headerShown: false, animation: 'none' }}
+    >
+      <Stack.Screen
+        name="ActivityPods"
+        initialParams={{ activity: createPodPreviewActivity, startCreate: true }}
+      >
+        {(props) => <ActivityPodsScreen {...props} preview />}
+      </Stack.Screen>
+      <Stack.Screen name="CreateClub" component={CreateClubScreen} />
+      <Stack.Screen name="PrivacyData">
+        {(props) => <PrivacyDataScreen {...props} preview />}
+      </Stack.Screen>
+      <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
+      <Stack.Screen name="ClubDetail" component={ClubHomeScreen} />
+      <Stack.Screen name="PodDetail" component={PodDetailScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SecondaryExperiencePreview({ mode }: { mode: string }) {
+  if (mode === 'secondary-terms') {
+    return <TermsAcceptanceScreen />;
+  }
+
+  const routeName: keyof RootStackParamList =
+    mode.startsWith('secondary-thread')
+      ? 'Thread'
+      : mode.startsWith('secondary-edit-profile')
+        ? 'EditProfile'
+        : mode.startsWith('secondary-user-profile')
+          ? 'UserProfile'
+          : mode.startsWith('secondary-people')
+            ? 'UserSearch'
+            : mode.startsWith('secondary-blocked')
+              ? 'BlockedUsers'
+              : 'AdminActivityRequests';
+  const sparseProfile = {
+    ...previewProfile,
+    podsJoined: 0,
+    podsAttended: 0,
+    friendCount: 0,
+    sharedPodCount: 0,
+    mutualFriendCount: 0,
+    mutualFriends: [],
+    clubCount: 0,
+    clubMemberships: [],
+    upcomingPods: [],
+  };
+
+  return (
+    <Stack.Navigator
+      initialRouteName={routeName}
+      screenOptions={{ headerShown: false, animation: 'none' }}
+    >
+      <Stack.Screen
+        name="Thread"
+        initialParams={{ threadId: 'preview-thread', title: previewOtherUser.name }}
+      >
+        {(props) => (
+          <ThreadScreen
+            {...props}
+            previewData={{
+              currentUserId: previewCurrentUserId,
+              otherUser: previewOtherUser,
+              messages: mode === 'secondary-thread-empty' ? [] : previewDirectMessages,
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen
+        name="UserProfile"
+        initialParams={{ userId: previewProfile.id }}
+      >
+        {(props) => (
+          <UserProfileScreen
+            {...props}
+            previewData={{
+              profile: mode === 'secondary-user-profile-empty' ? sparseProfile : previewProfile,
+              relationship: previewRelationship,
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="UserSearch">
+        {(props) => (
+          <UserSearchScreen
+            {...props}
+            previewData={{
+              suggestions: mode === 'secondary-people-empty' ? [] : previewSuggestions,
+              friends: previewSuggestions.slice(0, 2),
+              incoming: previewFriendRequests,
+              outgoing: [],
+              recent: previewSuggestions.slice(2, 4),
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="BlockedUsers">
+        {(props) => (
+          <BlockedUsersScreen
+            {...props}
+            previewUsers={mode === 'secondary-blocked-empty' ? [] : previewBlockedUsers}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="AdminActivityRequests">
+        {(props) => (
+          <AdminActivityRequestsScreen
+            {...props}
+            previewData={{
+              pending: mode === 'secondary-admin-empty' ? [] : previewActivityRequests,
+              reviewed: previewReviewedRequests,
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="PodDetail" component={PodDetailScreen} />
+      <Stack.Screen name="ClubDetail" component={ClubHomeScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function AuthedApp() {
+  return (
+    <Stack.Navigator
+      initialRouteName="MainTabs"
       screenOptions={{
         headerShown: false,
         animation: Platform.OS === 'ios' ? 'default' : 'slide_from_right',
         animationDuration: 280,
       }}
     >
-      <Stack.Screen name="FirstPlan">
-        {(props) => <FirstPlanScreen {...props} onDone={onFirstPlanDone} />}
-      </Stack.Screen>
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="ActivityPods" component={ActivityPodsScreen} />
       <Stack.Screen name="AdminActivityRequests" component={AdminActivityRequestsScreen} />
@@ -490,44 +789,6 @@ function AuthedApp({
 
 function AppGate() {
   const { user, isLoading } = useAuth();
-  const [firstRunReady, setFirstRunReady] = React.useState(false);
-  const [showFirstPlan, setShowFirstPlan] = React.useState(false);
-
-  const termsReady =
-    Boolean(user?.verifiedUniversity) &&
-    user?.termsVersion === CURRENT_TERMS_VERSION &&
-    Boolean(user?.ageAttestedAt);
-
-  React.useEffect(() => {
-    if (!user || !termsReady) {
-      setFirstRunReady(false);
-      setShowFirstPlan(false);
-      return;
-    }
-
-    let active = true;
-    AsyncStorage.getItem(FIRST_RUN_DONE_KEY)
-      .then((value) => {
-        if (!active) return;
-        setShowFirstPlan(value !== '1');
-      })
-      .catch(() => {
-        if (!active) return;
-        setShowFirstPlan(false);
-      })
-      .finally(() => {
-        if (active) setFirstRunReady(true);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [termsReady, user]);
-
-  const markFirstRunDone = React.useCallback(() => {
-    setShowFirstPlan(false);
-    void AsyncStorage.setItem(FIRST_RUN_DONE_KEY, '1');
-  }, []);
 
   if (isLoading) {
     return (
@@ -554,24 +815,15 @@ function AppGate() {
     return <TermsAcceptanceScreen />;
   }
 
-  if (!firstRunReady) {
-    return (
-      <AppBackdrop>
-        <View style={styles.loading}>
-          <SkeletonBlock width="58%" height={38} radius={16} />
-          <SkeletonBlock width="82%" height={14} radius={7} />
-          <SkeletonCard />
-          <SkeletonCard compact />
-        </View>
-      </AppBackdrop>
-    );
-  }
-
-  return <AuthedApp showFirstPlan={showFirstPlan} onFirstPlanDone={markFirstRunDone} />;
+  return <AuthedApp />;
 }
 
 function ThemedApp() {
   const { colors, isDark } = useTheme();
+  const [preview] = React.useState(getUiPreviewMode);
+  const stage2Mode = preview?.startsWith('stage2-')
+    ? (preview.replace('stage2-', '') as Stage2PreviewMode)
+    : null;
   // URL + notification handling lives in the `linking` options above so that
   // deep links and push taps share one pipeline.
 
@@ -593,7 +845,23 @@ function ThemedApp() {
   return (
     <NavigationContainer theme={navTheme} linking={linking}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <AppGate />
+      {preview?.startsWith('club-') ? (
+        <ClubExperiencePreview mode={preview} />
+      ) : preview?.startsWith('secondary-') ? (
+        <SecondaryExperiencePreview mode={preview} />
+      ) : preview?.startsWith('ui-') ? (
+        <FormExperiencePreview mode={preview} />
+      ) : preview === 'foundation' ? (
+        <FoundationPreviewTabs />
+      ) : stage2Mode &&
+        (stage2Mode === 'zero' ||
+          stage2Mode === 'spotlight' ||
+          stage2Mode === 'community' ||
+          stage2Mode === 'search') ? (
+        <Stage2PreviewTabs mode={stage2Mode} />
+      ) : (
+        <AppGate />
+      )}
     </NavigationContainer>
   );
 }
@@ -658,31 +926,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     alignItems: 'stretch',
   },
   dock: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    borderRadius: radii.xl,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    borderRadius: radii.lg,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     overflow: 'hidden',
   },
   dockBorder: {
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: BORDER_W,
   },
   tabSlot: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
+    gap: 3,
+    paddingVertical: 1,
   },
-  tabSticker: {
-    width: 46,
-    height: 32,
+  tabIconWell: {
+    width: 42,
+    height: 30,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -695,7 +963,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontFamily: fonts.semibold,
     fontWeight: '600',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0,
   },
   loading: {

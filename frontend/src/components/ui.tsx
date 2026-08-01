@@ -1,6 +1,9 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
+  ImageSourcePropType,
+  ImageStyle,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -43,7 +46,7 @@ import { resolveAvatarUrl } from '../api';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * CRIMSON COMPONENT KIT
+ * CAMPUS PULSE COMPONENT KIT
  *
  * Content surfaces are solid, calm, and native-feeling. Blur is reserved for
  * chrome such as the dock and bottom sheets.
@@ -72,6 +75,21 @@ export function accentKeyForSeed(seed: string): AccentKey {
   return ACCENT_KEYS[hash % ACCENT_KEYS.length];
 }
 
+/**
+ * Pick a legible label color for an arbitrary fill. Saturated fills (the
+ * scarlet primary) take `onPrimary`; pale crayon tints take `ink`.
+ */
+export function readableInkOn(colors: ThemeColors, fill: string): string {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(fill.trim());
+  if (!match) return colors.ink;
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 150 ? colors.ink : colors.onPrimary;
+}
+
 export function accentForSeed(colors: ThemeColors, seed: string) {
   const key = accentKeyForSeed(seed);
   return {
@@ -79,6 +97,22 @@ export function accentForSeed(colors: ThemeColors, seed: string) {
     tint: colors[key],
     soft: colors[`${key}Soft` as const],
   };
+}
+
+// ── Dock clearance ───────────────────────────────────────────────────────────
+
+/** Height of the floating dock's own content (padding + icon + label). */
+const DOCK_HEIGHT = 66;
+
+/**
+ * Bottom padding scroll content must reserve so nothing hides under the
+ * floating dock. Unlike the static DOCK_CLEARANCE constant (tuned for iPhone
+ * home-indicator insets), this follows the device's real bottom inset —
+ * Android 3-button nav has a taller inset and was clipping content.
+ */
+export function useDockClearance(): number {
+  const insets = useSafeAreaInsets();
+  return DOCK_HEIGHT + 12 + Math.max(insets.bottom, 10);
 }
 
 // ── Slab — the signature pressable surface ───────────────────────────────────
@@ -90,12 +124,12 @@ export type SlabProps = {
   disabled?: boolean;
   /** Face background. Defaults to surface. */
   color?: string;
-  /** Border + shadow color. Defaults to theme border. */
+  /** Border color. Defaults to theme border. */
   borderColor?: string;
   radius?: number;
-  /** Sticker tilt, in degrees. Use sparingly. */
+  /** @deprecated Kept for call-site compatibility. Campus Pulse surfaces sit flat. */
   tilt?: number;
-  /** Set false to hide the offset shadow (quiet slabs). */
+  /** Enable a diffuse surface shadow. */
   raised?: boolean;
   haptic?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -114,7 +148,6 @@ export function Slab({
   color,
   borderColor,
   radius = radii.md,
-  tilt = 0,
   raised = true,
   haptic = true,
   style,
@@ -199,17 +232,19 @@ const slabStyles = StyleSheet.create({
   },
 });
 
-/** Non-interactive slab with default padding — a plain card. */
+/** Non-interactive solid surface with default padding. */
 export function Card({
   children,
   style,
   faceStyle,
   padded = true,
+  raised = false,
   ...rest
 }: Omit<SlabProps, 'onPress' | 'onLongPress'> & { padded?: boolean }) {
   return (
     <Slab
       {...rest}
+      raised={raised}
       accessibilityRole="none"
       style={style}
       faceStyle={[padded && { padding: spacing.lg }, faceStyle]}
@@ -268,20 +303,19 @@ export function Button({
         : resolvedVariant === 'tertiary'
           ? colors.ink
           : colors.surface;
+  // Secondary reads as a quiet neutral control (the mock's "Decline" /
+  // "Details" buttons), not a red outline — scarlet is reserved for the
+  // one primary action on screen.
   const labelColor =
     resolvedVariant === 'primary' || resolvedVariant === 'danger'
       ? colors.onPrimary
       : resolvedVariant === 'tertiary'
         ? colors.bg
-        : colors.accentText;
+        : colors.ink;
   const borderColor =
-    resolvedVariant === 'secondary'
-      ? colors.primary
-      : resolvedVariant === 'danger'
-        ? colors.danger
-        : colors.border;
-  const height = size === 'lg' ? 56 : size === 'md' ? 48 : 38;
-  const fontSize = size === 'sm' ? 13 : 15;
+    resolvedVariant === 'danger' ? colors.danger : colors.border;
+  const height = size === 'lg' ? 52 : size === 'md' ? 46 : 36;
+  const fontSize = size === 'sm' ? 12 : 14;
 
   return (
     <Slab
@@ -289,7 +323,7 @@ export function Button({
       disabled={disabled || loading}
       color={fill}
       borderColor={borderColor}
-      radius={radii.md}
+      radius={radii.button}
       style={style}
       faceStyle={[buttonStyles.face, { height: height - SLAB_OFFSET }]}
       accessibilityLabel={label}
@@ -369,11 +403,16 @@ export function IconButton({
   testID?: string;
 }) {
   const { colors } = useTheme();
+  // Header glyphs sit bare on the page (back chevron, share, gear) unless a
+  // caller explicitly asks for a filled well.
+  const filled = Boolean(color);
   return (
     <Slab
       onPress={onPress}
       disabled={disabled}
-      color={color ?? colors.surface}
+      color={color ?? 'transparent'}
+      borderColor={filled ? color : 'transparent'}
+      raised={filled}
       radius={radii.sm}
       style={style}
       faceStyle={{
@@ -405,20 +444,22 @@ export function Chip({
   selected?: boolean;
   onPress?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
-  /** Fill when selected; defaults to ink. */
+  /** Fill when selected; defaults to the scarlet primary. */
   tint?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const { colors } = useTheme();
-  const fill = selected ? colors.primarySoft : colors.surface;
-  const labelColor = selected ? colors.accentText : colors.sub;
+  // Selected filter chips are solid pills — scarlet by default, or the
+  // caller's tint. The label flips to stay legible on either.
+  const fill = selected ? (tint ?? colors.primary) : colors.surface;
+  const labelColor = selected ? readableInkOn(colors, fill) : colors.sub;
 
   return (
     <Slab
       onPress={onPress}
       color={fill}
-      borderColor={selected ? colors.primary : colors.border}
+      borderColor={selected ? fill : colors.border}
       radius={radii.pill}
       raised={false}
       style={style}
@@ -457,8 +498,7 @@ const chipStyles = StyleSheet.create({
 });
 
 /**
- * Segmented control — a glass track with a sliding scarlet thumb. The Lumen
- * replacement for rows of mode-switch chips.
+ * Compact segmented control with one clear scarlet selection.
  */
 export function Segmented<T extends string>({
   options,
@@ -518,27 +558,27 @@ export function Segmented<T extends string>({
 const segmentedStyles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     borderWidth: BORDER_W,
     padding: 4,
     gap: 4,
   },
   segment: {
     flex: 1,
-    height: 38,
-    borderRadius: radii.pill,
+    height: 34,
+    borderRadius: radii.xs,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     fontFamily: fonts.semibold,
-    fontSize: 13.5,
+    fontWeight: '600',
+    fontSize: 12,
   },
 });
 
 /**
- * Soft status pill — category tags, counts, live flags. The `tilt` prop is
- * retained for call-site compatibility but Lumen pills sit flat.
+ * Soft status pill — category tags, counts, and live flags.
  */
 export function Sticker({
   label,
@@ -552,7 +592,7 @@ export function Sticker({
   tint?: string;
   textColor?: string;
   icon?: keyof typeof Ionicons.glyphMap;
-  /** @deprecated Lumen pills sit flat; kept for call-site compatibility. */
+  /** @deprecated Campus Pulse pills sit flat; kept for call-site compatibility. */
   tilt?: number;
   small?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -790,7 +830,8 @@ export function Avatar({
         {
           width: size,
           height: size,
-          borderRadius: size * 0.34,
+          // People are circles; clubs and content keep the squircle.
+          borderRadius: size / 2,
           backgroundColor: backgroundColor ?? accent.soft,
           borderColor: borderColor ?? colors.border,
         },
@@ -867,7 +908,7 @@ export function ClubMark({
         {
           width: size,
           height: size,
-          borderRadius: size * 0.29,
+          borderRadius: size * 0.26,
           backgroundColor: accent.soft,
           borderColor: colors.border,
           transform: tilt ? [{ rotate: `${tilt}deg` }] : undefined,
@@ -953,7 +994,7 @@ export function AvatarStack({
             {
               width: size,
               height: size,
-              borderRadius: size * 0.32,
+              borderRadius: size / 2,
               marginLeft: -size * 0.3,
               backgroundColor: onColor ? colors.onPrimary : colors.surfaceAlt,
               borderColor: onColor ? colors.onPrimary : colors.border,
@@ -974,12 +1015,197 @@ export function AvatarStack({
   );
 }
 
+// ── Editorial and content imagery ───────────────────────────────────────────
+
+/**
+ * Transparent editorial vignette for onboarding, activation, invitations, and
+ * state-specific guidance. Callers choose an approved `spot/**` asset; this
+ * wrapper intentionally does not infer files from user-entered text.
+ */
+export function SpotIllustration({
+  source,
+  accessibilityLabel,
+  height = 200,
+  decorative = false,
+  style,
+}: {
+  source: ImageSourcePropType;
+  accessibilityLabel?: string;
+  height?: number;
+  decorative?: boolean;
+  style?: StyleProp<ImageStyle>;
+}) {
+  return (
+    <Image
+      source={source}
+      resizeMode="contain"
+      accessible={!decorative}
+      accessibilityLabel={decorative ? undefined : accessibilityLabel}
+      style={[imageStyles.spot, { height }, style]}
+    />
+  );
+}
+
+/**
+ * Content-media frame. Until approved activity/category artwork exists, the
+ * fallback is a deterministic theme tint plus code-native icon—not invented
+ * photography or fictional social proof.
+ */
+export function ContentImage({
+  source,
+  seed,
+  fallbackIcon = 'sparkles-outline',
+  accessibilityLabel,
+  aspectRatio = 16 / 9,
+  children,
+  style,
+}: {
+  source?: ImageSourcePropType | null;
+  seed: string;
+  fallbackIcon?: keyof typeof Ionicons.glyphMap;
+  accessibilityLabel?: string;
+  aspectRatio?: number;
+  children?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const accent = accentForSeed(colors, seed);
+  return (
+    <View
+      style={[
+        imageStyles.content,
+        {
+          aspectRatio,
+          backgroundColor: accent.soft,
+          borderColor: colors.border,
+        },
+        style,
+      ]}
+    >
+      {source ? (
+        <Image
+          source={source}
+          resizeMode="cover"
+          accessible={Boolean(accessibilityLabel)}
+          accessibilityLabel={accessibilityLabel}
+          style={[StyleSheet.absoluteFill, imageStyles.cover]}
+        />
+      ) : (
+        <Ionicons
+          name={fallbackIcon}
+          size={Math.max(24, Math.min(38, 30 * aspectRatio))}
+          color={accent.tint}
+          accessibilityElementsHidden
+        />
+      )}
+      {children}
+    </View>
+  );
+}
+
+/** Live copy block used beside a state-specific illustration. */
+export function StateCopy({
+  eyebrow,
+  title,
+  body,
+  align = 'center',
+  style,
+}: {
+  eyebrow?: string;
+  title: string;
+  body?: string;
+  align?: 'left' | 'center';
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { typography } = useTheme();
+  return (
+    <View style={[stateStyles.copy, align === 'center' && stateStyles.center, style]}>
+      {eyebrow ? <Text style={typography.kicker}>{eyebrow}</Text> : null}
+      <Text style={[typography.display, { textAlign: align }]}>{title}</Text>
+      {body ? (
+        <Text style={[typography.body, stateStyles.body, { textAlign: align }]}>{body}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** One primary action and an optional quiet secondary action for state pages. */
+export function StateActions({
+  primaryLabel,
+  onPrimary,
+  primaryIcon,
+  secondaryLabel,
+  onSecondary,
+  style,
+}: {
+  primaryLabel: string;
+  onPrimary: () => void;
+  primaryIcon?: keyof typeof Ionicons.glyphMap;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[stateStyles.actions, style]}>
+      <Button label={primaryLabel} icon={primaryIcon} onPress={onPrimary} />
+      {secondaryLabel && onSecondary ? (
+        <Button label={secondaryLabel} onPress={onSecondary} variant="secondary" />
+      ) : null}
+    </View>
+  );
+}
+
+const imageStyles = StyleSheet.create({
+  spot: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  content: {
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: BORDER_W,
+    borderRadius: radii.md,
+  },
+  cover: {
+    width: '100%',
+    height: '100%',
+  },
+});
+
+const stateStyles = StyleSheet.create({
+  copy: {
+    gap: spacing.sm,
+    maxWidth: 320,
+  },
+  center: {
+    alignSelf: 'center',
+    alignItems: 'center',
+  },
+  body: {
+    maxWidth: 300,
+  },
+  actions: {
+    gap: spacing.sm,
+    width: '100%',
+  },
+});
+
 // ── Layout primitives ────────────────────────────────────────────────────────
 
 export function AppBackdrop({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const atmosphere = isDark
+    ? require('../../assets/illustrations/runtime/ambient/02-dark-charcoal-wash.jpg')
+    : require('../../assets/illustrations/runtime/ambient/01-light-paper-wash.jpg');
   return (
     <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>
+      <Image
+        source={atmosphere}
+        resizeMode="cover"
+        accessible={false}
+        style={[StyleSheet.absoluteFill, { opacity: isDark ? 0.28 : 0.08 }]}
+      />
       {children}
     </View>
   );
@@ -1029,7 +1255,7 @@ export function SectionHeader({
           accessibilityLabel={actionLabel}
           style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
         >
-          <Text style={[sectionStyles.action, { color: colors.accentText }]}>{actionLabel} →</Text>
+          <Text style={[sectionStyles.action, { color: colors.accentText }]}>{actionLabel}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -1047,23 +1273,26 @@ const sectionStyles = StyleSheet.create({
   },
   action: {
     fontFamily: fonts.bold,
-    fontSize: 13.5,
+    fontWeight: '600',
+    fontSize: 12,
     paddingBottom: 2,
   },
 });
 
-/** Stack-screen header: back slab + kicker/title. */
+/** Stack-screen header: compact back action, title, and optional right action. */
 export function ScreenHeader({
   title,
   kicker,
   onBack,
   right,
+  centered = false,
   style,
 }: {
   title: string;
   kicker?: string;
   onBack?: () => void;
   right?: React.ReactNode;
+  centered?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const { typography } = useTheme();
@@ -1072,7 +1301,7 @@ export function ScreenHeader({
       {onBack ? (
         <IconButton icon="arrow-back" onPress={onBack} accessibilityLabel="Go back" />
       ) : null}
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={[{ flex: 1, minWidth: 0 }, centered && headerStyles.centerTitle]}>
         {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
         <Text style={typography.display} numberOfLines={1}>
           {title}
@@ -1088,6 +1317,9 @@ const headerStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  centerTitle: {
+    alignItems: 'center',
   },
 });
 
@@ -1116,7 +1348,7 @@ export function Field({
 
   return (
     <View style={style}>
-      {label ? <Text style={[typography.kicker, { marginBottom: 6 }]}>{label}</Text> : null}
+      {label ? <Text style={[typography.captionSmall, fieldStyles.label]}>{label}</Text> : null}
       <View
         style={[
           fieldStyles.well,
@@ -1174,24 +1406,28 @@ export function Field({
 }
 
 const fieldStyles = StyleSheet.create({
+  label: {
+    fontWeight: '600',
+    marginBottom: 6,
+  },
   well: {
     borderWidth: BORDER_W,
     borderRadius: radii.sm,
     paddingHorizontal: 14,
-    minHeight: 50,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
   },
   input: {
     flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 15,
-    letterSpacing: -0.2,
-    paddingVertical: 12,
+    fontSize: 14,
+    letterSpacing: 0,
+    paddingVertical: 11,
   },
   meta: {
     fontFamily: fonts.medium,
-    fontSize: 12.5,
+    fontSize: 12,
     marginTop: 6,
   },
 });
@@ -1374,17 +1610,36 @@ export function Banner({
   onDismiss,
 }: {
   message: string;
-  kind?: 'error' | 'info' | 'success';
+  kind?: 'error' | 'info' | 'success' | 'warning';
   style?: StyleProp<ViewStyle>;
   /** Optional ✕ affordance for transient hints. */
   onDismiss?: () => void;
 }) {
   const { colors } = useTheme();
   const tint =
-    kind === 'error' ? colors.dangerSoft : kind === 'success' ? colors.successSoft : colors.blueSoft;
-  const fg = kind === 'error' ? colors.danger : kind === 'success' ? colors.success : colors.blue;
+    kind === 'error'
+      ? colors.dangerSoft
+      : kind === 'success'
+        ? colors.successSoft
+        : kind === 'warning'
+          ? colors.warningSoft
+          : colors.blueSoft;
+  const fg =
+    kind === 'error'
+      ? colors.danger
+      : kind === 'success'
+        ? colors.success
+        : kind === 'warning'
+          ? colors.warning
+          : colors.blue;
   const icon =
-    kind === 'error' ? 'alert-circle' : kind === 'success' ? 'checkmark-circle' : 'information-circle';
+    kind === 'error'
+      ? 'alert-circle'
+      : kind === 'success'
+        ? 'checkmark-circle'
+        : kind === 'warning'
+          ? 'warning'
+          : 'information-circle';
   return (
     <View
       style={[
@@ -1439,8 +1694,8 @@ export function EmptyState({
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   body?: string;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   tint?: string;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -1460,7 +1715,9 @@ export function EmptyState({
       </View>
       <Text style={[typography.title, emptyStyles.title]}>{title}</Text>
       {body ? <Text style={[typography.caption, emptyStyles.body]}>{body}</Text> : null}
-      <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
+      {actionLabel && onAction ? (
+        <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
+      ) : null}
     </View>
   );
 }
@@ -1539,6 +1796,50 @@ export function SkeletonCard({ compact, style }: { compact?: boolean; style?: St
     </Card>
   );
 }
+
+export function SkeletonRow({ style }: { style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[skeletonStyles.row, style]}>
+      <SkeletonBlock width={48} height={48} radius={24} />
+      <View style={skeletonStyles.rowCopy}>
+        <SkeletonBlock width="48%" height={13} />
+        <SkeletonBlock width="76%" height={11} />
+      </View>
+      <SkeletonBlock width={58} height={34} radius={radii.button} />
+    </View>
+  );
+}
+
+export function SkeletonHero({ style }: { style?: StyleProp<ViewStyle> }) {
+  return (
+    <Card padded={false} style={style}>
+      <SkeletonBlock width="100%" height={172} radius={radii.md} />
+      <View style={skeletonStyles.heroCopy}>
+        <SkeletonBlock width="34%" height={11} />
+        <SkeletonBlock width="74%" height={24} />
+        <SkeletonBlock width="92%" height={13} />
+        <SkeletonBlock width="100%" height={46} radius={radii.button} />
+      </View>
+    </Card>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 64,
+  },
+  rowCopy: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  heroCopy: {
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+});
 
 // ── Sheet modal ──────────────────────────────────────────────────────────────
 

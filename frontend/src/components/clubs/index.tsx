@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
   ClubChannelRow,
@@ -12,12 +13,17 @@ import type {
 import {
   AppBackdrop,
   Avatar,
+  Button,
   Chip,
   ClubMark,
+  ContentImage,
   CountBubble,
+  IconButton,
   ScreenHeader,
   SkeletonCard,
 } from '../ui';
+import { resolveAvatarUrl } from '../../api';
+import { clubIdentityImageFor } from '../../constants/contentImages';
 import { BORDER_W, ThemeColors, density, fonts, radii, spacing, useTheme } from '../../theme';
 import { formatShortDate, formatTime } from '../../utils/format';
 
@@ -231,6 +237,250 @@ export function ClubRow({
         <Ionicons name="chevron-forward" size={17} color={colors.sub} />
       )}
     </Pressable>
+  );
+}
+
+/**
+ * Photo-first club identity used on discovery and meeting surfaces.
+ * Uploaded club art wins; otherwise the stable category editorial image keeps
+ * sparse directories visual without inventing members or social proof.
+ */
+export function ClubPhoto({
+  name,
+  category,
+  uri,
+  size = 44,
+}: {
+  name: string;
+  category?: string | null;
+  uri?: string | null;
+  size?: number;
+}) {
+  const resolved = resolveAvatarUrl(uri);
+  return (
+    <ContentImage
+      source={resolved ? { uri: resolved } : clubIdentityImageFor({ name, category })}
+      seed={name}
+      aspectRatio={1}
+      accessibilityLabel={`${name} club photo`}
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.24) }}
+    />
+  );
+}
+
+/**
+ * Shared photo-first identity header for every in-club home surface. Uploaded
+ * cover art wins; otherwise curated club-identity or category editorial art is
+ * used behind the club mark rather than stretching a square avatar.
+ */
+export function ClubIdentityHero({
+  club,
+  role,
+  onBack,
+  onActions,
+  onRolePress,
+  topInset = 0,
+  squareBottom = false,
+}: {
+  club: {
+    name: string;
+    category: string;
+    emoji: string;
+    avatarUrl?: string | null;
+    coverUrl?: string | null;
+    isVerified: boolean;
+    members: readonly unknown[];
+  };
+  role?: string | null;
+  onBack: () => void;
+  onActions: () => void;
+  onRolePress?: () => void;
+  topInset?: number;
+  squareBottom?: boolean;
+}) {
+  const { colors, typography } = useTheme();
+  const roleLabel =
+    role === 'OWNER'
+      ? 'Owner'
+      : role === 'ADMIN'
+        ? 'Admin'
+        : role === 'OFFICER'
+          ? 'Officer'
+          : role === 'MEMBER'
+            ? 'Member'
+            : 'Community';
+
+  return (
+    <ContentImage
+      source={
+        club.coverUrl
+          ? { uri: resolveAvatarUrl(club.coverUrl) ?? club.coverUrl }
+          : clubIdentityImageFor(club)
+      }
+      seed={`${club.name}-hero`}
+      aspectRatio={1.42}
+      accessibilityLabel={
+        club.coverUrl ? `${club.name} cover photo` : `${club.name} editorial artwork`
+      }
+      style={[
+        styles.clubHero,
+        topInset > 0 && styles.clubHeroFlush,
+        squareBottom && styles.clubHeroSquareBottom,
+      ]}
+    >
+      <LinearGradient
+        colors={['rgba(8,10,15,0.10)', 'rgba(8,10,15,0.32)', 'rgba(8,10,15,0.92)']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <View style={[styles.heroChrome, { top: topInset + spacing.md }]}>
+        <IconButton
+          icon="arrow-back"
+          color="rgba(8,10,15,0.38)"
+          iconColor="#FFFFFF"
+          accessibilityLabel="Go back"
+          onPress={onBack}
+        />
+        <IconButton
+          icon="ellipsis-horizontal"
+          color="rgba(8,10,15,0.38)"
+          iconColor="#FFFFFF"
+          accessibilityLabel="Club actions"
+          onPress={onActions}
+        />
+      </View>
+      <View style={styles.heroIdentity}>
+        <ClubMark
+          name={club.name}
+          emoji={club.emoji}
+          uri={club.avatarUrl}
+          size={72}
+          style={styles.heroMark}
+        />
+        <View style={styles.heroIdentityCopy}>
+          <View style={styles.titleLine}>
+            <Text style={[typography.display, styles.heroTitle]} numberOfLines={2}>
+              {club.name}
+            </Text>
+            {club.isVerified ? (
+              <Ionicons name="checkmark-circle" size={18} color="#77DCA4" />
+            ) : null}
+          </View>
+          <Text style={[typography.caption, styles.heroMeta]}>
+            {club.category} · {club.members.length} member
+            {club.members.length === 1 ? '' : 's'}
+          </Text>
+          <Pressable
+            onPress={onRolePress}
+            disabled={!onRolePress}
+            accessibilityRole={onRolePress ? 'button' : undefined}
+            accessibilityLabel={onRolePress ? `Manage ${roleLabel} role` : undefined}
+            style={({ pressed }) => [
+              styles.rolePill,
+              { backgroundColor: colors.surface },
+              pressed && { opacity: 0.72 },
+            ]}
+          >
+            <View style={[styles.roleDot, { backgroundColor: colors.success }]} />
+            <Text style={[typography.captionSmall, { color: colors.ink }]}>{roleLabel}</Text>
+            {onRolePress ? (
+              <Ionicons name="chevron-down" size={13} color={colors.sub} />
+            ) : null}
+          </Pressable>
+        </View>
+      </View>
+    </ContentImage>
+  );
+}
+
+const CLUB_EMPTY_ART = {
+  calendar: require('../../../assets/illustrations/clubs/events-empty.png'),
+  chat: require('../../../assets/illustrations/clubs/chat-empty.png'),
+  people: require('../../../assets/illustrations/clubs/member-search-empty.png'),
+  applications: require('../../../assets/illustrations/clubs/applications-empty.png'),
+  private: require('../../../assets/illustrations/clubs/private-space.png'),
+  recovery: require('../../../assets/illustrations/clubs/recovery.png'),
+} as const;
+
+const CLUB_EMPTY_ICONS: Record<
+  keyof typeof CLUB_EMPTY_ART,
+  keyof typeof Ionicons.glyphMap
+> = {
+  calendar: 'calendar-outline',
+  chat: 'chatbubbles-outline',
+  people: 'people-outline',
+  applications: 'document-text-outline',
+  private: 'lock-closed-outline',
+  recovery: 'refresh-outline',
+};
+
+/**
+ * One empty/restricted/recovery language across all club screens. Full states
+ * use approved editorial artwork; compact states use the same hierarchy
+ * without consuming an entire feed.
+ */
+export function ClubEmptyState({
+  variant,
+  title,
+  body,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+  compact = false,
+}: {
+  variant: keyof typeof CLUB_EMPTY_ART;
+  title: string;
+  body: string;
+  actionLabel: string;
+  onAction: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  compact?: boolean;
+}) {
+  const { colors, typography } = useTheme();
+  return (
+    <View
+      style={[
+        styles.clubEmpty,
+        compact && styles.clubEmptyCompact,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+    >
+      {compact ? (
+        <View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons
+            name={CLUB_EMPTY_ICONS[variant]}
+            size={25}
+            color={colors.accentText}
+          />
+        </View>
+      ) : (
+        <ContentImage
+          source={CLUB_EMPTY_ART[variant]}
+          seed={`${variant}-${title}`}
+          aspectRatio={16 / 9}
+          accessibilityLabel={undefined}
+          style={styles.emptyArtwork}
+        />
+      )}
+      <Text style={[compact ? typography.title : typography.display, styles.emptyTitle]}>
+        {title}
+      </Text>
+      <Text style={[typography.caption, styles.emptyBody]}>{body}</Text>
+      <View style={styles.emptyActions}>
+        <Button label={actionLabel} onPress={onAction} style={styles.emptyAction} />
+        {secondaryLabel && onSecondary ? (
+          <Button
+            label={secondaryLabel}
+            variant="secondary"
+            onPress={onSecondary}
+            style={styles.emptyAction}
+          />
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -477,5 +727,103 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  clubHero: {
+    borderRadius: radii.xl,
+    borderWidth: 0,
+  },
+  clubHeroFlush: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  clubHeroSquareBottom: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  heroChrome: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  heroIdentity: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.md,
+  },
+  heroMark: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  heroIdentityCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    flexShrink: 1,
+  },
+  heroMeta: {
+    color: 'rgba(255,255,255,0.84)',
+  },
+  rolePill: {
+    minHeight: 30,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+  },
+  roleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  clubEmpty: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+    overflow: 'hidden',
+  },
+  clubEmptyCompact: {
+    paddingVertical: spacing.lg,
+  },
+  emptyArtwork: {
+    width: '100%',
+    borderRadius: radii.md,
+    marginBottom: spacing.xs,
+  },
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyTitle: {
+    textAlign: 'center',
+  },
+  emptyBody: {
+    textAlign: 'center',
+    maxWidth: 300,
+  },
+  emptyActions: {
+    width: '100%',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  emptyAction: {
+    width: '100%',
   },
 });

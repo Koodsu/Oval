@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import PrivacyDataScreen from './PrivacyDataScreen';
 
 jest.mock('@react-navigation/native', () => ({
@@ -8,6 +8,7 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
 jest.mock('../api', () => ({
@@ -61,13 +62,21 @@ describe('PrivacyDataScreen', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('switch')).toHaveLength(12);
+      expect(screen.getAllByRole('switch')).toHaveLength(2);
     });
-    expect(screen.getByText('Weekly planning')).toBeTruthy();
-    expect(screen.getByText('Demand alerts')).toBeTruthy();
+    expect(screen.getByText('Who can see and connect')).toBeTruthy();
+    expect(screen.getByText('Notification controls')).toBeTruthy();
     expect(screen.getByText('Download my data')).toBeTruthy();
     expect(screen.getByText('Connected accounts')).toBeTruthy();
-    expect(screen.getAllByText('Delete my account')).toHaveLength(2);
+    expect(screen.getByText('Delete account')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Notification controls'));
+    expect(screen.getAllByRole('switch')).toHaveLength(13);
+    expect(screen.getByText('Weekly planning')).toBeTruthy();
+    expect(screen.getByText('Demand alerts')).toBeTruthy();
+
+    fireEvent.press(screen.getAllByLabelText('Close')[0]);
+    fireEvent.press(screen.getByLabelText('Instagram'));
     expect(screen.getByText('Update Instagram')).toBeTruthy();
     expect(screen.getByText('Unlink Instagram')).toBeTruthy();
   });

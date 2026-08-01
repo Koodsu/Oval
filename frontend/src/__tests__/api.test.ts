@@ -2,8 +2,10 @@ import {
   getApiErrorMessage,
   getMessages,
   getToken,
+  getUserProfileShareUrl,
   setOnUnauthorized,
   setToken,
+  transferClubOwnership,
 } from '../api';
 
 beforeEach(() => {
@@ -21,6 +23,52 @@ describe('setToken / getToken', () => {
     setToken('abc123');
     setToken(null);
     expect(getToken()).toBeNull();
+  });
+});
+
+describe('getUserProfileShareUrl', () => {
+  it('builds a universal link and safely encodes the user id', () => {
+    expect(getUserProfileShareUrl('user/id')).toBe('https://www.theovalapp.com/users/user%2Fid');
+  });
+});
+
+describe('transferClubOwnership', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('posts the selected member to the owner-only transfer endpoint', async () => {
+    setToken('owner-token');
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          previousOwner: { userId: 'owner-1', role: 'ADMIN' },
+          newOwner: {
+            id: 'membership-2',
+            clubId: 'club/1',
+            userId: 'member/2',
+            role: 'OWNER',
+            user: { id: 'member/2', name: 'Next Owner' },
+          },
+        }),
+    });
+
+    await transferClubOwnership('club/1', 'member/2');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/clubs/club%2F1/transfer-ownership'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ newOwnerUserId: 'member/2' }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer owner-token',
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
   });
 });
 

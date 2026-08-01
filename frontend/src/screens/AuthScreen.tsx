@@ -32,10 +32,9 @@ import {
   Card,
   Chip,
   Field,
-  ProgressBar,
-  Slab,
-  Sticker,
+  SpotIllustration,
 } from '../components/ui';
+import { OnboardingTopBar, OvalWordmark } from '../components/OnboardingChrome';
 import {
   BORDER_W,
   Theme,
@@ -55,11 +54,12 @@ type Mode = 'login' | 'register' | 'reset';
 
 const MIN_PASSWORD_LENGTH = 8;
 const SITE_URL = 'https://www.theovalapp.com';
+const welcomeSpot = require('../../assets/illustrations/spot/onboarding/01-welcome.png');
 
-const REGISTER_STEP_COPY: Record<1 | 2 | 3, { kicker: string; title: string }> = {
-  1: { kicker: 'Step 1 — The basics', title: 'Who are you?' },
-  2: { kicker: 'Step 2 — Your campus', title: 'Where are you at?' },
-  3: { kicker: 'Step 3 — Your thing', title: 'What do you like?' },
+const REGISTER_STEP_COPY: Record<1 | 2 | 3, { title: string; sub: string }> = {
+  1: { title: 'Create your account', sub: "Let's get to know you." },
+  2: { title: 'Tell us about campus', sub: 'This helps Oval show you the right people and plans.' },
+  3: { title: 'Make it yours', sub: 'Choose a few interests to personalize your experience.' },
 };
 
 export default function AuthScreen() {
@@ -305,57 +305,67 @@ export default function AuthScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-        {/* Wordmark — scarlet glass tile */}
-        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
-          <View style={styles.masthead}>
-            <Slab
-              color={colors.accentText}
-              radius={radii.md}
-              faceStyle={styles.markFace}
-              accessibilityRole="none"
-            >
-              <Text style={styles.markText}>Oval</Text>
-            </Slab>
-            <Sticker label="Ohio State only" tint={colors.warningSoft} icon="school" />
-          </View>
-        </Animated.View>
+          {mode === 'register' ? (
+            <OnboardingTopBar
+              current={registerStep}
+              total={3}
+              onBack={() => {
+                if (registerStep === 1) changeMode('login');
+                else setRegisterStep((step) => (step === 3 ? 2 : 1));
+              }}
+            />
+          ) : mode === 'reset' ? (
+            <OnboardingTopBar label="Password reset" onBack={() => changeMode('login')} />
+          ) : null}
 
-        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
-          <Text style={styles.heroTitle}>
-            {mode === 'login'
-              ? 'Your campus\nis waiting.'
-              : mode === 'register'
-                ? REGISTER_STEP_COPY[registerStep].title
-                : 'Locked out?\nNo stress.'}
-          </Text>
-          <Text style={[typography.body, styles.heroSub]}>
-            {mode === 'login'
-              ? 'Small groups. Real plans. Less scrolling, more showing up.'
-              : mode === 'register'
-                ? 'A couple of details and your first pods will actually fit you.'
-                : 'We will send a 6-digit code to your OSU email.'}
-          </Text>
-        </Animated.View>
+          <Animated.View entering={FadeInDown.duration(motion.durBase)} style={styles.wordmarkRow}>
+            <OvalWordmark compact={mode !== 'login'} />
+            <View style={[styles.campusBadge, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons name="school-outline" size={14} color={colors.sub} />
+              <Text style={[styles.campusBadgeText, { color: colors.sub }]}>Ohio State only</Text>
+            </View>
+          </Animated.View>
 
-        {/* Mode switch */}
-        <Animated.View
-          entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
-          style={styles.modeRow}
-        >
-          <Chip label="Sign in" selected={mode === 'login'} onPress={() => changeMode('login')} />
-          <Chip label="New here" selected={mode === 'register'} onPress={() => changeMode('register')} />
-          <Chip label="Reset" selected={mode === 'reset'} onPress={() => changeMode('reset')} />
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}>
-          <Card padded>
-            {mode === 'register' ? (
-              <View style={styles.progressBlock}>
-                <Text style={typography.kicker}>{REGISTER_STEP_COPY[registerStep].kicker}</Text>
-                <ProgressBar value={registerStep / 3} style={{ marginTop: 8 }} />
+          {mode === 'login' ? (
+            <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+              <View style={[styles.welcomeArt, { backgroundColor: colors.surfaceAlt }]}>
+                <SpotIllustration
+                  source={welcomeSpot}
+                  accessibilityLabel="Ohio State students meeting through Oval"
+                  height={182}
+                  style={styles.welcomeImage}
+                />
               </View>
-            ) : null}
+            </Animated.View>
+          ) : null}
 
+          <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
+            <Text style={styles.heroTitle}>
+              {mode === 'login'
+                ? 'Your campus\nis waiting.'
+                : mode === 'register'
+                  ? REGISTER_STEP_COPY[registerStep].title
+                  : 'Reset your password'}
+            </Text>
+            <Text style={[typography.body, styles.heroSub]}>
+              {mode === 'login'
+                ? 'Find your people, join small groups, and make real plans at Ohio State.'
+                : mode === 'register'
+                  ? REGISTER_STEP_COPY[registerStep].sub
+                  : 'We will send a secure 6-digit code to your OSU email.'}
+            </Text>
+          </Animated.View>
+
+          {mode === 'login' ? (
+            <Animated.View
+              entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}
+            >
+              <AuthModeSwitch mode={mode} onChange={changeMode} />
+            </Animated.View>
+          ) : null}
+
+          <Animated.View entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}>
+            <Card padded faceStyle={styles.formCard}>
             <View style={styles.form}>
               {errors.form ? <Banner message={errors.form} kind="error" /> : null}
               {mode === 'reset' ? (
@@ -614,44 +624,109 @@ export default function AuthScreen() {
               )}
 
               {mode === 'login' ? (
-                <Button label="Let's go" onPress={submit} loading={busy} size="lg" icon="flash" />
+                <Button label="Sign in with email" onPress={submit} loading={busy} size="lg" />
               ) : null}
               {mode === 'register' ? (
-                <View style={styles.registerActions}>
-                  {registerStep > 1 ? (
-                    <Button
-                      label="Back"
-                      onPress={() => setRegisterStep((step) => (step === 3 ? 2 : 1))}
-                      variant="ghost"
-                      disabled={busy}
-                    />
-                  ) : null}
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      label={registerStep === 3 ? 'Build my profile' : 'Continue'}
-                      onPress={registerStep === 3 ? submit : advanceRegistration}
-                      loading={busy}
-                      size="lg"
-                    />
-                  </View>
-                </View>
+                <Button
+                  label={registerStep === 3 ? 'Create my account' : 'Continue'}
+                  onPress={registerStep === 3 ? submit : advanceRegistration}
+                  loading={busy}
+                  size="lg"
+                />
               ) : null}
             </View>
-          </Card>
-        </Animated.View>
+            </Card>
+          </Animated.View>
 
-        <Text style={[typography.captionSmall, styles.footnote]}>
-          {mode === 'login'
-            ? 'Returning users land straight in the live campus feed.'
-            : mode === 'reset'
-              ? 'Reset codes are sent to your OSU email and expire quickly.'
-              : 'For students 18+. Oval is independent and not affiliated with Ohio State.'}
-        </Text>
+          {mode === 'login' ? (
+            <View style={[styles.trustRow, { borderColor: colors.border }]}>
+              <Ionicons name="shield-checkmark-outline" size={21} color={colors.accentText} />
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.subheading, styles.trustTitle]}>Built for OSU students</Text>
+                <Text style={typography.captionSmall}>Private, campus-verified, and 18+.</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={[typography.captionSmall, styles.footnote]}>
+              {mode === 'reset'
+                ? 'Reset codes expire quickly and are only sent to your school email.'
+                : 'For students 18+. Oval is independent and not affiliated with Ohio State.'}
+            </Text>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </AppBackdrop>
   );
 }
+
+function AuthModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: Exclude<Mode, 'reset'>;
+  onChange: (mode: Mode) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[modeStyles.track, { backgroundColor: colors.surfaceAlt }]}>
+      {(
+        [
+          ['login', 'Sign in'],
+          ['register', 'New here'],
+        ] as const
+      ).map(([value, label]) => {
+        const selected = mode === value;
+        return (
+          <Pressable
+            key={value}
+            onPress={() => onChange(value)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            style={({ pressed }) => [
+              modeStyles.option,
+              selected && {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+              pressed && { opacity: 0.65 },
+            ]}
+          >
+            <Text
+              style={[
+                modeStyles.label,
+                { color: selected ? colors.accentText : colors.sub },
+              ]}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const modeStyles = StyleSheet.create({
+  track: {
+    flexDirection: 'row',
+    borderRadius: radii.sm,
+    padding: 4,
+  },
+  option: {
+    flex: 1,
+    height: 42,
+    borderRadius: radii.xs,
+    borderWidth: BORDER_W,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+});
 
 function CheckRow({
   checked,
@@ -745,41 +820,53 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
     gap: spacing.lg,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center' as const,
   },
-  masthead: {
+  wordmarkRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing.md,
+    justifyContent: 'space-between' as const,
   },
-  markFace: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  campusBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    height: 34,
+    borderRadius: radii.pill,
   },
-  markText: {
-    fontFamily: fonts.display,
-    fontSize: 18,
-    letterSpacing: -0.2,
-    color: t.colors.onPrimary,
+  campusBadgeText: {
+    fontFamily: fonts.bold,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  welcomeArt: {
+    borderRadius: radii.lg,
+    overflow: 'hidden' as const,
+    minHeight: 174,
+    justifyContent: 'flex-end' as const,
+  },
+  welcomeImage: {
+    width: '112%',
+    marginLeft: '-6%',
+    marginBottom: -6,
   },
   heroTitle: {
     fontFamily: fonts.display,
-    fontSize: 31,
-    lineHeight: 37,
-    letterSpacing: -0.7,
+    fontSize: 34,
+    lineHeight: 39,
+    letterSpacing: -0.8,
     color: t.colors.ink,
-    marginTop: spacing.sm,
   },
   heroSub: {
     marginTop: spacing.sm,
     color: t.colors.sub,
-    maxWidth: 300,
+    maxWidth: 360,
   },
-  modeRow: {
-    flexDirection: 'row' as const,
-    gap: spacing.sm,
-  },
-  progressBlock: {
-    marginBottom: spacing.lg,
+  formCard: {
+    padding: spacing.lg,
   },
   form: {
     gap: spacing.lg,
@@ -804,10 +891,16 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexWrap: 'wrap' as const,
     gap: spacing.lg,
   },
-  registerActions: {
+  trustRow: {
     flexDirection: 'row' as const,
-    gap: spacing.sm,
     alignItems: 'center' as const,
+    gap: spacing.md,
+    borderTopWidth: BORDER_W,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.sm,
+  },
+  trustTitle: {
+    marginBottom: 2,
   },
   footnote: {
     textAlign: 'center' as const,

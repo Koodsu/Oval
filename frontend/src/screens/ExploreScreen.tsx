@@ -1,230 +1,362 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   clearActivityDemand,
-  createPod,
   fetchFeed,
   getActivities,
   getApiErrorMessage,
+  getFriends,
+  PUBLIC_SITE_URL,
   requestActivity,
   signalActivityDemand,
+  trackEvent,
 } from '../api';
-import { Activity, Pod } from '../types';
-import { RootStackParamList } from '../../App';
+import type { Activity, FriendUser, Pod } from '../types';
+import type { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
 import {
   AppBackdrop,
+  AvatarStack,
   Banner,
   Button,
-  Chip,
-  EmptyState,
+  Card,
+  ContentImage,
   Field,
   SearchBar,
   SectionHeader,
   Sheet,
-  SkeletonCard,
-  Slab,
-  Sticker,
+  SkeletonHero,
+  SkeletonRow,
+  SpotIllustration,
+  StateActions,
+  StateCopy,
   accentForSeed,
+  useDockClearance,
 } from '../components/ui';
-import PodTemplatePicker from '../components/PodTemplatePicker';
+import { PodDiscoveryRow, podDayLabel, podTimeLabel } from '../components/pulse';
 import { CATEGORY_META, CATEGORIES } from '../constants/categories';
-import { PodTemplate, templateCreateOptions } from '../constants/podTemplates';
+import { activityImageFor } from '../constants/contentImages';
 import { useJoinPod } from '../hooks/useJoinPod';
 import { useLocationPermission } from '../hooks/useLocationPermission';
-import {
-  BORDER_W,
-  DOCK_CLEARANCE,
-  Theme,
-  createThemedStyles,
-  fonts,
-  motion,
-  radii,
-  spacing,
-  useTheme,
-} from '../theme';
-import { formatTime } from '../utils/format';
-
+import { BORDER_W, fonts, radii, spacing, useTheme } from '../theme';
+import { getPodTitle, sortUpcomingPods } from '../utils/experience';
 import { toast } from '../lib/toast';
+
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const MAX_TRUSTWORTHY_DISTANCE_MILES = 25;
+const exploreZeroSpot = require('../../assets/illustrations/spot/cold-start/02-explore-first-move.png');
+const searchMissSpot = require('../../assets/illustrations/spot/cold-start/07-no-search-results.png');
+const inviteFriendsSpot = require('../../assets/illustrations/spot/invites/01-invite-friends.png');
 
-function formatParticipantCount(pods: Pod[]) {
-  const total = pods.reduce((sum, pod) => sum + pod.members.length, 0);
-  return `${total} student${total === 1 ? '' : 's'} joined`;
-}
-
-function categoryShortLabel(category: string) {
-  const meta = CATEGORY_META[category];
-  if (meta) return meta.label.split(' & ')[0];
-  return category;
-}
-
-function distanceMiles(
-  from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number },
-) {
-  const earthRadiusMiles = 3958.8;
-  const toRadians = (value: number) => (value * Math.PI) / 180;
-  const dLat = toRadians(to.latitude - from.latitude);
-  const dLng = toRadians(to.longitude - from.longitude);
-  const lat1 = toRadians(from.latitude);
-  const lat2 = toRadians(to.latitude);
-  const a =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * earthRadiusMiles * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function formatDistanceLabel(miles: number) {
-  if (miles < 0.1) return '<0.1 mi';
-  if (miles < 10) return `${miles.toFixed(1)} mi`;
-  return `${Math.round(miles)} mi`;
-}
-
-function isUsableCoordinate(coords: { latitude: number; longitude: number } | null | undefined) {
-  if (!coords) return false;
-  return (
-    Number.isFinite(coords.latitude) &&
-    Number.isFinite(coords.longitude) &&
-    Math.abs(coords.latitude) <= 90 &&
-    Math.abs(coords.longitude) <= 180 &&
-    !(coords.latitude === 0 && coords.longitude === 0)
-  );
-}
-
-function trustworthyDistanceLabel(
-  activePods: Pod[],
-  userLocation: { latitude: number; longitude: number } | null,
-) {
-  if (!isUsableCoordinate(userLocation)) return null;
-  const podsWithCoordinates = activePods.filter(
-    (pod) => pod.latitude != null && pod.longitude != null,
-  );
-  if (userLocation && podsWithCoordinates.length) {
-    const nearestMiles = Math.min(
-      ...podsWithCoordinates.map((pod) =>
-        distanceMiles(userLocation, {
-          latitude: pod.latitude ?? 0,
-          longitude: pod.longitude ?? 0,
-        }),
-      ),
-    );
-    if (nearestMiles > MAX_TRUSTWORTHY_DISTANCE_MILES) return null;
-    return formatDistanceLabel(nearestMiles);
-  }
-  return null;
-}
-
-function ctaLabel(liveCount: number) {
-  if (liveCount === 1) return 'Join pod';
-  if (liveCount > 1) return 'View pods';
-  return 'Start pod';
-}
-
-function activePodLocation(activePods: Pod[]) {
-  const rawLocation = activePods.find((pod) => pod.location.trim())?.location.trim();
-  if (!rawLocation) return null;
-  const firstPart = rawLocation.split('•')[0]?.trim() ?? rawLocation;
-  const words = firstPart.split(/\s+/);
-  const cleanedWords = words.filter(
-    (word, index) => index < 2 || word.toLowerCase() !== words[index - 1]?.toLowerCase(),
-  );
-  const cleaned = cleanedWords.join(' ').replace(/\s+/g, ' ').trim();
-  if (!cleaned || cleaned.length > 36) return 'Near campus';
-  return cleaned;
-}
-
-function displayTitle(activity: Activity) {
-  return activity.title;
-}
-
-type ExploreCard = {
-  activity: Activity;
-  activePods: Pod[];
-  liveCount: number;
-  totalParticipants: number;
+export type ExplorePreviewData = {
+  activities: Activity[];
+  feed: Pod[];
+  friends?: FriendUser[];
+  query?: string;
+  category?: string | null;
 };
+
+function activityMatches(activity: Activity, query: string) {
+  if (!query) return true;
+  return [activity.title, activity.description, activity.category, activity.defaultLocation]
+    .join(' ')
+    .toLowerCase()
+    .includes(query);
+}
+
+function PodFeatureCard({
+  pod,
+  friendIds,
+  mine,
+  joining,
+  onOpen,
+  onJoin,
+}: {
+  pod: Pod;
+  friendIds: Set<string>;
+  mine: boolean;
+  joining: boolean;
+  onOpen: () => void;
+  onJoin: () => void;
+}) {
+  const { colors, typography } = useTheme();
+  const friendsGoing = pod.members.filter((member) => friendIds.has(member.userId));
+  const title = getPodTitle(pod);
+
+  return (
+    <Card padded={false} style={styles.featureCard} faceStyle={styles.featureCardFace}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${title}`}
+        style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}
+      >
+        <ContentImage
+          source={activityImageFor(pod.activity)}
+          seed={pod.activity?.id ?? pod.activityId}
+          aspectRatio={1}
+          style={styles.featureImage}
+        />
+        <View style={styles.featureCopy}>
+          <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            {pod.location}
+          </Text>
+          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
+          </Text>
+          <View style={styles.featureSocial}>
+            <AvatarStack
+              names={pod.members.slice(0, 3).map((member) => ({
+                name: member.user.name,
+                uri: member.user.avatarUrl,
+              }))}
+              overflowCount={Math.max(0, pod.members.length - 3)}
+              size={20}
+            />
+            <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+              {friendsGoing.length
+                ? `${friendsGoing.length} ${
+                    friendsGoing.length === 1 ? 'friend' : 'friends'
+                  } going`
+                : `${pod.members.length} going`}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+      <Button
+        label={mine ? 'Open pod' : joining ? 'Joining…' : 'Join'}
+        onPress={mine ? onOpen : onJoin}
+        disabled={joining}
+        variant={mine ? 'secondary' : 'primary'}
+        size="sm"
+        style={styles.featureButton}
+      />
+    </Card>
+  );
+}
+
+function ActivityIdeaCard({
+  activity,
+  busy,
+  onOpen,
+  onStart,
+  onDemand,
+}: {
+  activity: Activity;
+  busy: boolean;
+  onOpen: () => void;
+  onStart: () => void;
+  onDemand: () => void;
+}) {
+  const { colors, typography } = useTheme();
+  const source = activityImageFor(activity);
+
+  return (
+    <Card padded={false} style={styles.ideaCard} faceStyle={styles.ideaCardFace}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${activity.title}`}
+        style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}
+      >
+        <ContentImage
+          source={source}
+          seed={activity.id}
+          aspectRatio={4 / 3}
+          style={styles.ideaImage}
+        />
+        <View style={styles.ideaCopy}>
+          <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
+            {activity.title}
+          </Text>
+          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            {activity.category}
+          </Text>
+        </View>
+      </Pressable>
+      <View style={styles.ideaActions}>
+        <Pressable
+          onPress={onDemand}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel={
+            activity.myDemanded
+              ? `Remove interest in ${activity.title}`
+              : `Interested in ${activity.title}`
+          }
+          style={({ pressed }) => [
+            styles.demandPill,
+            {
+              backgroundColor: activity.myDemanded ? colors.primarySoft : colors.surfaceAlt,
+              opacity: busy ? 0.5 : pressed ? 0.68 : 1,
+            },
+          ]}
+        >
+          <Ionicons
+            name={activity.myDemanded ? 'checkmark' : 'hand-left-outline'}
+            size={13}
+            color={activity.myDemanded ? colors.accentText : colors.sub}
+          />
+          <Text style={[typography.captionSmall, { color: colors.sub }]}>
+            {busy ? '…' : activity.demandCount ?? 0}
+          </Text>
+        </Pressable>
+        <Button label="Start a pod" onPress={onStart} size="sm" />
+      </View>
+    </Card>
+  );
+}
+
+function PromoBanner({
+  kind,
+  onPress,
+}: {
+  kind: 'request' | 'invite';
+  onPress: () => void;
+}) {
+  const { colors, typography } = useTheme();
+  const invite = kind === 'invite';
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={invite ? 'Invite friends' : 'Request an activity'}
+      style={({ pressed }) => [
+        styles.promo,
+        {
+          backgroundColor: invite ? colors.tealSoft : colors.amberSoft,
+          borderColor: colors.border,
+          opacity: pressed ? 0.74 : 1,
+        },
+      ]}
+    >
+      <View style={styles.promoCopy}>
+        <Text style={[typography.title, { color: colors.ink }]}>
+          {invite ? 'Invite friends' : 'Request an activity'}
+        </Text>
+        <Text style={[typography.caption, { color: colors.sub }]}>
+          {invite ? 'More people means more possibilities.' : "Don't see it? Tell us what you want."}
+        </Text>
+        <View style={[styles.promoButton, { backgroundColor: colors.surface }]}>
+          <Text style={[typography.button, { color: colors.ink }]}>
+            {invite ? 'Invite friends' : 'Request activity'}
+          </Text>
+          <Ionicons
+            name={invite ? 'share-outline' : 'chevron-forward'}
+            size={16}
+            color={colors.ink}
+          />
+        </View>
+      </View>
+      {invite ? (
+        <Image source={inviteFriendsSpot} resizeMode="contain" style={styles.promoArt} />
+      ) : (
+        <View style={styles.requestArt} accessibilityElementsHidden>
+          <Ionicons name="chatbubble" size={58} color={colors.amber} />
+          <Ionicons
+            name="reorder-three"
+            size={28}
+            color={colors.surface}
+            style={styles.requestLines}
+          />
+          <View style={[styles.requestBubbleBack, { backgroundColor: colors.surface }]} />
+        </View>
+      )}
+    </Pressable>
+  );
+}
 
 export default function ExploreScreen({
   startCreate,
+  initialCategory,
+  initialCategoryNonce,
   embedded,
+  previewData,
 }: {
   startCreate?: number;
+  initialCategory?: string;
+  initialCategoryNonce?: number;
   embedded?: boolean;
+  previewData?: ExplorePreviewData;
 }) {
   const navigation = useNavigation<Nav>();
-  const { colors, typography } = useTheme();
-  const styles = useStyles();
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { colors, typography } = useTheme();
+  const insets = useSafeAreaInsets();
+  const dockClearance = useDockClearance();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [feed, setFeed] = useState<Pod[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState(previewData?.query ?? '');
+  const [category, setCategory] = useState<string | null>(
+    previewData?.category ?? initialCategory ?? null,
+  );
+  const [activities, setActivities] = useState<Activity[]>(previewData?.activities ?? []);
+  const [feed, setFeed] = useState<Pod[]>(previewData?.feed ?? []);
+  const [friends, setFriends] = useState<FriendUser[]>(previewData?.friends ?? []);
+  const [loaded, setLoaded] = useState(Boolean(previewData));
   const [refreshing, setRefreshing] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(8);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestTitle, setRequestTitle] = useState('');
   const [requestCategory, setRequestCategory] = useState(CATEGORIES[0]);
   const [requestDescription, setRequestDescription] = useState('');
   const [requestBusy, setRequestBusy] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
-  const [templateOpen, setTemplateOpen] = useState(false);
-  const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
   const [demandBusyId, setDemandBusyId] = useState<string | null>(null);
   const [customHint, setCustomHint] = useState<string | null>(null);
-  const { join: joinInline, busyPodId: busyJoinPodId } = useJoinPod();
+  const { join, busyPodId } = useJoinPod();
   const handledStartCreateRef = React.useRef<number | null>(null);
-  const deferredQuery = useDeferredValue(query);
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
   const load = useCallback(async () => {
-    try {
-      const [activityList, podFeed] = await Promise.all([
-        getActivities(category ?? undefined),
-        fetchFeed(category ? { category } : {}),
-      ]);
-      setActivities(activityList);
-      setFeed(podFeed);
-      setLoadWarning(null);
-    } catch {
-      setLoadWarning("Couldn't refresh — pull to retry.");
-    } finally {
+    if (previewData) {
+      setActivities(previewData.activities);
+      setFeed(previewData.feed);
+      setFriends(previewData.friends ?? []);
       setLoaded(true);
       setRefreshing(false);
+      return;
     }
-  }, [category]);
-
-  const explainAndRequestLocation = useCallback(() => {
-    Alert.alert(
-      'Use campus location?',
-      'Oval uses your location to sort nearby pods and show distance hints. Your exact location is not posted to pods.',
-      [
-        { text: 'Not now', style: 'cancel' },
-        {
-          text: 'Continue',
-          onPress: () => {
-            void requestLocation().then((allowed) => {
-              if (!allowed) {
-                toast.info(
-                  'Location is off',
-                  'No problem. You can still browse every activity and join pods normally.',
-                );
-              }
-            });
-          },
-        },
-      ],
+    const feedParams = {
+      ...(category ? { category } : {}),
+      limit: 50,
+      ...(userLocation
+        ? { lat: userLocation.latitude, lng: userLocation.longitude }
+        : {}),
+    };
+    const [activityResult, feedResult, friendResult] = await Promise.allSettled([
+      getActivities(category ?? undefined),
+      fetchFeed(feedParams),
+      getFriends(),
+    ]);
+    if (activityResult.status === 'fulfilled') setActivities(activityResult.value);
+    if (feedResult.status === 'fulfilled') setFeed(feedResult.value);
+    if (friendResult.status === 'fulfilled') setFriends(friendResult.value);
+    setLoadWarning(
+      activityResult.status === 'rejected' && feedResult.status === 'rejected'
+        ? "Couldn't refresh — pull to retry."
+        : null,
     );
-  }, [requestLocation]);
+    setLoaded(true);
+    setRefreshing(false);
+  }, [category, previewData, userLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -233,59 +365,55 @@ export default function ExploreScreen({
   );
 
   useEffect(() => {
-    setVisibleCount(12);
+    setVisibleCount(8);
   }, [category, deferredQuery]);
 
   useEffect(() => {
-    // Nonce-keyed: each [+] → "Start a pod" tap carries a fresh Date.now(), so
-    // the picker re-opens every time (a boolean here only ever fired once).
+    if (!initialCategory) return;
+    setQuery('');
+    setCategory(initialCategory);
+  }, [initialCategory, initialCategoryNonce]);
+
+  useEffect(() => {
     if (!startCreate || handledStartCreateRef.current === startCreate || !loaded) return;
     handledStartCreateRef.current = startCreate;
-    setTemplateOpen(true);
+    setCategory(null);
+    setQuery('');
+    setCustomHint('Choose an activity below to start your pod.');
   }, [loaded, startCreate]);
 
-  const cards = useMemo<ExploreCard[]>(() => {
-    const q = deferredQuery.trim().toLowerCase();
-    return activities
-      .filter((activity) => {
-        if (category && activity.category !== category) return false;
-        if (!q) return true;
-        return [activity.title, activity.description, activity.category, activity.defaultLocation]
-          .join(' ')
-          .toLowerCase()
-          .includes(q);
-      })
-      .map((activity) => {
-        const pods = feed.filter((pod) => pod.activityId === activity.id);
-        const activePods = pods.filter((pod) => pod.status === 'FORMING');
-        const liveCount = activePods.length;
-        const totalParticipants = activePods.reduce((sum, pod) => sum + pod.members.length, 0);
-        return { activity, activePods, liveCount, totalParticipants };
-      })
-      .sort((a, b) => {
-        if (b.liveCount !== a.liveCount) return b.liveCount - a.liveCount;
-        if (b.totalParticipants !== a.totalParticipants)
-          return b.totalParticipants - a.totalParticipants;
-        return a.activity.title.localeCompare(b.activity.title);
-      });
-  }, [activities, category, deferredQuery, feed]);
+  const explainAndRequestLocation = useCallback(() => {
+    Alert.alert(
+      'Use campus location?',
+      'Oval uses your location to sort nearby pods. Your exact location is never posted.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            void requestLocation().then((allowed) => {
+              if (!allowed) toast.info('Location is off', 'You can still browse and join normally.');
+            });
+          },
+        },
+      ],
+    );
+  }, [requestLocation]);
 
-  const liveCards = useMemo(() => cards.filter((item) => item.liveCount > 0).slice(0, 6), [cards]);
-  const totalLivePods = useMemo(() => cards.reduce((sum, item) => sum + item.liveCount, 0), [cards]);
-  const joinableFeed = useMemo(
-    () =>
-      feed
-        .filter(
-          (pod) =>
-            pod.status === 'FORMING' &&
-            pod.members.length < pod.maxMembers &&
-            !pod.members.some((member) => member.userId === user?.id),
-        )
-        .sort((a, b) => new Date(a.meetupTime).getTime() - new Date(b.meetupTime).getTime())
-        .slice(0, 3),
-    [feed, user?.id],
-  );
-  const visibleCards = cards.slice(0, visibleCount);
+  const shareInvite = useCallback(async (surface: string) => {
+    try {
+      const result = await Share.share({
+        title: 'Oval',
+        message: 'Join me on Oval!',
+        url: PUBLIC_SITE_URL,
+      });
+      if (result.action !== Share.dismissedAction) {
+        void trackEvent('invite.shared', { surface });
+      }
+    } catch (error) {
+      toast.error('Could not open sharing', getApiErrorMessage(error));
+    }
+  }, []);
 
   const openActivityRequest = () => {
     setRequestSubmitted(false);
@@ -300,8 +428,6 @@ export default function ExploreScreen({
     }
     setRequestBusy(true);
     try {
-      // No location here on purpose: catalog entries describe *what* the
-      // activity is; each pod picks *where* it meets when it's created.
       await requestActivity({
         title: requestTitle.trim(),
         category: requestCategory,
@@ -315,32 +441,6 @@ export default function ExploreScreen({
     } finally {
       setRequestBusy(false);
     }
-  };
-
-  const handleTemplateCreate = async ({
-    template,
-    activity,
-  }: {
-    template: PodTemplate;
-    activity: Activity;
-  }) => {
-    setBusyTemplateId(template.id);
-    try {
-      const pod = await createPod(activity.id, templateCreateOptions(template));
-      setTemplateOpen(false);
-      navigation.navigate('PodDetail', { podId: pod.id, justCreated: true });
-    } catch (error) {
-      toast.error('Could not start pod', getApiErrorMessage(error));
-    } finally {
-      setBusyTemplateId(null);
-    }
-  };
-
-  const handleCustomTemplate = () => {
-    // No single activity context here — closing reveals the activity grid, so
-    // tell the user what to do next instead of silently doing nothing.
-    setTemplateOpen(false);
-    setCustomHint('Pick an activity below to build a custom pod.');
   };
 
   const toggleDemand = async (activity: Activity) => {
@@ -357,19 +457,214 @@ export default function ExploreScreen({
         ),
       );
     } catch (error) {
-      toast.error('Could not update demand', getApiErrorMessage(error));
+      toast.error('Could not update interest', getApiErrorMessage(error));
     } finally {
       setDemandBusyId(null);
     }
   };
+
+  const upcoming = useMemo(() => sortUpcomingPods(feed), [feed]);
+  const filteredActivities = useMemo(
+    () =>
+      activities.filter(
+        (activity) =>
+          (!category || activity.category === category) &&
+          activityMatches(activity, deferredQuery),
+      ),
+    [activities, category, deferredQuery],
+  );
+  const filteredPods = useMemo(
+    () =>
+      upcoming.filter((pod) => {
+        if (category && pod.activity?.category !== category) return false;
+        if (!deferredQuery) return true;
+        return [
+          pod.activity?.title,
+          pod.activity?.description,
+          pod.activity?.category,
+          pod.location,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(deferredQuery);
+      }),
+    [category, deferredQuery, upcoming],
+  );
+  const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
+  const searchMiss =
+    Boolean(deferredQuery) && filteredActivities.length === 0 && filteredPods.length === 0;
+  const featuredPods = filteredPods.slice(0, 3);
+  const remainingPods = filteredPods.slice(3);
+  const visiblePods = remainingPods.slice(0, visibleCount);
+  const isMine = (pod: Pod) => pod.members.some((member) => member.userId === user?.id);
+  const featuredActivityIds = new Set(featuredPods.map((pod) => pod.activityId));
+  const orderedActivities = useMemo(
+    () =>
+      [...filteredActivities].sort((a, b) => {
+        const featuredDifference =
+          Number(featuredActivityIds.has(a.id)) - Number(featuredActivityIds.has(b.id));
+        if (featuredDifference) return featuredDifference;
+        return (b.demandCount ?? 0) - (a.demandCount ?? 0);
+      }),
+    [featuredActivityIds, filteredActivities],
+  );
+
+  const openPod = (pod: Pod) => navigation.navigate('PodDetail', { podId: pod.id });
+  const openActivity = (activity: Activity, startCreate = false) =>
+    navigation.navigate('ActivityPods', { activity, startCreate });
+
+  const renderActivityRail = (title = 'Start with an activity') =>
+    orderedActivities.length ? (
+      <View style={styles.sectionStack}>
+        <SectionHeader
+          title={title}
+          actionLabel="Browse all"
+          onAction={() => {
+            setCategory(null);
+            setQuery('');
+          }}
+        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalRail}
+        >
+          {orderedActivities.slice(0, 8).map((activity) => (
+            <ActivityIdeaCard
+              key={activity.id}
+              activity={activity}
+              busy={demandBusyId === activity.id}
+              onOpen={() => openActivity(activity)}
+              onStart={() => openActivity(activity, true)}
+              onDemand={() => void toggleDemand(activity)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+    ) : null;
+
+  const renderPromos = () => (
+    <View style={styles.promoStack}>
+      <PromoBanner kind="request" onPress={openActivityRequest} />
+      <PromoBanner kind="invite" onPress={() => void shareInvite('explore_editorial')} />
+    </View>
+  );
+
+  const renderZero = () => (
+    <View style={styles.sectionStack}>
+      <Card faceStyle={styles.zeroStateCard}>
+        <View style={styles.zeroStateIntro}>
+          <SpotIllustration
+            source={exploreZeroSpot}
+            accessibilityLabel="A student making the first campus plan"
+            height={112}
+            style={styles.zeroStateArt}
+          />
+          <View style={styles.zeroStateCopy}>
+            <Text style={[typography.kicker, { color: colors.sub }]}>Campus starts here</Text>
+            <Text style={[styles.zeroStateTitle, { color: colors.ink }]}>
+              Be the first plan on the board
+            </Text>
+            <Text style={[typography.caption, { color: colors.sub }]}>
+              Pick an activity and Oval will turn it into a small group.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.zeroStateActions}>
+          <Button
+            label="Choose an activity"
+            icon="search"
+            onPress={() => setCustomHint('Choose an activity below to start your pod.')}
+            style={styles.zeroStateAction}
+          />
+          <Button
+            label="Invite a friend"
+            icon="share-outline"
+            onPress={() => void shareInvite('explore_zero')}
+            variant="secondary"
+            style={styles.zeroStateAction}
+          />
+        </View>
+      </Card>
+      {renderActivityRail('Choose your first activity')}
+      {renderPromos()}
+    </View>
+  );
+
+  const renderDiscovery = () => (
+    <View style={styles.discoveryStack}>
+      {featuredPods.length ? (
+        <View style={styles.sectionStack}>
+          <SectionHeader
+            title={deferredQuery ? 'Matching pods' : 'Featured this week'}
+            actionLabel="Browse activities"
+            onAction={() => {
+              setQuery('');
+              setCategory(null);
+              setCustomHint('Choose an activity below to start your pod.');
+            }}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalRail}
+          >
+            {featuredPods.map((pod) => (
+              <PodFeatureCard
+                key={pod.id}
+                pod={pod}
+                friendIds={friendIds}
+                mine={isMine(pod)}
+                joining={busyPodId === pod.id}
+                onOpen={() => openPod(pod)}
+                onJoin={() => void join(pod)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {renderActivityRail(deferredQuery ? 'Matching activities' : 'Find an activity to start')}
+
+      {visiblePods.length ? (
+        <View style={styles.sectionStack}>
+          <SectionHeader
+            title={granted ? 'Pods near you' : 'More pods this week'}
+            actionLabel={remainingPods.length > visibleCount ? 'Show more' : undefined}
+            onAction={
+              remainingPods.length > visibleCount
+                ? () => setVisibleCount((count) => count + 8)
+                : undefined
+            }
+          />
+          <View style={styles.podList}>
+            {visiblePods.map((pod) => (
+              <PodDiscoveryRow
+                key={pod.id}
+                pod={pod}
+                friendIds={friendIds}
+                onOpen={() => openPod(pod)}
+                onJoin={isMine(pod) ? undefined : () => void join(pod)}
+                joining={busyPodId === pod.id}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {!deferredQuery ? renderPromos() : null}
+    </View>
+  );
 
   return (
     <AppBackdrop>
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          // Inside Discover the segmented header already clears the status bar.
-          { paddingTop: embedded ? spacing.md : insets.top + spacing.md },
+          {
+            paddingTop: embedded ? spacing.md : insets.top + spacing.md,
+            paddingBottom: embedded ? spacing.xl : dockClearance,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -385,542 +680,436 @@ export default function ExploreScreen({
           />
         }
       >
-        {/* Masthead */}
-        <Animated.View entering={FadeInDown.duration(motion.durBase)}>
-          <View style={styles.masthead}>
-            <View style={{ flex: 1 }}>
-              <Text style={[typography.kicker, { color: colors.accentText }]}>FIND YOUR PEOPLE</Text>
-              <Text style={styles.pageTitle}>Explore</Text>
-              <View style={styles.liveSummary}>
-                <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
-                <Text style={typography.caption}>
-                  {loaded
-                    ? totalLivePods
-                      ? `${totalLivePods} pod${totalLivePods === 1 ? '' : 's'} live across campus`
-                      : 'Quiet right now — start something'
-                    : 'Reading campus…'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ gap: spacing.sm, alignItems: 'flex-end' }}>
-              {user?.isAdmin ? (
-                <Chip
-                  label="Review"
-                  icon="checkmark-done"
-                  onPress={() => navigation.navigate('AdminActivityRequests')}
-                  tint={colors.violetSoft}
-                  selected
-                />
-              ) : null}
-              {!granted && canAskAgain ? (
-                <Chip
-                  label="Nearby"
-                  icon="navigate"
-                  onPress={explainAndRequestLocation}
-                  tint={colors.tealSoft}
-                  selected
-                />
-              ) : null}
-            </View>
-          </View>
-        </Animated.View>
-        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
-        {customHint ? <Banner message={customHint} kind="info" onDismiss={() => setCustomHint(null)} /> : null}
-
-        <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
-          <SearchBar
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search activities or places"
-          />
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(motion.stagger * 2).duration(motion.durBase)}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            <Chip label="All" selected={!category} onPress={() => setCategory(null)} />
-            {CATEGORIES.map((item) => (
-              <Chip
-                key={item}
-                label={categoryShortLabel(item)}
-                selected={category === item}
-                tint={category === item ? accentForSeed(colors, item).soft : undefined}
-                onPress={() => setCategory(item)}
-              />
-            ))}
-          </ScrollView>
-        </Animated.View>
-
-        {/* Live right now rail */}
-        {loaded && liveCards.length ? (
-          <Animated.View
-            entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
-            style={styles.section}
-          >
-            <SectionHeader kicker="Happening" title="Live right now" />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
+        <View style={styles.header}>
+          <Text style={[styles.screenTitle, { color: colors.ink }]}>Explore</Text>
+          {user?.isAdmin ? (
+            <Pressable
+              onPress={() => navigation.navigate('AdminActivityRequests')}
+              accessibilityRole="button"
+              accessibilityLabel="Review activity requests"
+              style={({ pressed }) => [
+                styles.adminButton,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.65 : 1,
+                },
+              ]}
             >
-              {liveCards.map((item, index) => {
-                const meta = CATEGORY_META[item.activity.category];
-                const accent = accentForSeed(colors, item.activity.category ?? item.activity.title);
-                const podLocation = activePodLocation(item.activePods);
-                const distanceLabel = trustworthyDistanceLabel(item.activePods, userLocation);
-                return (
-                  <Slab
-                    key={item.activity.id}
-                    onPress={() => navigation.navigate('ActivityPods', { activity: item.activity })}
-                    color={accent.soft}
-                    tilt={index % 2 === 0 ? -0.8 : 0.8}
-                    style={styles.liveCard}
-                    faceStyle={styles.liveCardFace}
-                    accessibilityLabel={`${displayTitle(item.activity)}, ${item.liveCount} active pod${item.liveCount === 1 ? '' : 's'}`}
-                  >
-                    <View style={styles.liveCardTop}>
-                      <View
-                        style={[
-                          styles.liveCardIcon,
-                          { backgroundColor: colors.surface, borderColor: colors.border },
-                        ]}
-                      >
-                        <Ionicons
-                          name={meta?.icon ?? 'sparkles-outline'}
-                          size={20}
-                          color={accent.tint}
-                        />
-                      </View>
-                      <Sticker
-                        label={`${item.liveCount} LIVE`}
-                        tint={colors.primary}
-                        textColor={colors.onPrimary}
-                        tilt={3}
-                        small
-                      />
-                    </View>
-                    <Text style={typography.heading} numberOfLines={1}>
-                      {displayTitle(item.activity)}
-                    </Text>
-                    <View style={styles.factList}>
-                      <View style={styles.factItem}>
-                        <Ionicons name="people" size={12} color={colors.sub} />
-                        <Text style={styles.factText} numberOfLines={1}>
-                          {formatParticipantCount(item.activePods)}
-                        </Text>
-                      </View>
-                      {podLocation ? (
-                        <View style={styles.factItem}>
-                          <Ionicons name="location" size={12} color={colors.sub} />
-                          <Text style={styles.factText} numberOfLines={1}>
-                            {podLocation}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {distanceLabel ? (
-                        <View style={styles.factItem}>
-                          <Ionicons name="navigate" size={12} color={colors.sub} />
-                          <Text style={styles.factText}>{distanceLabel}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Slab>
-                );
-              })}
-            </ScrollView>
-          </Animated.View>
-        ) : null}
-
-        {/* Happening now — joinable pods with inline Join (02 §3) */}
-        {loaded && joinableFeed.length ? (
-          <Animated.View
-            entering={FadeInDown.delay(motion.stagger * 3).duration(motion.durBase)}
-            style={styles.section}
-          >
-            <SectionHeader kicker="Open spots" title="Happening now" />
-            {joinableFeed.map((pod) => {
-              const spotsLeft = Math.max(0, pod.maxMembers - pod.members.length);
-              return (
-                <Slab
-                  key={pod.id}
-                  onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
-                  faceStyle={styles.joinRowFace}
-                  accessibilityLabel={pod.activity?.title ?? 'Pod'}
-                >
-                  <View
-                    style={[
-                      styles.joinTimeBlock,
-                      { backgroundColor: colors.primarySoft, borderColor: colors.border },
-                    ]}
-                  >
-                    <Text style={styles.joinTimeText}>{formatTime(pod.meetupTime)}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Text style={typography.heading} numberOfLines={1}>
-                      {pod.activity?.title ?? 'Pod'}
-                    </Text>
-                    <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
-                      {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left · {pod.location}
-                    </Text>
-                  </View>
-                  <Button
-                    label={busyJoinPodId === pod.id ? 'Joining…' : 'Join'}
-                    size="sm"
-                    variant="secondary"
-                    disabled={Boolean(busyJoinPodId)}
-                    onPress={() => void joinInline(pod)}
-                  />
-                </Slab>
-              );
-            })}
-          </Animated.View>
-        ) : null}
-
-        {/* Browse grid */}
-        <View style={styles.section}>
-          <SectionHeader kicker="The catalog" title="Browse activities" />
-          {!loaded ? (
-            <>
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </>
-          ) : cards.length ? (
-            <View style={styles.grid}>
-              {visibleCards.map((item, cardIndex) => {
-                const meta = CATEGORY_META[item.activity.category];
-                const accent = accentForSeed(colors, item.activity.category ?? item.activity.title);
-                const hasActivePods = item.liveCount > 0;
-                return (
-                  <Animated.View
-                    key={item.activity.id}
-                    entering={FadeInDown.delay(Math.min(cardIndex, 6) * motion.stagger).duration(
-                      motion.durBase,
-                    )}
-                    style={styles.gridSlot}
-                  >
-                    <Slab
-                      onPress={() =>
-                        navigation.navigate('ActivityPods', { activity: item.activity })
-                      }
-                      style={{ flex: 1 }}
-                      faceStyle={styles.tileFace}
-                      accessibilityLabel={displayTitle(item.activity)}
-                    >
-                      <View style={styles.tileTop}>
-                        <View
-                          style={[
-                            styles.tileIcon,
-                            { backgroundColor: accent.soft, borderColor: colors.border },
-                          ]}
-                        >
-                          <Ionicons
-                            name={meta?.icon ?? 'sparkles-outline'}
-                            size={20}
-                            color={accent.tint}
-                          />
-                        </View>
-                        {hasActivePods ? (
-                          <Sticker
-                            label={String(item.liveCount)}
-                            tint={colors.primary}
-                            textColor={colors.onPrimary}
-                            tilt={4}
-                            small
-                          />
-                        ) : null}
-                      </View>
-                      <Text style={styles.tileCategory} numberOfLines={1}>
-                        {(meta?.label ?? item.activity.category ?? '').toUpperCase()}
-                      </Text>
-                      <Text style={[typography.heading, styles.tileTitle]} numberOfLines={2}>
-                        {displayTitle(item.activity)}
-                      </Text>
-                      <Text style={styles.tileDescription} numberOfLines={2}>
-                        {item.activity.description}
-                      </Text>
-                      <View style={[styles.tileFooter, { borderTopColor: colors.borderSoft }]}>
-                        {hasActivePods ? (
-                          <>
-                            <Text style={[styles.tileCta, { color: colors.primary }]}>
-                              {ctaLabel(item.liveCount)}
-                            </Text>
-                            <Ionicons name="arrow-forward" size={13} color={colors.primary} />
-                          </>
-                        ) : (
-                          <Chip
-                            label={
-                              demandBusyId === item.activity.id
-                                ? 'Saving'
-                                : item.activity.myDemanded
-                                ? 'You are down'
-                                : item.activity.demandCount
-                                  ? `${item.activity.demandCount} down`
-                                  : "I'm down"
-                            }
-                            icon={item.activity.myDemanded ? 'checkmark' : 'sparkles'}
-                            selected={Boolean(item.activity.myDemanded)}
-                            tint={colors.primarySoft}
-                            onPress={
-                              demandBusyId ? undefined : () => void toggleDemand(item.activity)
-                            }
-                          />
-                        )}
-                      </View>
-                    </Slab>
-                  </Animated.View>
-                );
-              })}
-            </View>
-          ) : (
-            <EmptyState
-              icon="telescope"
-              title="Nothing matches that view"
-              body="Try another category or search for a different place."
-              actionLabel="Clear filters"
-              onAction={() => {
-                setCategory(null);
-                setQuery('');
-              }}
-            />
-          )}
-          {visibleCount < cards.length ? (
-            <Button
-              label={`Show ${Math.min(12, cards.length - visibleCount)} more`}
-              onPress={() => setVisibleCount((count) => count + 12)}
-              variant="secondary"
-            />
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.sub} />
+            </Pressable>
           ) : null}
-          <View style={{ gap: spacing.sm, alignItems: 'center' }}>
-            <Text style={[typography.captionSmall, { color: colors.sub }]}>
-              Don&apos;t see your activity in the catalog?
-            </Text>
-            <Button
-              label="Suggest an activity"
-              icon="bulb-outline"
-              variant="secondary"
-              onPress={openActivityRequest}
-            />
-          </View>
         </View>
+
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          onClear={() => setQuery('')}
+          placeholder="Search pods, activities, and places"
+        />
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRail}
+        >
+          <Pressable
+            onPress={() => setCategory(null)}
+            style={({ pressed }) => [
+              styles.filterPill,
+              {
+                backgroundColor: !category ? colors.primary : colors.surface,
+                borderColor: !category ? colors.primary : colors.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterLabel,
+                { color: !category ? colors.onPrimary : colors.sub },
+              ]}
+            >
+              All
+            </Text>
+          </Pressable>
+          {CATEGORIES.map((value) => {
+            const accent = accentForSeed(colors, value);
+            const selected = category === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => setCategory(selected ? null : value)}
+                style={({ pressed }) => [
+                  styles.filterPill,
+                  {
+                    backgroundColor: selected ? accent.tint : accent.soft,
+                    borderColor: selected ? accent.tint : colors.border,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterLabel,
+                    { color: selected ? colors.onPrimary : colors.ink },
+                  ]}
+                >
+                  {CATEGORY_META[value]?.label.split(' & ')[0] ?? value}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {!granted && canAskAgain ? (
+            <Pressable
+              onPress={explainAndRequestLocation}
+              style={({ pressed }) => [
+                styles.filterPill,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="location-outline" size={14} color={colors.sub} />
+              <Text style={[styles.filterLabel, { color: colors.sub }]}>Nearby</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
+
+        {customHint ? (
+          <Banner message={customHint} kind="info" onDismiss={() => setCustomHint(null)} />
+        ) : null}
+        {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
+
+        {!loaded ? (
+          <View style={styles.sectionStack}>
+            <SkeletonHero />
+            <SkeletonRow />
+            <SkeletonRow />
+          </View>
+        ) : searchMiss ? (
+          <View style={styles.sectionStack}>
+            <Card faceStyle={styles.stateCard}>
+              <SpotIllustration
+                source={searchMissSpot}
+                accessibilityLabel="No plans matching this search"
+                height={174}
+              />
+              <StateCopy
+                eyebrow="No exact match"
+                title={`Nothing for “${query.trim()}” yet`}
+                body="Request this activity, clear the search, or start a pod from the catalog."
+              />
+              <StateActions
+                primaryLabel="Request activity"
+                onPrimary={openActivityRequest}
+                secondaryLabel="Clear search"
+                onSecondary={() => setQuery('')}
+              />
+            </Card>
+            {renderPromos()}
+          </View>
+        ) : upcoming.length === 0 && !deferredQuery && !category ? (
+          renderZero()
+        ) : (
+          renderDiscovery()
+        )}
       </ScrollView>
-      <Sheet visible={requestOpen} onClose={() => setRequestOpen(false)} title="Suggest an activity" scrollable>
-        <View style={{ gap: spacing.md }}>
-          {requestSubmitted ? <Banner kind="success" message="Submitted - pending approval." /> : null}
-          <Text style={[typography.captionSmall, { color: colors.sub }]}>
-            Suggest something new for the catalog. Once approved, anyone can start pods for it.
-          </Text>
-          <Field
-            label="Title"
-            value={requestTitle}
-            onChangeText={setRequestTitle}
-            placeholder="Pickup volleyball"
-          />
-          <View style={{ gap: spacing.sm }}>
-            <Text style={typography.kicker}>CATEGORY</Text>
-            <View style={styles.chipWrap}>
-              {CATEGORIES.map((item) => (
-                <Chip
-                  key={item}
-                  label={categoryShortLabel(item)}
-                  selected={requestCategory === item}
-                  tint={requestCategory === item ? accentForSeed(colors, item).soft : undefined}
-                  onPress={() => setRequestCategory(item)}
-                />
+
+      <Sheet
+        visible={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        title={requestSubmitted ? 'Request sent' : 'Request an activity'}
+        kicker="Catalog"
+        scrollable
+      >
+        {requestSubmitted ? (
+          <View style={styles.sheetStack}>
+            <StateCopy
+              title="Thanks for the idea"
+              body="Your request is in review. We’ll add it to the catalog if it fits the campus board."
+            />
+            <Button label="Done" onPress={() => setRequestOpen(false)} />
+          </View>
+        ) : (
+          <View style={styles.sheetStack}>
+            <Field
+              label="Activity name"
+              value={requestTitle}
+              onChangeText={setRequestTitle}
+              placeholder="Late-night breakfast"
+            />
+            <Text style={typography.caption}>Category</Text>
+            <View style={styles.requestCategories}>
+              {CATEGORIES.map((value) => (
+                <Pressable
+                  key={value}
+                  onPress={() => setRequestCategory(value)}
+                  style={({ pressed }) => [
+                    styles.requestCategory,
+                    {
+                      backgroundColor:
+                        requestCategory === value ? colors.primarySoft : colors.surface,
+                      borderColor:
+                        requestCategory === value ? colors.primary : colors.border,
+                      opacity: pressed ? 0.68 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.chip, { color: colors.ink }]}>
+                    {CATEGORY_META[value]?.label ?? value}
+                  </Text>
+                </Pressable>
               ))}
             </View>
+            <Field
+              label="What should people know?"
+              value={requestDescription}
+              onChangeText={setRequestDescription}
+              placeholder="Optional"
+              multiline
+            />
+            <Button
+              label={requestBusy ? 'Sending…' : 'Send request'}
+              disabled={requestBusy}
+              onPress={() => void submitActivityRequest()}
+            />
           </View>
-          <Field
-            label="Details"
-            value={requestDescription}
-            onChangeText={setRequestDescription}
-            placeholder="Short description"
-            multiline
-          />
-          <Button
-            label="Submit request"
-            icon="send"
-            loading={requestBusy}
-            onPress={() => void submitActivityRequest()}
-          />
-        </View>
+        )}
       </Sheet>
-      <PodTemplatePicker
-        visible={templateOpen}
-        activities={activities}
-        busyTemplateId={busyTemplateId}
-        onClose={() => setTemplateOpen(false)}
-        onTemplate={(choice) => void handleTemplateCreate(choice)}
-        onCustom={handleCustomTemplate}
-      />
+
     </AppBackdrop>
   );
 }
 
-const useStyles = createThemedStyles((t: Theme) => ({
+const styles = StyleSheet.create({
   content: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: DOCK_CLEARANCE,
+    paddingHorizontal: spacing.lg,
     gap: spacing.lg,
   },
-  masthead: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-    gap: spacing.md,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  pageTitle: {
-    fontFamily: fonts.display,
+  screenTitle: {
+    fontFamily: fonts.displayHeavy,
     fontSize: 28,
-    lineHeight: 33,
-    letterSpacing: -0.6,
-    color: t.colors.ink,
-    marginTop: 4,
+    lineHeight: 34,
+    fontWeight: '800',
   },
-  liveSummary: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 7,
-    marginTop: 6,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  chipRow: {
-    gap: spacing.sm,
-    paddingRight: spacing.xl,
-    paddingVertical: 4,
-  },
-  chipWrap: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: spacing.sm,
-  },
-  section: {
-    gap: spacing.md,
-  },
-  rail: {
-    gap: spacing.md,
-    paddingRight: spacing.xl,
-    paddingVertical: 4,
-  },
-  liveCard: {
-    width: 230,
-  },
-  liveCardFace: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  liveCardTop: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  liveCardIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.sm,
-    borderWidth: BORDER_W,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  factList: {
-    gap: 5,
-  },
-  factItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 5,
-  },
-  factText: {
-    color: t.colors.sub,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    flexShrink: 1,
-  },
-  joinRowFace: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  joinTimeBlock: {
-    minWidth: 70,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: radii.xs,
-    borderWidth: BORDER_W,
-    alignItems: 'center' as const,
-  },
-  joinTimeText: {
-    fontFamily: fonts.bold,
-    fontWeight: '700' as const,
-    fontSize: 12,
-    color: t.colors.ink,
-  },
-  grid: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: spacing.md,
-  },
-  gridSlot: {
-    flexBasis: '47%' as const,
-    flexGrow: 0,
-    maxWidth: '48%' as const,
-  },
-  tileFace: {
-    flex: 1,
-    padding: spacing.md,
-    gap: 7,
-    minHeight: 172,
-  },
-  tileTop: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    marginBottom: 2,
-  },
-  tileIcon: {
+  adminButton: {
     width: 40,
     height: 40,
-    borderRadius: radii.sm,
     borderWidth: BORDER_W,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tileCategory: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: t.colors.sub,
+  filterRail: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
   },
-  tileTitle: {
-    // Reserve two lines so neighboring tiles in a row stay the same height.
-    minHeight: 42,
+  filterPill: {
+    minHeight: 36,
+    borderWidth: BORDER_W,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
   },
-  tileDescription: {
-    fontFamily: fonts.medium,
-    fontSize: 12.5,
-    lineHeight: 17,
-    minHeight: 34,
-    color: t.colors.sub,
-  },
-  tileFooter: {
-    marginTop: 'auto' as const,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  tileCta: {
+  filterLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 12,
-    letterSpacing: 0.1,
+    fontWeight: '600',
+    fontSize: 13,
   },
-}));
+  discoveryStack: {
+    gap: spacing.xxxl,
+  },
+  sectionStack: {
+    gap: spacing.md,
+  },
+  horizontalRail: {
+    gap: spacing.md,
+    paddingRight: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  featureCard: {
+    width: 172,
+  },
+  featureCardFace: {
+    overflow: 'hidden',
+    paddingBottom: spacing.md,
+  },
+  featureImage: {
+    height: 164,
+    borderWidth: 0,
+    borderBottomWidth: BORDER_W,
+    borderRadius: 0,
+  },
+  featureCopy: {
+    padding: spacing.md,
+    paddingBottom: spacing.sm,
+    height: 140,
+    gap: 3,
+  },
+  featureSocial: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.xs,
+  },
+  featureButton: {
+    marginHorizontal: spacing.md,
+  },
+  ideaCard: {
+    width: 184,
+  },
+  ideaCardFace: {
+    overflow: 'hidden',
+    paddingBottom: spacing.md,
+  },
+  ideaImage: {
+    height: 138,
+    borderWidth: 0,
+    borderBottomWidth: BORDER_W,
+    borderRadius: 0,
+  },
+  ideaCopy: {
+    padding: spacing.md,
+    paddingBottom: spacing.sm,
+    height: 88,
+    gap: 3,
+  },
+  ideaActions: {
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  demandPill: {
+    minWidth: 42,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  podList: {
+    gap: spacing.sm,
+  },
+  promoStack: {
+    gap: spacing.md,
+  },
+  promo: {
+    minHeight: 148,
+    borderWidth: BORDER_W,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  promoCopy: {
+    flex: 1,
+    zIndex: 2,
+    gap: 4,
+    alignItems: 'flex-start',
+  },
+  promoButton: {
+    marginTop: 'auto',
+    minHeight: 38,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  promoArt: {
+    position: 'absolute',
+    width: 172,
+    height: 142,
+    right: -14,
+    bottom: -2,
+  },
+  requestArt: {
+    width: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestLines: {
+    position: 'absolute',
+    left: 41,
+    top: 45,
+  },
+  requestBubbleBack: {
+    position: 'absolute',
+    width: 52,
+    height: 40,
+    borderRadius: radii.md,
+    right: -8,
+    top: 18,
+    opacity: 0.48,
+  },
+  stateCard: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+  },
+  zeroStateCard: {
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  zeroStateIntro: {
+    minHeight: 116,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  zeroStateArt: {
+    width: 126,
+    flexShrink: 0,
+  },
+  zeroStateCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5,
+  },
+  zeroStateTitle: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: 21,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  zeroStateActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  zeroStateAction: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sheetStack: {
+    gap: spacing.lg,
+  },
+  requestCategories: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  requestCategory: {
+    borderWidth: BORDER_W,
+    borderRadius: radii.pill,
+    minHeight: 34,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

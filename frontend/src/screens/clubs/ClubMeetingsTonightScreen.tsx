@@ -5,17 +5,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getApiErrorMessage, getClubsWeek } from '../../api';
+import { getApiErrorMessage, getClubs, getClubsWeek } from '../../api';
 import type { RootStackParamList } from '../../../App';
-import { ClubMeetingToday } from '../../types';
+import { ClubDirectoryEntry, ClubMeetingToday } from '../../types';
 import {
   AppBackdrop,
-  ClubMark,
-  EmptyState,
   ScreenHeader,
   Slab,
   Sticker,
 } from '../../components/ui';
+import { ClubEmptyState, ClubPhoto } from '../../components/clubs';
 import { formatTime } from '../../utils/format';
 import {
   BORDER_W,
@@ -80,16 +79,24 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const [meetings, setMeetings] = useState<ClubMeetingToday[]>([]);
+  const [clubs, setClubs] = useState<ClubDirectoryEntry[]>([]);
   const week = useMemo(buildWeek, []);
   const [selectedDay, setSelectedDay] = useState<string>(dayKey(week[0]));
 
   const load = useCallback(async () => {
-    try {
-      const rows = await getClubsWeek();
-      setMeetings(sortMeetings(rows));
-    } catch (error) {
-      toast.error("Could not load this week's meetings", getApiErrorMessage(error));
+    const [meetingResult, clubResult] = await Promise.allSettled([
+      getClubsWeek(),
+      getClubs(),
+    ]);
+    if (meetingResult.status === 'fulfilled') {
+      setMeetings(sortMeetings(meetingResult.value));
+    } else {
+      toast.error(
+        "Could not load this week's meetings",
+        getApiErrorMessage(meetingResult.reason),
+      );
     }
+    if (clubResult.status === 'fulfilled') setClubs(clubResult.value);
   }, []);
 
   useFocusEffect(
@@ -106,6 +113,10 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
     }
     return map;
   }, [meetings]);
+  const clubById = useMemo(
+    () => new Map(clubs.map((club) => [club.id, club])),
+    [clubs],
+  );
 
   const items = useMemo(
     () => sortMeetings(byDay.get(selectedDay) ?? []),
@@ -247,11 +258,11 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
                       accessibilityLabel={`${meeting.clubName}, ${meeting.title}, at ${formatTime(meeting.meetingTime)}`}
                     >
                       <View style={styles.meetingTop}>
-                        <ClubMark
+                        <ClubPhoto
                           name={meeting.clubName}
-                          emoji={meeting.clubEmoji}
+                          category={clubById.get(meeting.clubId)?.category}
+                          uri={clubById.get(meeting.clubId)?.avatarUrl}
                           size={44}
-                          tilt={-2}
                         />
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={typography.heading} numberOfLines={1}>
@@ -296,8 +307,8 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
             })}
           </View>
         ) : (
-          <EmptyState
-            icon="calendar"
+          <ClubEmptyState
+            variant="calendar"
             title={isToday ? 'No club meetings tonight' : 'No meetings this day'}
             body="Club meetings will show up here once they're posted."
             actionLabel={isToday ? 'Refresh' : 'Show tonight'}

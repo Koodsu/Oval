@@ -37,7 +37,6 @@ import {
   reportNoShow,
   sendFriendRequest,
   sendPodInvite,
-  submitRecap,
   trackEvent,
   unlockPod,
   updatePodPrivacy,
@@ -50,6 +49,7 @@ import {
   Banner,
   Button,
   Card,
+  ContentImage,
   DateTimeField,
   EmptyState,
   IconButton,
@@ -74,6 +74,8 @@ import {
 import { formatDateTime, formatTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
+import { activityImageFor } from '../constants/contentImages';
+import { getPodTitle } from '../utils/experience';
 
 import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
@@ -121,6 +123,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editLocation, setEditLocation] = useState('');
   const [editTime, setEditTime] = useState(new Date());
@@ -267,62 +270,6 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleRecap = async (rating: 1 | 2 | 3) => {
-    if (!pod) return;
-    setActionBusy('recap');
-    try {
-      await submitRecap(pod.id, { rating });
-      await load(false);
-      if (rating === 3) {
-        Alert.alert('Run it back?', 'Start the same plan again and bring someone new.', [
-          { text: 'Not now', style: 'cancel' },
-          {
-            text: 'Start next pod',
-            onPress: () => {
-              void (async () => {
-                setActionBusy('chain');
-                try {
-                  const nextTime = new Date(pod.meetupTime);
-                  const now = new Date();
-                  do {
-                    nextTime.setDate(nextTime.getDate() + 7);
-                  } while (nextTime <= now);
-                  if (nextTime.getTime() > now.getTime() + 7 * 24 * 60 * 60 * 1000) {
-                    nextTime.setTime(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-                    nextTime.setHours(19, 30, 0, 0);
-                  }
-                  const response = await createPod(pod.activityId, {
-                    location: pod.location,
-                    meetupTime: nextTime.toISOString(),
-                    minMembers: 2,
-                    maxMembers: pod.maxMembers,
-                    visibility: 'public',
-                    template: 'recap-chain',
-                  });
-                  void trackEvent('recap.chained_create', {
-                    fromPodId: pod.id,
-                    podId: response.id,
-                    activityId: pod.activityId,
-                  });
-                  // justCreated → the new pod shows the "bring someone new" share prompt (04 §3a)
-                  navigation.navigate('PodDetail', { podId: response.id, justCreated: true });
-                } catch (error) {
-                  toast.error('Could not run it back', getApiErrorMessage(error));
-                } finally {
-                  setActionBusy(null);
-                }
-              })();
-            },
-          },
-        ]);
-      }
-    } catch (error) {
-      toast.error('Could not submit recap', getApiErrorMessage(error));
-    } finally {
-      if (actionBusy !== 'chain') setActionBusy(null);
-    }
-  };
-
   const handleStartTwin = async () => {
     if (!pod) return;
     setActionBusy('twin');
@@ -330,10 +277,15 @@ export default function PodDetailScreen({ route, navigation }: Props) {
       const twinTime = new Date(pod.meetupTime);
       twinTime.setMinutes(twinTime.getMinutes() + 30);
       const response = await createPod(pod.activityId, {
+        title: pod.title || undefined,
+        note: pod.note || undefined,
         location: pod.location,
+        locationAddress: pod.locationAddress || undefined,
         meetupTime: twinTime.toISOString(),
         minMembers: 2,
         maxMembers: pod.maxMembers,
+        latitude: pod.latitude ?? undefined,
+        longitude: pod.longitude ?? undefined,
         visibility: 'public',
         twinFromPodId: pod.id,
         template: 'twin',
@@ -356,8 +308,10 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         : new Date(pod.meetupTime).toLocaleDateString([], { weekday: 'short' });
     try {
       const result = await Share.share({
-        title: `Join my ${pod.activity?.title ?? 'Oval'} pod`,
-        message: `${pod.activity?.title ?? 'Oval pod'} ${dayLabel} ${formatTime(pod.meetupTime)} - ${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'}. I'm in. ${shareUrl}`,
+        title: `Join my ${getPodTitle(pod)} pod`,
+        // Link lives in `url` only — putting it in `message` too makes iOS
+        // texts show it twice, and only the first renders as the rich tappable card.
+        message: `${getPodTitle(pod)} ${dayLabel} ${formatTime(pod.meetupTime)} - ${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'}. I'm in.`,
         url: shareUrl,
       });
       // Only count real shares — iOS reports dismissedAction when the user
@@ -549,7 +503,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         {pod ? (
           <>
             <ScreenHeader
-              title={pod.activity?.title ?? 'Pod'}
+              title={getPodTitle(pod)}
               kicker={pod.activity?.category}
               onBack={() => navigation.goBack()}
               right={
@@ -562,66 +516,78 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             />
 
             {/* Header card */}
-            <Card padded>
-              <View style={styles.headerTop}>
-                <Sticker
-                  label={POD_STATUS_LABELS[pod.status]}
-                  tint={statusTint(pod.status, colors)}
-                  tilt={-2}
-                />
-                <View style={styles.countPill}>
-                  <Ionicons name="people" size={14} color={colors.ink} />
-                  <Text style={styles.countText}>
-                    {pod.members.length}/{pod.maxMembers}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.metaList}>
-                <View style={styles.metaItem}>
-                  <Ionicons name="calendar" size={15} color={colors.sub} />
-                  <Text style={typography.bodyMedium} numberOfLines={1}>
-                    {formatDateTime(pod.meetupTime)}
-                  </Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <Ionicons name="location" size={15} color={colors.sub} />
-                  <Text style={typography.bodyMedium} numberOfLines={1}>
-                    {pod.location}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.actionRow}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label={primaryActionLabel}
-                    onPress={() => void handlePrimaryAction()}
-                    loading={actionBusy === 'primary'}
-                    variant={meInPod || !canJoinOrWaitlist ? 'secondary' : 'primary'}
+            <Card padded={false}>
+              <ContentImage
+                source={activityImageFor(pod.activity)}
+                seed={pod.activity?.id ?? pod.activityId}
+                accessibilityLabel={`${getPodTitle(pod)} activity image`}
+                aspectRatio={16 / 9}
+                style={styles.podHeroImage}
+              />
+              <View style={styles.headerCardBody}>
+                <View style={styles.headerTop}>
+                  <Sticker
+                    label={POD_STATUS_LABELS[pod.status]}
+                    tint={statusTint(pod.status, colors)}
+                    tilt={-2}
                   />
+                  <View style={styles.countPill}>
+                    <Ionicons name="people" size={14} color={colors.ink} />
+                    <Text style={styles.countText}>
+                      {pod.members.length}/{pod.maxMembers}
+                    </Text>
+                  </View>
                 </View>
-                <IconButton
-                  icon="link"
-                  onPress={() => void handleShare()}
-                  accessibilityLabel="Share pod link"
-                  size={48}
-                />
-                {isCreator && (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
+                <View style={styles.metaList}>
+                  <View style={styles.metaItem}>
+                    <Ionicons name="calendar" size={15} color={colors.sub} />
+                    <Text style={typography.bodyMedium} numberOfLines={1}>
+                      {formatDateTime(pod.meetupTime)}
+                    </Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Ionicons name="location" size={15} color={colors.sub} />
+                    <Text style={typography.bodyMedium} numberOfLines={1}>
+                      {pod.location}
+                    </Text>
+                  </View>
+                </View>
+                {pod.note ? (
+                  <Text style={[typography.body, { color: colors.sub }]}>{pod.note}</Text>
+                ) : null}
+                <View style={styles.actionRow}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label={primaryActionLabel}
+                      onPress={() => void handlePrimaryAction()}
+                      loading={actionBusy === 'primary'}
+                      variant={meInPod || !canJoinOrWaitlist ? 'secondary' : 'primary'}
+                    />
+                  </View>
                   <IconButton
-                    icon="pencil"
-                    onPress={openEditPod}
-                    accessibilityLabel="Edit pod details"
+                    icon="link"
+                    onPress={() => void handleShare()}
+                    accessibilityLabel="Share pod link"
                     size={48}
                   />
-                ) : null}
-                {isCreator ? (
-                  <IconButton
-                    icon={pod.status === 'LOCKED' ? 'lock-open' : 'lock-closed'}
-                    onPress={() => void handleLockToggle()}
-                    disabled={actionBusy != null}
-                    accessibilityLabel={pod.status === 'LOCKED' ? 'Unlock pod' : 'Lock pod'}
-                    size={48}
-                  />
-                ) : null}
+                  {isCreator && (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
+                    <IconButton
+                      icon="pencil"
+                      onPress={openEditPod}
+                      accessibilityLabel="Edit pod details"
+                      size={48}
+                    />
+                  ) : null}
+                  {isCreator ? (
+                    <IconButton
+                      icon={pod.status === 'LOCKED' ? 'lock-open' : 'lock-closed'}
+                      onPress={() => void handleLockToggle()}
+                      disabled={actionBusy != null}
+                      accessibilityLabel={pod.status === 'LOCKED' ? 'Unlock pod' : 'Lock pod'}
+                      size={48}
+                    />
+                  ) : null}
+                </View>
               </View>
             </Card>
 
@@ -658,7 +624,10 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     icon="person-add-outline"
                     size="sm"
                     variant="secondary"
-                    onPress={() => setShowCreatePrompt(false)}
+                    onPress={() => {
+                      setShowCreatePrompt(false);
+                      setInviteOpen(true);
+                    }}
                   />
                 </View>
               </Card>
@@ -962,43 +931,6 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
             {pod.status === 'COMPLETED' ? (
               <>
-                <Card padded>
-                  <Text style={typography.title}>Pod recap</Text>
-                  <Text style={[typography.body, { marginTop: 6 }]}>
-                    {pod.averageRating != null
-                      ? `Average member sentiment: ${pod.averageRating.toFixed(1)} / 3`
-                      : 'No group rating yet.'}
-                  </Text>
-                  {pod.myRecap ? (
-                    <Text style={[typography.caption, { marginTop: 6 }]}>
-                      Your recap is already in.
-                    </Text>
-                  ) : (
-                    <View style={styles.recapRow}>
-                      <Button
-                        label="Rough"
-                        variant="secondary"
-                        size="sm"
-                        onPress={() => void handleRecap(1)}
-                        loading={actionBusy === 'recap'}
-                      />
-                      <Button
-                        label="Solid"
-                        variant="secondary"
-                        size="sm"
-                        onPress={() => void handleRecap(2)}
-                        disabled={actionBusy === 'recap'}
-                      />
-                      <Button
-                        label="Great"
-                        size="sm"
-                        onPress={() => void handleRecap(3)}
-                        disabled={actionBusy === 'recap'}
-                      />
-                    </View>
-                  )}
-                </Card>
-
                 {peopleYouMet.length ? (
                   <Card padded>
                     <Text style={typography.title}>People you met</Text>
@@ -1105,6 +1037,60 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         )}
       </ScrollView>
       </KeyboardAvoidingView>
+      <Sheet
+        visible={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title="Invite friends"
+        kicker="FILL THE POD"
+        scrollable
+      >
+        <View style={{ gap: spacing.lg }}>
+          <Text style={typography.caption}>
+            Send the pod directly to a friend or share the link with your group chat.
+          </Text>
+          <Button
+            label="Share pod link"
+            icon="share-outline"
+            size="lg"
+            onPress={() => void handleShare()}
+          />
+          <View style={{ gap: spacing.sm }}>
+            {eligibleInviteFriends.length ? (
+              eligibleInviteFriends.map((friend) => (
+                <View key={friend.id} style={styles.inviteRow}>
+                  <Pressable
+                    style={styles.inviteIdentity}
+                    onPress={() => {
+                      setInviteOpen(false);
+                      navigation.navigate('UserProfile', { userId: friend.id });
+                    }}
+                  >
+                    <Avatar name={friend.name} uri={friend.avatarUrl} size={42} />
+                    <Text style={typography.subheading} numberOfLines={1}>
+                      {friend.name}
+                    </Text>
+                  </Pressable>
+                  <Button
+                    label="Invite"
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => void handleInviteFriend(friend)}
+                    loading={actionBusy === `invite-${friend.id}`}
+                  />
+                </View>
+              ))
+            ) : (
+              <Card padded>
+                <Text style={typography.subheading}>No friends to invite yet</Text>
+                <Text style={[typography.caption, { marginTop: 4 }]}>
+                  Add people from their profiles or after a completed pod. You can still share the
+                  link now.
+                </Text>
+              </Card>
+            )}
+          </View>
+        </View>
+      </Sheet>
       <Sheet
         visible={editOpen}
         onClose={() => setEditOpen(false)}
@@ -1454,11 +1440,13 @@ const useStyles = createThemedStyles((t: Theme) => ({
     overflow: 'hidden' as const,
     borderWidth: BORDER_W,
   },
-  recapRow: {
-    flexDirection: 'row' as const,
-    gap: spacing.sm,
-    flexWrap: 'wrap' as const,
-    marginTop: spacing.md,
+  podHeroImage: {
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  headerCardBody: {
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   metCard: {
     borderWidth: BORDER_W,

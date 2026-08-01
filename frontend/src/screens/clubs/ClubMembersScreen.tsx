@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,17 +13,17 @@ import type { RootStackParamList } from '../../../App';
 import {
   AppBackdrop,
   Card,
-  EmptyState,
   ListRow,
   ScreenHeader,
   SearchBar,
   Sheet,
 } from '../../components/ui';
-import { ClubScreenLoading, MemberRow } from '../../components/clubs';
+import { ClubEmptyState, ClubScreenLoading, MemberRow } from '../../components/clubs';
 import { roleRank, useClub } from '../../hooks/useClub';
 import type { ClubMemberWithUser } from '../../types';
 import { spacing, useTheme } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { getUiPreviewMode } from '../../dev/previewMode';
 
 import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubMembers'>;
@@ -34,8 +34,20 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const { typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState('');
+  const [previewMode] = useState(getUiPreviewMode);
+  const [query, setQuery] = useState(
+    previewMode === 'club-members-search-empty' ? 'No matching student' : '',
+  );
   const [active, setActive] = useState<ClubMemberWithUser | null>(null);
+
+  useEffect(() => {
+    if (previewMode !== 'club-members-actions' || !club?.members.length) return;
+    const target =
+      club.members.find((member) => member.role === 'MEMBER') ?? club.members.at(-1);
+    if (!target) return;
+    const timer = setTimeout(() => setActive(target), 250);
+    return () => clearTimeout(timer);
+  }, [club?.members, previewMode]);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -116,10 +128,10 @@ export default function ClubMembersScreen({ route, navigation }: Props) {
             </Card>
           </View>
         ) : null) : (
-          <EmptyState
-            icon="people-outline"
+          <ClubEmptyState
+            variant="people"
             title="No members found"
-            body="Try another search."
+            body="Try another name or clear your search."
             actionLabel={query ? 'Clear search' : 'Refresh'}
             onAction={() => {
               if (query) {

@@ -108,7 +108,7 @@ export function clearApiCache(prefix?: string) {
  */
 export function resolveAvatarUrl(avatarUrl: string | null | undefined): string | undefined {
   if (!avatarUrl) return undefined;
-  if (avatarUrl.startsWith('http')) return avatarUrl;
+  if (/^(https?:|file:|data:|content:|blob:)/.test(avatarUrl)) return avatarUrl;
   return `${API_BASE}${avatarUrl}`;
 }
 
@@ -119,6 +119,10 @@ export function getPodShareUrl(podId: string, inviterUserId?: string | null): st
 
 export function getClubShareUrl(clubId: string): string {
   return `${PUBLIC_SITE_URL}/clubs/${encodeURIComponent(clubId)}`;
+}
+
+export function getUserProfileShareUrl(userId: string): string {
+  return `${PUBLIC_SITE_URL}/users/${encodeURIComponent(userId)}`;
 }
 
 let authToken: string | null = null;
@@ -354,9 +358,12 @@ export const clearActivityDemand = (activityId: string) =>
     { method: 'DELETE' }
   );
 
-export const getAdminActivityRequests = (signal?: AbortSignal) =>
+export const getAdminActivityRequests = (
+  status: 'pending' | 'reviewed' = 'pending',
+  signal?: AbortSignal,
+) =>
   request<{ requests: import('./types').ActivityRequest[] }>(
-    '/admin/activity-requests',
+    `/admin/activity-requests${status === 'reviewed' ? '?status=reviewed' : ''}`,
     {},
     signal
   );
@@ -416,6 +423,7 @@ export interface CreateClubBody {
   description: string;
   category: string;
   emoji: string;
+  discoveryPreference?: 'CAMPUS' | 'INVITE_ONLY';
 }
 
 export const createClub = (body: CreateClubBody) =>
@@ -486,7 +494,7 @@ export const getApplicationCycles = (clubId: string, signal?: AbortSignal) =>
 
 export const createApplicationCycle = (
   clubId: string,
-  body: { title: string; questions: string[] }
+  body: { title: string; questions: string[]; closesAt?: string | null }
 ) =>
   request<import('./types').ClubApplicationCycle>(
     `/clubs/${encodeURIComponent(clubId)}/application-cycles`,
@@ -496,7 +504,12 @@ export const createApplicationCycle = (
 export const updateApplicationCycle = (
   clubId: string,
   cycleId: string,
-  body: { title?: string; questions?: string[]; status?: 'OPEN' | 'CLOSED' }
+  body: {
+    title?: string;
+    questions?: string[];
+    status?: 'OPEN' | 'CLOSED';
+    closesAt?: string | null;
+  }
 ) =>
   request<import('./types').ClubApplicationCycle>(
     `/clubs/${encodeURIComponent(clubId)}/application-cycles/${encodeURIComponent(cycleId)}`,
@@ -518,6 +531,12 @@ export const updateApplication = (
   request<{ ok: true; stage: string }>(
     `/clubs/${encodeURIComponent(clubId)}/applications/${encodeURIComponent(applicationId)}`,
     { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
+export const withdrawClubApplication = (clubId: string, applicationId: string) =>
+  request<{ ok: true; stage: 'WITHDRAWN' }>(
+    `/clubs/${encodeURIComponent(clubId)}/applications/${encodeURIComponent(applicationId)}/withdraw`,
+    { method: 'PATCH' },
   );
 
 export const getClubMeetings = (clubId: string, signal?: AbortSignal) =>
@@ -611,7 +630,13 @@ export type ClubVisibility = 'PUBLIC' | 'MEMBERS' | 'OFFICERS';
 
 export const createClubAnnouncement = (
   clubId: string,
-  body: { content: string; visibility: ClubVisibility; targetRoleIds?: string[] }
+  body: {
+    content: string;
+    visibility: ClubVisibility;
+    targetRoleIds?: string[];
+    meetingId?: string | null;
+    notifyMembers?: boolean;
+  }
 ) =>
   request<import('./types').ClubAnnouncementRow>(
     `/clubs/${encodeURIComponent(clubId)}/announcements`,
@@ -655,6 +680,12 @@ export const updateClubRole = (clubId: string, roleId: string, body: string | Cl
     { method: 'PATCH', body: JSON.stringify(typeof body === 'string' ? { name: body } : body) }
   );
 
+export const reorderClubRoles = (clubId: string, roleIds: string[]) =>
+  request<{ roleIds: string[] }>(
+    `/clubs/${encodeURIComponent(clubId)}/roles/reorder`,
+    { method: 'PATCH', body: JSON.stringify({ roleIds }) },
+  );
+
 export const selfAssignClubRole = (clubId: string, roleId: string) =>
   request<{ ok: true }>(
     `/clubs/${encodeURIComponent(clubId)}/roles/${encodeURIComponent(roleId)}/self`,
@@ -695,6 +726,12 @@ export const updateClubChannel = (clubId: string, channelId: string, body: ClubC
     { method: 'PATCH', body: JSON.stringify(body) }
   );
 
+export const reorderClubChannels = (clubId: string, channelIds: string[]) =>
+  request<{ channelIds: string[] }>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/reorder`,
+    { method: 'PATCH', body: JSON.stringify({ channelIds }) },
+  );
+
 export const deleteClubChannel = (clubId: string, channelId: string) =>
   request<{ ok: true }>(
     `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}`,
@@ -718,11 +755,69 @@ export const sendClubChannelMessage = (
   clubId: string,
   channelId: string,
   content: string,
-  mentionRoleIds?: string[]
+  mentionRoleIds?: string[],
+  replyToId?: string,
+  imageUrl?: string,
 ) =>
   request<import('./types').ClubMessage>(
     `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages`,
-    { method: 'POST', body: JSON.stringify({ content, mentionRoleIds }) }
+    { method: 'POST', body: JSON.stringify({ content, mentionRoleIds, replyToId, imageUrl }) }
+  );
+
+export const uploadClubMessageImage = async (
+  clubId: string,
+  channelId: string,
+  uri: string,
+): Promise<{ imageUrl: string }> => {
+  const filename = uri.split('/').pop() ?? 'club-chat-photo.jpg';
+  const extension = filename.split('.').pop()?.toLowerCase();
+  const type = extension === 'png'
+    ? 'image/png'
+    : extension === 'webp'
+      ? 'image/webp'
+      : 'image/jpeg';
+  const formData = new FormData();
+  formData.append('image', { uri, name: filename, type } as unknown as Blob);
+
+  const headers: Record<string, string> = {};
+  const sentAuthToken = authToken;
+  if (sentAuthToken) headers.Authorization = `Bearer ${sentAuthToken}`;
+
+  const res = await fetch(
+    `${API_BASE}/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages/media`,
+    { method: 'POST', headers, body: formData },
+  );
+  if (res.status === 401) {
+    if (sentAuthToken) onUnauthorized?.();
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error ?? `Upload failed: ${res.status}`);
+  }
+  return res.json();
+};
+
+export const addClubMessageReaction = (
+  clubId: string,
+  channelId: string,
+  messageId: string,
+  emoji: string,
+) =>
+  request<import('./types').ClubMessage>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/reactions`,
+    { method: 'POST', body: JSON.stringify({ emoji }) },
+  );
+
+export const removeClubMessageReaction = (
+  clubId: string,
+  channelId: string,
+  messageId: string,
+  emoji: string,
+) =>
+  request<import('./types').ClubMessage>(
+    `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/reactions?emoji=${encodeURIComponent(emoji)}`,
+    { method: 'DELETE' },
   );
 
 export const deleteClubChannelMessage = (clubId: string, channelId: string, messageId: string) =>
@@ -767,10 +862,34 @@ export const updateOfficerPermissions = (clubId: string, permissions: string[]) 
     { method: 'PATCH', body: JSON.stringify({ permissions }) }
   );
 
+export const updateClubMemberPermissions = (
+  clubId: string,
+  memberUserId: string,
+  permissions: string[],
+) =>
+  request<{ userId: string; permissions: string[] }>(
+    `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}/permissions`,
+    { method: 'PATCH', body: JSON.stringify({ permissions }) },
+  );
+
 export const removeClubMember = (clubId: string, memberUserId: string) =>
   request<{ ok: true }>(
     `/clubs/${encodeURIComponent(clubId)}/members/${encodeURIComponent(memberUserId)}`,
     { method: 'DELETE' }
+  );
+
+export const transferClubOwnership = (clubId: string, newOwnerUserId: string) =>
+  request<import('./types').TransferClubOwnershipResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/transfer-ownership`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ newOwnerUserId }),
+    }
+  );
+
+export const getClubOwnershipHistory = (clubId: string) =>
+  request<{ items: import('./types').ClubOwnershipTransfer[] }>(
+    `/clubs/${encodeURIComponent(clubId)}/ownership-history`
   );
 
 export type ClubMeetingRsvpStatus = 'GOING' | 'MAYBE' | 'NOT_GOING';
@@ -939,10 +1058,13 @@ export const joinPod = async (podId: string) => {
 };
 
 export interface CreatePodOptions {
+  title?: string;
+  note?: string;
   minMembers?: number;
   maxMembers?: number;
   meetupTime?: string; // ISO string
   location?: string;
+  locationAddress?: string;
   visibility?: 'public' | 'private';
   latitude?: number;
   longitude?: number;
@@ -1288,10 +1410,16 @@ export const downloadMyData = () =>
  * Upload a club avatar. ADMIN only.
  * `uri` is the local file URI returned by expo-image-picker.
  */
-export const uploadClubAvatar = async (clubId: string, uri: string, signal?: AbortSignal): Promise<{ avatarUrl: string }> => {
+const uploadClubImage = async (
+  clubId: string,
+  uri: string,
+  imageKind: 'avatar' | 'cover',
+  signal?: AbortSignal,
+): Promise<{ avatarUrl?: string | null; coverUrl?: string | null }> => {
   const filename = uri.split('/').pop() ?? 'club-avatar.jpg';
   const formData = new FormData();
   formData.append('image', { uri, name: filename, type: 'image/jpeg' } as unknown as Blob);
+  formData.append('imageKind', imageKind);
 
   const headers: Record<string, string> = {};
   const sentAuthToken = authToken;
@@ -1327,16 +1455,24 @@ export const uploadClubAvatar = async (clubId: string, uri: string, signal?: Abo
   return res.json();
 };
 
+export const uploadClubAvatar = (clubId: string, uri: string, signal?: AbortSignal) =>
+  uploadClubImage(clubId, uri, 'avatar', signal) as Promise<{ avatarUrl: string }>;
+
+export const uploadClubCover = (clubId: string, uri: string, signal?: AbortSignal) =>
+  uploadClubImage(clubId, uri, 'cover', signal) as Promise<{ coverUrl: string }>;
+
 export const updateClubProfile = (
   clubId: string,
-  body: { name: string; description: string; isPublic: boolean },
+  body: { name: string; description: string; category: string; isPublic: boolean },
 ) =>
   request<{
     id: string;
     name: string;
     description: string;
+    category: string;
     isPublic: boolean;
     avatarUrl?: string | null;
+    coverUrl?: string | null;
   }>(`/clubs/${encodeURIComponent(clubId)}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -1354,11 +1490,21 @@ export const unblockUser = (userId: string) =>
   });
 
 export const getBlockedUsers = () =>
-  request<{ id: string; name: string; avatarUrl: string | null; blockedAt: string }[]>('/users/blocked');
+  request<{
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    classYear?: string | null;
+    major?: string | null;
+    blockedAt: string;
+  }[]>('/users/blocked');
 
 // User search
 export const searchUsers = (q: string) =>
   request<import('./types').FriendUser[]>(`/users/search?q=${encodeURIComponent(q)}`);
+
+export const discoverUsers = (signal?: AbortSignal) =>
+  request<import('./types').FriendUser[]>('/users/discover', {}, signal);
 
 // Friends
 export const getFriends = (signal?: AbortSignal) =>
@@ -1409,6 +1555,7 @@ export const getThreadByUser = (userId: string) =>
 
 export interface GetThreadMessagesResponse {
   messages: import('./types').DirectMessage[];
+  otherUser: import('./types').FriendUser;
   typingUserIds: string[];
   otherLastReadAt: string | null;
   hasMore?: boolean;
@@ -1459,16 +1606,6 @@ export const acceptPodInvite = (id: string) =>
 
 export const declinePodInvite = (id: string) =>
   request<void>(`/pods/invites/${id}/decline`, { method: 'POST' });
-
-// Pod recaps
-export const submitRecap = (podId: string, data: { rating: 1 | 2 | 3; note?: string | null }) =>
-  request<import('./types').PodRecap>(`/pods/${podId}/recap`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-
-export const getMyRecap = (podId: string) =>
-  request<import('./types').PodRecap | null>(`/pods/${podId}/recap`);
 
 // People You Met
 export const getPeopleYouMet = (podId: string) =>

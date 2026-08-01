@@ -23,3 +23,7 @@ export function getFeaturedActivities(activities: Activity[], pods: Pod[]): Acti
 export function getOpenPodCount(pods: Pod[]): number {
   return pods.filter((pod) => pod.status === 'FORMING').length;
 }
+
+export function getPodTitle(pod: Pick<Pod, 'title' | 'activity'>): string {
+  return pod.title?.trim() || pod.activity?.title || 'Pod';
+}

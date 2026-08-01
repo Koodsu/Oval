@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deleteAvatar, updateProfile, uploadAvatar } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -86,7 +88,8 @@ export default function EditProfileScreen({ navigation }: Props) {
         clubInterests: clubInterests.trim() || null,
       });
       await updateUser(updated);
-      toast.success('Saved', 'Your profile now matches the new experience.');
+      toast.success('Profile saved', 'Your changes are live.');
+      navigation.goBack();
     } catch (error) {
       toast.error('Could not save', error instanceof Error ? error.message : 'Please try again.');
     } finally {
@@ -160,55 +163,97 @@ export default function EditProfileScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-        <ScreenHeader title="Edit profile" kicker="YOUR LOOK" onBack={() => navigation.goBack()} />
+          <ScreenHeader
+            title="Edit profile"
+            onBack={() => navigation.goBack()}
+            right={
+              <Pressable
+                onPress={() => void save()}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Save profile"
+                style={({ pressed }) => [styles.headerSave, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={[typography.subheading, { color: colors.accentText }]}>
+                  {busy ? 'Saving…' : 'Save'}
+                </Text>
+              </Pressable>
+            }
+          />
 
-        <Card padded>
           <View style={styles.avatarSection}>
-            <Avatar name={user?.name ?? 'User'} uri={user?.avatarUrl} size={84} tilt={-3} />
-            <View style={styles.avatarActions}>
-              <Button label="Change photo" icon="image" onPress={() => void pickAvatar()} loading={avatarBusy} />
-              {user?.avatarUrl ? (
-                <Button
-                  label="Remove photo"
-                  variant="secondary"
-                  onPress={() => void removeCurrentAvatar()}
-                  disabled={avatarBusy}
-                />
-              ) : null}
-            </View>
+            <Pressable
+              onPress={() => void pickAvatar()}
+              disabled={avatarBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+              style={({ pressed }) => [styles.avatarButton, pressed && { opacity: 0.75 }]}
+            >
+              <Avatar name={user?.name ?? 'User'} uri={user?.avatarUrl} size={92} />
+              <View
+                style={[
+                  styles.cameraBadge,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="camera" size={17} color={colors.ink} />
+              </View>
+            </Pressable>
+            <Pressable onPress={() => void pickAvatar()} disabled={avatarBusy}>
+              <Text style={[typography.subheading, { color: colors.accentText }]}>
+                {avatarBusy ? 'Updating…' : 'Change photo'}
+              </Text>
+            </Pressable>
+            {user?.avatarUrl ? (
+              <Pressable onPress={() => void removeCurrentAvatar()} disabled={avatarBusy}>
+                <Text style={[typography.captionSmall, { color: colors.sub }]}>Remove photo</Text>
+              </Pressable>
+            ) : null}
           </View>
 
-          <View style={{ gap: spacing.lg }}>
-            <View style={{ gap: spacing.sm }}>
-              <Text style={typography.kicker}>Class year</Text>
-              <View style={styles.tagWrap}>
-                {CLASS_YEAR_OPTIONS.map((option) => (
-                  <Chip
-                    key={option}
-                    label={option}
-                    selected={classYear === option}
-                    onPress={() => setClassYear(option)}
-                  />
-                ))}
+          <Card padded>
+            <View style={{ gap: spacing.lg }}>
+              <View style={{ gap: spacing.sm }}>
+                <Text style={typography.kicker}>CLASS YEAR</Text>
+                <View style={styles.tagWrap}>
+                  {CLASS_YEAR_OPTIONS.map((option) => (
+                    <Chip
+                      key={option}
+                      label={option}
+                      selected={classYear === option}
+                      onPress={() => setClassYear(option)}
+                    />
+                  ))}
+                </View>
               </View>
+              <Field
+                label="Major"
+                value={major}
+                onChangeText={setMajor}
+                placeholder="Computer Science"
+              />
+              <Field
+                label="Bio"
+                value={bio}
+                onChangeText={setBio}
+                placeholder="What should people know before they make a plan with you?"
+                multiline
+                maxLength={120}
+                hint={`${bio.length}/120`}
+              />
+              <Field
+                label="Instagram"
+                value={instagramHandle}
+                onChangeText={setInstagramHandle}
+                placeholder="@ovalperson"
+                autoCapitalize="none"
+              />
             </View>
-            <Field label="Major" value={major} onChangeText={setMajor} placeholder="Computer Science" />
-            <Field
-              label="Instagram"
-              value={instagramHandle}
-              onChangeText={setInstagramHandle}
-              placeholder="@ovalperson"
-              autoCapitalize="none"
-            />
-            <Field
-              label="Bio"
-              value={bio}
-              onChangeText={setBio}
-              placeholder="What should people know before they join your pod?"
-              multiline
-            />
+          </Card>
+
+          <Card padded>
             <View style={{ gap: spacing.sm }}>
-              <Text style={typography.kicker}>Interests — pick up to 5</Text>
+              <Text style={typography.kicker}>INTERESTS · PICK UP TO 5</Text>
               <View style={styles.tagWrap}>
                 {INTEREST_TAGS.map((tag) => (
                   <Chip
@@ -221,8 +266,11 @@ export default function EditProfileScreen({ navigation }: Props) {
                 ))}
               </View>
             </View>
+          </Card>
+
+          <Card padded>
             <View style={{ gap: spacing.sm }}>
-              <Text style={typography.kicker}>What are you here for?</Text>
+              <Text style={typography.kicker}>WHAT I’M HERE FOR</Text>
               <View style={styles.tagWrap}>
                 {PURPOSE_OPTIONS.map((option) => (
                   <Chip
@@ -234,28 +282,40 @@ export default function EditProfileScreen({ navigation }: Props) {
                 ))}
               </View>
             </View>
-            <View style={{ gap: spacing.sm }}>
-              <Text style={typography.kicker}>Campus zones — pick up to {MAX_CAMPUS_ZONES}</Text>
-              <View style={styles.tagWrap}>
-                {CAMPUS_ZONE_OPTIONS.map((zone) => (
-                  <Chip
-                    key={zone}
-                    label={zone}
-                    selected={campusZones.includes(zone)}
-                    onPress={() => toggleZone(zone)}
-                  />
-                ))}
+          </Card>
+
+          <Card padded>
+            <View style={{ gap: spacing.lg }}>
+              <View style={{ gap: spacing.sm }}>
+                <Text style={typography.kicker}>
+                  CAMPUS AREAS · PICK UP TO {MAX_CAMPUS_ZONES}
+                </Text>
+                <View style={styles.tagWrap}>
+                  {CAMPUS_ZONE_OPTIONS.map((zone) => (
+                    <Chip
+                      key={zone}
+                      label={zone}
+                      selected={campusZones.includes(zone)}
+                      onPress={() => toggleZone(zone)}
+                    />
+                  ))}
+                </View>
               </View>
+              <Field
+                label="Club interests (optional)"
+                value={clubInterests}
+                onChangeText={setClubInterests}
+                placeholder="Design, robotics, service…"
+              />
             </View>
-            <Field
-              label="Club interests (optional)"
-              value={clubInterests}
-              onChangeText={setClubInterests}
-              placeholder="Design, robotics, service…"
-            />
-            <Button label="Save profile" onPress={save} loading={busy} size="lg" icon="checkmark" />
-          </View>
-        </Card>
+          </Card>
+
+          <Button
+            label="Save changes"
+            onPress={() => void save()}
+            loading={busy}
+            size="lg"
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </AppBackdrop>
@@ -270,12 +330,27 @@ const useStyles = createThemedStyles((_t: Theme) => ({
   },
   avatarSection: {
     alignItems: 'center' as const,
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  avatarActions: {
-    alignSelf: 'stretch' as const,
     gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  avatarButton: {
+    position: 'relative' as const,
+  },
+  cameraBadge: {
+    position: 'absolute' as const,
+    right: -3,
+    bottom: -3,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  headerSave: {
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.sm,
   },
   tagWrap: {
     flexDirection: 'row' as const,

@@ -44,12 +44,13 @@
       }
     },
     "android": {
-      "package": "com.bradyvb.ovalapp",
+      "package": "com.theovalapp.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/oval-open-1024-transparent.png",
         "backgroundColor": "#0F0E12"
       },
       "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
