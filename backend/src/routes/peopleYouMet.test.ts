@@ -56,7 +56,7 @@ describe('People You Met API', () => {
     token2 = u2.token;
     userId2 = u2.user.id;
 
-    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic / Study' } });
     if (!activity) throw new Error('No activities in seed');
     activityId = activity.id;
   });

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cancelPod,
   confirmAttendance,
+  createReport,
   createPod,
   editPod,
   getApiErrorMessage,
@@ -52,6 +53,7 @@ import {
   ContentImage,
   DateTimeField,
   EmptyState,
+  Field,
   IconButton,
   ListRow,
   ScreenHeader,
@@ -76,6 +78,8 @@ import { useAuth } from '../context/AuthContext';
 import { INTEREST_TAG_META } from '../constants/interestTags';
 import { activityImageFor } from '../constants/contentImages';
 import { getPodTitle } from '../utils/experience';
+import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
+import { getPodTitleValidationError } from '../utils/podTitleValidation';
 
 import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodDetail'>;
@@ -125,8 +129,12 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTitleServerError, setEditTitleServerError] = useState<string | null>(null);
   const [editLocation, setEditLocation] = useState('');
   const [editTime, setEditTime] = useState(new Date());
+  const editTitleError = editTitleServerError ?? getPodTitleValidationError(editTitle);
 
   const load = useCallback(
     async (showAlert = false) => {
@@ -380,6 +388,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
   const openEditPod = () => {
     if (!pod) return;
+    setEditTitle(getPodTitle(pod));
+    setEditTitleServerError(null);
     setEditLocation(pod.location);
     setEditTime(new Date(pod.meetupTime));
     setEditOpen(true);
@@ -387,6 +397,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
 
   const handleEditSave = async () => {
     if (!pod) return;
+    if (getPodTitleValidationError(editTitle)) return;
     if (!editLocation.trim()) {
       toast.error('Add a meetup spot', 'The location cannot be empty.');
       return;
@@ -394,13 +405,37 @@ export default function PodDetailScreen({ route, navigation }: Props) {
     setActionBusy('edit');
     try {
       const updated = await editPod(pod.id, {
+        title: editTitle.trim(),
         location: editLocation.trim(),
         meetupTime: editTime.toISOString(),
       });
       setPod(updated);
       setEditOpen(false);
     } catch (error) {
-      toast.error('Could not update pod', getApiErrorMessage(error));
+      const message = getApiErrorMessage(error);
+      if (/pod title|descriptive pod title|safety rules/i.test(message)) {
+        setEditTitleServerError(message);
+      } else {
+        toast.error('Could not update pod', message);
+      }
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const handleReportPod = async (reason: string) => {
+    if (!pod) return;
+    setActionBusy(`report-${reason}`);
+    try {
+      await createReport({
+        podId: pod.id,
+        reason,
+        details: `Pod title: ${getPodTitle(pod)}`,
+      });
+      setReportOpen(false);
+      toast.success('Report sent', 'Thanks. We logged this pod for review.');
+    } catch (error) {
+      toast.error('Could not send report', getApiErrorMessage(error));
     } finally {
       setActionBusy(null);
     }
@@ -570,6 +605,14 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     accessibilityLabel="Share pod link"
                     size={48}
                   />
+                  {!isCreator ? (
+                    <IconButton
+                      icon="flag-outline"
+                      onPress={() => setReportOpen(true)}
+                      accessibilityLabel="Report pod"
+                      size={48}
+                    />
+                  ) : null}
                   {isCreator && (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
                     <IconButton
                       icon="pencil"
@@ -1092,12 +1135,48 @@ export default function PodDetailScreen({ route, navigation }: Props) {
         </View>
       </Sheet>
       <Sheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        title="Report this pod"
+        kicker="SAFETY"
+        scrollable
+      >
+        <View style={{ gap: spacing.md }}>
+          <Text style={typography.caption}>
+            Choose the reason that best describes the title or plan. Reports are sent to Oval for
+            manual review.
+          </Text>
+          {REPORT_REASON_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              label={option.label}
+              variant="secondary"
+              onPress={() => void handleReportPod(option.value)}
+              loading={actionBusy === `report-${option.value}`}
+              disabled={actionBusy?.startsWith('report-')}
+            />
+          ))}
+        </View>
+      </Sheet>
+      <Sheet
         visible={editOpen}
         onClose={() => setEditOpen(false)}
         title="Edit pod details"
         kicker="CREATOR TOOLS"
       >
         <View style={{ gap: spacing.lg }}>
+          <Field
+            label="Pod title"
+            value={editTitle}
+            onChangeText={(value) => {
+              setEditTitle(value);
+              setEditTitleServerError(null);
+            }}
+            placeholder="Euchre at Morrill Tower"
+            maxLength={60}
+            error={editTitleError}
+            hint="This is what people will see in the feed."
+          />
           <View style={{ gap: 6 }}>
             <Text style={typography.kicker}>Location</Text>
             <TextInput
@@ -1132,6 +1211,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             label="Save changes"
             onPress={() => void handleEditSave()}
             loading={actionBusy === 'edit'}
+            disabled={Boolean(editTitleError)}
             size="lg"
           />
           <Button

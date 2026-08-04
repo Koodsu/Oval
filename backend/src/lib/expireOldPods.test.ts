@@ -11,7 +11,7 @@ describe('expireOldPods', () => {
 
   beforeEach(async () => {
     resetExpireOldPodsThrottleForTests();
-    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic / Study' } });
     if (!activity) throw new Error('No activities in seed');
     activityId = activity.id;
   });

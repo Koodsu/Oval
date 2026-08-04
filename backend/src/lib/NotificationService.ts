@@ -63,6 +63,13 @@ function podUrl(podId: string): string {
   return `oval://pod/${podId}`;
 }
 
+function podDisplayTitle(
+  pod: { title?: string | null; activity?: { title: string } | null },
+  fallback: string,
+): string {
+  return pod.title?.trim() || pod.activity?.title || fallback;
+}
+
 function threadUrl(threadId: string): string {
   return `oval://thread/${threadId}`;
 }
@@ -294,7 +301,7 @@ export const NotificationService = {
       await send([
         {
           to: pod.creator.pushToken,
-          title: pod.activity?.title ?? 'Your Pod',
+          title: podDisplayTitle(pod, 'Your Pod'),
           body: `${joinerName} joined your pod!`,
           data: { type: 'pod_join', podId, url: podUrl(podId) },
           sound: 'default',
@@ -341,11 +348,11 @@ export const NotificationService = {
           })
         : pod.members.map((m) => m.user);
 
-      const title = pod.activity?.title ?? 'Your pod';
+      const title = podDisplayTitle(pod, 'Your pod');
       const body =
         kind === 'cancelled'
           ? 'This pod was cancelled by its creator.'
-          : 'The meetup time or location changed — check the new plan.';
+          : 'The pod details changed — check the updated plan.';
 
       const messages: ExpoPushMessage[] = [];
       for (const user of recipients) {
@@ -397,7 +404,7 @@ export const NotificationService = {
         if (!prefs.newMessage) continue;
         messages.push({
           to: member.user.pushToken,
-          title: pod.activity?.title ?? 'Pod Message',
+          title: podDisplayTitle(pod, 'Pod Message'),
           body: `${senderName} sent a message`,
           data: { type: 'new_message', podId, url: podUrl(podId) },
           sound: 'default',
@@ -486,7 +493,7 @@ export const NotificationService = {
           messages.push({
             to: member.user.pushToken,
             title: 'Meetup in 1 hour!',
-            body: `${pod.activity?.title ?? 'Your meetup'} at ${pod.location}`,
+            body: `${podDisplayTitle(pod, 'Your meetup')} at ${pod.location}`,
             data: { type: 'meetup_reminder', podId: pod.id, url: podUrl(pod.id) },
             sound: 'default',
           });
@@ -539,7 +546,7 @@ export const NotificationService = {
           messages.push({
             to: member.user.pushToken,
             title: 'How was it?',
-            body: `Rate your ${pod.activity?.title ?? 'meetup'} experience`,
+            body: `Rate your ${podDisplayTitle(pod, 'meetup')} experience`,
             data: { type: 'recap_prompt', podId: pod.id, url: podUrl(pod.id) },
             sound: 'default',
           });
@@ -593,7 +600,7 @@ export const NotificationService = {
         messages.push({
           to: entry.user.pushToken,
           title: 'A second pod opened',
-          body: `${newPod.activity?.title ?? 'That plan'} was full, so a twin just went up — grab a spot`,
+          body: `${podDisplayTitle(newPod, 'That plan')} was full, so a twin just went up — grab a spot`,
           data: { type: 'waitlist_twin', podId: newPodId, url: podUrl(newPodId) },
           sound: 'default',
         });
@@ -738,7 +745,7 @@ export const NotificationService = {
 
         messages.push({
           to: membership.user.pushToken,
-          title: `Tonight: ${membership.pod.activity?.title ?? 'your pod'} at ${meetupTime}`,
+          title: `Tonight: ${podDisplayTitle(membership.pod, 'your pod')} at ${meetupTime}`,
           body: peopleLine,
           data: { type: 'first_pod_nudge', podId: membership.podId, url: podUrl(membership.podId) },
           sound: 'default',
@@ -799,7 +806,9 @@ export const NotificationService = {
         });
         if (openPodCount > 0) continue;
 
-        const activity = await prisma.activity.findUnique({ where: { id: group.activityId } });
+        const activity = await prisma.activity.findFirst({
+          where: { id: group.activityId, isActive: true },
+        });
         if (!activity) continue;
         const demands = await prisma.podDemand.findMany({
           where: { activityId: group.activityId, consumedAt: null, expiresAt: { gt: now } },
@@ -851,8 +860,11 @@ export const NotificationService = {
   ): Promise<{ attempted: number; sent: number }> {
     const now = new Date();
     try {
-      const [activity, demands] = await Promise.all([
-        prisma.activity.findUnique({ where: { id: activityId }, select: { title: true } }),
+      const [pod, demands] = await Promise.all([
+        prisma.pod.findUnique({
+          where: { id: podId },
+          select: { title: true, activity: { select: { title: true } } },
+        }),
         prisma.podDemand.findMany({
           where: { activityId, consumedAt: null, expiresAt: { gt: now } },
           include: { user: { select: { id: true, pushToken: true, notificationPreferences: true } } },
@@ -872,7 +884,7 @@ export const NotificationService = {
         const didSend = await sendNonTransactional(
           demand.user,
           {
-            title: `${activity?.title ?? 'A pod'} just went up`,
+            title: `${pod ? podDisplayTitle(pod, 'A pod') : 'A pod'} just went up`,
             body: `A plan just opened ${dayLabel}. Grab a spot while it is forming.`,
             data: { type: 'demand_pod_created', activityId, podId, url: podUrl(podId) },
             sound: 'default',

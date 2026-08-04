@@ -59,8 +59,8 @@ describe('Analytics API', () => {
     const admin = await createTestUser({ email: `analytics-admin-${Date.now()}@osu.edu` });
     const activated = await createTestUser({ email: `activated-${Date.now()}@osu.edu` });
     const tooLate = await createTestUser({ email: `too-late-${Date.now()}@osu.edu` });
-    const activity = await prisma.activity.findFirst({ where: { title: 'Boba Run' } });
-    if (!activity) throw new Error('No Boba Run activity in seed');
+    const activity = await prisma.activity.findFirst({ where: { title: 'Grab coffee or tea' } });
+    if (!activity) throw new Error('No coffee activity in seed');
     process.env.ADMIN_USER_IDS = admin.id;
 
     const now = new Date();

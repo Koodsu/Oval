@@ -7,16 +7,14 @@ import { INTEREST_TAGS, TAG_TO_CATEGORY } from '../config/interestTags';
 // Must stay in sync with the `category` values in prisma/seed.ts — a mapping
 // to a category that no activity uses silently disables the interest boost.
 const KNOWN_ACTIVITY_CATEGORIES = new Set([
-  'Sports & Fitness',
-  'Food & Drink',
-  'Academic',
-  'Arts & Creative',
-  'Social',
-  'Outdoors',
-  'Music & Entertainment',
-  'Wellness',
+  'Academic / Study',
+  'Sports',
+  'Fitness & Wellness',
+  'Social & Events',
   'Gaming',
   'Volunteering',
+  'Food',
+  'Music & Arts',
 ]);
 
 describe('Interest tag category mapping', () => {

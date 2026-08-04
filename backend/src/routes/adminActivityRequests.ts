@@ -69,14 +69,18 @@ router.post('/:id/approve', async (req: AuthRequest, res: Response): Promise<voi
       const existing = await tx.activity.findFirst({
         where: { title: { equals: activityRequest.title, mode: 'insensitive' } },
       });
-      const activity = existing ?? await tx.activity.create({
-        data: {
-          title: activityRequest.title,
-          description: activityRequest.description ?? '',
-          category: activityRequest.category,
-          defaultLocation: activityRequest.defaultLocation ?? '',
-        },
-      });
+      const maxSortOrder = await tx.activity.aggregate({ _max: { sortOrder: true } });
+      const catalogData = {
+        title: activityRequest.title,
+        description: activityRequest.description ?? '',
+        category: activityRequest.category,
+        defaultLocation: activityRequest.defaultLocation ?? '',
+        isActive: true,
+        sortOrder: existing?.sortOrder || (maxSortOrder._max.sortOrder ?? 0) + 1,
+      };
+      const activity = existing
+        ? await tx.activity.update({ where: { id: existing.id }, data: catalogData })
+        : await tx.activity.create({ data: catalogData });
 
       const updated = await tx.activityRequest.update({
         where: { id },

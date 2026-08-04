@@ -9,16 +9,14 @@ import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 const router = Router();
 
 const ACTIVITY_REQUEST_CATEGORIES = new Set([
-  'Sports & Fitness',
-  'Food & Drink',
-  'Academic',
-  'Arts & Creative',
-  'Social',
-  'Outdoors',
-  'Music & Entertainment',
-  'Wellness',
+  'Academic / Study',
+  'Sports',
+  'Fitness & Wellness',
+  'Social & Events',
   'Gaming',
   'Volunteering',
+  'Food',
+  'Music & Arts',
 ]);
 
 const ACTIVITY_REQUEST_LIMIT = 5;
@@ -115,7 +113,7 @@ router.post('/:id/demand', requireAuth, async (req: AuthRequest, res: Response):
   const now = new Date();
 
   try {
-    const activity = await prisma.activity.findUnique({ where: { id: activityId } });
+    const activity = await prisma.activity.findFirst({ where: { id: activityId, isActive: true } });
     if (!activity) {
       res.status(404).json({ error: 'Activity not found' });
       return;
@@ -206,13 +204,16 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     await expireOldPods();
 
     const { category } = req.query;
-    const where = category && typeof category === 'string' ? { category } : {};
+    const where = {
+      isActive: true,
+      ...(category && typeof category === 'string' ? { category } : {}),
+    };
     const now = new Date();
     const userId = req.user!.userId;
 
     const activities = await prisma.activity.findMany({
       where,
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: {
         _count: {
           select: {

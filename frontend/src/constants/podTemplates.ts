@@ -14,7 +14,7 @@ export type PodTemplate = {
 export const POD_TEMPLATES: PodTemplate[] = [
   {
     id: 'boba-tonight',
-    activityTitle: 'Boba Run',
+    activityTitle: 'Grab coffee or tea',
     label: 'Boba run',
     detail: 'Tonight near the Union',
     location: 'Ohio Union',
@@ -23,7 +23,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'study-thompson',
-    activityTitle: 'Study Group Sprint',
+    activityTitle: 'Study group',
     label: 'Study grind',
     detail: 'Focused work at Thompson',
     location: 'Thompson Library',
@@ -32,7 +32,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'pickup-hoops',
-    activityTitle: 'Basketball Pickup Game',
+    activityTitle: 'Pickup basketball',
     label: 'Pickup hoops',
     detail: 'Run a game at RPAC',
     location: 'RPAC',
@@ -41,7 +41,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'soccer-sat',
-    activityTitle: 'Soccer Kickaround',
+    activityTitle: 'Pickup soccer',
     label: 'Soccer kickaround',
     detail: 'Casual touches outside',
     location: 'Lincoln Tower Park',
@@ -50,7 +50,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'board-games',
-    activityTitle: 'Board Game Night',
+    activityTitle: 'Board games',
     label: 'Board games',
     detail: 'Low-key table at the Union',
     location: 'Ohio Union',
@@ -59,7 +59,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'movie-night',
-    activityTitle: 'Movie Night',
+    activityTitle: 'Movie / watch party',
     label: 'Movie night',
     detail: 'Pick something together',
     location: 'Ohio Union',
@@ -68,7 +68,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'mirror-lake',
-    activityTitle: 'Mirror Lake Hangout',
+    activityTitle: 'Casual hangout',
     label: 'Mirror Lake hang',
     detail: 'Walk, sit, decompress',
     location: 'Mirror Lake',
@@ -77,7 +77,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'yoga-reset',
-    activityTitle: 'Yoga Reset',
+    activityTitle: 'Yoga',
     label: 'Yoga reset',
     detail: 'Easy reset session',
     location: 'RPAC – Wellness Space',
@@ -86,7 +86,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'smash-night',
-    activityTitle: 'Smash Bros Tournament',
+    activityTitle: 'Video games',
     label: 'Smash bracket',
     detail: 'Friendly games, no sweat',
     location: 'Ohio Union – Esports Arena',
@@ -95,7 +95,7 @@ export const POD_TEMPLATES: PodTemplate[] = [
   },
   {
     id: 'campus-cleanup',
-    activityTitle: 'Campus Cleanup',
+    activityTitle: 'Other volunteering',
     label: 'Campus cleanup',
     detail: 'Bring a friend, do some good',
     location: 'Ohio Union – Service Hub',

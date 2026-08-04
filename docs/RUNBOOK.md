@@ -1,5 +1,10 @@
 # Oval — Do-This-Next Runbook
 
+> **August 2 reset:** follow the reset section at the top of
+> `LAUNCH_PLAN_FALL2026.md` first. The older session order below remains useful
+> as detailed instructions, but club outreach and the Android APK fallback are
+> no longer blocked on the Apple organization transfer.
+
 No decisions required. Work top to bottom. Each session is one sitting; each step says exactly what to type or click. Check things off as you go.
 
 Companion docs: `LAUNCH_PLAN_FALL2026.md` (the why/dependencies), `GOOGLE_PLAY_ROADMAP.md` (Play detail).
@@ -99,7 +104,7 @@ eas build --platform android --profile preview
 
 Wait ~20 min. While it builds, do step 3.2.
 
-**3.2 Boot the emulator** — Android Studio → More Actions → Virtual Device Manager → ▶ next to Pixel 10. Leave it running.
+**3.2 Boot the emulator** — Android Studio → More Actions → Virtual Device Manager → ▶ next to Pixel 10. Use a system image labeled **Google Play** so Play Services and FCM are available. Leave it running.
 
 **3.3 Install**
 
@@ -122,6 +127,11 @@ eas build:run -p android --latest
 5. Now force-kill the Android app and repeat — cold-start deep link is the one that usually breaks
 
 **3.7** Send me the punch list and I'll fix them.
+
+**3.8 Real-device check (remote is fine):** by Aug 10, send the final preview-build
+link to one trusted Android owner. Ask them to test camera/library avatar selection,
+a background and force-killed push notification, notification tap routing, and a
+`theovalapp.com` invite link. You do not need to own or buy an Android phone.
 
 ---
 

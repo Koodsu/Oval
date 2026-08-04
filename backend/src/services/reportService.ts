@@ -163,12 +163,29 @@ export async function createReport(
   }
 
   if (podId && !messageId) {
-    const pod = await prisma.pod.findUnique({ where: { id: podId } });
+    const pod = await prisma.pod.findUnique({
+      where: { id: podId },
+      select: {
+        id: true,
+        title: true,
+        note: true,
+        location: true,
+        activity: { select: { title: true } },
+      },
+    });
     if (!pod) {
       throw new Error('Pod not found');
     }
     resolvedPodId = pod.id;
     targetType = targetType ?? 'POD';
+    // Snapshot the user-authored plan text so it remains reviewable if the pod
+    // is later edited or deleted.
+    reportedContent = [
+      `Title: ${pod.title?.trim() || pod.activity.title}`,
+      `Activity: ${pod.activity.title}`,
+      pod.note ? `Note: ${pod.note}` : null,
+      `Location: ${pod.location}`,
+    ].filter(Boolean).join('\n').slice(0, 2000);
   }
 
   if (clubId && !clubMessageId && !clubOfficerMessageId && !clubAnnouncementId) {
@@ -292,6 +309,7 @@ export async function adminListReports(filters: AdminReportFilters) {
       pod: {
         select: {
           id: true,
+          title: true,
           activity: { select: { title: true } },
           location: true,
         },
@@ -355,6 +373,7 @@ export async function adminGetReport(id: string) {
       pod: {
         select: {
           id: true,
+          title: true,
           location: true,
           activity: { select: { title: true } },
         },
@@ -467,6 +486,7 @@ async function notifyModerationReport(reportId: string): Promise<void> {
       pod: {
         select: {
           id: true,
+          title: true,
           location: true,
           activity: { select: { title: true } },
         },

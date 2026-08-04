@@ -107,10 +107,15 @@ model Activity {
   description     String
   category        String   @default("Social")
   defaultLocation String
+  isActive        Boolean  @default(true)
+  artworkKey      String?  @unique
+  sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
 
   pods    Pod[]
   demands PodDemand[]
+
+  @@index([isActive, category, sortOrder])
 }
 
 model ActivityRequest {
@@ -504,7 +509,7 @@ model Club {
 
   // --- Club lifecycle: four orthogonal axes ---
   isDiscoverable Boolean @default(false)
-  discoveryPreference String @default("CAMPUS") // CAMPUS | INVITE_ONLY
+  discoveryPreference String  @default("CAMPUS") // CAMPUS | INVITE_ONLY
   verification   String  @default("UNVERIFIED") // UNVERIFIED | PENDING_REVIEW | VERIFIED
   joinPolicy     String  @default("OPEN") // OPEN | REQUEST | APPLICATION | INVITE_ONLY
   status         String  @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED

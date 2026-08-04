@@ -27,7 +27,7 @@ describe('Pod Waitlist API', () => {
     waiterToken = w.token;
     waiterId = w.user.id;
 
-    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic / Study' } });
     if (!activity) throw new Error('No activities in seed');
     activityId = activity.id;
   });

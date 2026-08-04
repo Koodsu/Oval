@@ -479,6 +479,7 @@ export default function ExploreScreen({
         if (category && pod.activity?.category !== category) return false;
         if (!deferredQuery) return true;
         return [
+          pod.title,
           pod.activity?.title,
           pod.activity?.description,
           pod.activity?.category,

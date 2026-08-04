@@ -40,6 +40,11 @@ export function validateProductionEnvironment(
     }
   }
 
+  const androidFingerprint = env.ANDROID_SHA256_CERT_FINGERPRINT?.trim();
+  if (androidFingerprint && !/^(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$/.test(androidFingerprint)) {
+    errors.push('ANDROID_SHA256_CERT_FINGERPRINT must be a colon-delimited SHA-256 fingerprint');
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid production environment:\n- ${errors.join('\n- ')}`);
   }
@@ -50,6 +55,12 @@ export function validateProductionEnvironment(
     console.warn(
       '[env] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — realtime broadcasts are ' +
         'DISABLED; clients will fall back to polling for chat, typing, and inbox badges.',
+    );
+  }
+  if (!androidFingerprint) {
+    console.warn(
+      '[env] ANDROID_SHA256_CERT_FINGERPRINT is not set — Android App Links cannot verify ' +
+        'until the Play App Signing certificate fingerprint is configured.',
     );
   }
 }

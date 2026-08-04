@@ -15,9 +15,10 @@ import type { ClubsPreviewData } from '../screens/clubs/ClubsHomeScreen';
 const activities: Activity[] = [
   {
     id: 'activity-basketball',
-    title: 'Basketball Pickup Game',
+    title: 'Pickup basketball',
     description: 'Friendly pickup games for any skill level.',
-    category: 'Sports & Fitness',
+    category: 'Sports',
+    artworkKey: 'pickup-basketball',
     defaultLocation: 'RPAC courts',
     createdAt: new Date().toISOString(),
     demandCount: 8,
@@ -25,45 +26,50 @@ const activities: Activity[] = [
   },
   {
     id: 'activity-study',
-    title: 'Study Group Sprint',
+    title: 'Study group',
     description: 'Quiet focus with a small group.',
-    category: 'Academic',
+    category: 'Academic / Study',
+    artworkKey: 'study-group',
     defaultLocation: 'Thompson Library',
     createdAt: new Date().toISOString(),
     demandCount: 6,
   },
   {
     id: 'activity-trivia',
-    title: 'Trivia Night',
+    title: 'Trivia',
     description: 'Form a team for a lively trivia round.',
-    category: 'Social',
+    category: 'Gaming',
+    artworkKey: 'trivia',
     defaultLocation: 'Ohio Union',
     createdAt: new Date().toISOString(),
     demandCount: 4,
   },
   {
     id: 'activity-walk',
-    title: 'Sunset campus walk',
+    title: 'Nature walk',
     description: 'Take a loop around campus after class.',
-    category: 'Outdoors',
+    category: 'Fitness & Wellness',
+    artworkKey: 'nature-walk',
     defaultLocation: 'Mirror Lake',
     createdAt: new Date().toISOString(),
     demandCount: 3,
   },
   {
     id: 'activity-boba',
-    title: 'Boba run',
+    title: 'Grab coffee or tea',
     description: 'Walk over for an afternoon drink.',
-    category: 'Food & Drink',
+    category: 'Food',
+    artworkKey: 'grab-coffee-tea',
     defaultLocation: 'High Street',
     createdAt: new Date().toISOString(),
     demandCount: 2,
   },
   {
     id: 'activity-games',
-    title: 'Board game break',
+    title: 'Board games',
     description: 'One quick game between classes.',
     category: 'Gaming',
+    artworkKey: 'board-games',
     defaultLocation: 'Ohio Union',
     createdAt: new Date().toISOString(),
     demandCount: 1,
@@ -102,7 +108,7 @@ function futureIso(hoursFromNow: number) {
 
 const communityPods: Pod[] = Array.from({ length: 12 }, (_, index) => {
   const activity = activities[index % activities.length]!;
-  const memberTotal = 2 + (index % 3);
+  const memberTotal = 4 + (index % 3);
   return {
     id: `preview-pod-${index + 1}`,
     activityId: activity.id,
@@ -123,7 +129,7 @@ const communityPods: Pod[] = Array.from({ length: 12 }, (_, index) => {
   };
 });
 
-const friends: FriendUser[] = people.slice(0, 3).map((person) => ({
+const friends: FriendUser[] = people.slice(0, 5).map((person) => ({
   ...person,
   verifiedUniversity: true,
 }));
@@ -154,6 +160,20 @@ const photographyMeeting: ClubMeetingToday = {
   clubEmoji: '📷',
   attendeeCount: 9,
   isMyClub: false,
+};
+
+const volleyballMeeting: ClubMeetingToday = {
+  id: 'meeting-volleyball',
+  title: 'Open gym & team mixer',
+  location: 'RPAC Upper Gym',
+  meetingTime: futureIso(9),
+  isPublic: true,
+  visibility: 'PUBLIC',
+  clubId: 'club-volleyball',
+  clubName: 'Volleyball Club',
+  clubEmoji: '🏐',
+  attendeeCount: 26,
+  isMyClub: true,
 };
 
 const clubMembership: MyClubMembershipRow = {
@@ -270,6 +290,67 @@ const clubDirectory: ClubDirectoryEntry[] = [
   },
 ];
 
+const photographyMembership: MyClubMembershipRow = {
+  membershipId: 'membership-photography',
+  role: 'MEMBER',
+  joinedAt: new Date().toISOString(),
+  unreadCount: 4,
+  club: clubDirectory[1]!,
+  nextMeeting: {
+    id: photographyMeeting.id,
+    clubId: photographyMeeting.clubId,
+    title: photographyMeeting.title,
+    description: 'Bring any camera. We will pair up, walk the Oval, and swap favorite shots.',
+    location: photographyMeeting.location,
+    meetingTime: photographyMeeting.meetingTime,
+    isPublic: true,
+    visibility: 'PUBLIC',
+    createdById: 'person-jordan',
+    createdAt: new Date().toISOString(),
+  },
+  latestAnnouncement: {
+    id: 'announcement-photography',
+    clubId: photographyMeeting.clubId,
+    userId: 'person-jordan',
+    content: 'Golden hour walk is on. Meet by the Thompson statue and bring a friend.',
+    visibility: 'PUBLIC',
+    createdAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    user: { id: 'person-jordan', name: 'Jordan', avatarUrl: null },
+  },
+};
+
+const volleyballMembership: MyClubMembershipRow = {
+  membershipId: 'membership-volleyball',
+  role: 'MEMBER',
+  joinedAt: new Date().toISOString(),
+  unreadCount: 1,
+  club: clubDirectory[3]!,
+  nextMeeting: {
+    id: volleyballMeeting.id,
+    clubId: volleyballMeeting.clubId,
+    title: volleyballMeeting.title,
+    description: 'Open play, quick team rotations, and a casual mixer afterward.',
+    location: volleyballMeeting.location,
+    meetingTime: volleyballMeeting.meetingTime,
+    isPublic: true,
+    visibility: 'PUBLIC',
+    createdById: 'person-sam',
+    createdAt: new Date().toISOString(),
+  },
+  latestAnnouncement: {
+    id: 'announcement-volleyball',
+    clubId: volleyballMeeting.clubId,
+    userId: 'person-sam',
+    content: 'Open gym teams are posted. New players are absolutely welcome.',
+    visibility: 'PUBLIC',
+    createdAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    user: { id: 'person-sam', name: 'Sam', avatarUrl: null },
+  },
+};
+
+const communityMemberships = [clubMembership, photographyMembership, volleyballMembership];
+const communityMeetings = [clubMeeting, photographyMeeting, volleyballMeeting];
+
 export type Stage2PreviewMode = 'zero' | 'spotlight' | 'community' | 'search';
 
 export function homePreviewData(mode: Stage2PreviewMode): HomePreviewData {
@@ -277,9 +358,9 @@ export function homePreviewData(mode: Stage2PreviewMode): HomePreviewData {
     mode === 'zero' ? [] : mode === 'spotlight' ? communityPods.slice(0, 4) : communityPods;
   return {
     pods,
-    myPods: mode === 'zero' ? [] : [pods[0]!],
-    clubMeetings: mode === 'community' ? [clubMeeting] : [],
-    myClubs: mode === 'community' ? [clubMembership] : [],
+    myPods: mode === 'zero' ? [] : pods.slice(0, 3),
+    clubMeetings: mode === 'community' ? communityMeetings : [],
+    myClubs: mode === 'community' ? communityMemberships : [],
     friends,
     summary: {
       dmUnread: 1,
@@ -313,7 +394,7 @@ export function podsPreviewData(mode: Stage2PreviewMode): PodsPreviewData {
         ? communityPods.slice(0, 4)
         : communityPods;
   return {
-    activePods: mode === 'community' ? communityPods.slice(0, 3) : [],
+    activePods: mode === 'community' ? communityPods.slice(0, 5) : [],
     historyPods: communityPods
       .slice(6, 9)
       .map((pod, index) => ({
@@ -342,7 +423,7 @@ export function clubsPreviewData(mode: Stage2PreviewMode): ClubsPreviewData {
   }
   return {
     clubs: clubDirectory,
-    myClubs: [clubMembership],
-    meetings: [clubMeeting, photographyMeeting],
+    myClubs: communityMemberships,
+    meetings: communityMeetings,
   };
 }

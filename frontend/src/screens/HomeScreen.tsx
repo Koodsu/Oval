@@ -135,7 +135,7 @@ function PodThumbnail({ pod }: { pod: Pod }) {
       <Image
         source={source}
         resizeMode="cover"
-        accessibilityLabel={`${pod.activity?.title ?? 'Pod'} image`}
+        accessibilityLabel={`${getPodTitle(pod)} image`}
         style={styles.fillImage}
       />
     </View>

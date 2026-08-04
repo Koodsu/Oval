@@ -19,6 +19,8 @@
 
 const BLOCKED_CONTENT_MESSAGE =
   'This content appears to violate Oval safety rules. Please revise it before posting.';
+const GIBBERISH_CONTENT_MESSAGE =
+  'Use a clear, descriptive pod title so people know what they are joining.';
 
 export interface ModerationRejection {
   status: 400;
@@ -28,6 +30,8 @@ export interface ModerationRejection {
 export interface ModerationOptions {
   /** Allow general profanity (for conversational content like chat messages). */
   allowProfanity?: boolean;
+  /** Reject likely keyboard-mash text. Intended for short public labels such as pod titles. */
+  rejectGibberish?: boolean;
 }
 
 // Leetspeak / homoglyph folding. Conservative — only common substitutions.
@@ -96,6 +100,83 @@ const PROFANITY_WORD: RegExp[] = [
   /\bb+o+l+l+o+c+k/, /\bmotherf+u+c?k/, /\bjackass/, /\bdouchebag/,
 ];
 
+// Top 1,000 character trigrams learned from macOS's 234k-word English
+// dictionaries (web2 + web2a). A trigram model proved much less prone to false
+// positives than the earlier repeated-bigram rule: the full dictionary audit
+// caught 25 rare-but-real words, which are explicitly preserved below.
+const COMMON_TRIGRAM_DATA = `
+e$$y$$s$$^^s^^pn$$^^c^^a^^ud$$r$$l$$t$$^un^^t^^ma$$ly$c$$^^ber$essic$^^dal$ion^^rss$teratied$^^hus$ingm$$on$te$^^i^^eous
+tiones^^oentatele$tic^^f^^g^co^^nicag$$ist^^lan$^prbleng$calant^reine^inablperh$$erint$allne$trast$ia$ver^sutricon^pary$
+prealiproite^^wstiene^caismoniis$ty$nte^diianntiratsm$ive^detor^nothe^anlitophste^^vlinerolatricmantinari^trasteraatoder
+^stresranmen^manonstr^peitigrandeherriaitytro^seintina^chlesmatolollyphorinometed^poaniectizeundiliae$overoplogereonaula
+ialdis^meid$chimetishtivostk$$^henicacese$phistanatum$ve$oriomarapin$emictilaroneniseleidaparaphnalforsisracestminze$ide
+^miphaelllen^mo^ba^sptal^phncecatgenmontisand^besto^^ko$$rouermoliillntaoid^sa^ovphyp$$eliersris^scmicngllislicculcartom
+inireduncetelanraltat^terosreaancchatence$^hyrom^thchelliar$comre$recarti$$araritardenish$plachollaencthoosior$misacteti
+athortotooreontniaetrhalicisubglynit^ta^larononoanghor^aroraachendunsdiainotanshirottur^enenoogrdenke$itaorm^al^^jrocton
+alacrondi^brhrountscoretsside$ful^ho^expol^plmernerurencoogilas^crntrdaecorageidianaler^haesiaryalenthnchcenporbilthinin
+hea^aces$ikearc^focol^shbrauriercliarentariouharquihinemahicdinvensuptabposium^gaetaberindliken$et$^lilleassamioseiat^si
+ge$hipelyomogerpleomimorsem^soertotholeons^ne^pillofer^totteout^raura^bihan^bongekerkindicdrospecertelcopuniincsiortiise
+^grcanpatrchrioserounearridpinogeicoabiramitholypenthrainedilacctoanetiaemeoroataephrmaens^leope^amhemupehyprepochizasin
+eryeouifianotre^muondcrapalotiholletamephewormalquaerreat^^qhilpicalohonopi^quip$gictitsitecolizmarlecolame$rabtopiscpan
+hy$adeimpern^dooponarunaileareoncultled^flgy$ck$velackead^veodi^clloscourm$radadi^ceansunpasispo^imspiemo^buma$epipti^ro
+^wahenchrsalomyficla$^fisnelornsintoaciceaoryote^ap^asustrd$oodelaocamitsen^vienara$cinsiaibldlyblyrol^geul$rogtillounos
+roocrenomdnerthdesthaghtcy$ongciaodohisniztleslynetnou^loich^ps^pu^fand$icuogyoceremealatrisoighpri^aueanmelsomcepqueune
+my$ras^orodeifoimeosp^^zzatrelwaretherlbrohelickinsollrrech$eptompclelea^blf$$decnedrte^tucritol^frshaiceampapphyddoniss
+ocoockuti^syoscel$unr^dagintchamarmiattbarrdina$rusaveorp^adnstcelautedlsseod$^tiacoscagalscrlum^cuystlocsheragthyclaerp
+^vata$itoscetoculiake^ouson^elopandandrliouto^epagielodradomsoluro^glescth$eveedniacneugislushettoseurraiisinrelopydreae
+ienlam^natestru^godalrerervx$$ily^wirsehotifeuslarrlabornorrdiohylaronne^cyannngisulnsepe$ilasurncyettungaccditcitacrilo
+rifossulltacreededbripte^fenoprigcurgonypeligmiamuldlehiaotanabhomsanpitrefndoll$nansmaimatlyganad$ckenaclotripunf^mysch
+ceoetootrmoueasoplicrsorecairemacrieiviiolasepsesiccidtrybalselordcostifmededeea$lidgatpisecilowmasierhedscisquimi^ci^sl
+ntleed^wherbw$$lonrmo^hibacextpedrilailponvalnsuee$poddrierghoucapapoeudrimnotrrirt$rphwinlnesilpulngumpetemmesmpherfbla
+esotogdemeseambrizdelbulsphmil^drglousetimootusipec^abusncocunbctaualtid^ispli^^yulosivvisysiutebatmidhooinfegarodrnispa
+belom$acasidot$nocoptgleeinoursedobinolpetatuvinbit^guamonorltiny$echituseugneprareghos^rilemtylempil$deaudomotagommenci
+`.replace(/\s/g, '');
+
+const COMMON_TRIGRAMS = new Set(
+  Array.from(
+    { length: COMMON_TRIGRAM_DATA.length / 3 },
+    (_, index) => COMMON_TRIGRAM_DATA.slice(index * 3, index * 3 + 3),
+  ),
+);
+
+const KNOWN_LOW_FREQUENCY_WORDS = new Set([
+  'avoirdupois', 'azoxybenzoic', 'caughnawaga', 'fifteenfold', 'hlidhskjalf',
+  'husbandfield', 'johnadreams', 'kalashnikov', 'kalymmocyte', 'kitkahaxki',
+  'kitkehahki', 'kornskeppur', 'kotukutuku', 'kuskwogmiut', 'mushrebiyeh',
+  'oxybenzaldehyde', 'razoumofskya', 'satyashodak', 'sixteenfold', 'swashbuckle',
+  'twelvefold', 'whiffenpoof', 'xylobalsamum', 'yajnavalkya', 'zaklohpakap',
+]);
+
+const KEYBOARD_RUNS = [
+  'qwerty', 'werty', 'asdfg', 'sdfgh', 'dfghj', 'fghjk', 'ghjkl',
+  'zxcvb', 'xcvbn', 'cvbnm',
+];
+
+function looksLikeGibberish(text: string): boolean {
+  const words = normalize(text).match(/[a-z]+/g) ?? [];
+
+  return words.some((word) => {
+    // Short words/acronyms and normal multi-word connective text are too easy
+    // to misclassify, so only scrutinize long tokens.
+    if (word.length < 10) return false;
+    if (KEYBOARD_RUNS.some((run) => word.includes(run) || word.includes(run.split('').reverse().join('')))) {
+      return true;
+    }
+
+    const vowels = (word.match(/[aeiouy]/g) ?? []).length;
+    const vowelRatio = vowels / word.length;
+    if (vowelRatio < 0.15 || vowelRatio > 0.8) return true;
+    if (KNOWN_LOW_FREQUENCY_WORDS.has(word)) return false;
+
+    const padded = `^^${word}$$`;
+    let commonCount = 0;
+    for (let index = 0; index < padded.length - 2; index += 1) {
+      if (COMMON_TRIGRAMS.has(padded.slice(index, index + 3))) commonCount += 1;
+    }
+    return commonCount / (padded.length - 2) < 0.24;
+  });
+}
+
 function matches(text: string, opts: ModerationOptions): boolean {
   if (!text) return false;
   const norm = normalize(text);
@@ -131,6 +212,9 @@ export async function moderateTextContent(
   const text = combinedText(texts);
   if (matches(text, options)) {
     return { status: 400, message: BLOCKED_CONTENT_MESSAGE };
+  }
+  if (options.rejectGibberish && looksLikeGibberish(text)) {
+    return { status: 400, message: GIBBERISH_CONTENT_MESSAGE };
   }
   return null;
 }

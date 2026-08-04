@@ -12,9 +12,26 @@
           "value": "public, max-age=3600"
         }
       ]
+    },
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "destination": "https://api.theovalapp.com/.well-known/assetlinks.json"
+    },
     {
       "source": "/pod/:path*",
       "destination": "/index.html"

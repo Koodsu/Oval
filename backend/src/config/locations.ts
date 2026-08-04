@@ -8,6 +8,49 @@
  * Run `npx prisma db seed` after changing activities if needed.
  */
 export const LOCATION_BY_CATEGORY: Record<string, string[]> = {
+  'Academic / Study': [
+    'Thompson Library',
+    '18th Avenue Library',
+    'FAES Library',
+    'Health Sciences Library',
+    'Research Commons',
+  ],
+  Sports: [
+    'RPAC',
+    'North Recreation Center',
+    'Jesse Owens North',
+    'Jesse Owens South',
+    'Aquatic Center',
+    'Lincoln Tower Fields',
+    'The Oval',
+  ],
+  'Fitness & Wellness': [
+    'RPAC',
+    'RPAC – Wellness Space',
+    'RPAC – Mind Body Studio',
+    'Student Wellness Center',
+    'The Oval',
+    'Olentangy Trail',
+  ],
+  'Social & Events': ['Ohio Union', 'The Oval', 'Mirror Lake', 'Student Lounge'],
+  Food: [
+    'Traditions at Scott',
+    'Traditions at Kennedy',
+    'Traditions at Morrill',
+    "Sloopy's Diner",
+    'Ohio Union',
+    'Berry Café',
+    'High Street',
+    'Residence Hall – Community Kitchen',
+  ],
+  'Music & Arts': [
+    'Wexner Center for the Arts',
+    'Hopkins Hall',
+    'Hughes Hall',
+    'Sullivant Hall',
+    'Ohio Union',
+    'The Oval',
+  ],
   'Sports & Fitness': [
     'RPAC',
     'North Recreation Center',
@@ -143,6 +186,7 @@ export const LOCATION_COORDINATES: Record<string, { latitude: number; longitude:
   'wexner center': { latitude: 39.9992, longitude: -83.0092 },
   'hopkins hall': { latitude: 39.9998, longitude: -83.014 },
   'hagerty hall': { latitude: 39.9987, longitude: -83.0122 },
+  'hughes hall': { latitude: 40.0003, longitude: -83.0105 },
   'sullivant hall': { latitude: 39.9986, longitude: -83.0093 },
 
   // Social

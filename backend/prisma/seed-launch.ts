@@ -4,13 +4,13 @@ import { getLocationsForCategory } from '../src/config/locations';
 
 const prisma = new PrismaClient();
 
-const LAUNCH_ACTIVITY_TITLES = [
-  'Morning Coffee Walk',
-  'Study Group Sprint',
-  'Basketball Pickup Game',
-  'Board Game Night',
-  'Sketch & Chat',
-  'Campus Cleanup',
+const LAUNCH_PLANS = [
+  { activityTitle: 'Grab coffee or tea', podTitle: 'Coffee after class' },
+  { activityTitle: 'Study group', podTitle: 'Midterm study sprint' },
+  { activityTitle: 'Pickup basketball', podTitle: '3v3 at the RPAC' },
+  { activityTitle: 'Board games', podTitle: 'Catan at the Union' },
+  { activityTitle: 'Draw / paint together', podTitle: 'Watercolor on the Oval' },
+  { activityTitle: 'Other volunteering', podTitle: 'Campus cleanup crew' },
 ];
 
 function ambassadorEmails(): string[] {
@@ -46,15 +46,15 @@ async function main() {
   }
 
   const activities = await prisma.activity.findMany({
-    where: { title: { in: LAUNCH_ACTIVITY_TITLES } },
+    where: { title: { in: LAUNCH_PLANS.map((plan) => plan.activityTitle) }, isActive: true },
   });
   const activityByTitle = new Map(activities.map((activity) => [activity.title, activity]));
 
   let created = 0;
-  for (const [index, title] of LAUNCH_ACTIVITY_TITLES.entries()) {
-    const activity = activityByTitle.get(title);
+  for (const [index, plan] of LAUNCH_PLANS.entries()) {
+    const activity = activityByTitle.get(plan.activityTitle);
     if (!activity) {
-      console.log(`Skipping "${title}" because the activity does not exist.`);
+      console.log(`Skipping "${plan.activityTitle}" because the activity does not exist.`);
       continue;
     }
 
@@ -62,6 +62,7 @@ async function main() {
     const existing = await prisma.pod.findFirst({
       where: {
         activityId: activity.id,
+        title: plan.podTitle,
         creatorId: { in: ambassadors.map((user) => user.id) },
         meetupTime: { gt: new Date() },
         status: { in: ['FORMING', 'LOCKED'] },

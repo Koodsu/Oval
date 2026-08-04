@@ -55,6 +55,7 @@ import { activityImageFor } from '../constants/contentImages';
 import { useAuth } from '../context/AuthContext';
 import { toast } from '../lib/toast';
 import { formatDateTime, relativeTime } from '../utils/format';
+import { getPodTitle } from '../utils/experience';
 import {
   BORDER_W,
   Theme,
@@ -1218,6 +1219,7 @@ function PodChatRow({
   const styles = useStyles();
   const { colors } = useTheme();
   const unread = pod.unreadCount ?? 0;
+  const title = getPodTitle(pod);
   const members = pod.members.map((member) => ({
     name: member.user.name,
     uri: member.user.avatarUrl,
@@ -1226,7 +1228,7 @@ function PodChatRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${pod.activity?.title ?? 'pod'} chat`}
+      accessibilityLabel={`Open ${title} chat`}
       style={({ pressed }) => [
         styles.inboxRow,
         showDivider && { borderBottomWidth: BORDER_W, borderBottomColor: colors.borderSoft },
@@ -1248,7 +1250,7 @@ function PodChatRow({
       <View style={styles.rowCopy}>
         <View style={styles.rowTop}>
           <Text style={[styles.rowTitle, styles.podRowTitle, { flex: 1 }]} numberOfLines={1}>
-            {pod.activity?.title ?? 'Pod chat'}
+            {title}
           </Text>
           {pod.lastMessageAt ? (
             <Text style={[styles.rowTimestamp, { color: colors.sub }]}>
@@ -1290,7 +1292,7 @@ function PodChatCard({ pod, onPress }: { pod: InboxPodThread; onPress: () => voi
     name: member.user.name,
     uri: member.user.avatarUrl,
   }));
-  const title = pod.activity?.title ?? 'Pod chat';
+  const title = getPodTitle(pod);
   return (
     <Pressable
       onPress={onPress}
@@ -1346,7 +1348,7 @@ function InviteSpotlightCard({
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const title = invite.pod?.activity.title ?? 'A pod';
+  const title = invite.pod ? getPodTitle(invite.pod) : 'A pod';
   return (
     <View
       style={[
@@ -1416,7 +1418,7 @@ function InviteRow({
       <View style={styles.actionableCopy}>
         <Text style={typography.captionSmall}>You're invited to join</Text>
         <Text style={typography.heading} numberOfLines={1}>
-          {invite.pod?.activity.title ?? 'A pod'}
+          {invite.pod ? getPodTitle(invite.pod) : 'A pod'}
         </Text>
         <View style={styles.compactActions}>
           <MiniButton label="Decline" onPress={onDecline} disabled={busy} />
@@ -1547,7 +1549,7 @@ function PodInviteCard({
         <View style={styles.rowCopy}>
           <Text style={[styles.inviteEyebrow, { color: colors.sub }]}>You're invited to join</Text>
           <Text style={styles.inviteTitle} numberOfLines={2}>
-            {invite.pod?.activity.title ?? 'A pod'}
+            {invite.pod ? getPodTitle(invite.pod) : 'A pod'}
           </Text>
           <Text style={[styles.inviteMeta, { color: colors.sub }]}>
             {memberCount

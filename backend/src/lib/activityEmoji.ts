@@ -21,6 +21,14 @@ export function getActivityEmoji(title: string, category: string): string {
     [/movie|film|cinema/i, '🎬'],
     [/music|concert|jam session|band/i, '🎵'],
     [/game night|board game|gaming\b/i, '🎮'],
+    [/chess/i, '♟️'],
+    [/card game|poker/i, '🃏'],
+    [/trivia/i, '❓'],
+    [/swim/i, '🏊'],
+    [/golf/i, '⛳'],
+    [/bowling/i, '🎳'],
+    [/cook|bake/i, '🧑‍🍳'],
+    [/book|reading/i, '📖'],
     [/photo|camera|shoot/i, '📷'],
     [/art\b|paint|sketch|museum/i, '🎨'],
     [/dance|salsa|swing dance/i, '💃'],
@@ -34,6 +42,12 @@ export function getActivityEmoji(title: string, category: string): string {
   }
 
   const byCategory: Record<string, string> = {
+    'Academic / Study': '📚',
+    Sports: '⚽',
+    'Fitness & Wellness': '🌿',
+    'Social & Events': '👋',
+    Food: '🍽️',
+    'Music & Arts': '🎨',
     'Sports & Fitness': '⚽',
     'Food & Drink': '🍽️',
     Academic: '📚',

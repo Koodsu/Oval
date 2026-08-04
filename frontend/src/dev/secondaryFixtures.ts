@@ -206,7 +206,7 @@ export const previewActivityRequests: ActivityRequest[] = [
     userId: 'student-1',
     title: 'Ceramics Studio Night',
     description: 'A relaxed evening of ceramic making and glazing for all skill levels.',
-    category: 'Arts & Creative',
+    category: 'Music & Arts',
     defaultLocation: 'Hopkins Hall',
     status: 'PENDING',
     createdAt: minutesAgo(60),

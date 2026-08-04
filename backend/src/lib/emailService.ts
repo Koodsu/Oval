@@ -163,7 +163,7 @@ export interface ModerationReportEmailPayload {
   createdAt: Date;
   reporter?: { id: string; name: string; email: string } | null;
   target?: { id: string; name: string; email: string } | null;
-  pod?: { id: string; location?: string | null; activity?: { title: string } | null } | null;
+  pod?: { id: string; title?: string | null; location?: string | null; activity?: { title: string } | null } | null;
   message?: { id: string; content: string; createdAt?: Date } | null;
   reportedContent?: string | null;
   directMessageId?: string | null;
@@ -208,7 +208,7 @@ export async function sendModerationReportEmail(report: ModerationReportEmailPay
     ['Target type', report.targetType],
     ['Reporter', report.reporter ? `${report.reporter.name} <${report.reporter.email}> (${report.reporter.id})` : null],
     ['Target user', report.target ? `${report.target.name} <${report.target.email}> (${report.target.id})` : null],
-    ['Pod', report.pod ? `${report.pod.activity?.title ?? 'Pod'} at ${report.pod.location ?? 'unknown location'} (${report.pod.id})` : null],
+    ['Pod', report.pod ? `${report.pod.title?.trim() || report.pod.activity?.title || 'Pod'} at ${report.pod.location ?? 'unknown location'} (${report.pod.id})` : null],
     ['Reported content', report.message ? `${report.message.content.slice(0, 500)} (${report.message.id})` : report.reportedContent?.slice(0, 500)],
     ['Direct message id', report.directMessageId],
     ['Club id', report.clubId],

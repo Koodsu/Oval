@@ -54,5 +54,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "ip-address": "^10.4.0"
   }
 }

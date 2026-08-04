@@ -446,7 +446,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
     }
 
     // ── Option B: create a new pod for an activity ───────────────────────────
-    const activity = await prisma.activity.findUnique({ where: { id: activityId } });
+    const activity = await prisma.activity.findFirst({ where: { id: activityId, isActive: true } });
     if (!activity) {
       res.status(404).json({ error: 'Activity not found' });
       return;
@@ -510,8 +510,13 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    const titleModeration = await moderateTextContent([titleInput], { rejectGibberish: true });
+    if (titleModeration) {
+      res.status(titleModeration.status).json({ error: titleModeration.message });
+      return;
+    }
+
     const moderation = await moderateTextContent([
-      titleInput,
       noteInput,
       locationInput,
       locationAddressInput,
@@ -848,7 +853,7 @@ router.post('/:id/unlock', requireAuth, async (req: AuthRequest, res: Response):
   }
 });
 
-// PATCH /pods/:id — creator only; edit meetup time, location, and coordinates
+// PATCH /pods/:id — creator only; edit title, meetup time, location, and coordinates
 router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.userId;
   const { id } = req.params;
@@ -875,6 +880,24 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
     }
 
     const data: Record<string, unknown> = {};
+
+    if (req.body.title != null) {
+      const titleInput = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+      if (!titleInput) {
+        res.status(400).json({ error: 'Pod title cannot be empty' });
+        return;
+      }
+      if (titleInput.length > MAX_POD_TITLE_LENGTH) {
+        res.status(400).json({ error: `Pod title cannot exceed ${MAX_POD_TITLE_LENGTH} characters` });
+        return;
+      }
+      const moderation = await moderateTextContent([titleInput], { rejectGibberish: true });
+      if (moderation) {
+        res.status(moderation.status).json({ error: moderation.message });
+        return;
+      }
+      data.title = titleInput;
+    }
 
     if (req.body.meetupTime != null) {
       const parsed = new Date(req.body.meetupTime);

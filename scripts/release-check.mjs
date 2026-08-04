@@ -34,6 +34,9 @@ if (!backendLegal || backendLegal !== frontendLegal) {
 }
 
 const appConfig = JSON.parse(fs.readFileSync('frontend/app.json', 'utf8'));
+if (!/^\d+\.\d+\.\d+$/.test(appConfig.expo.version) || appConfig.expo.version === '1.0.1') {
+  fail('frontend/app.json must contain the bumped semantic release version');
+}
 if (appConfig.expo.ios?.supportsTablet !== false) {
   fail('iPad support must stay disabled until the iPad release is tested');
 }
@@ -65,6 +68,35 @@ for (const pattern of [
 
 if (!fs.existsSync('landing/public/.well-known/apple-app-site-association')) {
   fail('the landing Apple association file is missing');
+}
+
+const landingVercel = JSON.parse(fs.readFileSync('landing/vercel.json', 'utf8'));
+const androidAssociationRewrite = landingVercel.rewrites?.find(
+  (entry) => entry.source === '/.well-known/assetlinks.json',
+);
+if (androidAssociationRewrite?.destination !== 'https://api.theovalapp.com/.well-known/assetlinks.json') {
+  fail('the landing Android App Links association route is missing or points at the wrong API');
+}
+
+const expectedArtworkKeys = [
+  'study-group', 'reading-book-club', 'pickup-basketball', 'pickup-soccer',
+  'pickup-volleyball', 'tennis-pickleball', 'running-jogging', 'swimming', 'golf',
+  'bowling', 'frisbee', 'gym-partner', 'yoga', 'meditation', 'nature-walk',
+  'casual-hangout', 'movie-watch-party', 'go-to-event', 'video-games', 'board-games',
+  'card-games', 'tabletop-rpgs', 'mobile-games', 'trivia', 'chess',
+  'food-bank-volunteering', 'animal-shelter-volunteering', 'medical-center-volunteering',
+  'other-volunteering', 'cook-together', 'eat-at-restaurant', 'eat-at-dining-hall',
+  'grab-coffee-tea', 'bake-something', 'picnic', 'draw-paint', 'crafting',
+  'creative-writing', 'play-practice-music', 'photography', 'dance',
+];
+const activityCatalogSource = fs.readFileSync('backend/prisma/activityCatalog.ts', 'utf8');
+for (const key of expectedArtworkKeys) {
+  if (!activityCatalogSource.includes(`artworkKey: '${key}'`)) {
+    fail(`backend activity catalog is missing artwork key ${key}`);
+  }
+  if (!fs.existsSync(`frontend/assets/illustrations/activity/catalog/${key}.jpg`)) {
+    fail(`activity artwork is missing for ${key}`);
+  }
 }
 
 if (!process.exitCode) {

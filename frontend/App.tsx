@@ -81,7 +81,11 @@ import {
 import { Activity } from './src/types';
 import { getInboxSummary } from './src/api';
 import { BORDER_W, ThemeProvider, elevation, fonts, motion, radii, useTheme } from './src/theme';
-import { getUiPreviewMode } from './src/dev/previewMode';
+import {
+  getUiPreviewMode,
+  getUiPreviewNeutralDock,
+  getUiPreviewTab,
+} from './src/dev/previewMode';
 import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 import { REALTIME_INBOX_EVENTS, useRealtimeChannel } from './src/hooks/useRealtimeChannel';
@@ -267,6 +271,7 @@ function TabItem({
   routeName,
   label,
   focused,
+  selected,
   onPress,
   onLongPress,
   badge,
@@ -274,6 +279,7 @@ function TabItem({
   routeName: keyof MainTabParamList;
   label: string;
   focused: boolean;
+  selected: boolean;
   onPress: () => void;
   onLongPress: () => void;
   badge?: number | string;
@@ -299,7 +305,7 @@ function TabItem({
       onLongPress={onLongPress}
       accessibilityRole="tab"
       accessibilityLabel={label}
-      accessibilityState={{ selected: focused }}
+      accessibilityState={{ selected }}
       style={styles.tabSlot}
     >
       <Animated.View style={[styles.tabIconWell, iconStyle]}>
@@ -328,6 +334,7 @@ function TabItem({
 function OvalDock({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const neutralPreview = getUiPreviewNeutralDock();
 
   const renderRoute = (route: BottomTabBarProps['state']['routes'][number], index: number) => {
     const { options } = descriptors[route.key];
@@ -335,7 +342,8 @@ function OvalDock({ state, descriptors, navigation }: BottomTabBarProps) {
       typeof options.tabBarLabel === 'string'
         ? options.tabBarLabel
         : options.title ?? route.name;
-    const focused = state.index === index;
+    const selected = state.index === index;
+    const focused = selected && !neutralPreview;
 
     return (
       <TabItem
@@ -343,13 +351,14 @@ function OvalDock({ state, descriptors, navigation }: BottomTabBarProps) {
         routeName={route.name as keyof MainTabParamList}
         label={label}
         focused={focused}
+        selected={selected}
         onPress={() => {
           const event = navigation.emit({
             type: 'tabPress',
             target: route.key,
             canPreventDefault: true,
           });
-          if (!focused && !event.defaultPrevented) {
+          if (!selected && !event.defaultPrevented) {
             navigation.navigate(route.name);
           }
         }}
@@ -482,6 +491,7 @@ function FoundationPreviewTabs() {
 }
 
 function Stage2PreviewTabs({ mode }: { mode: Stage2PreviewMode }) {
+  const [initialTab] = React.useState(getUiPreviewTab);
   const HomePreview = React.useCallback(
     () => <HomeScreen previewData={homePreviewData(mode)} />,
     [mode],
@@ -500,6 +510,7 @@ function Stage2PreviewTabs({ mode }: { mode: Stage2PreviewMode }) {
   );
   return (
     <Tab.Navigator
+      initialRouteName={initialTab ?? 'Home'}
       tabBar={(props) => <OvalDock {...props} />}
       screenOptions={{ headerShown: false }}
     >
