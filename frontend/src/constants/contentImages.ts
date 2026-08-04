@@ -8,12 +8,51 @@ import type { Activity } from '../types';
  */
 const ACTIVITY_IMAGES_BY_ID: Record<string, ImageSourcePropType> = {};
 
-/**
- * Explicit mappings for curated catalog activities. These are exact catalog
- * titles—not fuzzy matching and never user-entered pod copy. Once the backend
- * exposes a stable artwork key, this table can move to that key without
- * changing call sites.
- */
+const ACTIVITY_IMAGES_BY_ARTWORK_KEY: Record<string, ImageSourcePropType> = {
+  'study-group': require('../../assets/illustrations/activity/catalog/study-group.jpg'),
+  'reading-book-club': require('../../assets/illustrations/activity/catalog/reading-book-club.jpg'),
+  'pickup-basketball': require('../../assets/illustrations/activity/catalog/pickup-basketball.jpg'),
+  'pickup-soccer': require('../../assets/illustrations/activity/catalog/pickup-soccer.jpg'),
+  'pickup-volleyball': require('../../assets/illustrations/activity/catalog/pickup-volleyball.jpg'),
+  'tennis-pickleball': require('../../assets/illustrations/activity/catalog/tennis-pickleball.jpg'),
+  'running-jogging': require('../../assets/illustrations/activity/catalog/running-jogging.jpg'),
+  swimming: require('../../assets/illustrations/activity/catalog/swimming.jpg'),
+  golf: require('../../assets/illustrations/activity/catalog/golf.jpg'),
+  bowling: require('../../assets/illustrations/activity/catalog/bowling.jpg'),
+  frisbee: require('../../assets/illustrations/activity/catalog/frisbee.jpg'),
+  'gym-partner': require('../../assets/illustrations/activity/catalog/gym-partner.jpg'),
+  yoga: require('../../assets/illustrations/activity/catalog/yoga.jpg'),
+  meditation: require('../../assets/illustrations/activity/catalog/meditation.jpg'),
+  'nature-walk': require('../../assets/illustrations/activity/catalog/nature-walk.jpg'),
+  'casual-hangout': require('../../assets/illustrations/activity/catalog/casual-hangout.jpg'),
+  'movie-watch-party': require('../../assets/illustrations/activity/catalog/movie-watch-party.jpg'),
+  'go-to-event': require('../../assets/illustrations/activity/catalog/go-to-event.jpg'),
+  'video-games': require('../../assets/illustrations/activity/catalog/video-games.jpg'),
+  'board-games': require('../../assets/illustrations/activity/catalog/board-games.jpg'),
+  'card-games': require('../../assets/illustrations/activity/catalog/card-games.jpg'),
+  'tabletop-rpgs': require('../../assets/illustrations/activity/catalog/tabletop-rpgs.jpg'),
+  'mobile-games': require('../../assets/illustrations/activity/catalog/mobile-games.jpg'),
+  trivia: require('../../assets/illustrations/activity/catalog/trivia.jpg'),
+  chess: require('../../assets/illustrations/activity/catalog/chess.jpg'),
+  'food-bank-volunteering': require('../../assets/illustrations/activity/catalog/food-bank-volunteering.jpg'),
+  'animal-shelter-volunteering': require('../../assets/illustrations/activity/catalog/animal-shelter-volunteering.jpg'),
+  'medical-center-volunteering': require('../../assets/illustrations/activity/catalog/medical-center-volunteering.jpg'),
+  'other-volunteering': require('../../assets/illustrations/activity/catalog/other-volunteering.jpg'),
+  'cook-together': require('../../assets/illustrations/activity/catalog/cook-together.jpg'),
+  'eat-at-restaurant': require('../../assets/illustrations/activity/catalog/eat-at-restaurant.jpg'),
+  'eat-at-dining-hall': require('../../assets/illustrations/activity/catalog/eat-at-dining-hall.jpg'),
+  'grab-coffee-tea': require('../../assets/illustrations/activity/catalog/grab-coffee-tea.jpg'),
+  'bake-something': require('../../assets/illustrations/activity/catalog/bake-something.jpg'),
+  picnic: require('../../assets/illustrations/activity/catalog/picnic.jpg'),
+  'draw-paint': require('../../assets/illustrations/activity/catalog/draw-paint.jpg'),
+  crafting: require('../../assets/illustrations/activity/catalog/crafting.jpg'),
+  'creative-writing': require('../../assets/illustrations/activity/catalog/creative-writing.jpg'),
+  'play-practice-music': require('../../assets/illustrations/activity/catalog/play-practice-music.jpg'),
+  photography: require('../../assets/illustrations/activity/catalog/photography.jpg'),
+  dance: require('../../assets/illustrations/activity/catalog/dance.jpg'),
+};
+
+/** Legacy title mappings keep historical pods visually intact. */
 const ACTIVITY_IMAGES_BY_CATALOG_TITLE: Record<string, ImageSourcePropType> = {
   'Basketball Pickup Game': require('../../assets/illustrations/activity/basketball.jpg'),
   'Study Group Sprint': require('../../assets/illustrations/activity/study-session.jpg'),
@@ -23,6 +62,12 @@ const ACTIVITY_IMAGES_BY_CATALOG_TITLE: Record<string, ImageSourcePropType> = {
 };
 
 const ACTIVITY_IMAGES_BY_CATEGORY: Record<string, ImageSourcePropType> = {
+  'Academic / Study': require('../../assets/illustrations/activity/study-session.jpg'),
+  Sports: require('../../assets/illustrations/activity/soccer.jpg'),
+  'Fitness & Wellness': require('../../assets/illustrations/activity/outdoors.jpg'),
+  'Social & Events': require('../../assets/illustrations/activity/campus-hangout.jpg'),
+  Food: require('../../assets/illustrations/activity/cafe-hangout.jpg'),
+  'Music & Arts': require('../../assets/illustrations/activity/arts-music.jpg'),
   'Sports & Fitness': require('../../assets/illustrations/activity/soccer.jpg'),
   'Food & Drink': require('../../assets/illustrations/activity/cafe-hangout.jpg'),
   Academic: require('../../assets/illustrations/activity/study-session.jpg'),
@@ -77,11 +122,12 @@ export function activityImageForId(activityId: string): ImageSourcePropType {
 }
 
 export function activityImageFor(
-  activity?: Pick<Activity, 'id' | 'title' | 'category'> | null,
+  activity?: Pick<Activity, 'id' | 'title' | 'category' | 'artworkKey'> | null,
 ): ImageSourcePropType {
   if (!activity) return DEFAULT_ACTIVITY_IMAGE;
   return (
     ACTIVITY_IMAGES_BY_ID[activity.id] ??
+    (activity.artworkKey ? ACTIVITY_IMAGES_BY_ARTWORK_KEY[activity.artworkKey] : undefined) ??
     ACTIVITY_IMAGES_BY_CATALOG_TITLE[activity.title] ??
     ACTIVITY_IMAGES_BY_CATEGORY[activity.category] ??
     DEFAULT_ACTIVITY_IMAGE

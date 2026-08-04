@@ -24,7 +24,7 @@ describe('Inbox summary', () => {
       createTestUser({ name: 'Inbox Requester' }),
     ]);
     const token = getAuthToken(me.id, me.email);
-    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic / Study' } });
     if (!activity) throw new Error('No Academic activity in seed');
 
     const thread = await prisma.directMessageThread.create({

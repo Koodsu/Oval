@@ -52,6 +52,7 @@ import {
 } from '../constants/campusMap';
 import { customCreateDefaults } from '../constants/podTemplates';
 import { formatDateTime } from '../utils/format';
+import { getPodTitleValidationError } from '../utils/podTitleValidation';
 import {
   BORDER_W,
   Theme,
@@ -82,6 +83,50 @@ function dedupeLocations(locations: string[]) {
   });
 }
 
+const POD_TITLE_EXAMPLES: Record<string, string> = {
+  'study-group': 'CSE 2231 midterm review',
+  'reading-book-club': 'Sci-fi book club kickoff',
+  'pickup-basketball': '3v3 at the RPAC',
+  'pickup-soccer': 'Beginner soccer at Lincoln Fields',
+  'pickup-volleyball': 'Sunset grass volleyball',
+  'tennis-pickleball': 'Beginner pickleball doubles',
+  'running-jogging': 'Easy 5K around campus',
+  swimming: 'Morning lap swim',
+  golf: 'Driving range after class',
+  bowling: 'Friday bowling night',
+  frisbee: 'Casual frisbee on the Oval',
+  'gym-partner': 'Push day at the RPAC',
+  yoga: 'Beginner sunset yoga',
+  meditation: '20-minute guided reset',
+  'nature-walk': 'Olentangy Trail walk',
+  'casual-hangout': 'Mirror Lake sunset hang',
+  'movie-watch-party': 'Buckeyes watch party',
+  'go-to-event': 'Gallery opening at the Wex',
+  'video-games': 'Mario Kart tournament',
+  'board-games': 'Catan at the Union',
+  'card-games': 'Poker night',
+  'tabletop-rpgs': 'Beginner D&D one-shot',
+  'mobile-games': 'Pokémon GO campus walk',
+  trivia: 'Thursday trivia team',
+  chess: 'Beginner chess meetup',
+  'food-bank-volunteering': 'Saturday food packing shift',
+  'animal-shelter-volunteering': 'Shelter volunteer afternoon',
+  'medical-center-volunteering': 'Care-kit assembly night',
+  'other-volunteering': 'Oval cleanup crew',
+  'cook-together': 'Homemade pasta night',
+  'eat-at-restaurant': 'Sushi on High Street',
+  'eat-at-dining-hall': 'Dinner at Scott',
+  'grab-coffee-tea': 'Coffee before class',
+  'bake-something': 'Brownie bake night',
+  picnic: 'Sunday picnic on the Oval',
+  'draw-paint': 'Watercolor at Mirror Lake',
+  crafting: 'Crochet and conversation',
+  'creative-writing': 'Poetry workshop',
+  'play-practice-music': 'Acoustic jam session',
+  photography: 'Golden-hour photo walk',
+  dance: 'Beginner salsa practice',
+};
+
 export default function ActivityPodsScreen({ route, navigation, preview = false }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
@@ -91,7 +136,11 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
   const [pods, setPods] = useState<Pod[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState(activity.title);
+  // The activity is the broad category (for example, "Card Games"); the pod
+  // title should describe the specific plan people are joining.
+  const [title, setTitle] = useState('');
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [titleServerError, setTitleServerError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [location, setLocation] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
@@ -113,6 +162,9 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(preview);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const liveTitleError = getPodTitleValidationError(title);
+  const titleFieldError =
+    titleServerError ?? (title.trim() || titleTouched ? liveTitleError : null);
 
   useEffect(() => {
     setDemandCount(activity.demandCount ?? 0);
@@ -185,8 +237,9 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
   };
 
   const handleCreate = async () => {
-    if (!title.trim()) {
-      toast.error('Add a pod title', 'Give people a quick, clear reason to join.');
+    setTitleTouched(true);
+    const titleError = getPodTitleValidationError(title);
+    if (titleError) {
       return;
     }
     if (!location.trim() || !locationAddress.trim()) {
@@ -219,7 +272,12 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
       });
       navigation.replace('PodDetail', { podId: response.id, justCreated: true });
     } catch (error) {
-      toast.error('Could not start pod', getApiErrorMessage(error));
+      const message = getApiErrorMessage(error);
+      if (/pod title|descriptive pod title|safety rules/i.test(message)) {
+        setTitleServerError(message);
+      } else {
+        toast.error('Could not start pod', message);
+      }
     } finally {
       setCreating(false);
     }
@@ -410,11 +468,22 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
           {composerExpanded ? (
             <View style={[styles.composerBody, { borderTopColor: colors.borderSoft }]}>
               <Field
-                label="Pod title"
+                label="What are you planning?"
                 value={title}
-                onChangeText={setTitle}
-                placeholder="Sunrise hike & coffee"
+                onChangeText={(value) => {
+                  setTitle(value);
+                  setTitleServerError(null);
+                }}
+                onBlur={() => setTitleTouched(true)}
+                placeholder={
+                  (activity.artworkKey && POD_TITLE_EXAMPLES[activity.artworkKey]) ||
+                  `A specific ${activity.title.toLowerCase()} plan`
+                }
                 maxLength={60}
+                error={titleFieldError}
+                hint={title.trim() && !liveTitleError
+                  ? 'Looks good — this is what people will see in the feed.'
+                  : `${activity.title} is the activity. Add the specific plan here.`}
               />
 
               <View style={{ gap: 6 }}>
@@ -546,7 +615,13 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
                 {note.trim() ? <Text style={typography.caption}>{note.trim()}</Text> : null}
               </View>
 
-              <Button label="Create pod" onPress={handleCreate} loading={creating} size="lg" />
+              <Button
+                label="Create pod"
+                onPress={handleCreate}
+                loading={creating}
+                disabled={Boolean(liveTitleError || titleServerError)}
+                size="lg"
+              />
               <View style={styles.privateHint}>
                 <Ionicons name="lock-closed-outline" size={14} color={colors.sub} />
                 <Text style={typography.captionSmall}>Only invited members can see private pods.</Text>
@@ -577,9 +652,14 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
                   accessibilityLabel={`Open pod at ${pod.location}`}
                 >
                   <View style={styles.podTop}>
-                    <Text style={typography.heading} numberOfLines={1}>
-                      {formatDateTime(pod.meetupTime)}
-                    </Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={typography.heading} numberOfLines={1}>
+                        {pod.title?.trim() || activity.title}
+                      </Text>
+                      <Text style={typography.captionSmall} numberOfLines={1}>
+                        {formatDateTime(pod.meetupTime)}
+                      </Text>
+                    </View>
                     {!isOpen ? (
                       <Sticker
                         label={pod.status === 'COMPLETED' ? 'Done' : pod.status.toLowerCase()}

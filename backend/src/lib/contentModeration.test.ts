@@ -37,6 +37,48 @@ describe('content moderation (local, no provider)', () => {
     expect(await blocked('a$$hole')).toBe(true);
   });
 
+  it('rejects likely keyboard-mash pod titles when requested', async () => {
+    const options = { rejectGibberish: true };
+    for (const title of [
+      'asfoiashdoi',
+      'AFOISUDOIAS',
+      'qwertyuiop',
+      'bcdfghjklm',
+      'aaaaaaaaaa',
+    ]) {
+      expect(await blocked(title, options)).toBe(true);
+    }
+  });
+
+  it('keeps plausible titles, campus names, and acronyms', async () => {
+    const options = { rejectGibberish: true };
+    for (const title of [
+      'Euchre at Morrill Tower',
+      'CSE 2221',
+      'MATH 1151 study group',
+      'Algorithms exam cram',
+      'Pickleball',
+      'Thanksgiving potluck',
+      'BuckeyeLink help session',
+      'RPAC pickup basketball',
+      'Mississippi watch party',
+      'Ashwaganda supplements',
+      'Ashwagandha discussion',
+      'Availability',
+      'Aboveboard',
+      'Birthplace',
+      'Postscript',
+      'Backstroke',
+      'Matchstick',
+      'Swashbuckle',
+      'Kalashnikov history discussion',
+      'Oxybenzaldehyde study session',
+      'Twelvefold',
+    ]) {
+      expect(await clean(title, options)).toBe(true);
+    }
+  });
+
   it('does NOT flag innocent words (false-positive guards)', async () => {
     for (const word of [
       'class', 'classic', 'assassin', 'Scunthorpe', 'grape', 'scrape',

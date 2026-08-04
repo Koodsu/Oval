@@ -1,4 +1,4 @@
-import { getActivityLiveCount, getFeaturedActivities, getOpenPodCount, sortUpcomingPods } from './experience';
+import { getActivityLiveCount, getFeaturedActivities, getOpenPodCount, getPodTitle, sortUpcomingPods } from './experience';
 import type { Activity, Pod } from '../types';
 
 const activity = (id: string, title: string): Activity => ({
@@ -51,5 +51,13 @@ describe('experience utilities', () => {
       pod('1', 'a', '2026-04-26T12:00:00Z'),
       pod('2', 'a', '2026-04-26T13:00:00Z', 'LOCKED'),
     ])).toBe(1);
+  });
+
+  it('uses the specific pod title before the activity fallback', () => {
+    const named = { ...pod('p1', 'a', '2026-08-03T18:00:00.000Z'), title: 'Euchre at Morrill', activity: activity('a', 'Card Games') };
+    const legacy = { ...pod('p2', 'a', '2026-08-03T19:00:00.000Z'), title: null, activity: activity('a', 'Card Games') };
+
+    expect(getPodTitle(named)).toBe('Euchre at Morrill');
+    expect(getPodTitle(legacy)).toBe('Card Games');
   });
 });

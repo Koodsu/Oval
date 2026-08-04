@@ -46,4 +46,11 @@ describe('production environment validation', () => {
   it('does nothing outside production', () => {
     expect(() => validateProductionEnvironment({ NODE_ENV: 'test' })).not.toThrow();
   });
+
+  it('rejects a malformed Android App Links certificate fingerprint', () => {
+    expect(() => validateProductionEnvironment({
+      ...validEnv,
+      ANDROID_SHA256_CERT_FINGERPRINT: 'not-a-sha256-fingerprint',
+    })).toThrow(/ANDROID_SHA256_CERT_FINGERPRINT/);
+  });
 });

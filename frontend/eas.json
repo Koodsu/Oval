@@ -14,6 +14,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.theovalapp.com",
+        "EXPO_PUBLIC_ENV": "preview",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_SUPABASE_URL": "https://vwxvtmyqjmihncufhkwj.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3eHZ0bXlxam1paG5jdWZoa3dqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2ODcyNzIsImV4cCI6MjA4NDI2MzI3Mn0.LKuIKs-MNY_OW0Nv0i9Ldivp2jki8U6pNS5HFFLRhJg"
@@ -24,6 +25,7 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.theovalapp.com",
+        "EXPO_PUBLIC_ENV": "production",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_SUPABASE_URL": "https://vwxvtmyqjmihncufhkwj.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3eHZ0bXlxam1paG5jdWZoa3dqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2ODcyNzIsImV4cCI6MjA4NDI2MzI3Mn0.LKuIKs-MNY_OW0Nv0i9Ldivp2jki8U6pNS5HFFLRhJg"

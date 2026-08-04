@@ -170,6 +170,9 @@ export interface Activity {
   description: string;
   category: string;
   defaultLocation: string;
+  isActive?: boolean;
+  artworkKey?: string | null;
+  sortOrder?: number;
   createdAt: string;
   _count?: { pods: number };
   demandCount?: number;

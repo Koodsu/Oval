@@ -33,7 +33,7 @@ describe('Pod invites routes', () => {
     await prisma.friendship.create({ data: { userAId, userBId } });
 
     const activity = await prisma.activity.findFirst({
-      where: { category: 'Academic' },
+      where: { category: 'Academic / Study' },
     });
     if (!activity) throw new Error('No Academic activity in seed');
 

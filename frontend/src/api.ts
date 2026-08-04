@@ -1118,6 +1118,7 @@ export const leavePod = (podId: string) =>
   request<LeavePodResponse>(`/pods/${podId}/leave`, { method: 'POST' });
 
 export interface EditPodPayload {
+  title?: string;
   meetupTime?: string;
   location?: string;
   latitude?: number;

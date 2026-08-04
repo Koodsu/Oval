@@ -22,20 +22,56 @@ describe('GET /activities', () => {
     expect(res.body[0]).toHaveProperty('title');
     expect(res.body[0]).toHaveProperty('category');
     expect(res.body[0]).toHaveProperty('description');
+    expect(res.body[0]).toHaveProperty('artworkKey');
+    expect(res.body.every((activity: { isActive: boolean }) => activity.isActive)).toBe(true);
   });
 
   it('filters by category when provided', async () => {
     const { token } = await registerAndGetToken('Bob', 'bob@activities.test.com', 'password123');
     const res = await request(app)
       .get('/activities')
-      .query({ category: 'Sports & Fitness' })
+      .query({ category: 'Sports' })
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
     expect(Array.isArray(res.body)).toBe(true);
     res.body.forEach((a: { category: string }) => {
-      expect(a.category).toBe('Sports & Fitness');
+      expect(a.category).toBe('Sports');
     });
+  });
+
+  it('hides retired activities from discovery and blocks new demand', async () => {
+    const { token } = await registerAndGetToken(
+      'Legacy Activity Student',
+      'legacy-activity@activities.test.com',
+      'password123'
+    );
+    const retired = await prisma.activity.create({
+      data: {
+        title: `Retired Activity ${Date.now()}`,
+        description: 'Kept only so existing pod history remains valid.',
+        category: 'Social & Events',
+        defaultLocation: 'Ohio Union',
+        isActive: false,
+      },
+    });
+
+    const activities = await request(app)
+      .get('/activities')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(activities.body.some((activity: { id: string }) => activity.id === retired.id)).toBe(false);
+
+    await request(app)
+      .post(`/activities/${retired.id}/demand`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+
+    await request(app)
+      .post('/pods/join')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activityId: retired.id })
+      .expect(404);
   });
 });
 
@@ -43,7 +79,7 @@ describe('GET /activities/locations', () => {
   it('returns 401 without auth', async () => {
     await request(app)
       .get('/activities/locations')
-      .query({ category: 'Food & Drink' })
+      .query({ category: 'Food' })
       .expect(401);
   });
 
@@ -51,7 +87,7 @@ describe('GET /activities/locations', () => {
     const { token } = await registerAndGetToken('Carol', 'carol@activities.test.com', 'password123');
     const res = await request(app)
       .get('/activities/locations')
-      .query({ category: 'Food & Drink' })
+      .query({ category: 'Food' })
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
@@ -72,9 +108,9 @@ describe('GET /activities/:id/locations', () => {
   it('returns locations for an activity by its category when authenticated', async () => {
     const { token } = await registerAndGetToken('Eve', 'eve@activities.test.com', 'password123');
     const activity = await prisma.activity.findFirst({
-      where: { category: 'Food & Drink' },
+      where: { category: 'Food' },
     });
-    if (!activity) throw new Error('No Food & Drink activity in seed');
+    if (!activity) throw new Error('No Food activity in seed');
 
     const res = await request(app)
       .get(`/activities/${activity.id}/locations`)
@@ -105,7 +141,7 @@ describe('activity demand signals', () => {
       data: {
         title: `Demand Signal ${Date.now()}`,
         description: 'Demand pooling test activity.',
-        category: 'Food & Drink',
+        category: 'Food',
         defaultLocation: 'Ohio Union',
       },
     });
@@ -157,7 +193,7 @@ describe('activity demand signals', () => {
       data: {
         title: `Demand Pool ${Date.now()}`,
         description: 'Demand conversion test activity.',
-        category: 'Food & Drink',
+        category: 'Food',
         defaultLocation: 'Ohio Union',
       },
     });
@@ -207,7 +243,7 @@ describe('activity requests', () => {
         .set('Authorization', `Bearer ${student.token}`)
         .send({
           title,
-          category: 'Outdoors',
+          category: 'Sports',
           description: 'Low-key lawn games around campus.',
           defaultLocation: 'The Oval',
         })
@@ -240,7 +276,7 @@ describe('activity requests', () => {
       const duplicate = await request(app)
         .post('/activities/requests')
         .set('Authorization', `Bearer ${student.token}`)
-        .send({ title: title.toUpperCase(), category: 'Outdoors' })
+        .send({ title: title.toUpperCase(), category: 'Sports' })
         .expect(201);
       const duplicateApproval = await request(app)
         .post(`/admin/activity-requests/${duplicate.body.id}/approve`)
@@ -268,7 +304,7 @@ describe('activity requests', () => {
       const submitted = await request(app)
         .post('/activities/requests')
         .set('Authorization', `Bearer ${student.token}`)
-        .send({ title: `Rejected Activity ${Date.now()}`, category: 'Social' })
+        .send({ title: `Rejected Activity ${Date.now()}`, category: 'Social & Events' })
         .expect(201);
 
       const rejected = await request(app)

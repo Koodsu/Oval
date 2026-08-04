@@ -10,14 +10,14 @@ import { isInsideCampus } from '../routes/pods';
 
 describe('getLocationsForCategory', () => {
   it('returns locations for a known category', () => {
-    const result = getLocationsForCategory('Sports & Fitness');
+    const result = getLocationsForCategory('Sports');
     expect(result).toContain('RPAC');
     expect(result).toContain('North Recreation Center');
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('returns locations for Food & Drink', () => {
-    const result = getLocationsForCategory('Food & Drink');
+  it('returns locations for Food', () => {
+    const result = getLocationsForCategory('Food');
     expect(result).toContain("Sloopy's Diner");
     expect(result).toContain('Ohio Union');
   });
@@ -36,10 +36,10 @@ describe('getLocationsForCategory', () => {
 describe('LOCATION_BY_CATEGORY', () => {
   it('has entries for all expected categories', () => {
     const categories = Object.keys(LOCATION_BY_CATEGORY);
-    expect(categories).toContain('Sports & Fitness');
-    expect(categories).toContain('Food & Drink');
-    expect(categories).toContain('Academic');
-    expect(categories).toContain('Wellness');
+    expect(categories).toContain('Sports');
+    expect(categories).toContain('Food');
+    expect(categories).toContain('Academic / Study');
+    expect(categories).toContain('Fitness & Wellness');
     expect(categories).toContain('Gaming');
   });
 
@@ -100,6 +100,7 @@ describe('getCoordinatesForLocation', () => {
       'Urban Arts Space',
       'Student Center – Game Room',
       'Residence Hall – Common Room',
+      'Residence Hall – Community Kitchen',
       'Community Garden – Behind Science Hall',
       'Student Center – Volunteer Office',
     ]);

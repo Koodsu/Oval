@@ -29,7 +29,7 @@ function renderReport(report: NonNullable<Awaited<ReturnType<typeof adminGetRepo
     ['Target account', report.target?.accountStatus],
     ['Last account action', report.accountAction],
     ['Content removed', report.contentRemovedAt?.toISOString()],
-    ['Pod', report.pod ? `${report.pod.activity?.title ?? 'Pod'} at ${report.pod.location ?? 'unknown location'}` : null],
+    ['Pod', report.pod ? `${report.pod.title?.trim() || report.pod.activity?.title || 'Pod'} at ${report.pod.location ?? 'unknown location'}` : null],
     ['Reported content', report.message?.content ?? report.reportedContent],
     ['Details', report.details],
     ['Created', report.createdAt.toISOString()],

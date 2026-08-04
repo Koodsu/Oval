@@ -31,6 +31,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { RootStackParamList } from '../../App';
 import { Message, Pod } from '../types';
+import { getPodTitle } from '../utils/experience';
 import {
   AppBackdrop,
   Avatar,
@@ -324,7 +325,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
         <View style={[styles.screen, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.header}>
             <ScreenHeader
-              title={pod?.activity?.title ?? 'Pod chat'}
+              title={pod ? getPodTitle(pod) : 'Pod chat'}
               kicker={
                 pod
                   ? `${pod.members.length} ${pod.members.length === 1 ? 'MEMBER' : 'MEMBERS'}${realtimeConnected ? ' • LIVE' : ''}`
@@ -538,7 +539,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={typography.subheading}>See you soon</Text>
                 <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
-                  {pod.activity?.title ?? 'Your pod'} at {formatTime(pod.meetupTime)} — let the
+                  {getPodTitle(pod)} at {formatTime(pod.meetupTime)} — let the
                   others know you're coming.
                 </Text>
               </View>

@@ -90,13 +90,13 @@ const INTEREST_POOL = ['Coffee', 'Running', 'Music', 'Coding', 'Soccer', 'Photog
 
 const POOL_SIZE = 50;
 
-const ACTIVITIES = [
-  { title: 'Frisbee on the Oval', description: 'Casual frisbee toss on the Oval. No experience needed.', category: 'Sports & Fitness', defaultLocation: 'The Oval' },
-  { title: 'Trivia Night', description: 'Form a team and battle it out at weekly trivia. No expertise required.', category: 'Social', defaultLocation: 'The Lounge – High Street' },
-  { title: 'Library Study Sprint', description: 'Focused co-working session. Bring your hardest assignment.', category: 'Study', defaultLocation: 'Thompson Library – 11th Floor' },
-  { title: 'Boba Run', description: 'Walk to grab boba off campus. Try a new flavor every time.', category: 'Food & Drink', defaultLocation: 'High Street' },
-  { title: 'Sunset Hammock Hang', description: 'String up a hammock and watch the sunset with good company.', category: 'Outdoors', defaultLocation: 'The Oval' },
-  { title: 'Intramural Soccer', description: 'Friendly pickup soccer. All skill levels welcome.', category: 'Sports & Fitness', defaultLocation: 'Lincoln Tower Fields' },
+const SCREENSHOT_ACTIVITY_KEYS = [
+  'frisbee',
+  'trivia',
+  'study-group',
+  'grab-coffee-tea',
+  'casual-hangout',
+  'pickup-soccer',
 ];
 
 const POD_CHAT = [
@@ -172,15 +172,20 @@ async function main() {
   console.log(`[seed] created ${users.length} demo users`);
 
   // --- Activities ---
-  const activityIds: string[] = [];
-  for (const a of ACTIVITIES) {
-    // Reuse an existing activity with the same title so re-running this seed
-    // (or running it alongside the main seed) doesn't create duplicates.
-    const existing = await prisma.activity.findFirst({ where: { title: a.title } });
-    const act = existing ?? (await prisma.activity.create({ data: a }));
-    manifest.activities.push(act.id);
-    activityIds.push(act.id);
-  }
+  const screenshotActivities = await prisma.activity.findMany({
+    where: { artworkKey: { in: SCREENSHOT_ACTIVITY_KEYS }, isActive: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const activityByKey = new Map(
+    screenshotActivities.map((activity) => [activity.artworkKey, activity]),
+  );
+  const activityIds = SCREENSHOT_ACTIVITY_KEYS.map((key) => {
+    const activity = activityByKey.get(key);
+    if (!activity) {
+      throw new Error(`Missing active catalog activity "${key}". Deploy migrations before seeding screenshots.`);
+    }
+    return activity.id;
+  });
 
   // --- Pods (first one gets a full chat thread) ---
   // Fallback anchor: center of the Oval. Real pins come from the named-location

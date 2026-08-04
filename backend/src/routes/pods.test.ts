@@ -21,7 +21,7 @@ describe('Pods API (integration)', () => {
     userId = user.id;
 
     const activity = await prisma.activity.findFirst({
-      where: { category: 'Academic' },
+      where: { category: 'Academic / Study' },
     });
     if (!activity) throw new Error('No activities in seed');
     activityId = activity.id;
@@ -98,6 +98,51 @@ describe('Pods API (integration)', () => {
       expect(publicPreview.body.activityName).toBe(res.body.activity.title);
     });
 
+    it('moderates user-authored pod titles locally', async () => {
+      const res = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          title: 'fuuuck this study group',
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(400);
+
+      expect(res.body.error).toContain('safety rules');
+    });
+
+    it('rejects keyboard-mash pod titles locally', async () => {
+      const res = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          title: 'AFOISUDOIAS',
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(400);
+
+      expect(res.body.error).toContain('clear, descriptive pod title');
+    });
+
+    it('allows course codes and numbers in descriptive titles', async () => {
+      const res = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          title: 'CSE 2221 exam review',
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      expect(res.body.title).toBe('CSE 2221 exam review');
+    });
+
     it('rejects without location', async () => {
       await request(app)
         .post('/pods/join')
@@ -111,7 +156,7 @@ describe('Pods API (integration)', () => {
 
     it('rejects invalid location for activity category', async () => {
       const activity = await prisma.activity.findFirst({
-        where: { category: 'Sports & Fitness' },
+        where: { category: 'Sports' },
       });
       if (!activity) throw new Error('No Sports activity');
 
@@ -210,6 +255,35 @@ describe('Pods API (integration)', () => {
     });
   });
 
+  describe('PATCH /pods/:id (edit pod)', () => {
+    it('lets the creator edit the title and moderates the replacement', async () => {
+      const createRes = await request(app)
+        .post('/pods/join')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          activityId,
+          title: 'Library study session',
+          meetupTime: new Date(Date.now() + 86400000).toISOString(),
+          location: validLocation,
+        })
+        .expect(201);
+
+      const updateRes = await request(app)
+        .patch(`/pods/${createRes.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Algorithms exam cram' })
+        .expect(200);
+
+      expect(updateRes.body.title).toBe('Algorithms exam cram');
+
+      await request(app)
+        .patch(`/pods/${createRes.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'fuuuck this exam' })
+        .expect(400);
+    });
+  });
+
   describe('PATCH /pods/:id/privacy', () => {
     it('lets the creator make a pod private and removes it from discovery', async () => {
       const createRes = await request(app)
@@ -302,7 +376,7 @@ describe('Pods API (integration)', () => {
       );
 
       const sportsActivity = await prisma.activity.findFirst({
-        where: { category: 'Sports & Fitness' },
+        where: { category: 'Sports' },
       });
       if (!sportsActivity) throw new Error('No Sports activity');
 
@@ -338,13 +412,13 @@ describe('Pods API (integration)', () => {
 
     it('filters by category', async () => {
       const res = await request(app)
-        .get('/pods/feed?category=Academic')
+        .get('/pods/feed?category=Academic%20%2F%20Study')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
       res.body.forEach((p: { activity: { category: string } }) => {
-        expect(p.activity.category).toBe('Academic');
+        expect(p.activity.category).toBe('Academic / Study');
       });
     });
 
@@ -372,7 +446,7 @@ describe('Pods API (integration)', () => {
       );
 
       const sportsActivity = await prisma.activity.findFirst({
-        where: { category: 'Sports & Fitness' },
+        where: { category: 'Sports' },
       });
       if (!sportsActivity) throw new Error('No Sports activity');
 
@@ -419,7 +493,7 @@ describe('Pods API (integration)', () => {
       );
       await prisma.user.update({
         where: { id: feedUser.id },
-        data: { interestTags: JSON.stringify(['Gym']) },
+        data: { interestTags: JSON.stringify(['Sports']) },
       });
 
       const { token: academicCreator } = await registerAndGetToken(
@@ -433,7 +507,7 @@ describe('Pods API (integration)', () => {
         'password123'
       );
       const sportsActivity = await prisma.activity.findFirst({
-        where: { category: 'Sports & Fitness' },
+        where: { category: 'Sports' },
       });
       if (!sportsActivity) throw new Error('No Sports activity');
 
@@ -482,7 +556,7 @@ describe('Pods API (integration)', () => {
       );
 
       const sportsActivity = await prisma.activity.findFirst({
-        where: { category: 'Sports & Fitness' },
+        where: { category: 'Sports' },
       });
       if (!sportsActivity) throw new Error('No Sports activity');
 

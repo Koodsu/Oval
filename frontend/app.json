@@ -2,7 +2,7 @@
   "expo": {
     "name": "Oval",
     "slug": "oval",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/brand/oval-open-1024.png",
     "userInterfaceStyle": "automatic",
@@ -17,7 +17,33 @@
           "sounds": []
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Oval lets you choose a photo from your library for your profile or club avatar.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Oval uses your location to show pods forming near you on campus.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false,
+          "isAndroidMotionActivityEnabled": false
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-status-bar",
       "expo-sharing",

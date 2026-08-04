@@ -21,7 +21,7 @@ describe('Reports API', () => {
     token = t;
     userId = user.id;
 
-    const activity = await prisma.activity.findFirst({ where: { category: 'Academic' } });
+    const activity = await prisma.activity.findFirst({ where: { category: 'Academic / Study' } });
     if (!activity) throw new Error('No activity in seed');
 
     const createRes = await request(app)
@@ -110,7 +110,7 @@ describe('Reports API', () => {
 
     it('messageId must match podId when both provided', async () => {
       const activity = await prisma.activity.findFirst({
-        where: { category: 'Social' },
+        where: { category: 'Social & Events' },
       });
       if (!activity) throw new Error('No Social activity');
 
@@ -120,7 +120,7 @@ describe('Reports API', () => {
         .send({
           activityId: activity.id,
           meetupTime: new Date(Date.now() + 86400000).toISOString(),
-          location: 'Student Union',
+          location: 'Ohio Union',
         })
         .expect(201);
 
@@ -147,6 +147,8 @@ describe('Reports API', () => {
       expect(report?.podId).toBe(podId);
       expect(report?.messageId).toBeNull();
       expect(report?.targetUserId).toBeNull();
+      expect(report?.reportedContent).toContain('Title:');
+      expect(report?.reportedContent).toContain('Location: Thompson Library');
     });
 
     it('creates report for user only', async () => {

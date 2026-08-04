@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oval App Store Screenshots</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        --scarlet: #d70912;
+        --ink: #101218;
+        --paper: #fbf8f2;
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--paper);
+      }
+
+      body {
+        display: grid;
+        place-items: start;
+      }
+
+      .shot {
+        position: relative;
+        width: 1284px;
+        height: 2778px;
+        overflow: hidden;
+        isolation: isolate;
+        background:
+          linear-gradient(180deg, rgba(255, 253, 248, 0.98) 0%, rgba(255, 251, 244, 0.88) 28%, rgba(255, 250, 241, 0.15) 100%),
+          url("./generated/oval-editorial-background.png") center / cover no-repeat;
+      }
+
+      .shot::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 84% 21%, rgba(215, 9, 18, 0.11), transparent 27%),
+          radial-gradient(circle at 10% 58%, rgba(74, 99, 166, 0.10), transparent 24%);
+      }
+
+      .shot.dark {
+        color: white;
+        background:
+          linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(13, 17, 28, 0.88) 38%, rgba(13, 17, 28, 0.52) 100%),
+          url("./generated/oval-editorial-background.png") center / cover no-repeat;
+      }
+
+      .shot.scarlet {
+        color: white;
+        background:
+          linear-gradient(180deg, rgba(163, 0, 8, 0.96) 0%, rgba(202, 3, 13, 0.88) 28%, rgba(83, 5, 17, 0.46) 100%),
+          url("./generated/oval-editorial-background.png") center / cover no-repeat;
+      }
+
+      .orb {
+        position: absolute;
+        border-radius: 999px;
+        border: 2px solid rgba(215, 9, 18, 0.18);
+        pointer-events: none;
+      }
+
+      .orb.one {
+        width: 520px;
+        height: 520px;
+        right: -190px;
+        top: 355px;
+      }
+
+      .orb.two {
+        width: 230px;
+        height: 230px;
+        left: -105px;
+        top: 575px;
+      }
+
+      .dark .orb,
+      .scarlet .orb { border-color: rgba(255, 255, 255, 0.20); }
+
+      .copy {
+        position: absolute;
+        z-index: 10;
+        top: 96px;
+        left: 86px;
+        right: 80px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 18px;
+        min-height: 66px;
+        padding: 8px 22px 8px 8px;
+        border: 1px solid rgba(16, 18, 24, 0.11);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 16px 55px rgba(20, 17, 15, 0.08);
+        backdrop-filter: blur(20px);
+        color: var(--ink);
+        font-size: 27px;
+        font-weight: 760;
+        letter-spacing: -0.6px;
+      }
+
+      .brand img {
+        display: block;
+        width: 52px;
+        height: 52px;
+        border-radius: 15px;
+      }
+
+      .dark .brand,
+      .scarlet .brand {
+        color: white;
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.20);
+      }
+
+      h1 {
+        max-width: 1120px;
+        margin: 42px 0 0;
+        color: var(--ink);
+        font-size: 116px;
+        line-height: 0.94;
+        font-weight: 850;
+        letter-spacing: -7px;
+        text-wrap: balance;
+      }
+
+      h1 em {
+        color: var(--scarlet);
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 600;
+        letter-spacing: -6px;
+      }
+
+      .dark h1,
+      .scarlet h1 { color: white; }
+
+      .dark h1 em { color: #ff7077; }
+      .scarlet h1 em { color: #fff0cf; }
+
+      .subhead {
+        max-width: 970px;
+        margin: 27px 0 0;
+        color: #4e5058;
+        font-size: 38px;
+        line-height: 1.22;
+        font-weight: 520;
+        letter-spacing: -1.2px;
+      }
+
+      .dark .subhead { color: rgba(255, 255, 255, 0.72); }
+      .scarlet .subhead { color: rgba(255, 255, 255, 0.80); }
+
+      .device {
+        position: absolute;
+        z-index: 4;
+        width: 850px;
+        padding: 18px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 104px;
+        background: #08090c;
+        box-shadow:
+          0 70px 120px rgba(26, 18, 14, 0.30),
+          0 22px 42px rgba(26, 18, 14, 0.22),
+          inset 0 0 0 2px rgba(255, 255, 255, 0.13);
+        transform-origin: 50% 45%;
+      }
+
+      .device::after {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        pointer-events: none;
+        border-radius: 100px;
+        box-shadow: inset 12px 0 18px rgba(255, 255, 255, 0.07), inset -10px 0 15px rgba(255, 255, 255, 0.03);
+      }
+
+      .device img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 87px;
+        background: white;
+      }
+
+      .device.hero {
+        top: 790px;
+        left: 217px;
+      }
+
+      .device.tilt-left {
+        top: 805px;
+        left: 222px;
+        transform: rotate(-3.2deg);
+      }
+
+      .device.tilt-right {
+        top: 800px;
+        left: 220px;
+        transform: rotate(3deg);
+      }
+
+      .device.inbox {
+        top: 825px;
+        left: 212px;
+        transform: rotate(-1.8deg);
+      }
+
+      .device.back {
+        z-index: 2;
+        width: 690px;
+        top: 920px;
+        left: 610px;
+        transform: rotate(7deg);
+        opacity: 0.90;
+        filter: saturate(0.92);
+        box-shadow: 0 55px 95px rgba(26, 18, 14, 0.23);
+      }
+
+      .device.front-left {
+        z-index: 5;
+        width: 740px;
+        top: 835px;
+        left: -20px;
+        transform: rotate(-6deg);
+      }
+
+      .device.meeting {
+        z-index: 5;
+        width: 825px;
+        top: 820px;
+        left: 225px;
+        transform: rotate(1.8deg);
+      }
+
+      .device.club-sliver {
+        z-index: 2;
+        width: 650px;
+        top: 945px;
+        left: -300px;
+        transform: rotate(-7deg);
+        opacity: 0.82;
+        filter: saturate(0.85);
+      }
+
+      .story-tag {
+        position: absolute;
+        z-index: 9;
+        right: 68px;
+        bottom: 66px;
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 26px;
+        border: 1px solid rgba(255, 255, 255, 0.54);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 18px 60px rgba(18, 14, 12, 0.13);
+        backdrop-filter: blur(18px);
+        color: var(--ink);
+        font-size: 25px;
+        font-weight: 720;
+        letter-spacing: -0.5px;
+      }
+
+      .story-tag::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border-radius: 999px;
+        background: var(--scarlet);
+        box-shadow: 0 0 0 7px rgba(215, 9, 18, 0.12);
+      }
+
+      .dark .story-tag,
+      .scarlet .story-tag {
+        color: white;
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(10, 12, 18, 0.46);
+      }
+
+      .dark .story-tag::before,
+      .scarlet .story-tag::before { background: #fff0cf; box-shadow: 0 0 0 7px rgba(255, 240, 207, 0.15); }
+    </style>
+  </head>
+  <body>
+    <main id="shot" class="shot">
+      <div class="orb one"></div>
+      <div class="orb two"></div>
+      <header class="copy">
+        <div class="brand">
+          <img src="./generated/oval-app-icon.png" alt="" />
+          <span>Oval for Ohio State</span>
+        </div>
+        <h1 id="headline"></h1>
+        <p id="subhead" class="subhead"></p>
+      </header>
+      <div id="devices"></div>
+      <div id="tag" class="story-tag"></div>
+    </main>
+
+    <script>
+      const stories = [
+        {
+          className: "",
+          headline: "Campus,<br><em>actually happening.</em>",
+          subhead: "See the plans, clubs, and people moving around you.",
+          tag: "Your campus pulse",
+          devices: [{ image: "home.png", className: "hero" }],
+        },
+        {
+          className: "scarlet",
+          headline: "Find your<br><em>next move.</em>",
+          subhead: "Browse real small-group plans happening around campus.",
+          tag: "Explore what’s next",
+          devices: [{ image: "explore.png", className: "tilt-left" }],
+        },
+        {
+          className: "",
+          headline: "Turn “we should”<br><em>into tonight.</em>",
+          subhead: "Keep every plan—and the people in it—close at hand.",
+          tag: "Small groups, real plans",
+          devices: [{ image: "pods.png", className: "tilt-right" }],
+        },
+        {
+          className: "dark",
+          headline: "Stay close to<br><em>your people.</em>",
+          subhead: "Messages, pod chats, and invites—together in one place.",
+          tag: "Always in the loop",
+          devices: [{ image: "inbox.png", className: "inbox" }],
+        },
+        {
+          className: "",
+          headline: "Clubs that<br><em>feel alive.</em>",
+          subhead: "Discover organizations, events, and the people behind them.",
+          tag: "One home for every club",
+          devices: [
+            { image: "club-home.png", className: "back" },
+            { image: "clubs.png", className: "front-left" },
+          ],
+        },
+        {
+          className: "scarlet",
+          headline: "RSVP & show up.<br><em>Belong.</em>",
+          subhead: "Club events from the first invite to check-in.",
+          tag: "Make campus yours",
+          devices: [
+            { image: "club-home.png", className: "club-sliver" },
+            { image: "meeting.png", className: "meeting" },
+          ],
+        },
+      ];
+
+      const shotNumber = Math.min(stories.length, Math.max(1, Number(new URLSearchParams(location.search).get("shot")) || 1));
+      const story = stories[shotNumber - 1];
+      const shot = document.getElementById("shot");
+      shot.className = `shot ${story.className}`.trim();
+      document.getElementById("headline").innerHTML = story.headline;
+      document.getElementById("subhead").textContent = story.subhead;
+      document.getElementById("tag").textContent = story.tag;
+      document.getElementById("devices").innerHTML = story.devices
+        .map(({ image, className }) => `<div class="device ${className}"><img src="./captures/${image}" alt="" /></div>`)
+        .join("");
+    </script>
+  </body>
+</html>

@@ -71,10 +71,8 @@ async function main() {
   const threads = await prisma.directMessageThread.deleteMany(inIds(m.dmThreads));
   const friendships = await prisma.friendship.deleteMany(inIds(m.friendships));
   const friendRequests = await prisma.friendRequest.deleteMany(inIds(m.friendRequests ?? []));
-  // Pod.activityId is onDelete: Restrict, so only delete manifest activities
-  // that no remaining (real) pod still references. The seed also reuses
-  // pre-existing activities by title, so some manifest activities may be
-  // shared with the main seed — skipping in-use ones keeps those intact.
+  // Current screenshot seeds never create activities. This remains for cleanup
+  // of older manifests and only removes explicitly recorded, now-unreferenced rows.
   const activities = await prisma.activity.deleteMany({
     where: { id: { in: m.activities }, pods: { none: {} } },
   });
