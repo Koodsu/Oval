@@ -18,6 +18,7 @@ OSU campus social app for small-group hangouts ("pods"), clubs, messaging, and a
 - **Verification gate:** almost everything requires a verified OSU email (`requireVerifiedAuth`). The App Store reviewer account bypasses it — don't break that path.
 - **Deep links:** `oval://pod/:podId` etc., configured in `App.tsx`; push notification payloads carry a `url` that feeds the same config.
 - **Age rating is 18+** and moderation features (block, report, delete account, data export) are App Store review-critical. Never weaken them casually.
+- **Terms version is a two-sided deploy.** `CURRENT_TERMS_VERSION` exists in both `backend/src/config/legal.ts` and `frontend/src/constants/legal.ts`. Bumping one without the other 400s every client on the terms screen with no way past it — this has broken a release twice. Old versions stay valid via `PREVIOUS_TERMS_VERSIONS`; deploy the backend before shipping the build. Full procedure: `docs/PLAYBOOK.md` §8.
 
 ## Workflow expectations
 

@@ -3,7 +3,7 @@ import request from 'supertest';
 import app from '../server';
 import prisma from '../prisma';
 import { hashOneTimeCode } from '../lib/oneTimeCodes';
-import { CURRENT_TERMS_VERSION } from '../config/legal';
+import { CURRENT_TERMS_VERSION, PREVIOUS_TERMS_VERSIONS } from '../config/legal';
 
 const TEST_DOMAIN = '@osu.edu';
 const VALID_PROFILE = {
@@ -54,6 +54,43 @@ describe('POST /auth/register', () => {
         password: 'password123',
         classYear: 'Freshman',
         major: 'Computer Science',
+      })
+      .expect(400);
+  });
+
+  // Regression: the App Store build and the backend deploy are never
+  // simultaneous. A client on the previously-shipped terms version must still
+  // be able to register, or the terms screen becomes an inescapable wall
+  // between the two deploys. See docs/PLAYBOOK.md → "Bumping the terms version".
+  it.each(PREVIOUS_TERMS_VERSIONS)(
+    'still registers a client on previous terms version %s',
+    async (oldVersion) => {
+      const email = `oldterms-test-register-${Date.now()}${TEST_DOMAIN}`;
+      const res = await request(app)
+        .post('/auth/register')
+        .send({
+          name: 'Old Build',
+          email,
+          password: 'password123',
+          ...VALID_PROFILE,
+          termsVersion: oldVersion,
+        })
+        .expect(201);
+
+      // Records what that build actually displayed, not the current version.
+      expect(res.body.user.termsVersion).toBe(oldVersion);
+    }
+  );
+
+  it('rejects an unrecognized terms version', async () => {
+    await request(app)
+      .post('/auth/register')
+      .send({
+        name: 'Bogus Terms',
+        email: `bogusterms-test-register-${Date.now()}${TEST_DOMAIN}`,
+        password: 'password123',
+        ...VALID_PROFILE,
+        termsVersion: '1999-01-01',
       })
       .expect(400);
   });
@@ -451,5 +488,44 @@ describe('POST /auth/accept-terms', () => {
 
     expect(response.body.user.termsVersion).toBe(CURRENT_TERMS_VERSION);
     expect(response.body.user.ageAttestedAt).toEqual(expect.any(String));
+  });
+
+  it.each(PREVIOUS_TERMS_VERSIONS)(
+    'still accepts a client on previous terms version %s',
+    async (oldVersion) => {
+      const email = `accept-old-terms-${Date.now()}${TEST_DOMAIN}`;
+      const registration = await request(app)
+        .post('/auth/register')
+        .send({ name: 'Old Client', email, password: 'password123', ...VALID_PROFILE })
+        .expect(201);
+
+      await prisma.user.update({
+        where: { email },
+        data: { termsVersion: null, termsAcceptedAt: null, ageAttestedAt: null },
+      });
+
+      const response = await request(app)
+        .post('/auth/accept-terms')
+        .set('Authorization', `Bearer ${registration.body.token}`)
+        .send({ termsAccepted: true, ageConfirmed: true, termsVersion: oldVersion })
+        .expect(200);
+
+      // The older build showed the older text, so that is what gets recorded.
+      expect(response.body.user.termsVersion).toBe(oldVersion);
+    }
+  );
+
+  it('rejects an unrecognized terms version', async () => {
+    const email = `accept-bogus-terms-${Date.now()}${TEST_DOMAIN}`;
+    const registration = await request(app)
+      .post('/auth/register')
+      .send({ name: 'Bogus Client', email, password: 'password123', ...VALID_PROFILE })
+      .expect(201);
+
+    await request(app)
+      .post('/auth/accept-terms')
+      .set('Authorization', `Bearer ${registration.body.token}`)
+      .send({ termsAccepted: true, ageConfirmed: true, termsVersion: 'not-a-version' })
+      .expect(400);
   });
 });

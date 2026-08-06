@@ -5,7 +5,7 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/emailService';
 import { getFullName, normalizeNameParts } from '../lib/userNames';
 import { moderateTextContent } from '../lib/contentModeration';
-import { CURRENT_TERMS_VERSION } from '../config/legal';
+import { CURRENT_TERMS_VERSION, isAcceptedTermsVersion } from '../config/legal';
 import { issueAuthToken } from '../lib/authSession';
 import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 import { hashEmailIdentity, normalizeEmail } from '../lib/identity';
@@ -152,7 +152,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  if (!termsAccepted || !ageConfirmed || termsVersion !== CURRENT_TERMS_VERSION) {
+  if (!termsAccepted || !ageConfirmed || !isAcceptedTermsVersion(termsVersion)) {
     res.status(400).json({
       error: 'You must confirm you are 18 or older and accept the current Terms and Community Guidelines.',
     });
@@ -207,7 +207,9 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         emailVerifyExpiry: expiry,
         classYear,
         major,
-        termsVersion: CURRENT_TERMS_VERSION,
+        // Record what the client actually displayed, not CURRENT_TERMS_VERSION —
+        // an older build showed older text.
+        termsVersion,
         termsAcceptedAt: new Date(),
         ageAttestedAt: new Date(),
       },
@@ -541,10 +543,13 @@ router.post('/resend-verification', requireAuth, async (req: AuthRequest, res: R
 
 // POST /auth/accept-terms
 router.post('/accept-terms', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const submittedVersion =
+    typeof req.body?.termsVersion === 'string' ? req.body.termsVersion.trim() : '';
+
   if (
     req.body?.termsAccepted !== true ||
     req.body?.ageConfirmed !== true ||
-    req.body?.termsVersion !== CURRENT_TERMS_VERSION
+    !isAcceptedTermsVersion(submittedVersion)
   ) {
     res.status(400).json({ error: 'Accept the current Terms and confirm you are 18 or older.' });
     return;
@@ -554,7 +559,9 @@ router.post('/accept-terms', requireAuth, async (req: AuthRequest, res: Response
     const updated = await prisma.user.update({
       where: { id: req.user!.userId },
       data: {
-        termsVersion: CURRENT_TERMS_VERSION,
+        // Record what the client actually displayed, not CURRENT_TERMS_VERSION —
+        // an older build showed older text.
+        termsVersion: submittedVersion,
         termsAcceptedAt: new Date(),
         ageAttestedAt: new Date(),
       },
