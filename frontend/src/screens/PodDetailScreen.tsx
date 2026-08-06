@@ -804,29 +804,33 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                     <Text style={typography.kicker}>People</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       {pod.members.map((member, index) => (
-                        <Pressable
+                        <View
                           key={member.id}
                           style={styles.member}
-                          onPress={() =>
-                            navigation.navigate('UserProfile', { userId: member.userId })
-                          }
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open ${member.user.name}'s profile`}
                         >
-                          <Avatar
-                            name={member.user.name}
-                            uri={member.user.avatarUrl}
-                            size={48}
-                            tilt={index % 2 === 0 ? -2 : 2}
-                          />
-                          <Text style={styles.memberName} numberOfLines={1}>
-                            {member.user.name}
-                          </Text>
-                          {member.confirmedAt ? (
-                            <Text style={[typography.captionSmall, { color: colors.success }]}>
-                              Confirmed
+                          <Pressable
+                            onPress={() =>
+                              navigation.navigate('UserProfile', { userId: member.userId })
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${member.user.name}'s profile`}
+                            style={styles.memberIdentity}
+                          >
+                            <Avatar
+                              name={member.user.name}
+                              uri={member.user.avatarUrl}
+                              size={48}
+                              tilt={index % 2 === 0 ? -2 : 2}
+                            />
+                            <Text style={styles.memberName} numberOfLines={1}>
+                              {member.user.name}
                             </Text>
-                          ) : null}
+                            {member.confirmedAt ? (
+                              <Text style={[typography.captionSmall, { color: colors.success }]}>
+                                Confirmed
+                              </Text>
+                            ) : null}
+                          </Pressable>
                           {isCreator &&
                           member.userId !== user?.id &&
                           (pod.status === 'FORMING' || pod.status === 'LOCKED') ? (
@@ -842,7 +846,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                               </Text>
                             </Pressable>
                           ) : null}
-                        </Pressable>
+                        </View>
                       ))}
                     </ScrollView>
                   </View>
@@ -922,6 +926,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                             <View key={friend.id} style={styles.inviteRow}>
                               <Pressable
                                 style={styles.inviteIdentity}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Open ${friend.name}'s profile`}
                                 onPress={() =>
                                   navigation.navigate('UserProfile', { userId: friend.id })
                                 }
@@ -955,6 +961,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                       <View style={[styles.mapFrame, { borderColor: colors.border }]}>
                         <MapView
                           provider={PROVIDER_DEFAULT}
+                          accessibilityLabel={`Meetup map for ${pod.location}`}
                           style={{ flex: 1 }}
                           initialRegion={{
                             latitude: pod.latitude,
@@ -991,6 +998,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                         >
                           <Pressable
                             onPress={() => navigation.navigate('UserProfile', { userId: person.id })}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${person.name}'s profile`}
                             style={styles.inviteIdentity}
                           >
                             <Avatar name={person.name} uri={person.avatarUrl} size={42} />
@@ -1041,6 +1050,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                           <View key={member.id} style={styles.inviteRow}>
                             <Pressable
                               style={styles.inviteIdentity}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open ${member.user.name}'s profile`}
                               onPress={() =>
                                 navigation.navigate('UserProfile', { userId: member.userId })
                               }
@@ -1103,6 +1114,8 @@ export default function PodDetailScreen({ route, navigation }: Props) {
                 <View key={friend.id} style={styles.inviteRow}>
                   <Pressable
                     style={styles.inviteIdentity}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${friend.name}'s profile`}
                     onPress={() => {
                       setInviteOpen(false);
                       navigation.navigate('UserProfile', { userId: friend.id });
@@ -1181,6 +1194,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
             <Text style={typography.kicker}>Location</Text>
             <TextInput
               value={editLocation}
+              accessibilityLabel="Location"
               onChangeText={setEditLocation}
               placeholder="Where are you meeting?"
               placeholderTextColor={colors.faint}
@@ -1468,6 +1482,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: 5,
     width: 76,
+  },
+  memberIdentity: {
+    alignItems: 'center' as const,
+    gap: 5,
   },
   memberName: {
     fontFamily: fonts.semibold,

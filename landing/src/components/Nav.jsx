@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from '../lib/router'
 
 function scrollToWaitlist() {
-  document.getElementById('waitlist')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  document.getElementById('waitlist')?.scrollIntoView({
+    behavior: reduceMotion ? 'auto' : 'smooth',
+    block: 'start',
+  })
 }
 
 export default function Nav() {
@@ -50,7 +54,7 @@ export default function Nav() {
         <a href="/" onClick={handleBrandClick} className="group flex items-center gap-2.5 no-underline">
           <img
             src="/oval-logo.png"
-            alt="Oval"
+            alt=""
             className="h-8 w-8 flex-shrink-0 rounded-xl transition-shadow duration-300"
             style={{ boxShadow: scrolled ? '0 0 20px rgba(187,0,0,0.6)' : '0 0 12px rgba(187,0,0,0.35)' }}
           />

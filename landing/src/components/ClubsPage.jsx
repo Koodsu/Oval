@@ -48,48 +48,20 @@ const SYSTEM_BLOCKS = [
 ]
 
 function CategorySelect({ value, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={`flex w-full items-center justify-between border px-4 py-4 text-left text-[15px] transition-colors ${
-          open ? 'border-scarlet bg-white/[0.08] text-white' : 'border-white/12 bg-white/[0.06] text-white hover:border-white/24'
-        }`}
+    <div>
+      <label htmlFor="club-category" className="sr-only">Club category</label>
+      <select
+        id="club-category"
+        name="category"
+        required
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-white/15 bg-[#161613] px-4 py-4 text-[15px] text-white"
       >
-        <span>{value || 'Club Category'}</span>
-        <span className={`text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-      </button>
-      {open ? (
-        <ul className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto border border-white/12 bg-[#161613] shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
-          {CATEGORIES.map((cat) => (
-            <li
-              key={cat}
-              onClick={() => {
-                onChange(cat)
-                setOpen(false)
-              }}
-              className={`cursor-pointer px-4 py-3 text-[15px] transition-colors ${
-                value === cat ? 'bg-scarlet text-white' : 'text-white/80 hover:bg-white/[0.06]'
-              }`}
-            >
-              {cat}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+        <option value="" disabled>Club Category</option>
+        {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+      </select>
     </div>
   )
 }
@@ -243,12 +215,12 @@ function ClubRegistrationForm() {
   }
 
   const inputClass =
-    'w-full border border-white/12 bg-white/[0.06] px-4 py-4 text-[15px] text-white outline-none transition-colors placeholder:text-white/30 focus:border-scarlet'
+    'w-full border border-white/12 bg-white/[0.06] px-4 py-4 text-[15px] text-white outline-none transition-colors placeholder:text-white/65 focus:border-scarlet'
 
   if (submitted) {
     return (
-      <div className="py-14 text-center">
-        <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-scarlet/24 bg-scarlet/8">
+      <div role="status" aria-live="polite" className="py-14 text-center">
+        <div aria-hidden="true" className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-scarlet/24 bg-scarlet/8">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 12l5 5 11-11" stroke="#BB0000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -261,28 +233,33 @@ function ClubRegistrationForm() {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
-      <input type="text" name="clubName" required placeholder="Club Name" value={fields.clubName} onChange={handleChange} className={inputClass} />
+      <label htmlFor="club-name" className="sr-only">Club name</label>
+      <input id="club-name" type="text" name="clubName" required placeholder="Club Name" value={fields.clubName} onChange={handleChange} className={inputClass} />
       <div className="grid gap-4 md:grid-cols-2">
-        <input type="text" name="yourName" required placeholder="Your Name" value={fields.yourName} onChange={handleChange} className={inputClass} />
-        <input type="text" name="role" required placeholder="Your Role" value={fields.role} onChange={handleChange} className={inputClass} />
+        <div><label htmlFor="club-contact-name" className="sr-only">Your name</label><input id="club-contact-name" type="text" name="yourName" required placeholder="Your Name" value={fields.yourName} onChange={handleChange} className={inputClass} /></div>
+        <div><label htmlFor="club-role" className="sr-only">Your role</label><input id="club-role" type="text" name="role" required placeholder="Your Role" value={fields.role} onChange={handleChange} className={inputClass} /></div>
       </div>
       <div>
-        <input type="email" name="email" required placeholder="name.#@osu.edu" value={fields.email} onChange={handleChange} className={inputClass} />
-        <p className="mt-1.5 px-1 text-[11px] text-white/40">Use an `@osu.edu` or `@buckeyemail.osu.edu` address.</p>
+        <label htmlFor="club-email" className="sr-only">OSU email address</label>
+        <input id="club-email" type="email" name="email" required placeholder="name.#@osu.edu" aria-describedby="club-email-hint" value={fields.email} onChange={handleChange} className={inputClass} />
+        <p id="club-email-hint" className="mt-1.5 px-1 text-[11px] text-white/65">Use an @osu.edu or @buckeyemail.osu.edu address.</p>
       </div>
       <CategorySelect value={fields.category} onChange={(category) => setFields((prev) => ({ ...prev, category }))} />
-      <textarea name="description" required rows={4} placeholder="What does your club help students do?" value={fields.description} onChange={handleChange} className={`${inputClass} resize-none`} />
-      <input type="text" name="instagramOrWebsite" placeholder="Instagram or website (optional)" value={fields.instagramOrWebsite} onChange={handleChange} className={inputClass} />
+      <label htmlFor="club-description" className="sr-only">Club description</label>
+      <textarea id="club-description" name="description" required rows={4} placeholder="What does your club help students do?" value={fields.description} onChange={handleChange} className={`${inputClass} resize-none`} />
+      <label htmlFor="club-link" className="sr-only">Instagram or website, optional</label>
+      <input id="club-link" type="text" name="instagramOrWebsite" placeholder="Instagram or website (optional)" value={fields.instagramOrWebsite} onChange={handleChange} className={inputClass} />
       <div>
         <label htmlFor="biggestChallenge" className="mb-2 block text-sm font-semibold text-white">
           What is hardest about running your club right now?
         </label>
         <textarea id="biggestChallenge" name="biggestChallenge" rows={3} placeholder="Optional, but helpful. Recruiting? attendance? communication? retention?" value={fields.biggestChallenge} onChange={handleChange} className={`${inputClass} resize-none`} />
       </div>
-      {error ? <p className="text-sm font-medium text-scarlet">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm font-medium text-scarlet">{error}</p> : null}
       <button
         type="submit"
         disabled={loading}
+        aria-busy={loading}
         className="h-14 bg-scarlet px-6 font-display text-xl tracking-[0.08em] text-white transition-colors hover:bg-scarlet-bright disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? 'REGISTERING...' : 'REGISTER MY CLUB'}
@@ -333,7 +310,7 @@ export default function ClubsPage() {
       <header className="sticky top-0 z-50 px-3 pt-3 md:px-6">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between border border-white/10 bg-ink/82 px-4 backdrop-blur-xl shadow-[0_14px_50px_rgba(0,0,0,0.28)] md:px-6">
           <Link to="/" className="flex items-center gap-3 no-underline">
-            <img src="/oval-logo.png" alt="Oval" className="h-7 w-7 rounded-md" />
+            <img src="/oval-logo.png" alt="" className="h-7 w-7 rounded-md" />
             <div className="flex flex-col">
               <span className="font-display text-2xl leading-none tracking-[0.12em] text-white">OVAL</span>
               <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-white/35 md:block">
@@ -352,6 +329,7 @@ export default function ClubsPage() {
         </div>
       </header>
 
+      <main id="main-content" tabIndex={-1}>
       <section
         ref={heroRef}
         className="relative isolate flex min-h-[94svh] items-center overflow-hidden bg-ink pt-14 text-white"
@@ -632,20 +610,22 @@ export default function ClubsPage() {
           </div>
         </div>
       </section>
+      </main>
 
       <footer className="border-t border-white/8 bg-[#0a0a08] px-5 py-10 md:px-16">
         <div className="mx-auto flex max-w-[1400px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <img src="/oval-logo.png" alt="Oval" className="h-6 w-6 rounded-md" />
+              <img src="/oval-logo.png" alt="" className="h-6 w-6 rounded-md" />
               <span className="font-display text-xl tracking-[0.12em] text-white">OVAL</span>
             </div>
-            <p className="mt-2 text-xs tracking-wide text-white/30">Clubs work better when discovery and turnout are visible.</p>
+            <p className="mt-2 text-xs tracking-wide text-white/65">Clubs work better when discovery and turnout are visible.</p>
           </div>
-          <div className="flex flex-wrap gap-5 text-[11px] font-medium uppercase tracking-[0.12em] text-white/30">
+          <div className="flex flex-wrap gap-5 text-[11px] font-medium uppercase tracking-[0.12em] text-white/65">
             <Link to="/" className="no-underline transition-colors hover:text-white">For students</Link>
             <Link to="/privacy" className="no-underline transition-colors hover:text-white">Privacy</Link>
             <Link to="/terms" className="no-underline transition-colors hover:text-white">Terms</Link>
+            <Link to="/accessibility" className="no-underline transition-colors hover:text-white">Accessibility</Link>
             <a href="mailto:contactus@theovalapp.com" className="no-underline transition-colors hover:text-white">Contact</a>
           </div>
         </div>

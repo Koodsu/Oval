@@ -210,6 +210,7 @@ export default function Hero() {
 
         {/* ---------------- right: live phone ---------------- */}
         <div
+          aria-hidden="true"
           ref={chipsRef}
           className="relative mx-auto w-full max-w-[420px]"
           style={enter(500, { transitionDuration: '1000ms' })}
@@ -284,7 +285,7 @@ export default function Hero() {
       </div>
 
       {/* ---------------- live ticker ---------------- */}
-      <div className="absolute inset-x-0 bottom-0 z-20 border-t border-white/8 bg-void/70 backdrop-blur-xl">
+      <div aria-hidden="true" className="absolute inset-x-0 bottom-0 z-20 border-t border-white/8 bg-void/70 backdrop-blur-xl">
         <div className="flex items-center">
           <div className="z-10 flex flex-shrink-0 items-center gap-2 border-r border-white/10 bg-void px-4 py-3.5 md:px-6">
             <span className="relative flex h-2 w-2">

@@ -85,18 +85,21 @@ export default function PodInvitePage() {
   }, [podId])
 
   return (
-    <div
+    <main
+      id="main-content"
+      tabIndex={-1}
       className="min-h-screen font-sans text-ink flex flex-col"
       style={{ backgroundColor: CREAM }}
     >
       <div className="flex-1 w-full max-w-[480px] mx-auto px-6 py-12 flex flex-col">
         <header className="flex items-center gap-3 mb-10">
-          <img src="/oval-logo.png" alt="Oval" className="w-9 h-9 rounded-md flex-shrink-0" />
+          <img src="/oval-logo.png" alt="" className="w-9 h-9 rounded-md flex-shrink-0" />
           <span className="font-display text-ink text-3xl tracking-[0.12em] leading-none">OVAL</span>
         </header>
 
         {status === 'loading' && (
           <div className="flex-1 flex items-center justify-center py-20">
+            <h1 className="sr-only">Pod invite</h1>
             <p className="text-warm-gray text-base">Loading…</p>
           </div>
         )}
@@ -212,6 +215,6 @@ export default function PodInvitePage() {
           </>
         )}
       </div>
-    </div>
+    </main>
   )
 }

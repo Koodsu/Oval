@@ -66,20 +66,24 @@ export function MessageList<T extends MessageListItem>({
           (reaction) => reaction.emoji === '❤️' && reaction.userId === currentUserId,
         ) ?? false;
         return (
-          <Pressable
-            onLongPress={() => onLongPress(item)}
+          <View
             style={[styles.messageWrap, mine && styles.messageMine]}
           >
-            <View
-              style={[
-                styles.bubble,
-                mine ? styles.bubbleMine : styles.bubbleTheirs,
-                {
-                  backgroundColor: mine ? colors.primary : colors.surface,
-                  borderColor: mine ? 'transparent' : colors.border,
-                },
-              ]}
-            >
+            <Pressable
+            onLongPress={() => onLongPress(item)}
+            onPress={() => onLongPress(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`${mine ? 'You' : item.user.name}, ${item.content || 'shared a photo'}, ${formatTime(item.createdAt)}`}
+            accessibilityHint="Long press for message actions"
+            style={[
+              styles.bubble,
+              mine ? styles.bubbleMine : styles.bubbleTheirs,
+              {
+                backgroundColor: mine ? colors.primary : colors.surface,
+                borderColor: mine ? 'transparent' : colors.border,
+              },
+            ]}
+          >
               {!mine ? (
                 <Text style={[typography.captionSmall, { color: colors.sub }]}>{item.user.name}</Text>
               ) : null}
@@ -137,23 +141,25 @@ export function MessageList<T extends MessageListItem>({
               >
                 {formatTime(item.createdAt)}
               </Text>
-              {heartCount ? (
-                <Pressable
-                  onPress={() => onReact?.(item, '❤️')}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${hearted ? 'Remove' : 'Add'} heart reaction`}
-                  style={[
-                    styles.reaction,
-                    {
-                      backgroundColor: mine ? 'rgba(255,255,255,0.16)' : colors.primarySoft,
-                    },
-                  ]}
-                >
-                  <Text style={typography.captionSmall}>❤️ {heartCount}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </Pressable>
+            </Pressable>
+            {heartCount ? (
+              <Pressable
+                onPress={() => onReact?.(item, '❤️')}
+                disabled={!onReact}
+                accessibilityRole="button"
+                accessibilityLabel={`${hearted ? 'Remove' : 'Add'} heart reaction, ${heartCount} total`}
+                accessibilityState={{ disabled: !onReact, selected: hearted }}
+                style={[
+                  styles.reaction,
+                  {
+                    backgroundColor: mine ? 'rgba(255,255,255,0.16)' : colors.primarySoft,
+                  },
+                ]}
+              >
+                <Text style={typography.captionSmall}>❤️ {heartCount}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         );
       }}
       ListEmptyComponent={
@@ -229,12 +235,14 @@ export function MessageComposer({
           { backgroundColor: colors.bg, borderColor: colors.border, color: colors.ink },
         ]}
         multiline
+        accessibilityLabel={placeholder}
       />
       <Pressable
         onPress={onSend}
         disabled={!canSend}
         accessibilityRole="button"
         accessibilityLabel="Send message"
+        accessibilityState={{ disabled: !canSend, busy: Boolean(sending) }}
         style={[
           styles.send,
           {

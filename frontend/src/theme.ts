@@ -99,7 +99,7 @@ export const lightColors: ThemeColors = {
   sunken: '#ECECEF',
   ink: '#111217',
   sub: '#62636B',
-  faint: '#898B93',
+  faint: '#74767E',
   border: '#E5E5E8',
   borderSoft: '#F0F0F2',
   shadow: '#111217',
@@ -115,26 +115,26 @@ export const lightColors: ThemeColors = {
 
   danger: '#C01731',
   dangerSoft: '#F9E2E6',
-  success: '#178A47',
+  success: '#14763D',
   successSoft: '#E2F3E9',
-  warning: '#A86D08',
+  warning: '#875704',
   warningSoft: '#F8EEDB',
 
   // Soft tints are pre-blended opaque values (tint over `surface`).
   // Translucent rgba surfaces composite badly with Android elevation
   // shadows (visible shadow-rect artifacts) and make text contrast
   // content-dependent. Solid surfaces everywhere.
-  blue: '#3569C8',
+  blue: '#2F60BC',
   blueSoft: '#E7EEFC',
-  green: '#2C844D',
+  green: '#21713F',
   greenSoft: '#E5F2E8',
-  amber: '#A96F0A',
+  amber: '#895600',
   amberSoft: '#F8EDDA',
-  pink: '#C63B69',
+  pink: '#A82C56',
   pinkSoft: '#FBE7EE',
   violet: '#6750B8',
   violetSoft: '#EEE9FC',
-  teal: '#167D87',
+  teal: '#0E6971',
   tealSoft: '#E2F1F2',
 };
 
@@ -148,7 +148,7 @@ export const darkColors: ThemeColors = {
   sunken: '#080A0F',
   ink: '#F5F5F7',
   sub: '#A8AAB3',
-  faint: '#767984',
+  faint: '#828590',
   border: '#2B2F38',
   borderSoft: '#22262E',
   shadow: '#000000',

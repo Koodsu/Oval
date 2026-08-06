@@ -340,7 +340,7 @@ export default function AuthScreen() {
           ) : null}
 
           <Animated.View entering={FadeInDown.delay(motion.stagger).duration(motion.durBase)}>
-            <Text style={styles.heroTitle}>
+            <Text accessibilityRole="header" style={styles.heroTitle}>
               {mode === 'login'
                 ? 'Your campus\nis waiting.'
                 : mode === 'register'
@@ -681,6 +681,7 @@ function AuthModeSwitch({
             key={value}
             onPress={() => onChange(value)}
             accessibilityRole="tab"
+            accessibilityLabel={label}
             accessibilityState={{ selected }}
             style={({ pressed }) => [
               modeStyles.option,
@@ -714,7 +715,7 @@ const modeStyles = StyleSheet.create({
   },
   option: {
     flex: 1,
-    height: 42,
+    minHeight: 44,
     borderRadius: radii.xs,
     borderWidth: BORDER_W,
     borderColor: 'transparent',

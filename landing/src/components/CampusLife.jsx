@@ -102,7 +102,7 @@ export default function CampusLife() {
   return (
     <>
       {/* ---------------- kinetic marquee divider ---------------- */}
-      <div className="relative overflow-hidden border-y border-white/8 bg-void py-6">
+      <div aria-hidden="true" className="relative overflow-hidden border-y border-white/8 bg-void py-6">
         <div className="animate-ticker flex w-max items-center">
           {[...MARQUEE_WORDS, ...MARQUEE_WORDS].map((word, i) => (
             <span key={i} className="flex items-center whitespace-nowrap">

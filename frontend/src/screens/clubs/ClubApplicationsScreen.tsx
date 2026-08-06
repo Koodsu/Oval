@@ -320,6 +320,8 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                     <Pressable
                       key={app.id}
                       onPress={() => openApplicant(app)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Review ${app.user.name}'s application, ${app.stage.toLowerCase()}`}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -428,6 +430,8 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
                           setNewQuestions((prev) => prev.filter((_, i) => i !== index))
                         }
                         hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove question ${index + 1}`}
                       >
                         <Text style={{ color: colors.danger, fontSize: 20 }}>×</Text>
                       </Pressable>

@@ -96,7 +96,7 @@ export default function VerifyEmailScreen() {
         </View>
 
         <View style={styles.copy}>
-          <Text style={styles.title}>Verify your email</Text>
+          <Text accessibilityRole="header" style={styles.title}>Verify your email</Text>
           <Text style={[typography.body, styles.sub]}>
             We sent a 6-digit code to{'\n'}
             <Text style={{ fontFamily: fonts.bold }}>{user?.email ?? 'your university email'}</Text>

@@ -437,6 +437,9 @@ export default function PodChatScreen({ route, navigation }: Props) {
                       <Pressable
                         onLongPress={() => setActiveMessage(message)}
                         onPress={() => setActiveMessage(message)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${mine ? 'You' : message.user.name}: ${message.content}. ${formatTime(message.createdAt)}`}
+                        accessibilityHint="Opens message actions"
                         style={[
                           styles.bubble,
                           {
@@ -606,6 +609,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
                     pingTyping(value);
                   }}
                   placeholder="Message the pod"
+                  accessibilityLabel="Message the pod"
                   placeholderTextColor={colors.faint}
                   style={[
                     styles.input,
@@ -875,7 +879,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
     borderRadius: radii.pill,
-    minHeight: 34,
+    minHeight: 44,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

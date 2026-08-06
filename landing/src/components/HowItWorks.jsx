@@ -90,13 +90,13 @@ export default function HowItWorks() {
                   <div className="absolute inset-0 rounded-full border border-flame/30 bg-flame/[0.06]" />
                   <span className="font-serif text-4xl italic text-gradient-fire">{step}</span>
                 </div>
-                <span className="font-serif text-[64px] italic leading-none text-white/[0.07]">{word}</span>
+                <span aria-hidden="true" className="font-serif text-[64px] italic leading-none text-white/[0.07]">{word}</span>
               </div>
 
               <h3 className="font-display text-[22px] font-bold tracking-tight text-white">{title}</h3>
               <p className="mt-3 flex-1 text-[14px] leading-relaxed text-white/45">{desc}</p>
 
-              <div className="mt-7 rounded-2xl border border-white/8 bg-[#0c0909]/80 p-3">
+              <div aria-hidden="true" className="mt-7 rounded-2xl border border-white/8 bg-[#0c0909]/80 p-3">
                 {visual}
               </div>
             </div>

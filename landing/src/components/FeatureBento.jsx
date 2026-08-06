@@ -43,7 +43,7 @@ export default function FeatureBento() {
               Oval shows what's forming right now — so instead of "we should hang sometime,"
               you're actually doing it. Spots fill fast, which is exactly the point.
             </p>
-            <div className="mt-6 flex flex-col gap-2.5">
+            <div aria-hidden="true" className="mt-6 flex flex-col gap-2.5">
               <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3.5">
                 <div className="flex items-center gap-3">
                   <span className="text-lg">🏀</span>
@@ -81,7 +81,7 @@ export default function FeatureBento() {
             <p className="mt-3 text-[14px] leading-relaxed text-white/45">
               Every account verifies an eligible OSU email. Real students, not random internet.
             </p>
-            <div className="mt-6 flex flex-col gap-3">
+            <div aria-hidden="true" className="mt-6 flex flex-col gap-3">
               {VERIFIED_USERS.map(({ initials, name, role, g }) => (
                 <div key={initials} className="flex items-center gap-3">
                   <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${g} text-[11px] font-bold text-white`}>
@@ -121,7 +121,7 @@ export default function FeatureBento() {
               style={{ transitionDelay: `${i * 90}ms` }}
               onMouseMove={track}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-xl">
+              <div aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-xl">
                 {emoji}
               </div>
               <h3 className="mt-5 font-display text-[18px] font-bold tracking-tight text-white">{title}</h3>

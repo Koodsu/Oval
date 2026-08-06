@@ -59,6 +59,8 @@ export default function UserProfilePage() {
 
   return (
     <main
+      id="main-content"
+      tabIndex={-1}
       className="min-h-screen font-sans text-ink overflow-hidden relative"
       style={{ backgroundColor: CREAM }}
     >
@@ -75,12 +77,13 @@ export default function UserProfilePage() {
 
       <div className="relative min-h-screen w-full max-w-[520px] mx-auto px-6 py-10 sm:py-14 flex flex-col">
         <header className="flex items-center gap-3 mb-10">
-          <img src="/oval-logo.png" alt="Oval" className="w-10 h-10 rounded-xl flex-shrink-0" />
+          <img src="/oval-logo.png" alt="" className="w-10 h-10 rounded-xl flex-shrink-0" />
           <span className="font-display text-ink text-3xl tracking-[0.12em] leading-none">OVAL</span>
         </header>
 
         {status === 'loading' && (
           <div className="flex-1 flex items-center justify-center py-20">
+            <h1 className="sr-only">Oval profile</h1>
             <p className="text-warm-gray text-base">Opening profile…</p>
           </div>
         )}

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BORDER_W, fonts, radii, spacing, useTheme } from '../theme';
+import { fonts, radii, spacing, useTheme } from '../theme';
 
 export function OvalWordmark({ compact = false }: { compact?: boolean }) {
   const { colors } = useTheme();
@@ -25,31 +25,26 @@ export function OvalWordmark({ compact = false }: { compact?: boolean }) {
 }
 
 export function OvalMark({ size = 40 }: { size?: number }) {
-  const { colors } = useTheme();
-  const center = Math.round(size * 0.42);
+  const width = Math.round(size * 1.75);
+  const sourceSize = Math.round(size * 2.65);
+
   return (
     <View
       accessibilityLabel="Oval"
+      accessibilityRole="image"
       style={[
         styles.mark,
         {
-          width: size,
+          width,
           height: size,
-          borderRadius: size / 2,
-          backgroundColor: colors.primary,
         },
       ]}
     >
-      <View
-        style={[
-          styles.markCenter,
-          {
-            width: center,
-            height: center,
-            borderRadius: center / 2,
-            backgroundColor: colors.surface,
-          },
-        ]}
+      <Image
+        source={require('../../assets/brand/oval-open-1024-transparent.png')}
+        resizeMode="contain"
+        accessible={false}
+        style={{ width: sourceSize, height: sourceSize }}
       />
     </View>
   );
@@ -114,10 +109,7 @@ const styles = StyleSheet.create({
   mark: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  markCenter: {
-    borderWidth: BORDER_W,
-    borderColor: 'transparent',
+    overflow: 'hidden',
   },
   wordmarkText: {
     fontFamily: fonts.display,

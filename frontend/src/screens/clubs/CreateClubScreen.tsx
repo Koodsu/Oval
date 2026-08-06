@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -48,7 +48,9 @@ function StepProgress({ step }: { step: Step }) {
   const { colors, typography } = useTheme();
   return (
     <View style={styles.stepHeader}>
-      <Text style={typography.captionSmall}>Step {step} of 3</Text>
+      <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+        Step {step} of 3
+      </Text>
       <View style={styles.progressTrack}>
         {[1, 2, 3].map((segment) => (
           <View
@@ -68,6 +70,8 @@ export default function CreateClubScreen({ navigation }: Props) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -167,30 +171,37 @@ export default function CreateClubScreen({ navigation }: Props) {
         {step === 1 ? (
           <>
             <View style={styles.intro}>
-              <Text style={typography.title}>Add your club identity</Text>
-              <Text style={typography.caption}>
+              <Text style={typography.title} maxFontSizeMultiplier={2}>
+                Add your club identity
+              </Text>
+              <Text style={typography.caption} maxFontSizeMultiplier={2}>
                 Help students recognize and connect with your club.
               </Text>
             </View>
 
-            <View style={styles.imageRow}>
+            <View style={[styles.imageRow, accessibilityLayout && styles.imageRowLargeText]}>
               <Pressable
                 onPress={() => void chooseImage('avatar')}
                 accessibilityRole="button"
                 accessibilityLabel="Edit club mark"
                 style={({ pressed }) => [
                   styles.avatarPicker,
+                  accessibilityLayout && styles.imagePickerLargeText,
                   { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
                 ]}
               >
                 {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  <Image source={{ uri: avatarUri }} accessible={false} style={styles.avatarImage} />
                 ) : (
                   <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surfaceAlt }]}>
-                    <Text style={styles.avatarEmoji}>{emoji.trim() || '🎓'}</Text>
+                    <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1}>
+                      {emoji.trim() || '🎓'}
+                    </Text>
                   </View>
                 )}
-                <Text style={typography.bodyMedium}>Edit mark</Text>
+                <Text style={typography.bodyMedium} maxFontSizeMultiplier={2}>
+                  Edit mark
+                </Text>
               </Pressable>
 
               <Pressable
@@ -199,6 +210,7 @@ export default function CreateClubScreen({ navigation }: Props) {
                 accessibilityLabel="Edit club cover"
                 style={({ pressed }) => [
                   styles.coverPicker,
+                  accessibilityLayout && styles.imagePickerLargeText,
                   {
                     borderColor: colors.border,
                     backgroundColor: colors.surfaceAlt,
@@ -206,13 +218,20 @@ export default function CreateClubScreen({ navigation }: Props) {
                   },
                 ]}
               >
-                {coverUri ? <Image source={{ uri: coverUri }} style={styles.coverImage} /> : null}
+                {coverUri ? (
+                  <Image source={{ uri: coverUri }} accessible={false} style={styles.coverImage} />
+                ) : null}
                 {!coverUri ? (
                   <Ionicons name="image-outline" size={30} color={colors.sub} />
                 ) : null}
                 <View style={styles.coverLabel}>
                   <Ionicons name="camera-outline" size={15} color={colors.onPrimary} />
-                  <Text style={[typography.bodyMedium, { color: colors.onPrimary }]}>Edit cover</Text>
+                  <Text
+                    style={[typography.bodyMedium, { color: colors.onPrimary }]}
+                    maxFontSizeMultiplier={2}
+                  >
+                    Edit cover
+                  </Text>
                 </View>
               </Pressable>
             </View>
@@ -230,7 +249,9 @@ export default function CreateClubScreen({ navigation }: Props) {
             />
 
             <View style={{ gap: spacing.sm }}>
-              <Text style={typography.captionSmall}>Category</Text>
+              <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                Category
+              </Text>
               <View style={styles.chipWrap}>
                 {CLUB_CATEGORIES.map((item) => (
                   <Chip
@@ -246,7 +267,10 @@ export default function CreateClubScreen({ navigation }: Props) {
                 ))}
               </View>
               {errors.category ? (
-                <Text style={[typography.captionSmall, { color: colors.danger }]}>
+                <Text
+                  style={[typography.captionSmall, { color: colors.danger }]}
+                  maxFontSizeMultiplier={2}
+                >
                   {errors.category}
                 </Text>
               ) : null}
@@ -275,7 +299,9 @@ export default function CreateClubScreen({ navigation }: Props) {
             />
 
             <View style={{ gap: spacing.sm }}>
-              <Text style={typography.subheading}>Who can discover this club?</Text>
+              <Text style={typography.subheading} maxFontSizeMultiplier={2}>
+                Who can discover this club?
+              </Text>
               {([
                 {
                   value: 'CAMPUS' as const,
@@ -300,6 +326,7 @@ export default function CreateClubScreen({ navigation }: Props) {
                     accessibilityLabel={option.title}
                     style={[
                       styles.discoveryRow,
+                      accessibilityLayout && styles.discoveryRowLargeText,
                       {
                         borderColor: active ? colors.primary : colors.border,
                         backgroundColor: active ? colors.primarySoft : colors.surface,
@@ -312,10 +339,16 @@ export default function CreateClubScreen({ navigation }: Props) {
                       color={active ? colors.primary : colors.faint}
                     />
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={typography.bodyMedium}>{option.title}</Text>
-                      <Text style={typography.captionSmall}>{option.body}</Text>
+                      <Text style={typography.bodyMedium} maxFontSizeMultiplier={2}>
+                        {option.title}
+                      </Text>
+                      <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                        {option.body}
+                      </Text>
                     </View>
-                    <Ionicons name={option.icon} size={20} color={colors.sub} />
+                    {!accessibilityLayout ? (
+                      <Ionicons name={option.icon} size={20} color={colors.sub} />
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -328,8 +361,10 @@ export default function CreateClubScreen({ navigation }: Props) {
         {step === 2 ? (
           <>
             <View style={styles.intro}>
-              <Text style={typography.title}>Keep it authentic</Text>
-              <Text style={typography.caption}>
+              <Text style={typography.title} maxFontSizeMultiplier={2}>
+                Keep it authentic
+              </Text>
+              <Text style={typography.caption} maxFontSizeMultiplier={2}>
                 Oval reviews new clubs to protect students and real campus organizations.
               </Text>
             </View>
@@ -337,17 +372,28 @@ export default function CreateClubScreen({ navigation }: Props) {
               {GUIDELINES.map((guideline, index) => (
                 <View key={guideline} style={styles.guidelineRow}>
                   <View style={[styles.ruleNumber, { backgroundColor: colors.primarySoft }]}>
-                    <Text style={[typography.captionSmall, { color: colors.primary }]}>
+                    <Text
+                      style={[typography.captionSmall, { color: colors.primary }]}
+                      maxFontSizeMultiplier={2}
+                    >
                       {index + 1}
                     </Text>
                   </View>
-                  <Text style={[typography.body, { flex: 1 }]}>{guideline}</Text>
+                  <Text style={[typography.body, { flex: 1 }]} maxFontSizeMultiplier={2}>
+                    {guideline}
+                  </Text>
                 </View>
               ))}
             </Card>
-            <View style={[styles.reviewNotice, { backgroundColor: colors.surfaceAlt }]}>
+            <View
+              style={[
+                styles.reviewNotice,
+                accessibilityLayout && styles.reviewNoticeLargeText,
+                { backgroundColor: colors.surfaceAlt },
+              ]}
+            >
               <Ionicons name="shield-checkmark-outline" size={24} color={colors.sub} />
-              <Text style={[typography.caption, { flex: 1 }]}>
+              <Text style={[typography.caption, { flex: 1 }]} maxFontSizeMultiplier={2}>
                 You will usually hear back within 24–48 hours. Your club remains available to you
                 while it is reviewed.
               </Text>
@@ -359,20 +405,32 @@ export default function CreateClubScreen({ navigation }: Props) {
         {step === 3 ? (
           <>
             <View style={styles.intro}>
-              <Text style={typography.title}>Review your club</Text>
-              <Text style={typography.caption}>Make sure this is how students should see it.</Text>
+              <Text style={typography.title} maxFontSizeMultiplier={2}>
+                Review your club
+              </Text>
+              <Text style={typography.caption} maxFontSizeMultiplier={2}>
+                Make sure this is how students should see it.
+              </Text>
             </View>
             <Card padded>
-              <View style={styles.reviewHero}>
+              <View style={[styles.reviewHero, accessibilityLayout && styles.reviewHeroLargeText]}>
                 {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.reviewAvatar} />
+                  <Image
+                    source={{ uri: avatarUri }}
+                    accessibilityLabel={`${name.trim()} club mark`}
+                    style={styles.reviewAvatar}
+                  />
                 ) : (
                   <View style={[styles.reviewAvatar, styles.reviewAvatarFallback, { backgroundColor: colors.surfaceAlt }]}>
-                    <Text style={styles.avatarEmoji}>{emoji.trim() || '🎓'}</Text>
+                    <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1}>
+                      {emoji.trim() || '🎓'}
+                    </Text>
                   </View>
                 )}
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={typography.title}>{name.trim()}</Text>
+                  <Text style={typography.title} maxFontSizeMultiplier={2}>
+                    {name.trim()}
+                  </Text>
                   <View style={styles.reviewMeta}>
                     <Sticker label={category} tint={colors.greenSoft} small />
                     <Sticker
@@ -383,7 +441,12 @@ export default function CreateClubScreen({ navigation }: Props) {
                   </View>
                 </View>
               </View>
-              <Text style={[typography.body, { marginTop: spacing.md }]}>{description.trim()}</Text>
+              <Text
+                style={[typography.body, { marginTop: spacing.md }]}
+                maxFontSizeMultiplier={2}
+              >
+                {description.trim()}
+              </Text>
             </Card>
             <Button
               label="Create club"
@@ -425,6 +488,13 @@ const useStyles = createThemedStyles((_t: Theme) => ({
   imageRow: {
     flexDirection: 'row' as const,
     gap: spacing.md,
+  },
+  imageRowLargeText: {
+    flexDirection: 'column' as const,
+  },
+  imagePickerLargeText: {
+    minHeight: 188,
+    width: '100%' as const,
   },
   avatarPicker: {
     width: 148,
@@ -496,6 +566,9 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  discoveryRowLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   guidelineCard: {
     gap: spacing.lg,
   },
@@ -505,9 +578,12 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     gap: spacing.md,
   },
   ruleNumber: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    // Intrinsic size so the numeral scales to 200% without clipping.
+    minWidth: 26,
+    minHeight: 26,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -518,10 +594,17 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  reviewNoticeLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   reviewHero: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
+  },
+  reviewHeroLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
   },
   reviewAvatar: {
     width: 68,

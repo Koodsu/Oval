@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -91,6 +92,8 @@ export default function ThreadScreen({
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const { threadId, title: titleParam } = route.params;
   const { user } = useAuth();
   // Notification taps deep-link here without a title param — derive the other
@@ -309,14 +312,14 @@ export default function ThreadScreen({
       >
         <View style={[styles.screen, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.header}>
-            <View style={styles.threadHeader}>
+            <View style={[styles.threadHeader, accessibilityLayout && styles.threadHeaderLargeText]}>
               <IconButton
                 icon="arrow-back"
                 onPress={() => navigation.goBack()}
                 accessibilityLabel="Go back"
               />
               <Pressable
-                style={styles.headerIdentity}
+                style={[styles.headerIdentity, accessibilityLayout && styles.headerIdentityLargeText]}
                 onPress={() =>
                   otherUser
                     ? navigation.navigate('UserProfile', { userId: otherUser.id })
@@ -335,10 +338,14 @@ export default function ThreadScreen({
                   size={40}
                 />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={typography.heading} numberOfLines={1}>
+                  <Text
+                    style={typography.heading}
+                    numberOfLines={accessibilityLayout ? 2 : 1}
+                    maxFontSizeMultiplier={2}
+                  >
                     {title}
                   </Text>
-                  <Text style={typography.captionSmall}>
+                  <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
                     {typingUserIds.length ? 'Typing…' : 'Friend'}
                   </Text>
                 </View>
@@ -427,7 +434,13 @@ export default function ThreadScreen({
                       <Sticker label={dayLabel(message.createdAt)} tint={colors.surfaceAlt} small tilt={0} />
                     </View>
                   ) : null}
-                  <View style={[styles.messageRow, mine && styles.messageRowMine]}>
+                  <View
+                    style={[
+                      styles.messageRow,
+                      accessibilityLayout && styles.messageRowLargeText,
+                      mine && styles.messageRowMine,
+                    ]}
+                  >
                     {!mine ? (
                       grouped ? (
                         <View style={{ width: 32 }} />
@@ -435,16 +448,29 @@ export default function ThreadScreen({
                         <Avatar name={message.sender.name} uri={message.sender.avatarUrl} size={32} />
                       )
                     ) : null}
-                    <View style={[styles.messageStack, mine && { alignItems: 'flex-end' }]}>
+                    <View
+                      style={[
+                        styles.messageStack,
+                        accessibilityLayout && styles.messageStackLargeText,
+                        mine && { alignItems: 'flex-end' },
+                      ]}
+                    >
                       {!grouped ? (
                         <View style={styles.metaRow}>
-                          <Text style={styles.metaName}>{mine ? 'You' : message.sender.name}</Text>
-                          <Text style={styles.metaTime}>{formatTime(message.createdAt)}</Text>
+                          <Text style={styles.metaName} maxFontSizeMultiplier={2}>
+                            {mine ? 'You' : message.sender.name}
+                          </Text>
+                          <Text style={styles.metaTime} maxFontSizeMultiplier={2}>
+                            {formatTime(message.createdAt)}
+                          </Text>
                         </View>
                       ) : null}
                       <Pressable
                         onLongPress={() => openMessageActions(message)}
                         onPress={() => openMessageActions(message)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${mine ? 'You' : message.sender.name}: ${message.content}. ${formatTime(message.createdAt)}`}
+                        accessibilityHint="Opens message actions"
                         style={[
                           styles.bubble,
                           {
@@ -475,6 +501,7 @@ export default function ThreadScreen({
                                 { color: colors.sub },
                               ]}
                               numberOfLines={1}
+                              maxFontSizeMultiplier={2}
                             >
                               {message.replyTo.content}
                             </Text>
@@ -485,6 +512,7 @@ export default function ThreadScreen({
                             styles.messageBody,
                             { color: colors.ink },
                           ]}
+                          maxFontSizeMultiplier={2}
                         >
                           {message.content}
                         </Text>
@@ -509,6 +537,7 @@ export default function ThreadScreen({
                                 styles.heartCount,
                                 hasHeart && { color: colors.pink },
                               ]}
+                              maxFontSizeMultiplier={2}
                             >
                               {heartCount}
                             </Text>
@@ -523,8 +552,12 @@ export default function ThreadScreen({
                             accessibilityRole="button"
                             accessibilityLabel={`${group.mine ? 'Remove' : 'Add'} ${group.emoji} reaction`}
                           >
-                            <Text style={styles.reactionPillEmoji}>{group.emoji}</Text>
-                            <Text style={styles.reactionPillCount}>{group.count}</Text>
+                            <Text style={styles.reactionPillEmoji} maxFontSizeMultiplier={2}>
+                              {group.emoji}
+                            </Text>
+                            <Text style={styles.reactionPillCount} maxFontSizeMultiplier={2}>
+                              {group.count}
+                            </Text>
                           </Pressable>
                         ))}
                         {!mine ? (
@@ -579,7 +612,7 @@ export default function ThreadScreen({
                 </Pressable>
               </View>
             ) : null}
-            <View style={styles.composerRow}>
+            <View style={[styles.composerRow, accessibilityLayout && styles.composerRowLargeText]}>
               <TextInput
                 value={messageText}
                 onChangeText={(value) => {
@@ -587,12 +620,14 @@ export default function ThreadScreen({
                   pingTyping(value);
                 }}
                 placeholder={`Message ${title.split(' ')[0]}…`}
+                accessibilityLabel={`Message ${title.split(' ')[0]}`}
                 placeholderTextColor={colors.faint}
                 style={[
                   styles.input,
                   { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.ink },
                 ]}
                 multiline
+                maxFontSizeMultiplier={2}
               />
               <Pressable
                 onPress={() => void handleSend()}
@@ -767,12 +802,18 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.sm,
   },
+  threadHeaderLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   headerIdentity: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.sm,
+  },
+  headerIdentityLargeText: {
+    alignItems: 'flex-start' as const,
   },
   messageList: {
     flexGrow: 1,
@@ -798,9 +839,16 @@ const useStyles = createThemedStyles((t: Theme) => ({
   messageRowMine: {
     justifyContent: 'flex-end' as const,
   },
+  messageRowLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   messageStack: {
     maxWidth: '78%' as const,
     gap: 3,
+  },
+  messageStackLargeText: {
+    flex: 1,
+    maxWidth: '100%' as const,
   },
   metaRow: {
     flexDirection: 'row' as const,
@@ -906,6 +954,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'flex-end' as const,
     gap: spacing.sm,
     padding: spacing.md,
+  },
+  composerRowLargeText: {
+    alignItems: 'stretch' as const,
   },
   input: {
     flex: 1,

@@ -1,5 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type {
   NativeStackNavigationProp,
@@ -70,6 +78,8 @@ export default function UserProfileScreen({
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const { userId } = route.params;
   const nav = useNavigation<Nav>();
   const [profile, setProfile] = useState<PublicProfile | null>(previewData?.profile ?? null);
@@ -221,13 +231,13 @@ export default function UserProfileScreen({
     switch (relationship.status) {
       case 'NONE':
         return (
-          <View style={styles.actionRow}>
+          <View style={[styles.actionRow, accessibilityLayout && styles.actionRowLargeText]}>
             <Button
               label="Add friend"
               icon="person-add-outline"
               onPress={() => void handleFriendAction('send')}
               loading={busyAction === 'send'}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
             <Button
               label="Message"
@@ -235,71 +245,71 @@ export default function UserProfileScreen({
               variant="secondary"
               disabled
               onPress={() => {}}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
           </View>
         );
       case 'PENDING_SENT':
         return (
-          <View style={styles.actionRow}>
+          <View style={[styles.actionRow, accessibilityLayout && styles.actionRowLargeText]}>
             <Button
               label="Request sent"
               icon="checkmark"
               variant="secondary"
               disabled
               onPress={() => {}}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
             <Button
               label="Cancel"
               variant="ghost"
               onPress={() => void handleFriendAction('cancel')}
               loading={busyAction === 'cancel'}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
           </View>
         );
       case 'PENDING_RECEIVED':
         return (
-          <View style={styles.actionRow}>
+          <View style={[styles.actionRow, accessibilityLayout && styles.actionRowLargeText]}>
             <Button
               label="Accept"
               onPress={() => void handleFriendAction('accept')}
               loading={busyAction === 'accept'}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
             <Button
               label="Decline"
               variant="secondary"
               onPress={() => void handleFriendAction('decline')}
               loading={busyAction === 'decline'}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
           </View>
         );
       case 'FRIENDS':
         return (
-          <View style={styles.actionRow}>
+          <View style={[styles.actionRow, accessibilityLayout && styles.actionRowLargeText]}>
             <Button
               label="Message"
               icon="chatbubble-outline"
               onPress={() => void handleMessage()}
               loading={busyAction === 'message'}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
             <Button
               label="Friends"
               icon="people-outline"
               variant="secondary"
               onPress={() => setSafetyOpen(true)}
-              style={{ flex: 1 }}
+              style={[{ flex: 1 }, accessibilityLayout && styles.actionButtonLargeText]}
             />
           </View>
         );
       case 'BLOCKED':
         return (
           <Card padded>
-            <Text style={typography.body}>
+            <Text style={typography.body} maxFontSizeMultiplier={2}>
               This profile is blocked. Unblock them to reconnect.
             </Text>
             <Button
@@ -368,25 +378,29 @@ export default function UserProfileScreen({
         {profile ? (
           <>
             <Card padded>
-              <View style={styles.identityRow}>
+              <View style={[styles.identityRow, accessibilityLayout && styles.identityRowLargeText]}>
                 <Avatar name={profile.name} uri={profile.avatarUrl} size={82} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={styles.nameRow}>
-                    <Text style={styles.profileName} numberOfLines={2}>
+                    <Text
+                      style={styles.profileName}
+                      numberOfLines={accessibilityLayout ? undefined : 2}
+                      maxFontSizeMultiplier={2}
+                    >
                       {profile.name}
                     </Text>
                     {profile.verifiedUniversity ? (
                       <Ionicons name="checkmark-circle" size={19} color={colors.blue} />
                     ) : null}
                   </View>
-                  <Text style={typography.captionSmall}>
+                  <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
                     {[profile.major, profile.classYear].filter(Boolean).join(' · ') ||
                       'Ohio State student'}
                   </Text>
                 </View>
               </View>
               {profile.bio ? (
-                <Text style={[typography.body, { marginTop: spacing.md }]}>
+                <Text style={[typography.body, { marginTop: spacing.md }]} maxFontSizeMultiplier={2}>
                   {profile.bio}
                 </Text>
               ) : null}
@@ -402,7 +416,10 @@ export default function UserProfileScreen({
                 </View>
               ) : null}
               {profile.purpose || profile.campusZones?.length ? (
-                <Text style={[typography.captionSmall, { marginTop: spacing.sm }]}>
+                <Text
+                  style={[typography.captionSmall, { marginTop: spacing.sm }]}
+                  maxFontSizeMultiplier={2}
+                >
                   {[
                     profile.purpose ? `Here for: ${profile.purpose}` : null,
                     profile.campusZones?.length
@@ -414,7 +431,10 @@ export default function UserProfileScreen({
                 </Text>
               ) : null}
               {profile.instagramHandle ? (
-                <Text style={[typography.captionSmall, { marginTop: spacing.xs }]}>
+                <Text
+                  style={[typography.captionSmall, { marginTop: spacing.xs }]}
+                  maxFontSizeMultiplier={2}
+                >
                   @{profile.instagramHandle}
                 </Text>
               ) : null}
@@ -432,13 +452,17 @@ export default function UserProfileScreen({
 
             {profile.mutualFriends?.length ? (
               <View style={styles.section}>
-                <Text style={typography.kicker}>MUTUAL FRIENDS</Text>
+                <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                  MUTUAL FRIENDS
+                </Text>
                 <Card padded>
-                  <View style={styles.mutualRow}>
+                  <View style={[styles.mutualRow, accessibilityLayout && styles.mutualRowLargeText]}>
                     <View style={styles.avatarStack}>
                       {profile.mutualFriends.slice(0, 4).map((friend, index) => (
                         <Pressable
                           key={friend.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${friend.name}'s profile`}
                           onPress={() =>
                             navigation.push('UserProfile', { userId: friend.id })
                           }
@@ -448,7 +472,13 @@ export default function UserProfileScreen({
                         </Pressable>
                       ))}
                     </View>
-                    <Text style={[typography.captionSmall, { flex: 1, textAlign: 'right' }]}>
+                    <Text
+                      style={[
+                        typography.captionSmall,
+                        { flex: 1, textAlign: accessibilityLayout ? 'left' : 'right' },
+                      ]}
+                      maxFontSizeMultiplier={2}
+                    >
                       {profile.mutualFriendCount} mutual{' '}
                       {profile.mutualFriendCount === 1 ? 'friend' : 'friends'}
                     </Text>
@@ -459,7 +489,9 @@ export default function UserProfileScreen({
 
             {profile.upcomingPods?.length ? (
               <View style={styles.section}>
-                <Text style={typography.kicker}>UPCOMING PODS</Text>
+                <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                  UPCOMING PODS
+                </Text>
                 {profile.upcomingPods.map((pod) => (
                   <Slab
                     key={pod.id}
@@ -467,24 +499,36 @@ export default function UserProfileScreen({
                     accessibilityLabel={`Open ${pod.title}`}
                     faceStyle={{ padding: spacing.lg }}
                   >
-                    <View style={styles.podRow}>
+                    <View style={[styles.podRow, accessibilityLayout && styles.podRowLargeText]}>
                       <View
                         style={[styles.podIcon, { backgroundColor: colors.primarySoft }]}
                       >
                         <Ionicons name="calendar-outline" size={22} color={colors.accentText} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Text style={typography.heading} numberOfLines={1}>
+                        <Text
+                          style={typography.heading}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {pod.title}
                         </Text>
-                        <Text style={typography.captionSmall} numberOfLines={1}>
+                        <Text
+                          style={typography.captionSmall}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {formatDateTime(pod.meetupTime)}
                         </Text>
-                        <Text style={typography.captionSmall} numberOfLines={1}>
+                        <Text
+                          style={typography.captionSmall}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {pod.location}
                         </Text>
                       </View>
-                      <Text style={typography.captionSmall}>
+                      <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
                         {Math.max(0, pod.maxMembers - pod.memberCount)} spots
                       </Text>
                     </View>
@@ -495,14 +539,19 @@ export default function UserProfileScreen({
 
             {profile.clubMemberships?.length ? (
               <View style={styles.section}>
-                <Text style={typography.kicker}>CLUBS</Text>
+                <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                  CLUBS
+                </Text>
                 <Card padded={false}>
                   {profile.clubMemberships.map((club, index) => (
                     <Pressable
                       key={club.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open ${club.name}`}
                       onPress={() => navigation.navigate('ClubDetail', { clubId: club.id })}
                       style={[
                         styles.clubRow,
+                        accessibilityLayout && styles.clubRowLargeText,
                         { borderBottomColor: colors.borderSoft },
                         index === profile.clubMemberships!.length - 1 && {
                           borderBottomWidth: 0,
@@ -513,12 +562,20 @@ export default function UserProfileScreen({
                         <Text style={{ fontSize: 18 }}>{club.emoji}</Text>
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={typography.subheading} numberOfLines={1}>
+                        <Text
+                          style={typography.subheading}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {club.name}
                         </Text>
-                        <Text style={typography.captionSmall}>{club.category}</Text>
+                        <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                          {club.category}
+                        </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={17} color={colors.sub} />
+                      {!accessibilityLayout ? (
+                        <Ionicons name="chevron-forward" size={17} color={colors.sub} />
+                      ) : null}
                     </Pressable>
                   ))}
                 </Card>
@@ -533,8 +590,13 @@ export default function UserProfileScreen({
                   <View style={[styles.sparseIcon, { backgroundColor: colors.surfaceAlt }]}>
                     <Ionicons name="git-network-outline" size={28} color={colors.ink} />
                   </View>
-                  <Text style={typography.title}>Nothing shared yet</Text>
-                  <Text style={[typography.caption, { textAlign: 'center' }]}>
+                  <Text style={typography.title} maxFontSizeMultiplier={2}>
+                    Nothing shared yet
+                  </Text>
+                  <Text
+                    style={[typography.caption, { textAlign: 'center' }]}
+                    maxFontSizeMultiplier={2}
+                  >
                     When you join the same pods or clubs, you’ll see that context here.
                   </Text>
                 </View>
@@ -561,7 +623,9 @@ export default function UserProfileScreen({
             <ListRow icon="person-remove-outline" title="Unfriend" onPress={confirmUnfriend} />
           ) : null}
           <View>
-            <Text style={typography.kicker}>REPORT REASON</Text>
+              <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                REPORT REASON
+              </Text>
             <View style={styles.tagWrap}>
               {REPORT_REASONS.map((reason) => (
                 <Chip
@@ -575,6 +639,7 @@ export default function UserProfileScreen({
             </View>
             <TextInput
               value={reportDetails}
+              accessibilityLabel="Report details"
               onChangeText={setReportDetails}
               placeholder="Optional details that would help a review…"
               placeholderTextColor={colors.faint}
@@ -587,6 +652,7 @@ export default function UserProfileScreen({
                 },
               ]}
               multiline
+              maxFontSizeMultiplier={2}
             />
             <Button
               label="Submit report"
@@ -628,8 +694,12 @@ function ProfileStat({
         !last && { borderRightWidth: BORDER_W, borderRightColor: colors.borderSoft },
       ]}
     >
-      <Text style={typography.title}>{value}</Text>
-      <Text style={typography.captionSmall}>{label}</Text>
+      <Text style={typography.title} maxFontSizeMultiplier={2}>
+        {value}
+      </Text>
+      <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -644,6 +714,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.lg,
+  },
+  identityRowLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
   },
   profileName: {
     fontFamily: fonts.display,
@@ -662,6 +736,13 @@ const useStyles = createThemedStyles((t: Theme) => ({
   actionRow: {
     flexDirection: 'row' as const,
     gap: spacing.sm,
+  },
+  actionRowLargeText: {
+    flexDirection: 'column' as const,
+  },
+  actionButtonLargeText: {
+    alignSelf: 'stretch' as const,
+    flex: 0,
   },
   statRow: {
     flexDirection: 'row' as const,
@@ -685,6 +766,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  mutualRowLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
+  },
   avatarStack: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -696,6 +781,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
+  },
+  podRowLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
   },
   podIcon: {
     width: 48,
@@ -711,6 +800,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     borderBottomWidth: BORDER_W,
+  },
+  clubRowLargeText: {
+    alignItems: 'flex-start' as const,
+    paddingVertical: spacing.md,
   },
   clubIcon: {
     width: 38,

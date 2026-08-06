@@ -7,6 +7,7 @@ import {
   ScrollView,
   Share,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -329,7 +330,7 @@ export default function InboxScreen({ previewData }: { previewData?: InboxPrevie
         }
       >
         <Animated.View entering={FadeInDown.duration(motion.durBase)} style={styles.masthead}>
-          <Text style={styles.pageTitle}>Inbox</Text>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={2} style={styles.pageTitle}>Inbox</Text>
           <Pressable
             onPress={() => navigation.navigate('UserSearch')}
             accessibilityRole="button"
@@ -447,10 +448,16 @@ function InboxTabs({
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View
       accessibilityRole="tablist"
-      style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[
+        styles.tabs,
+        accessibilityLayout && styles.tabsAccessible,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -463,11 +470,13 @@ function InboxTabs({
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.tab,
+              accessibilityLayout && styles.tabAccessible,
               active && { backgroundColor: colors.primary },
               pressed && { opacity: 0.7 },
             ]}
           >
             <Text
+              maxFontSizeMultiplier={2}
               numberOfLines={1}
               style={[
                 styles.tabLabel,
@@ -775,7 +784,7 @@ function InvitesInbox({
     <View style={styles.sections}>
       {invites.length ? (
         <View style={styles.section}>
-          <Text style={typography.title}>Pod invites</Text>
+          <Text maxFontSizeMultiplier={2} style={typography.title}>Pod invites</Text>
           {invites.map((invite) => (
             <InviteSpotlightCard
               key={invite.id}
@@ -837,6 +846,8 @@ function InboxLanding({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const isNew = kind === 'new';
 
   return (
@@ -850,17 +861,22 @@ function InboxLanding({
         style={styles.heroImage}
       />
       <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>
+        <Text maxFontSizeMultiplier={2} style={styles.heroTitle}>
           {isNew ? 'Connections will\nshow up here' : "You're all caught up"}
         </Text>
-        <Text style={[typography.body, styles.heroBody]}>
+        <Text maxFontSizeMultiplier={2} style={[typography.body, styles.heroBody]}>
           {isNew
             ? 'Message friends, chat in pods, and manage invitations—all in one place.'
             : 'Nice work staying in the loop. Find someone new or plan what comes next.'}
         </Text>
       </View>
 
-      <View style={styles.primaryActions}>
+      <View
+        style={[
+          styles.primaryActions,
+          accessibilityLayout && styles.primaryActionsAccessible,
+        ]}
+      >
         <ActionButton
           label="Find classmates"
           icon="person-add-outline"
@@ -873,14 +889,19 @@ function InboxLanding({
       {isNew ? (
         <>
           <SharePanel onShare={onShare} />
-          <View style={styles.explainerGrid}>
+          <View
+            style={[
+              styles.explainerGrid,
+              accessibilityLayout && styles.explainerGridAccessible,
+            ]}
+          >
             <View
               style={[
                 styles.explainerCard,
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
-              <Text style={typography.heading}>What you'll see here</Text>
+              <Text maxFontSizeMultiplier={2} style={typography.heading}>What you'll see here</Text>
               <ExplainerLine icon="mail-outline" color={colors.blue} label="Direct messages" />
               <ExplainerLine icon="chatbubbles-outline" color={colors.violet} label="Pod chats" />
               <ExplainerLine icon="person-add-outline" color={colors.pink} label="Invitations" />
@@ -892,8 +913,8 @@ function InboxLanding({
               ]}
             >
               <Ionicons name="notifications-outline" size={23} color={colors.amber} />
-              <Text style={typography.heading}>Stay in the loop</Text>
-              <Text style={typography.caption}>Get notified when people reply or invite you.</Text>
+              <Text maxFontSizeMultiplier={2} style={typography.heading}>Stay in the loop</Text>
+              <Text maxFontSizeMultiplier={2} style={typography.caption}>Get notified when people reply or invite you.</Text>
             </View>
           </View>
         </>
@@ -929,6 +950,8 @@ function FocusedEmpty({
 }) {
   const styles = useStyles();
   const { typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <Animated.View entering={FadeInDown.duration(motion.durSlow)} style={styles.focusedEmpty}>
       <Image
@@ -938,10 +961,15 @@ function FocusedEmpty({
         style={styles.focusedEmptyImage}
       />
       <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>{title}</Text>
-        <Text style={[typography.body, styles.heroBody]}>{body}</Text>
+        <Text maxFontSizeMultiplier={2} style={styles.heroTitle}>{title}</Text>
+        <Text maxFontSizeMultiplier={2} style={[typography.body, styles.heroBody]}>{body}</Text>
       </View>
-      <View style={styles.primaryActions}>
+      <View
+        style={[
+          styles.primaryActions,
+          accessibilityLayout && styles.primaryActionsAccessible,
+        ]}
+      >
         <ActionButton label={primaryLabel} icon={primaryIcon} primary onPress={onPrimary} />
         {secondaryLabel && secondaryIcon && onSecondary ? (
           <ActionButton label={secondaryLabel} icon={secondaryIcon} onPress={onSecondary} />
@@ -961,6 +989,8 @@ function KeepMoving({
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View
       style={[
@@ -968,10 +998,11 @@ function KeepMoving({
         { backgroundColor: colors.primarySoft, borderColor: colors.pinkSoft },
       ]}
     >
-      <Text style={styles.movingTitle}>Keep things moving</Text>
+      <Text maxFontSizeMultiplier={2} style={styles.movingTitle}>Keep things moving</Text>
       <View
         style={[
           styles.movingActions,
+          accessibilityLayout && styles.movingActionsAccessible,
           { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
@@ -982,7 +1013,13 @@ function KeepMoving({
           body="Connect with people in your classes."
           onPress={onFindPeople}
         />
-        <View style={[styles.movingDivider, { backgroundColor: colors.border }]} />
+        <View
+          style={[
+            styles.movingDivider,
+            accessibilityLayout && styles.movingDividerAccessible,
+            { backgroundColor: colors.border },
+          ]}
+        />
         <MovingAction
           icon="person-add-outline"
           color={colors.violet}
@@ -1019,10 +1056,10 @@ function MovingAction({
     >
       <Ionicons name={icon} size={27} color={color} />
       <View style={styles.movingCopy}>
-        <Text style={styles.movingActionTitle} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={styles.movingActionTitle} numberOfLines={2}>
           {title}
         </Text>
-        <Text style={styles.movingActionBody} numberOfLines={2}>
+        <Text maxFontSizeMultiplier={2} style={styles.movingActionBody} numberOfLines={3}>
           {body}
         </Text>
       </View>
@@ -1034,18 +1071,21 @@ function MovingAction({
 function LoopBanner({ count }: { count: number }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View
       accessible
       accessibilityLabel={`You're in the loop. ${count} new ${count === 1 ? 'item' : 'items'} from your community.`}
       style={[
         styles.loopBanner,
+        accessibilityLayout && styles.loopBannerAccessible,
         { backgroundColor: colors.amberSoft, borderColor: colors.border },
       ]}
     >
       <View style={styles.loopBannerCopy}>
-        <Text style={styles.loopBannerTitle}>You&apos;re in the loop</Text>
-        <Text style={[styles.loopBannerBody, { color: colors.sub }]}>
+        <Text maxFontSizeMultiplier={2} style={styles.loopBannerTitle}>You&apos;re in the loop</Text>
+        <Text maxFontSizeMultiplier={2} style={[styles.loopBannerBody, { color: colors.sub }]}>
           New activity from your community.
         </Text>
         <View
@@ -1055,15 +1095,17 @@ function LoopBanner({ count }: { count: number }) {
           ]}
         >
           <Ionicons name="notifications" size={15} color={colors.primary} />
-          <Text style={styles.loopBannerPillLabel}>{count} new</Text>
+          <Text maxFontSizeMultiplier={2} style={styles.loopBannerPillLabel}>{count} new</Text>
         </View>
       </View>
-      <Image
-        source={connectionsIllustration}
-        resizeMode="cover"
-        accessibilityLabel=""
-        style={styles.loopBannerImage}
-      />
+      {accessibilityLayout ? null : (
+        <Image
+          source={connectionsIllustration}
+          resizeMode="cover"
+          accessible={false}
+          style={styles.loopBannerImage}
+        />
+      )}
     </View>
   );
 }
@@ -1071,9 +1113,16 @@ function LoopBanner({ count }: { count: number }) {
 function InboxSectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View
+      style={[
+        styles.sectionHeader,
+        accessibilityLayout && styles.sectionHeaderAccessible,
+      ]}
+    >
+      <Text maxFontSizeMultiplier={2} style={styles.sectionTitle}>{title}</Text>
       {onSeeAll ? (
         <Pressable
           onPress={onSeeAll}
@@ -1081,7 +1130,7 @@ function InboxSectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () 
           accessibilityRole="button"
           accessibilityLabel={`See all ${title.toLowerCase()}`}
         >
-          <Text style={[styles.seeAll, { color: colors.accentText }]}>See all</Text>
+          <Text maxFontSizeMultiplier={2} style={[styles.seeAll, { color: colors.accentText }]}>See all</Text>
         </Pressable>
       ) : null}
     </View>
@@ -1153,21 +1202,23 @@ function ThreadRow({
       </View>
       <View style={styles.rowCopy}>
         {detailed ? (
-          <Text style={[styles.rowTitle, { fontWeight: '800' }]} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={2} style={[styles.rowTitle, { fontWeight: '800' }]} numberOfLines={2}>
             {thread.otherUser.name}
           </Text>
         ) : (
           <View style={styles.rowTop}>
             <Text
+              maxFontSizeMultiplier={2}
               style={[styles.rowTitle, thread.hasUnread && { fontWeight: '800' }, { flex: 1 }]}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {thread.otherUser.name}
             </Text>
-            <Text style={[styles.rowTimestamp, { color: colors.sub }]}>{timestamp}</Text>
+            <Text maxFontSizeMultiplier={2} style={[styles.rowTimestamp, { color: colors.sub }]}>{timestamp}</Text>
           </View>
         )}
         <Text
+          maxFontSizeMultiplier={2}
           style={[
             styles.rowPreview,
             { color: colors.sub },
@@ -1180,7 +1231,7 @@ function ThreadRow({
       </View>
       {detailed ? (
         <View style={styles.threadRowEnd}>
-          <Text style={[styles.rowTimestamp, { color: colors.sub }]}>{timestamp}</Text>
+          <Text maxFontSizeMultiplier={2} style={[styles.rowTimestamp, { color: colors.sub }]}>{timestamp}</Text>
           <View style={styles.threadRowIndicators}>
             {thread.hasUnread ? (
               <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
@@ -1228,7 +1279,11 @@ function PodChatRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${title} chat`}
+      accessibilityLabel={
+        unread > 0
+          ? `Open ${title} chat, ${unread} unread ${unread === 1 ? 'message' : 'messages'}`
+          : `Open ${title} chat`
+      }
       style={({ pressed }) => [
         styles.inboxRow,
         showDivider && { borderBottomWidth: BORDER_W, borderBottomColor: colors.borderSoft },
@@ -1249,16 +1304,17 @@ function PodChatRow({
       </View>
       <View style={styles.rowCopy}>
         <View style={styles.rowTop}>
-          <Text style={[styles.rowTitle, styles.podRowTitle, { flex: 1 }]} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={2} style={[styles.rowTitle, styles.podRowTitle, { flex: 1 }]} numberOfLines={2}>
             {title}
           </Text>
           {pod.lastMessageAt ? (
-            <Text style={[styles.rowTimestamp, { color: colors.sub }]}>
+            <Text maxFontSizeMultiplier={2} style={[styles.rowTimestamp, { color: colors.sub }]}>
               {inboxTimestamp(pod.lastMessageAt)}
             </Text>
           ) : null}
         </View>
         <Text
+          maxFontSizeMultiplier={2}
           style={[
             styles.rowPreview,
             { color: colors.sub },
@@ -1275,7 +1331,7 @@ function PodChatRow({
       <View style={styles.podRowEnd}>
         {unread ? (
           <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.countBadgeLabel, { color: colors.onPrimary }]}>{unread}</Text>
+            <Text maxFontSizeMultiplier={2} style={[styles.countBadgeLabel, { color: colors.onPrimary }]}>{unread}</Text>
           </View>
         ) : null}
         <Ionicons name="chevron-forward" size={23} color={colors.ink} />
@@ -1287,6 +1343,8 @@ function PodChatRow({
 function PodChatCard({ pod, onPress }: { pod: InboxPodThread; onPress: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const unread = pod.unreadCount ?? 0;
   const members = pod.members.map((member) => ({
     name: member.user.name,
@@ -1300,6 +1358,7 @@ function PodChatCard({ pod, onPress }: { pod: InboxPodThread; onPress: () => voi
       accessibilityLabel={`Open ${title} chat${unread ? `, ${unread} unread` : ''}`}
       style={({ pressed }) => [
         styles.podCard,
+        accessibilityLayout && styles.podCardAccessible,
         { backgroundColor: colors.violetSoft, borderColor: colors.violetSoft },
         pressed && { opacity: 0.72 },
       ]}
@@ -1308,13 +1367,16 @@ function PodChatCard({ pod, onPress }: { pod: InboxPodThread; onPress: () => voi
         source={activityImageFor(pod.activity)}
         resizeMode="cover"
         accessibilityLabel=""
-        style={styles.podCardImage}
+        style={[
+          styles.podCardImage,
+          accessibilityLayout && styles.podCardImageAccessible,
+        ]}
       />
       <View style={styles.podCardCopy}>
-        <Text style={styles.podCardTitle} numberOfLines={2}>
+        <Text maxFontSizeMultiplier={2} style={styles.podCardTitle} numberOfLines={2}>
           {title}
         </Text>
-        <Text style={[styles.rowPreview, { color: colors.sub }]} numberOfLines={2}>
+        <Text maxFontSizeMultiplier={2} style={[styles.rowPreview, { color: colors.sub }]} numberOfLines={2}>
           {pod.lastMessagePreview
             ? `${pod.lastMessageSenderName ? `${pod.lastMessageSenderName}: ` : ''}${pod.lastMessagePreview}`
             : unread > 0
@@ -1348,11 +1410,14 @@ function InviteSpotlightCard({
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const title = invite.pod ? getPodTitle(invite.pod) : 'A pod';
   return (
     <View
       style={[
         styles.spotlightCard,
+        accessibilityLayout && styles.spotlightCardAccessible,
         { backgroundColor: colors.amberSoft, borderColor: colors.amberSoft },
       ]}
     >
@@ -1360,15 +1425,18 @@ function InviteSpotlightCard({
         source={activityImageFor(invite.pod?.activity)}
         resizeMode="cover"
         accessibilityLabel=""
-        style={styles.spotlightImage}
+        style={[
+          styles.spotlightImage,
+          accessibilityLayout && styles.spotlightImageAccessible,
+        ]}
       />
       <View style={styles.spotlightBody}>
         <View style={styles.spotlightTop}>
           <View style={styles.rowCopy}>
-            <Text style={styles.spotlightTitle} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={2} style={styles.spotlightTitle} numberOfLines={2}>
               {title}
             </Text>
-            <Text style={[styles.rowPreview, { color: colors.sub }]} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={2} style={[styles.rowPreview, { color: colors.sub }]} numberOfLines={2}>
               You&apos;ve been invited to join this community.
             </Text>
           </View>
@@ -1416,8 +1484,8 @@ function InviteRow({
         <Ionicons name="chatbubble-outline" size={24} color={colors.violet} />
       </View>
       <View style={styles.actionableCopy}>
-        <Text style={typography.captionSmall}>You're invited to join</Text>
-        <Text style={typography.heading} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>You're invited to join</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.heading} numberOfLines={2}>
           {invite.pod ? getPodTitle(invite.pod) : 'A pod'}
         </Text>
         <View style={styles.compactActions}>
@@ -1456,6 +1524,9 @@ function FriendRequestRow({
       <Pressable
         disabled={!request.sender || !onProfile}
         onPress={() => request.sender && onProfile?.(request.senderId)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${request.sender?.name ?? 'friend request'} profile`}
+        accessibilityState={{ disabled: !request.sender || !onProfile }}
       >
         <Avatar
           name={request.sender?.name ?? 'Friend request'}
@@ -1464,10 +1535,10 @@ function FriendRequestRow({
         />
       </Pressable>
       <View style={styles.actionableCopy}>
-        <Text style={typography.heading} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={typography.heading} numberOfLines={2}>
           {request.sender?.name ?? 'Friend request'}
         </Text>
-        <Text style={typography.captionSmall}>Wants to connect with you</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>Wants to connect with you</Text>
         <View style={styles.compactActions}>
           <MiniButton label="Decline" onPress={onDecline} disabled={busy} />
           <MiniButton label="Accept" onPress={onAccept} primary loading={busy} />
@@ -1502,6 +1573,9 @@ function SentRequestRow({
       <Pressable
         disabled={!request.receiver}
         onPress={() => request.receiver && onProfile(request.receiverId)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${request.receiver?.name ?? 'pending request'} profile`}
+        accessibilityState={{ disabled: !request.receiver }}
       >
         <Avatar
           name={request.receiver?.name ?? 'Pending request'}
@@ -1510,10 +1584,10 @@ function SentRequestRow({
         />
       </Pressable>
       <View style={styles.rowCopy}>
-        <Text style={typography.heading} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={typography.heading} numberOfLines={2}>
           {request.receiver?.name ?? 'Pending request'}
         </Text>
-        <Text style={typography.captionSmall}>Request sent {relativeTime(request.createdAt)}</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>Request sent {relativeTime(request.createdAt)}</Text>
       </View>
       <MiniButton label="Cancel" onPress={onCancel} loading={busy} />
     </View>
@@ -1547,11 +1621,11 @@ function PodInviteCard({
           <Ionicons name="people-outline" size={32} color="#FFFFFF" />
         </View>
         <View style={styles.rowCopy}>
-          <Text style={[styles.inviteEyebrow, { color: colors.sub }]}>You're invited to join</Text>
-          <Text style={styles.inviteTitle} numberOfLines={2}>
+          <Text maxFontSizeMultiplier={2} style={[styles.inviteEyebrow, { color: colors.sub }]}>You're invited to join</Text>
+          <Text maxFontSizeMultiplier={2} style={styles.inviteTitle} numberOfLines={2}>
             {invite.pod ? getPodTitle(invite.pod) : 'A pod'}
           </Text>
-          <Text style={[styles.inviteMeta, { color: colors.sub }]}>
+          <Text maxFontSizeMultiplier={2} style={[styles.inviteMeta, { color: colors.sub }]}>
             {memberCount
               ? `Pod  •  ${memberCount} ${memberCount === 1 ? 'member' : 'members'}`
               : `Pod invitation  •  ${relativeTime(invite.createdAt)}`}
@@ -1583,6 +1657,7 @@ function ActionButton({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => [
         styles.actionButton,
         {
@@ -1592,7 +1667,7 @@ function ActionButton({
         },
       ]}
     >
-      <Text style={[typography.button, { color: primary ? colors.onPrimary : colors.ink }]}>
+      <Text maxFontSizeMultiplier={2} style={[typography.button, { color: primary ? colors.onPrimary : colors.ink }]}>
         {label}
       </Text>
       <Ionicons
@@ -1634,6 +1709,8 @@ function MiniButton({
       onPress={onPress}
       disabled={disabled || loading}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
       style={({ pressed }) => [
         styles.miniButton,
         grow && styles.grow,
@@ -1648,7 +1725,7 @@ function MiniButton({
       {loading ? (
         <ActivityIndicator size="small" color={label_} />
       ) : (
-        <Text style={[typography.subheading, { color: label_ }]}>{label}</Text>
+        <Text maxFontSizeMultiplier={2} style={[typography.subheading, { color: label_ }]}>{label}</Text>
       )}
     </Pressable>
   );
@@ -1675,6 +1752,8 @@ function ActionRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={body}
       style={({ pressed }) => [
         styles.actionRow,
         { backgroundColor: soft, borderColor: color, opacity: pressed ? 0.72 : 1 },
@@ -1682,8 +1761,8 @@ function ActionRow({
     >
       <Ionicons name={icon} size={27} color={color} />
       <View style={styles.rowCopy}>
-        <Text style={typography.heading}>{title}</Text>
-        <Text style={typography.caption}>{body}</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.heading}>{title}</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.caption}>{body}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.ink} />
     </Pressable>
@@ -1704,8 +1783,8 @@ function SharePanel({ onShare }: { onShare: () => void }) {
         <Ionicons name="link-outline" size={22} color={colors.violet} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={typography.heading}>Share your link</Text>
-        <Text style={typography.caption}>Let friends jump straight to your Oval profile.</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.heading}>Share your link</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.caption}>Let friends jump straight to your Oval profile.</Text>
       </View>
       <MiniButton label="Share" onPress={onShare} />
     </View>
@@ -1736,8 +1815,8 @@ function ProfileSharePanel({
           <Ionicons name="link-outline" size={22} color={colors.violet} />
         </View>
         <View style={styles.rowCopy}>
-          <Text style={styles.profileShareTitle}>Bring someone into your circle</Text>
-          <Text style={[styles.profileShareBody, { color: colors.sub }]}>
+          <Text maxFontSizeMultiplier={2} style={styles.profileShareTitle}>Bring someone into your circle</Text>
+          <Text maxFontSizeMultiplier={2} style={[styles.profileShareBody, { color: colors.sub }]}>
             Share a link that opens your profile in Oval.
           </Text>
         </View>
@@ -1752,7 +1831,7 @@ function ProfileSharePanel({
           pressed && { opacity: 0.65 },
         ]}
       >
-        <Text style={[styles.profileLinkText, { color: colors.ink }]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={[styles.profileLinkText, { color: colors.ink }]} numberOfLines={2}>
           {visibleUrl}
         </Text>
         <Ionicons name="copy-outline" size={19} color={colors.violet} />
@@ -1793,7 +1872,7 @@ function PeopleStrip({
               style={({ pressed }) => [styles.peopleStripPerson, pressed && { opacity: 0.6 }]}
             >
               <Avatar name={friend.name} uri={friend.avatarUrl} size={58} />
-              <Text style={styles.peopleStripName} numberOfLines={1}>
+              <Text maxFontSizeMultiplier={2} style={styles.peopleStripName} numberOfLines={2}>
                 {friend.firstName ?? friend.name.split(' ')[0]}
               </Text>
             </Pressable>
@@ -1812,7 +1891,7 @@ function PeopleStrip({
             >
               <Ionicons name="add" size={28} color={colors.primary} />
             </View>
-            <Text style={styles.peopleStripName} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={2} style={styles.peopleStripName} numberOfLines={2}>
               Find
             </Text>
           </Pressable>
@@ -1847,13 +1926,13 @@ function FeaturedThread({
       >
         <Avatar name={thread.otherUser.name} uri={thread.otherUser.avatarUrl} size={68} />
         <View style={styles.rowCopy}>
-          <Text style={styles.featuredThreadName} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={2} style={styles.featuredThreadName} numberOfLines={2}>
             {thread.otherUser.name}
           </Text>
-          <Text style={[styles.featuredThreadPreview, { color: colors.sub }]} numberOfLines={2}>
+          <Text maxFontSizeMultiplier={2} style={[styles.featuredThreadPreview, { color: colors.sub }]} numberOfLines={2}>
             {preview}
           </Text>
-          <Text style={[styles.featuredThreadTime, { color: colors.accentText }]}>
+          <Text maxFontSizeMultiplier={2} style={[styles.featuredThreadTime, { color: colors.accentText }]}>
             {inboxTimestamp(thread.lastMessage?.createdAt ?? thread.updatedAt)}
           </Text>
         </View>
@@ -1884,8 +1963,8 @@ function ExplorePodsCallout({ onPress }: { onPress: () => void }) {
         <Ionicons name="search" size={24} color={colors.primary} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={styles.exploreCalloutTitle}>Find another pod</Text>
-        <Text style={[styles.exploreCalloutBody, { color: colors.sub }]}>
+        <Text maxFontSizeMultiplier={2} style={styles.exploreCalloutTitle}>Find another pod</Text>
+        <Text maxFontSizeMultiplier={2} style={[styles.exploreCalloutBody, { color: colors.sub }]}>
           Browse plans forming now.
         </Text>
       </View>
@@ -1908,7 +1987,7 @@ function ExplainerLine({
   return (
     <View style={styles.explainerLine}>
       <Ionicons name={icon} size={17} color={color} />
-      <Text style={typography.caption}>{label}</Text>
+      <Text maxFontSizeMultiplier={2} style={typography.caption}>{label}</Text>
     </View>
   );
 }
@@ -1925,7 +2004,7 @@ function ContactStrip({
   if (!friends.length) return null;
   return (
     <View style={styles.contacts}>
-      <Text style={typography.title}>Recent contacts</Text>
+      <Text maxFontSizeMultiplier={2} style={typography.title}>Recent contacts</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1940,7 +2019,7 @@ function ContactStrip({
             style={({ pressed }) => [styles.contact, pressed && { opacity: 0.6 }]}
           >
             <Avatar name={friend.name} uri={friend.avatarUrl} size={52} />
-            <Text style={typography.captionSmall} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={2} style={typography.captionSmall} numberOfLines={2}>
               {friend.firstName ?? friend.name.split(' ')[0]}
             </Text>
           </Pressable>
@@ -1970,8 +2049,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
     letterSpacing: -1.1,
   },
   composeButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 21,
     borderWidth: BORDER_W,
     alignItems: 'center' as const,
@@ -1985,12 +2064,22 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'stretch' as const,
   },
+  tabsAccessible: {
+    height: 'auto' as const,
+    minHeight: 104,
+    flexWrap: 'wrap' as const,
+  },
   tab: {
     flex: 1,
     borderRadius: radii.pill,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     paddingHorizontal: 4,
+  },
+  tabAccessible: {
+    flex: 0,
+    width: '50%' as const,
+    minHeight: 50,
   },
   tabLabel: {
     fontSize: 14,
@@ -2012,6 +2101,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 2,
+  },
+  sectionHeaderAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start' as const,
+    gap: spacing.sm,
   },
   sectionTitle: {
     color: t.colors.ink,
@@ -2122,6 +2216,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'stretch' as const,
   },
+  loopBannerAccessible: {
+    flexDirection: 'column' as const,
+  },
   loopBannerCopy: {
     flex: 1,
     minWidth: 0,
@@ -2147,7 +2244,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   loopBannerPill: {
     marginTop: 6,
     alignSelf: 'flex-start' as const,
-    minHeight: 32,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     borderWidth: BORDER_W,
     borderRadius: radii.pill,
@@ -2176,10 +2273,18 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: 14,
     overflow: 'hidden' as const,
   },
+  podCardAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+  },
   podCardImage: {
     width: 116,
     height: 100,
     borderRadius: radii.sm,
+  },
+  podCardImageAccessible: {
+    width: '100%' as const,
+    height: 160,
   },
   podCardCopy: {
     flex: 1,
@@ -2217,11 +2322,19 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: 14,
     overflow: 'hidden' as const,
   },
+  spotlightCardAccessible: {
+    flexDirection: 'column' as const,
+  },
   spotlightImage: {
     width: 116,
     alignSelf: 'stretch' as const,
     minHeight: 124,
     borderRadius: radii.sm,
+  },
+  spotlightImageAccessible: {
+    width: '100%' as const,
+    height: 160,
+    alignSelf: 'auto' as const,
   },
   spotlightBody: {
     flex: 1,
@@ -2264,10 +2377,13 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: 5,
   },
   countBadge: {
+    // Intrinsic height so the count can reach 200% Dynamic Type without
+    // clipping; the pill radius holds the shape at any size.
     minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+    minHeight: 24,
+    borderRadius: 999,
     paddingHorizontal: 6,
+    paddingVertical: 2,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -2290,7 +2406,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
   },
   miniButton: {
     minWidth: 82,
-    minHeight: 34,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
     borderWidth: BORDER_W,
@@ -2373,6 +2489,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'stretch' as const,
     overflow: 'hidden' as const,
   },
+  movingActionsAccessible: {
+    flexDirection: 'column' as const,
+  },
   movingAction: {
     flex: 1,
     minWidth: 0,
@@ -2403,6 +2522,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
   movingDivider: {
     width: BORDER_W,
     marginVertical: spacing.sm,
+  },
+  movingDividerAccessible: {
+    width: '100%' as const,
+    height: BORDER_W,
+    marginVertical: 0,
   },
   landing: {
     gap: spacing.xl,
@@ -2442,6 +2566,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
   primaryActions: {
     flexDirection: 'row' as const,
     gap: spacing.sm,
+  },
+  primaryActionsAccessible: {
+    flexDirection: 'column' as const,
   },
   actionButton: {
     flex: 1,
@@ -2605,6 +2732,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'stretch' as const,
     gap: spacing.md,
+  },
+  explainerGridAccessible: {
+    flexDirection: 'column' as const,
   },
   explainerCard: {
     flex: 1.15,

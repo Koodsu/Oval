@@ -34,7 +34,13 @@ export default function Testimonials() {
         </h2>
       </div>
 
-      <div className="relative">
+      <ul className="sr-only">
+        {TESTIMONIALS.map(({ quote, name, role }) => (
+          <li key={name}>{quote} — {name}, {role}</li>
+        ))}
+      </ul>
+
+      <div aria-hidden="true" className="relative">
         <div className="pointer-events-none absolute left-0 top-0 z-10 h-full w-24 bg-gradient-to-r from-void to-transparent md:w-40" />
         <div className="pointer-events-none absolute right-0 top-0 z-10 h-full w-24 bg-gradient-to-l from-void to-transparent md:w-40" />
         <div className="animate-ticker flex w-max">

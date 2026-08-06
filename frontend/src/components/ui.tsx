@@ -1,6 +1,8 @@
 import React from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  findNodeHandle,
   Image,
   ImageSourcePropType,
   ImageStyle,
@@ -14,6 +16,7 @@ import {
   TextInput,
   TextInputProps,
   TextStyle,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from 'react-native';
@@ -82,12 +85,30 @@ export function accentKeyForSeed(seed: string): AccentKey {
 export function readableInkOn(colors: ThemeColors, fill: string): string {
   const match = /^#([0-9a-fA-F]{6})$/.exec(fill.trim());
   if (!match) return colors.ink;
-  const value = match[1];
-  const r = Number.parseInt(value.slice(0, 2), 16);
-  const g = Number.parseInt(value.slice(2, 4), 16);
-  const b = Number.parseInt(value.slice(4, 6), 16);
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-  return luminance > 150 ? colors.ink : colors.onPrimary;
+
+  const luminance = (hex: string) => {
+    const channels = hex
+      .replace('#', '')
+      .match(/.{2}/g)
+      ?.map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((channel) =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+      );
+    if (!channels) return 0;
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const contrast = (first: string, second: string) => {
+    const firstLuminance = luminance(first);
+    const secondLuminance = luminance(second);
+    return (
+      (Math.max(firstLuminance, secondLuminance) + 0.05)
+      / (Math.min(firstLuminance, secondLuminance) + 0.05)
+    );
+  };
+
+  return contrast(fill, colors.ink) >= contrast(fill, colors.onPrimary)
+    ? colors.ink
+    : colors.onPrimary;
 }
 
 export function accentForSeed(colors: ThemeColors, seed: string) {
@@ -136,6 +157,8 @@ export type SlabProps = {
   faceStyle?: StyleProp<ViewStyle>;
   accessibilityRole?: 'button' | 'link' | 'tab' | 'none';
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityState?: React.ComponentProps<typeof Pressable>['accessibilityState'];
   hitSlop?: React.ComponentProps<typeof Pressable>['hitSlop'];
   testID?: string;
 };
@@ -154,12 +177,15 @@ export function Slab({
   faceStyle,
   accessibilityRole = 'button',
   accessibilityLabel,
+  accessibilityHint,
+  accessibilityState,
   hitSlop,
   testID,
 }: SlabProps) {
   const { colors } = useTheme();
   const press = useSharedValue(0);
-  const interactive = Boolean(onPress || onLongPress) && !disabled;
+  const actionable = Boolean(onPress || onLongPress);
+  const interactive = actionable && !disabled;
 
   const faceFill = color ?? colors.surface;
 
@@ -188,7 +214,7 @@ export function Slab({
         style,
       ]}
     >
-      {interactive ? (
+      {actionable ? (
         <AnimatedPressable
           onPress={() => {
             if (haptic) tick();
@@ -204,6 +230,8 @@ export function Slab({
           disabled={disabled}
           accessibilityRole={accessibilityRole}
           accessibilityLabel={accessibilityLabel}
+          accessibilityHint={accessibilityHint}
+          accessibilityState={{ ...accessibilityState, disabled: Boolean(disabled) }}
           hitSlop={hitSlop}
           testID={testID}
           style={faceStyles}
@@ -211,7 +239,16 @@ export function Slab({
           {children}
         </AnimatedPressable>
       ) : (
-        <Animated.View style={faceStyles}>{children}</Animated.View>
+        <Animated.View
+          accessible={Boolean(accessibilityLabel)}
+          accessibilityRole={accessibilityRole}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={accessibilityHint}
+          accessibilityState={accessibilityState}
+          style={faceStyles}
+        >
+          {children}
+        </Animated.View>
       )}
     </View>
   );
@@ -325,14 +362,22 @@ export function Button({
       borderColor={borderColor}
       radius={radii.button}
       style={style}
-      faceStyle={[buttonStyles.face, { height: height - SLAB_OFFSET }]}
+      faceStyle={[
+        buttonStyles.face,
+        { minHeight: height - SLAB_OFFSET, paddingVertical: size === 'sm' ? 8 : 10 },
+      ]}
       accessibilityLabel={label}
+      accessibilityState={{ busy: Boolean(loading), disabled: Boolean(disabled || loading) }}
       testID={testID}
     >
       <View style={buttonStyles.loadingFrame}>
         <View style={[buttonStyles.inner, loading && buttonStyles.loadingLabel]}>
           {icon ? <Ionicons name={icon} size={size === 'sm' ? 15 : 18} color={labelColor} /> : null}
-          <Text style={[buttonStyles.label, { color: labelColor, fontSize }]} numberOfLines={1}>
+          <Text
+            style={[buttonStyles.label, { color: labelColor, fontSize }]}
+            numberOfLines={2}
+            maxFontSizeMultiplier={2}
+          >
             {label}
           </Text>
         </View>
@@ -377,6 +422,7 @@ const buttonStyles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontWeight: '600',
     letterSpacing: 0,
+    textAlign: 'center',
   },
 });
 
@@ -422,6 +468,8 @@ export function IconButton({
         justifyContent: 'center',
       }}
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      hitSlop={size < 44 ? Math.ceil((44 - size) / 2) : undefined}
       testID={testID}
     >
       <Ionicons name={icon} size={Math.round(size * 0.46)} color={iconColor ?? colors.ink} />
@@ -439,6 +487,7 @@ export function Chip({
   tint,
   style,
   testID,
+  accessibilityLabel,
 }: {
   label: string;
   selected?: boolean;
@@ -448,6 +497,12 @@ export function Chip({
   tint?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /**
+   * Overrides the announced name. Use when adjacent visual state (an unread
+   * badge, a count) must reach assistive technology, since the chip collapses
+   * into a single accessibility element.
+   */
+  accessibilityLabel?: string;
 }) {
   const { colors } = useTheme();
   // Selected filter chips are solid pills — scarlet by default, or the
@@ -464,13 +519,18 @@ export function Chip({
       raised={false}
       style={style}
       faceStyle={chipStyles.face}
-      hitSlop={{ top: 6, bottom: 6 }}
-      accessibilityLabel={label}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ selected: Boolean(selected) }}
       testID={testID}
     >
       <View style={chipStyles.inner}>
         {icon ? <Ionicons name={icon} size={14} color={labelColor} /> : null}
-        <Text style={[chipStyles.label, { color: labelColor }]} numberOfLines={1}>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={[chipStyles.label, { color: labelColor }]}
+          numberOfLines={1}
+        >
           {label}
         </Text>
       </View>
@@ -512,10 +572,14 @@ export function Segmented<T extends string>({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View
+      accessibilityRole="tablist"
       style={[
         segmentedStyles.track,
+        accessibilityLayout && segmentedStyles.trackLargeText,
         { backgroundColor: colors.sunken, borderColor: colors.border },
         style,
       ]}
@@ -540,6 +604,7 @@ export function Segmented<T extends string>({
             ]}
           >
             <Text
+              maxFontSizeMultiplier={2}
               style={[
                 segmentedStyles.label,
                 { color: active ? colors.onPrimary : colors.sub },
@@ -563,9 +628,13 @@ const segmentedStyles = StyleSheet.create({
     padding: 4,
     gap: 4,
   },
+  trackLargeText: {
+    flexDirection: 'column',
+  },
   segment: {
     flex: 1,
-    height: 34,
+    minHeight: 44,
+    paddingVertical: 7,
     borderRadius: radii.xs,
     alignItems: 'center',
     justifyContent: 'center',
@@ -613,6 +682,7 @@ export function Sticker({
     >
       {icon ? <Ionicons name={icon} size={small ? 11 : 13} color={fg} /> : null}
       <Text
+        maxFontSizeMultiplier={2}
         style={[stickerStyles.label, { color: fg, fontSize: small ? 11 : 12 }]}
         numberOfLines={1}
       >
@@ -644,7 +714,7 @@ export function Tag({ label, tint, style }: { label: string; tint?: string; styl
   const { colors } = useTheme();
   return (
     <View style={[tagStyles.base, { backgroundColor: tint ?? colors.surfaceAlt }, style]}>
-      <Text style={[tagStyles.label, { color: colors.sub }]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={2} style={[tagStyles.label, { color: colors.sub }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -672,7 +742,7 @@ export function StatusTag({
   return (
     <View style={[tagStyles.status, { backgroundColor: config.bg }, style]}>
       {config.icon ? <Ionicons name={config.icon} size={12} color={config.fg} /> : null}
-      <Text style={[tagStyles.label, { color: config.fg }]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={2} style={[tagStyles.label, { color: config.fg }]} numberOfLines={1}>
         {config.label}
       </Text>
     </View>
@@ -703,19 +773,32 @@ const tagStyles = StyleSheet.create({
   },
 });
 
-/** Notification count dot. */
+/**
+ * Notification count dot.
+ *
+ * Intentionally hidden from assistive technology: the badge sits inside a
+ * container that collapses into a single accessibility element, so announcing
+ * it here would either be swallowed or read as a bare, contextless number.
+ * Every caller must fold the count into the container's `accessibilityLabel`
+ * instead — see `PodsScreen`, `InboxScreen`, `ChannelRow`, and the tab bar.
+ */
 export function CountBubble({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
   const { colors } = useTheme();
   if (count <= 0) return null;
   return (
     <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
       style={[
         bubbleStyles.base,
         { backgroundColor: colors.primary },
         style,
       ]}
     >
-      <Text style={[bubbleStyles.label, { color: colors.onPrimary }]}>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={[bubbleStyles.label, { color: colors.onPrimary }]}
+      >
         {count > 99 ? '99+' : String(count)}
       </Text>
     </View>
@@ -739,15 +822,16 @@ export function StatSlab({
   return (
     <Slab
       accessibilityRole="none"
+      accessibilityLabel={`${label}: ${value}`}
       color={tint}
       style={[{ flex: 1 }, style]}
       faceStyle={statSlabStyles.face}
     >
       <Ionicons name={icon} size={16} color={colors.ink} />
-      <Text style={[statSlabStyles.value, { color: colors.ink }]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={2} style={[statSlabStyles.value, { color: colors.ink }]} numberOfLines={1}>
         {value}
       </Text>
-      <Text style={[statSlabStyles.label, { color: colors.sub }]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={2} style={[statSlabStyles.label, { color: colors.sub }]} numberOfLines={1}>
         {label}
       </Text>
     </Slab>
@@ -767,17 +851,21 @@ const statSlabStyles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 8.5,
+    fontSize: 11,
     letterSpacing: 1,
   },
 });
 
 const bubbleStyles = StyleSheet.create({
   base: {
+    // Intrinsically sized rather than a fixed 18pt box, so the label can reach
+    // the full 200% Dynamic Type scale without clipping. The pill radius keeps
+    // the shape correct at every size.
     minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
+    minHeight: 18,
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -825,6 +913,8 @@ export function Avatar({
 
   return (
     <View
+      accessible={false}
+      accessibilityElementsHidden
       style={[
         avatarStyles.base,
         {
@@ -843,6 +933,7 @@ export function Avatar({
           source={{ uri: resolved }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
+          accessible={false}
         />
       ) : (
         <Text
@@ -903,6 +994,8 @@ export function ClubMark({
 
   return (
     <View
+      accessible={false}
+      accessibilityElementsHidden
       style={[
         clubMarkStyles.base,
         {
@@ -921,6 +1014,7 @@ export function ClubMark({
           source={{ uri: resolved }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
+          accessible={false}
         />
       ) : cleanEmoji ? (
         <Text style={{ fontSize: size * 0.44, lineHeight: size * 0.58 }}>{cleanEmoji}</Text>
@@ -1120,10 +1214,21 @@ export function StateCopy({
   const { typography } = useTheme();
   return (
     <View style={[stateStyles.copy, align === 'center' && stateStyles.center, style]}>
-      {eyebrow ? <Text style={typography.kicker}>{eyebrow}</Text> : null}
-      <Text style={[typography.display, { textAlign: align }]}>{title}</Text>
+      {eyebrow ? <Text maxFontSizeMultiplier={2} style={typography.kicker}>{eyebrow}</Text> : null}
+      <Text
+        accessibilityRole="header"
+        maxFontSizeMultiplier={2}
+        style={[typography.display, { textAlign: align }]}
+      >
+        {title}
+      </Text>
       {body ? (
-        <Text style={[typography.body, stateStyles.body, { textAlign: align }]}>{body}</Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={[typography.body, stateStyles.body, { textAlign: align }]}
+        >
+          {body}
+        </Text>
       ) : null}
     </View>
   );
@@ -1242,11 +1347,25 @@ export function SectionHeader({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
-    <View style={[sectionStyles.row, style]}>
-      <View style={{ flex: 1 }}>
-        {kicker ? <Text style={[typography.kicker, sectionStyles.kicker]}>{kicker}</Text> : null}
-        <Text style={typography.title}>{title}</Text>
+    <View
+      style={[
+        sectionStyles.row,
+        accessibilityLayout && sectionStyles.rowAccessible,
+        style,
+      ]}
+    >
+      <View style={{ flex: accessibilityLayout ? undefined : 1, minWidth: 0 }}>
+        {kicker ? (
+          <Text maxFontSizeMultiplier={2} style={[typography.kicker, sectionStyles.kicker]}>
+            {kicker}
+          </Text>
+        ) : null}
+        <Text accessibilityRole="header" maxFontSizeMultiplier={2} style={typography.title}>
+          {title}
+        </Text>
       </View>
       {actionLabel && onAction ? (
         <Pressable
@@ -1255,7 +1374,12 @@ export function SectionHeader({
           accessibilityLabel={actionLabel}
           style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
         >
-          <Text style={[sectionStyles.action, { color: colors.accentText }]}>{actionLabel}</Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[sectionStyles.action, { color: colors.accentText }]}
+          >
+            {actionLabel}
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -1267,6 +1391,11 @@ const sectionStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.md,
+  },
+  rowAccessible: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
   kicker: {
     marginBottom: 3,
@@ -1296,23 +1425,40 @@ export function ScreenHeader({
   style?: StyleProp<ViewStyle>;
 }) {
   const { typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
-    <View style={[headerStyles.row, style]}>
-      {onBack ? (
-        <IconButton icon="arrow-back" onPress={onBack} accessibilityLabel="Go back" />
-      ) : null}
-      <View style={[{ flex: 1, minWidth: 0 }, centered && headerStyles.centerTitle]}>
-        {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
-        <Text style={typography.display} numberOfLines={1}>
-          {title}
-        </Text>
+    <View style={[accessibilityLayout && headerStyles.accessibilityContainer, style]}>
+      <View style={headerStyles.row}>
+        {onBack ? (
+          <IconButton icon="arrow-back" onPress={onBack} accessibilityLabel="Go back" />
+        ) : null}
+        <View style={[{ flex: 1, minWidth: 0 }, centered && headerStyles.centerTitle]}>
+          {kicker ? (
+            <Text maxFontSizeMultiplier={2} style={[typography.kicker, { marginBottom: 2 }]}>
+              {kicker}
+            </Text>
+          ) : null}
+          <Text
+            accessibilityRole="header"
+            maxFontSizeMultiplier={2}
+            style={typography.display}
+            numberOfLines={accessibilityLayout ? undefined : 2}
+          >
+            {title}
+          </Text>
+        </View>
+        {!accessibilityLayout ? right : null}
       </View>
-      {right}
+      {accessibilityLayout && right ? <View style={headerStyles.accessibilityRight}>{right}</View> : null}
     </View>
   );
 }
 
 const headerStyles = StyleSheet.create({
+  accessibilityContainer: {
+    gap: spacing.sm,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1320,6 +1466,9 @@ const headerStyles = StyleSheet.create({
   },
   centerTitle: {
     alignItems: 'center',
+  },
+  accessibilityRight: {
+    alignItems: 'flex-end',
   },
 });
 
@@ -1345,10 +1494,20 @@ export function Field({
   const { colors, typography } = useTheme();
   const [focused, setFocused] = React.useState(false);
   const [secureVisible, setSecureVisible] = React.useState(false);
+  const accessibleLabel = inputProps.accessibilityLabel ?? label ?? inputProps.placeholder;
+  const accessibleHint = inputProps.accessibilityHint ?? error ?? hint;
 
   return (
     <View style={style}>
-      {label ? <Text style={[typography.captionSmall, fieldStyles.label]}>{label}</Text> : null}
+      {label ? (
+        <Text
+          accessible={false}
+          maxFontSizeMultiplier={2}
+          style={[typography.captionSmall, fieldStyles.label]}
+        >
+          {label}
+        </Text>
+      ) : null}
       <View
         style={[
           fieldStyles.well,
@@ -1361,6 +1520,7 @@ export function Field({
       >
         <TextInput
           {...inputProps}
+          maxFontSizeMultiplier={2}
           multiline={multiline}
           secureTextEntry={
             secureToggle ? !secureVisible : inputProps.secureTextEntry
@@ -1374,6 +1534,8 @@ export function Field({
             inputProps.onBlur?.(event);
           }}
           placeholderTextColor={colors.faint}
+          accessibilityLabel={accessibleLabel}
+          accessibilityHint={accessibleHint ?? undefined}
           style={[
             fieldStyles.input,
             { color: colors.ink },
@@ -1397,9 +1559,18 @@ export function Field({
         ) : null}
       </View>
       {error ? (
-        <Text style={[fieldStyles.meta, { color: colors.danger }]}>{error}</Text>
+        <Text
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          style={[fieldStyles.meta, { color: colors.danger }]}
+          maxFontSizeMultiplier={2}
+        >
+          {error}
+        </Text>
       ) : hint ? (
-        <Text style={[fieldStyles.meta, { color: colors.sub }]}>{hint}</Text>
+        <Text style={[fieldStyles.meta, { color: colors.sub }]} maxFontSizeMultiplier={2}>
+          {hint}
+        </Text>
       ) : null}
     </View>
   );
@@ -1466,7 +1637,7 @@ export function SearchBar({
         style,
       ]}
     >
-      <Ionicons name="search" size={18} color={colors.sub} />
+      <Ionicons name="search" size={18} color={colors.sub} accessibilityElementsHidden />
       <TextInput
         ref={inputRef}
         value={value}
@@ -1484,7 +1655,8 @@ export function SearchBar({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[fieldStyles.input, { color: colors.ink }]}
-        accessibilityLabel={placeholder}
+        maxFontSizeMultiplier={2}
+        accessibilityLabel={placeholder || 'Search'}
         testID={testID}
       />
       {value.length > 0 ? (
@@ -1551,6 +1723,11 @@ export function DateTimeField({
         onPress={() => setAndroidMode('date')}
         accessibilityRole="button"
         accessibilityLabel="Choose date"
+        accessibilityHint={value.toLocaleDateString([], {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        })}
         style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
       >
         <Ionicons name="calendar-outline" size={17} color={colors.accentText} />
@@ -1562,6 +1739,7 @@ export function DateTimeField({
         onPress={() => setAndroidMode('time')}
         accessibilityRole="button"
         accessibilityLabel="Choose time"
+        accessibilityHint={value.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
         style={[dateTimeStyles.androidButton, { borderColor: colors.border }]}
       >
         <Ionicons name="time-outline" size={17} color={colors.accentText} />
@@ -1648,6 +1826,7 @@ export function Banner({
         style,
       ]}
       accessibilityRole="alert"
+      accessibilityLiveRegion={kind === 'error' ? 'assertive' : 'polite'}
     >
       <Ionicons name={icon} size={18} color={fg} />
       <Text style={[bannerStyles.text, { color: colors.ink }]}>{message}</Text>
@@ -1713,7 +1892,9 @@ export function EmptyState({
       >
         <Ionicons name={icon} size={30} color={colors.ink} />
       </View>
-      <Text style={[typography.title, emptyStyles.title]}>{title}</Text>
+      <Text accessibilityRole="header" style={[typography.title, emptyStyles.title]}>
+        {title}
+      </Text>
       {body ? <Text style={[typography.caption, emptyStyles.body]}>{body}</Text> : null}
       {actionLabel && onAction ? (
         <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: spacing.lg }} />
@@ -1776,6 +1957,8 @@ export function SkeletonBlock({
   const animated = usePulse();
   return (
     <Animated.View
+      accessible={false}
+      accessibilityElementsHidden
       style={[
         { width, height, borderRadius: radius, backgroundColor: colors.surfaceAlt },
         animated,
@@ -1860,15 +2043,32 @@ export function Sheet({
 }) {
   const { colors, typography, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const headingRef = React.useRef<Text>(null);
+  const focusSheet = React.useCallback(() => {
+    const node = findNodeHandle(headingRef.current);
+    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+  }, []);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      onShow={focusSheet}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[sheetStyles.scrim, { backgroundColor: colors.overlay }]}>
-          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close sheet"
+          />
           <View
+            accessibilityViewIsModal
             style={[
               sheetStyles.sheet,
               {
@@ -1893,7 +2093,11 @@ export function Sheet({
               <View style={sheetStyles.header}>
                 <View style={{ flex: 1 }}>
                   {kicker ? <Text style={[typography.kicker, { marginBottom: 2 }]}>{kicker}</Text> : null}
-                  {title ? <Text style={typography.display}>{title}</Text> : null}
+                  {title ? (
+                    <Text ref={headingRef} accessibilityRole="header" style={typography.display}>
+                      {title}
+                    </Text>
+                  ) : null}
                 </View>
                 <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" size={38} />
               </View>
@@ -1971,27 +2175,11 @@ export function ListRow({
   testID?: string;
 }) {
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const fg = destructive ? colors.danger : colors.ink;
-  return (
-    <Pressable
-      onPress={
-        onPress
-          ? () => {
-              tick();
-              onPress();
-            }
-          : undefined
-      }
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : 'none'}
-      accessibilityLabel={title}
-      testID={testID}
-      style={({ pressed }) => [
-        rowStyles.row,
-        !last && { borderBottomWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft },
-        pressed && { opacity: 0.6 },
-      ]}
-    >
+  const content = (
+    <>
       {icon ? (
         <View
           style={[
@@ -2006,16 +2194,53 @@ export function ListRow({
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[rowStyles.title, { color: fg }]} numberOfLines={1}>
+        <Text
+          style={[rowStyles.title, { color: fg }]}
+          numberOfLines={accessibilityLayout ? undefined : 1}
+          maxFontSizeMultiplier={2}
+        >
           {title}
         </Text>
         {sub ? (
-          <Text style={[rowStyles.sub, { color: colors.sub }]} numberOfLines={2}>
+          <Text
+            style={[rowStyles.sub, { color: colors.sub }]}
+            numberOfLines={accessibilityLayout ? undefined : 2}
+            maxFontSizeMultiplier={2}
+          >
             {sub}
           </Text>
         ) : null}
       </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.sub} /> : null)}
+      {right ? (
+        <View style={accessibilityLayout ? rowStyles.accessibilityRight : undefined}>{right}</View>
+      ) : onPress && !accessibilityLayout ? (
+        <Ionicons name="chevron-forward" size={16} color={colors.sub} />
+      ) : null}
+    </>
+  );
+  const baseStyle = [
+    rowStyles.row,
+    accessibilityLayout && rowStyles.accessibilityRow,
+    !last && { borderBottomWidth: 1 as const, borderStyle: 'solid' as const, borderColor: colors.borderSoft },
+  ];
+
+  if (!onPress) {
+    return <View style={baseStyle}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={() => {
+        tick();
+        onPress();
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={sub}
+      testID={testID}
+      style={({ pressed }) => [baseStyle, pressed && { opacity: 0.6 }]}
+    >
+      {content}
     </Pressable>
   );
 }
@@ -2026,6 +2251,16 @@ const rowStyles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: 13,
+  },
+  accessibilityRow: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    paddingVertical: spacing.md,
+  },
+  accessibilityRight: {
+    width: '100%',
+    paddingLeft: 38 + spacing.md,
+    alignItems: 'flex-start',
   },
   iconWell: {
     width: 38,
@@ -2076,6 +2311,13 @@ export function ProgressBar({
         style,
       ]}
       accessibilityRole="progressbar"
+      accessibilityLabel="Progress"
+      accessibilityValue={{
+        min: 0,
+        max: 100,
+        now: Math.round(clamped * 100),
+        text: `${Math.round(clamped * 100)} percent`,
+      }}
     >
       <View
         style={{
@@ -2091,7 +2333,12 @@ export function ProgressBar({
 export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   const { colors, typography } = useTheme();
   return (
-    <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }}>
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityLiveRegion="polite"
+      style={{ alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }}
+    >
       <ActivityIndicator color={colors.accentText} />
       <Text style={typography.caption}>{label}</Text>
     </View>
@@ -2143,6 +2390,7 @@ export function TypingIndicator({
       style={[typingStyles.row, style]}
       accessibilityRole="text"
       accessibilityLabel={label ?? 'Someone is typing'}
+      accessibilityLiveRegion="polite"
     >
       <View
         style={[

@@ -4,6 +4,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -147,9 +148,9 @@ function ActionRow({
     >
       <Ionicons name={icon} size={24} color={colors.ink} />
       <View style={styles.actionCopy}>
-        <Text style={[typography.heading, { color: colors.ink }]}>{title}</Text>
+        <Text maxFontSizeMultiplier={2} style={[typography.heading, { color: colors.ink }]}>{title}</Text>
         {body ? (
-          <Text style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
+          <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
         ) : null}
       </View>
       <Ionicons name={trailing} size={19} color={colors.sub} />
@@ -175,14 +176,18 @@ function PlanRow({
       onPress={onOpen}
       raised={false}
       faceStyle={styles.planRow}
-      accessibilityLabel={`Open ${displayPodTitle(pod)}`}
+      accessibilityLabel={
+        unreadCount > 0
+          ? `Open ${displayPodTitle(pod)}, ${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}`
+          : `Open ${displayPodTitle(pod)}`
+      }
     >
       <PodThumbnail pod={pod} size={58} />
       <View style={styles.planCopy}>
-        <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
           {displayPodTitle(pod)}
         </Text>
-        <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
           {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)} · {pod.location}
         </Text>
         <AvatarStack names={memberAvatars(pod)} size={20} max={4} />
@@ -215,6 +220,8 @@ function RecommendationRow({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const friendCount = friendCountForPod(pod, friendIds);
   const reason = pod.recommended
     ? `Matches your ${pod.activity?.category ?? 'interests'}`
@@ -227,7 +234,12 @@ function RecommendationRow({
       raised={false}
       faceStyle={styles.recommendationShell}
     >
-      <View style={styles.recommendationRow}>
+      <View
+        style={[
+          styles.recommendationRow,
+          accessibilityLayout && styles.recommendationRowAccessible,
+        ]}
+      >
         <Pressable
           onPress={onOpen}
           accessibilityRole="button"
@@ -239,10 +251,10 @@ function RecommendationRow({
         >
           <PodThumbnail pod={pod} size={64} />
           <View style={styles.recommendationCopy}>
-            <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={2} style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
               {displayPodTitle(pod)}
             </Text>
-            <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
               {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)} · {pod.location}
             </Text>
             <View style={styles.reasonRow}>
@@ -255,7 +267,7 @@ function RecommendationRow({
             </View>
             <View style={styles.goingRow}>
               <AvatarStack names={memberAvatars(pod)} size={18} max={3} />
-              <Text style={[typography.captionSmall, { color: colors.sub }]}>
+              <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]}>
                 {pod.members.length} going
               </Text>
             </View>
@@ -287,12 +299,14 @@ function InviteSection({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
   if (!invites.length) return null;
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.ink }]}>Invites</Text>
+      <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>Invites</Text>
       {invites.map((invite) => {
         const pod = invite.pod;
         const friendCount = pod ? friendCountForPod(pod, friendIds) : 0;
@@ -303,7 +317,12 @@ function InviteSection({
             raised={false}
             faceStyle={styles.inviteShell}
           >
-            <View style={styles.inviteRow}>
+            <View
+              style={[
+                styles.inviteRow,
+                accessibilityLayout && styles.inviteRowAccessible,
+              ]}
+            >
               <Pressable
                 onPress={() => onOpen(invite.podId)}
                 accessibilityRole="button"
@@ -315,13 +334,13 @@ function InviteSection({
               >
                 {pod ? <PodThumbnail pod={pod} size={58} /> : null}
                 <View style={styles.planCopy}>
-                  <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={2} style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
                     {pod ? displayPodTitle(pod) : 'Pod invite'}
                   </Text>
-                  <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
                     {invite.sender?.name ?? 'Someone'} invited you
                   </Text>
-                  <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={2}>
                     {friendCount
                       ? `${friendCount} mutual ${friendCount === 1 ? 'friend' : 'friends'}`
                       : pod
@@ -387,16 +406,16 @@ function EmptyPodsState() {
           height={142}
           style={styles.stateIllustration}
         />
-        <Text style={[styles.stateTitle, { color: colors.ink }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.stateTitle, { color: colors.ink }]}>
           Your first plan can be simple
         </Text>
-        <Text style={[styles.stateBody, { color: colors.sub }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.stateBody, { color: colors.sub }]}>
           Start with one idea. We’ll help you turn it into a pod.
         </Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Three easy steps</Text>
+        <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>Three easy steps</Text>
         <Slab raised={false} faceStyle={styles.stepList}>
           {[
             ['checkmark-circle-outline', '1. Choose an idea', 'Pick a topic or activity you care about.'],
@@ -418,8 +437,8 @@ function EmptyPodsState() {
                 />
               </View>
               <View style={styles.actionCopy}>
-                <Text style={[typography.subheading, { color: colors.ink }]}>{title}</Text>
-                <Text style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
+                <Text maxFontSizeMultiplier={2} style={[typography.subheading, { color: colors.ink }]}>{title}</Text>
+                <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]}>{body}</Text>
               </View>
             </View>
           ))}
@@ -460,10 +479,10 @@ function DiscoveryState({
           height={136}
           style={styles.stateIllustration}
         />
-        <Text style={[styles.stateTitle, { color: colors.ink }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.stateTitle, { color: colors.ink }]}>
           {low ? 'Nothing on your calendar yet' : 'Your week is still open'}
         </Text>
-        <Text style={[styles.stateBody, { color: colors.sub }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.stateBody, { color: colors.sub }]}>
           {low
             ? 'You aren’t in any pods right now. Here are a couple you might like.'
             : 'You don’t have any upcoming pods. Here are some picks for you.'}
@@ -471,7 +490,7 @@ function DiscoveryState({
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionLabel, { color: colors.ink }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>
           {low ? 'Two good fits' : 'Recommended for you'}
         </Text>
         <View style={styles.cardStack}>
@@ -503,6 +522,8 @@ function NextUpHero({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View style={[styles.nextUp, { backgroundColor: colors.primary }]}>
       <Pressable
@@ -511,22 +532,32 @@ function NextUpHero({
         accessibilityLabel={`Open next pod, ${displayPodTitle(pod)}`}
         style={({ pressed }) => [
           styles.nextUpMain,
+          accessibilityLayout && styles.nextUpMainAccessible,
           { opacity: pressed ? 0.82 : 1 },
         ]}
       >
         <View style={styles.nextUpCopy}>
-          <Text style={[typography.kicker, { color: colors.onPrimary }]}>Next up</Text>
-          <Text style={[styles.nextUpTitle, { color: colors.onPrimary }]} numberOfLines={2}>
+          <Text maxFontSizeMultiplier={2} style={[typography.kicker, { color: colors.onPrimary }]}>Next up</Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[styles.nextUpTitle, { color: colors.onPrimary }]}
+            numberOfLines={accessibilityLayout ? undefined : 2}
+          >
             {displayPodTitle(pod)}
           </Text>
-          <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={2} style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={2}>
             {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
           </Text>
-          <Text style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={2} style={[typography.bodyMedium, { color: colors.onPrimary }]} numberOfLines={2}>
             {pod.location}
           </Text>
         </View>
-        <View style={styles.nextUpVisual}>
+        <View
+          style={[
+            styles.nextUpVisual,
+            accessibilityLayout && styles.nextUpVisualAccessible,
+          ]}
+        >
           <PodThumbnail pod={pod} size={78} />
           <AvatarStack
             names={memberAvatars(pod)}
@@ -549,7 +580,13 @@ function NextUpHero({
           },
         ]}
       >
-        <Text style={[typography.button, { color: colors.primary }]}>Open chat</Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          numberOfLines={2}
+          style={[typography.button, styles.chatButtonLabel, { color: colors.primary }]}
+        >
+          Open chat
+        </Text>
       </Pressable>
     </View>
   );
@@ -579,7 +616,7 @@ function MyPodsState({
       ) : null}
 
       <View style={styles.section}>
-        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Upcoming pods</Text>
+        <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>Upcoming pods</Text>
         <View style={styles.cardStack}>
           {upcoming.length ? (
             upcoming.map((pod) => (
@@ -591,7 +628,7 @@ function MyPodsState({
             ))
           ) : (
             <View style={[styles.inlineEmpty, { borderColor: colors.border }]}>
-              <Text style={[styles.stateBody, { color: colors.sub }]}>
+              <Text maxFontSizeMultiplier={2} style={[styles.stateBody, { color: colors.sub }]}>
                 No upcoming pods right now.
               </Text>
             </View>
@@ -615,7 +652,7 @@ function PastPodsSection({
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.ink }]}>Past pods</Text>
+      <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>Past pods</Text>
       <View style={styles.cardStack}>
         {pods.map((pod) => (
           <PlanRow
@@ -644,7 +681,7 @@ function PodActions({
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.ink }]}>More to do</Text>
+      <Text maxFontSizeMultiplier={2} style={[styles.sectionLabel, { color: colors.ink }]}>More to do</Text>
       <View style={styles.cardStack}>
         <ActionRow
           icon="search-outline"
@@ -817,7 +854,13 @@ export default function PodsScreen({ previewData }: { previewData?: PodsPreviewD
         }
       >
         <View style={styles.masthead}>
-          <Text style={[styles.pageTitle, { color: colors.ink }]}>My Pods</Text>
+          <Text
+            accessibilityRole="header"
+            maxFontSizeMultiplier={2}
+            style={[styles.pageTitle, { color: colors.ink }]}
+          >
+            My Pods
+          </Text>
           <Pressable
             onPress={openPeople}
             accessibilityRole="button"
@@ -900,8 +943,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
     lineHeight: 34,
   },
   headerButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -987,6 +1030,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  recommendationRowAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+  },
   recommendationOpen: {
     flex: 1,
     minWidth: 0,
@@ -1018,6 +1065,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  nextUpMainAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+  },
   nextUpCopy: {
     flex: 1,
     minWidth: 0,
@@ -1032,17 +1083,25 @@ const useStyles = createThemedStyles((t: Theme) => ({
   nextUpVisual: {
     alignItems: 'flex-end' as const,
   },
+  nextUpVisualAccessible: {
+    alignItems: 'flex-start' as const,
+  },
   nextUpAvatars: {
     marginTop: -12,
     marginRight: 4,
   },
   chatButton: {
-    alignSelf: 'flex-start' as const,
+    alignSelf: 'stretch' as const,
     minWidth: 156,
-    height: 42,
+    minHeight: 44,
     borderRadius: radii.button,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chatButtonLabel: {
+    textAlign: 'center' as const,
   },
   planRow: {
     minHeight: 86,
@@ -1092,6 +1151,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  inviteRowAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+  },
   inviteOpen: {
     flex: 1,
     minWidth: 0,
@@ -1104,8 +1167,8 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
   },
   inviteButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

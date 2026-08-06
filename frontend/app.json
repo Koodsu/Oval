@@ -3,7 +3,7 @@
     "name": "Oval",
     "slug": "oval",
     "version": "1.1.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/brand/oval-open-1024.png",
     "userInterfaceStyle": "automatic",
     "scheme": "oval",
@@ -37,7 +37,7 @@
           "locationWhenInUsePermission": "Oval uses your location to show pods forming near you on campus.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "motionUsagePermission": false,
+          "motionUsagePermission": "Oval uses motion data to support location features that show pods forming near you on campus.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
@@ -66,6 +66,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Oval uses your location to show pods forming near you on campus.",
+        "NSMotionUsageDescription": "Oval uses motion data to support location features that show pods forming near you on campus.",
         "NSPhotoLibraryUsageDescription": "Oval lets you choose a photo from your library for your profile or club avatar."
       }
     },

@@ -1,5 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -105,20 +115,29 @@ function PreferenceSwitch({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
     <View
       style={[
         styles.preferenceRow,
+        accessibilityLayout && styles.preferenceRowLargeText,
         !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.borderSoft },
       ]}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text style={typography.bodyMedium}>{row.title}</Text>
-        <Text style={typography.captionSmall}>{row.body}</Text>
+        <Text style={typography.bodyMedium} maxFontSizeMultiplier={2}>
+          {row.title}
+        </Text>
+        <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+          {row.body}
+        </Text>
       </View>
       <Switch
         value={value}
         onValueChange={onChange}
+        accessibilityLabel={row.title}
+        accessibilityHint={row.body}
         trackColor={{ false: colors.sunken, true: colors.primary }}
         thumbColor={colors.surface}
       />
@@ -131,6 +150,8 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
   const { colors, typography } = useTheme();
   const { user, updateUser } = useAuth();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(
     preview ? PREVIEW_PREFERENCES : null,
   );
@@ -247,7 +268,9 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
         {loadWarning ? <Banner message={loadWarning} kind="info" /> : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Who can see and connect</Text>
+          <Text style={styles.sectionTitle} maxFontSizeMultiplier={2}>
+            Who can see and connect
+          </Text>
           <Card padded={false} faceStyle={styles.listCard}>
             <ListRow
               icon="people-outline"
@@ -272,7 +295,9 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your data & activity</Text>
+          <Text style={styles.sectionTitle} maxFontSizeMultiplier={2}>
+            Your data & activity
+          </Text>
           <Card padded={false} faceStyle={styles.listCard}>
             {prefs ? (
               <>
@@ -304,7 +329,9 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Connected accounts</Text>
+          <Text style={styles.sectionTitle} maxFontSizeMultiplier={2}>
+            Connected accounts
+          </Text>
           <Card padded={false} faceStyle={styles.listCard}>
             <ListRow
               icon="logo-instagram"
@@ -326,7 +353,9 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data & downloads</Text>
+          <Text style={styles.sectionTitle} maxFontSizeMultiplier={2}>
+            Data & downloads
+          </Text>
           <Card padded={false} faceStyle={styles.listCard}>
             <ListRow
               icon="document-text-outline"
@@ -350,6 +379,7 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
           accessibilityLabel="Delete account"
           style={({ pressed }) => [
             styles.deleteCard,
+            accessibilityLayout && styles.deleteCardLargeText,
             {
               backgroundColor: colors.dangerSoft,
               borderColor: colors.danger,
@@ -361,8 +391,13 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
             <Ionicons name="trash-outline" size={21} color={colors.danger} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[typography.bodyMedium, { color: colors.danger }]}>Delete account</Text>
-            <Text style={typography.captionSmall}>
+            <Text
+              style={[typography.bodyMedium, { color: colors.danger }]}
+              maxFontSizeMultiplier={2}
+            >
+              Delete account
+            </Text>
+            <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
               Permanently delete your account and all your data
             </Text>
           </View>
@@ -404,6 +439,7 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
           </Text>
           <TextInput
             value={instagram}
+            accessibilityLabel="Instagram handle"
             onChangeText={setInstagram}
             autoCapitalize="none"
             autoCorrect={false}
@@ -460,6 +496,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
+  preferenceRowLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
+  },
   loadingCopy: {
     paddingVertical: spacing.lg,
   },
@@ -471,6 +511,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
+  },
+  deleteCardLargeText: {
+    alignItems: 'flex-start' as const,
+    flexWrap: 'wrap' as const,
   },
   deleteIcon: {
     width: 40,
