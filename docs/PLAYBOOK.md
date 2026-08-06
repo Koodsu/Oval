@@ -30,7 +30,26 @@ Copy-paste starting points for recurring tasks. Each recipe lists the context to
 
 > Read `INCIDENT_RESPONSE.md`. Check `/health` (touches the DB). Common causes: paused Supabase DB, missing env var (validated at boot by `productionEnv.ts` — check Vercel logs for the throw), stale cron scheduler, CORS_ORIGIN mismatch. Timezone bugs: remember everything is America/New_York.
 
-## 8. Design/UX pass
+## 8. Bumping the terms version
+
+> **This has broken a release twice. Read before touching `legal.ts`.**
+>
+> The version string lives in two places that must agree: `backend/src/config/legal.ts` and `frontend/src/constants/legal.ts`. The app re-prompts whenever a user's stored `termsVersion` differs from the frontend constant (`AuthContext.tsx`), and `/auth/register` + `/auth/accept-terms` validate what the client submits. So a client whose version the API doesn't recognize gets a 400 on the terms screen **with no way past it** — it blocks existing users, not just new signups.
+>
+> The App Store build and the Vercel deploy are never simultaneous, so some client is always on the old version. That's what `ACCEPTED_TERMS_VERSIONS` is for.
+>
+> **Procedure:**
+>
+> 1. Update the terms text (`landing/src/components/TermsOfUse.jsx`, `PrivacyPolicy.jsx`, `CommunityGuidelines.jsx`).
+> 2. In `backend/src/config/legal.ts`: set the new `CURRENT_TERMS_VERSION` **and move the old value into `PREVIOUS_TERMS_VERSIONS` in the same commit.**
+> 3. Set the identical string in `frontend/src/constants/legal.ts`.
+> 4. `cd backend && npm test -- auth` — the `PREVIOUS_TERMS_VERSIONS` cases must pass.
+> 5. **Deploy the backend first, then build the app.** Never the reverse: a build that ships ahead of the deploy sends a version the API has never heard of.
+> 6. Verify against production before submitting: register a throwaway account on the new build, and confirm the currently-live App Store build can still accept terms.
+>
+> Prune `PREVIOUS_TERMS_VERSIONS` only once the build carrying that version is out of circulation, not at the next bump. The accepted version is recorded as-submitted rather than forced to `CURRENT_TERMS_VERSION`, because a user on an older build genuinely saw older text.
+
+## 9. Design/UX pass
 
 > Read `AUDIT_2026.md` Part 2 (D1–D7) and the Lumen 2.0 token table before proposing changes; wireframes live in `docs/wireframes-2026/` (regenerate: `node gen-wireframes.mjs .`). Constraints: blur only on chrome (dock/sheets), solid card surfaces, WCAG AA contrast, OSU scarlet accent.
 
