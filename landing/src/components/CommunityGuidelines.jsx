@@ -32,13 +32,13 @@ export default function CommunityGuidelines() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-ink pb-24 pt-20">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-ink pb-24 pt-20">
       <div className="mx-auto max-w-3xl px-6 py-12 md:px-10">
         <div className="mb-12">
           <h1 className="mb-2 font-display text-3xl uppercase tracking-widest text-white">
             Community Guidelines
           </h1>
-          <p className="text-sm text-white/35">Effective June 8, 2026</p>
+          <p className="text-sm text-white/35">Effective August 5, 2026</p>
         </div>
 
         <Section title="The Short Version">
@@ -77,6 +77,10 @@ export default function CommunityGuidelines() {
 
         <Section title="Reports, Blocks, And Enforcement">
           <p>
+            We have zero tolerance for objectionable content and abusive users. We aim to review
+            reports and remove violating content or the accounts responsible within 24 hours.
+          </p>
+          <p>
             You can report users, messages, clubs, announcements, and pod behavior inside Oval.
             Blocking separates you from the blocked user across messaging and shared pods where possible.
           </p>
@@ -97,6 +101,6 @@ export default function CommunityGuidelines() {
           </p>
         </Section>
       </div>
-    </div>
+    </main>
   )
 }

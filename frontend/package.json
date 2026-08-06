@@ -11,6 +11,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
+    "audit:a11y": "node scripts/audit-accessibility.mjs",
     "doctor": "npx --yes expo-doctor",
     "export:ios": "expo export --platform ios --output-dir dist",
     "android": "expo start --android",

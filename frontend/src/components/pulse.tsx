@@ -78,50 +78,37 @@ export function PodDiscoveryRow({
 
   return (
     <Slab
-      onPress={onOpen}
       raised={false}
       faceStyle={pulseStyles.podRow}
       style={style}
-      accessibilityLabel={`${title}, ${podDayLabel(pod.meetupTime)} at ${podTimeLabel(
-        pod.meetupTime,
-      )}`}
     >
-      <ContentImage
-        source={activityImageFor(pod.activity)}
-        seed={pod.activity?.id ?? pod.activityId}
-        aspectRatio={1}
-        style={pulseStyles.podThumb}
-      />
-      <View style={pulseStyles.podCopy}>
-        <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
-          {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
-        </Text>
-        <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
-          {pod.location} · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
-        </Text>
-        {friends.length ? (
-          <View style={pulseStyles.socialLine}>
-            <AvatarStack
-              names={friends.slice(0, 3).map((member) => ({
-                name: member.user.name,
-                uri: member.user.avatarUrl,
-              }))}
-              overflowCount={Math.max(0, friends.length - 3)}
-              size={18}
-            />
-            <Text style={[typography.captionSmall, { color: colors.success }]} numberOfLines={1}>
-              {friends.length} {friends.length === 1 ? 'friend' : 'friends'} going
-            </Text>
-          </View>
-        ) : (
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${podDayLabel(pod.meetupTime)} at ${podTimeLabel(pod.meetupTime)}`}
+        style={({ pressed }) => [pulseStyles.podOpen, pressed && { opacity: 0.7 }]}
+      >
+        <ContentImage
+          source={activityImageFor(pod.activity)}
+          seed={pod.activity?.id ?? pod.activityId}
+          aspectRatio={1}
+          style={pulseStyles.podThumb}
+        />
+        <View style={pulseStyles.podCopy}>
+          <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={1}>{title}</Text>
           <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
-            {pod.members.length} going
+            {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
           </Text>
-        )}
-      </View>
+          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            {pod.location} · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
+          </Text>
+          <Text style={[typography.captionSmall, { color: friends.length ? colors.success : colors.sub }]} numberOfLines={1}>
+            {friends.length
+              ? `${friends.length} ${friends.length === 1 ? 'friend' : 'friends'} going`
+              : `${pod.members.length} going`}
+          </Text>
+        </View>
+      </Pressable>
       {onJoin ? (
         <Button
           label={joining ? 'Joining…' : 'Join'}
@@ -335,6 +322,13 @@ const pulseStyles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.sm,
+  },
+  podOpen: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
   podThumb: {
     width: 58,

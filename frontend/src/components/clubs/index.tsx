@@ -101,7 +101,11 @@ export function ChannelRow({
         pressed && styles.pressed,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${channel.name} channel`}
+      accessibilityLabel={
+        channel.unreadCount > 0
+          ? `Open ${channel.name} channel, ${channel.unreadCount} unread ${channel.unreadCount === 1 ? 'message' : 'messages'}`
+          : `Open ${channel.name} channel`
+      }
     >
       <View style={[styles.icon, { backgroundColor: channelTint(colors, channel.kind), borderColor: colors.border }]}>
         <Ionicons name={channelIcon(channel.kind)} size={19} color={colors.ink} />
@@ -197,27 +201,30 @@ export function ClubRow({
 }) {
   const { colors, typography } = useTheme();
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.row,
         { backgroundColor: colors.surface, borderColor: colors.border },
-        pressed && styles.pressed,
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${club.name}`}
     >
-      <ClubMark name={club.name} emoji={club.emoji} uri={club.avatarUrl} size={44} />
-      <View style={styles.grow}>
-        <View style={styles.titleLine}>
-          <Text style={[typography.subheading, styles.titleText]} numberOfLines={1}>{club.name}</Text>
-          {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${club.name}`}
+        style={({ pressed }) => [styles.rowIdentity, pressed && styles.pressed]}
+      >
+        <ClubMark name={club.name} emoji={club.emoji} uri={club.avatarUrl} size={44} />
+        <View style={styles.grow}>
+          <View style={styles.titleLine}>
+            <Text style={[typography.subheading, styles.titleText]} numberOfLines={1}>{club.name}</Text>
+            {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
+          </View>
+          <Text style={typography.captionSmall} numberOfLines={1}>
+            {club.category} · {club.memberCount} member{club.memberCount === 1 ? '' : 's'}
+            {signal ? ` · ${signal}` : ''}
+          </Text>
         </View>
-        <Text style={typography.captionSmall} numberOfLines={1}>
-          {club.category} · {club.memberCount} member{club.memberCount === 1 ? '' : 's'}
-          {signal ? ` · ${signal}` : ''}
-        </Text>
-      </View>
+      </Pressable>
       {!club.isMember && onJoin ? (
         <Pressable
           onPress={(event) => {
@@ -236,7 +243,7 @@ export function ClubRow({
       ) : (
         <Ionicons name="chevron-forward" size={17} color={colors.sub} />
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -488,7 +495,11 @@ export function DateBadge({ iso }: { iso: string }) {
   const { colors } = useTheme();
   const date = new Date(iso);
   return (
-    <View style={[styles.date, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View
+      accessible
+      accessibilityLabel={date.toLocaleDateString([], { month: 'long', day: 'numeric' })}
+      style={[styles.date, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    >
       <Text style={[styles.month, { color: colors.onPrimary, backgroundColor: colors.primary }]}>
         {date.toLocaleDateString([], { month: 'short' }).toUpperCase()}
       </Text>
@@ -518,6 +529,9 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             onPress={() => onChange(option.value)}
             disabled={disabled}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ checked: selected, disabled: Boolean(disabled) }}
             style={[
               styles.segmentItem,
               index > 0 && { borderLeftWidth: BORDER_W, borderLeftColor: colors.border },
@@ -551,9 +565,8 @@ export function MeetingCard({
 }) {
   const { colors, typography } = useTheme();
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.meeting,
         {
           backgroundColor: colors.surface,
@@ -561,12 +574,14 @@ export function MeetingCard({
           shadowColor: hero ? colors.shadow : 'transparent',
         },
         hero && styles.hero,
-        pressed && styles.pressed,
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${meeting.title}`}
     >
-      <View style={styles.meetingTop}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${meeting.title}`}
+        style={({ pressed }) => [styles.meetingTop, pressed && styles.pressed]}
+      >
         <DateBadge iso={meeting.meetingTime} />
         <View style={styles.grow}>
           <Text style={[typography.kicker, { color: colors.accentText }]} numberOfLines={1}>
@@ -578,7 +593,7 @@ export function MeetingCard({
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={17} color={colors.sub} />
-      </View>
+      </Pressable>
       {onRsvp ? (
         <SegmentedControl
           value={meeting.myRsvp}
@@ -586,7 +601,7 @@ export function MeetingCard({
           onChange={onRsvp}
         />
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -609,6 +624,9 @@ export function SpaceRow({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={badge ? `${title}, ${badge} new` : title}
+      accessibilityHint={sub}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: colors.surface, borderColor: colors.border },
@@ -640,23 +658,35 @@ export function MemberRow({
   const { colors, typography } = useTheme();
   const tags = member.customRoles?.map((item) => item.role.name).join(', ');
   return (
-    <Pressable onPress={onPress} style={styles.member}>
-      <Avatar name={member.user.name} uri={member.user.avatarUrl} size={42} />
-      <View style={styles.grow}>
-        <Text style={typography.subheading} numberOfLines={1}>{member.user.name}</Text>
-        <Text style={typography.captionSmall} numberOfLines={1}>
-          {member.role !== 'MEMBER' ? member.role : 'Member'}
-          {tags ? ` · ${tags}` : ''}
-        </Text>
-      </View>
+    <View style={styles.member}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${member.user.name}'s profile`}
+        style={styles.memberIdentity}
+      >
+        <Avatar name={member.user.name} uri={member.user.avatarUrl} size={42} />
+        <View style={styles.grow}>
+          <Text style={typography.subheading} numberOfLines={1}>{member.user.name}</Text>
+          <Text style={typography.captionSmall} numberOfLines={1}>
+            {member.role !== 'MEMBER' ? member.role : 'Member'}
+            {tags ? ` · ${tags}` : ''}
+          </Text>
+        </View>
+      </Pressable>
       {action ? (
-        <Pressable onPress={action} hitSlop={10} accessibilityLabel={`Actions for ${member.user.name}`}>
+        <Pressable
+          onPress={action}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={`Actions for ${member.user.name}`}
+        >
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.sub} />
         </Pressable>
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.sub} />
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -671,6 +701,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  rowIdentity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   pressed: { opacity: 0.65 },
   grow: { flex: 1, minWidth: 0, gap: 2 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
@@ -681,6 +718,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xs,
     paddingHorizontal: 12,
     paddingVertical: 7,
+    minHeight: 44,
+    justifyContent: 'center',
     flexShrink: 0,
   },
   joinText: { fontFamily: fonts.bold, fontSize: 12 },
@@ -700,7 +739,7 @@ const styles = StyleSheet.create({
   },
   day: { fontFamily: fonts.display, fontSize: 18, paddingVertical: 3 },
   segment: { flexDirection: 'row', borderWidth: BORDER_W, borderRadius: radii.sm, overflow: 'hidden' },
-  segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 8 },
+  segmentItem: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   segmentText: { fontFamily: fonts.bold, fontSize: 11 },
   meeting: { borderWidth: BORDER_W, borderRadius: radii.md, padding: spacing.md, gap: spacing.md },
   hero: { shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 3 },
@@ -714,6 +753,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   member: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8 },
+  memberIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   loading: {
     flex: 1,
     paddingHorizontal: spacing.xl,

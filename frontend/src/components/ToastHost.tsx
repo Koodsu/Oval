@@ -75,8 +75,10 @@ export function ToastHost() {
           >
             <Pressable
               onPress={() => dismiss(t.id)}
-              accessibilityRole="alert"
+              accessibilityRole="button"
               accessibilityLabel={t.message ? `${t.title}. ${t.message}` : t.title}
+              accessibilityHint="Double tap to dismiss"
+              accessibilityLiveRegion={t.kind === 'error' ? 'assertive' : 'polite'}
               style={[
                 styles.toast,
                 elevation.floating,
@@ -85,11 +87,11 @@ export function ToastHost() {
             >
               <Ionicons name={icon} size={18} color={fg} style={styles.icon} />
               <View style={styles.copy}>
-                <Text style={[styles.title, { color: colors.ink }]} numberOfLines={2}>
+                <Text style={[styles.title, { color: colors.ink }]}>
                   {t.title}
                 </Text>
                 {t.message ? (
-                  <Text style={[styles.message, { color: colors.ink }]} numberOfLines={3}>
+                  <Text style={[styles.message, { color: colors.ink }]}>
                     {t.message}
                   </Text>
                 ) : null}

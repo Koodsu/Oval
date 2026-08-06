@@ -6,6 +6,7 @@ import {
   ScrollView,
   Share,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -100,6 +101,8 @@ function EventHero({
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const meetingHour = new Date(meeting.meetingTime).getHours();
   const eyebrow = meetingHour >= 17 ? 'Tonight near campus' : 'Happening near campus';
 
@@ -108,7 +111,11 @@ function EventHero({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`View ${meeting.title} from ${meeting.clubName}`}
-      style={({ pressed }) => [styles.eventHero, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.eventHero,
+        accessibilityLayout && styles.eventHeroAccessible,
+        pressed && styles.pressed,
+      ]}
     >
       <Image source={EVENT_HERO} resizeMode="cover" style={styles.eventHeroPhoto} accessible={false} />
       <LinearGradient
@@ -116,16 +123,35 @@ function EventHero({
         locations={[0, 0.38, 0.68]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
-        style={styles.eventHeroShade}
+        style={[
+          styles.eventHeroShade,
+          accessibilityLayout && styles.eventHeroShadeAccessible,
+        ]}
       >
-        <Text style={styles.heroEyebrow}>{eyebrow}</Text>
-        <Text style={styles.heroTitle} numberOfLines={2}>{meeting.title}</Text>
-        <Text style={styles.heroDescription} numberOfLines={1}>{meeting.clubName}</Text>
-        <Text style={styles.heroMeta} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={styles.heroEyebrow}>{eyebrow}</Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={[styles.heroTitle, accessibilityLayout && styles.heroTextAccessible]}
+          numberOfLines={accessibilityLayout ? undefined : 2}
+        >
+          {meeting.title}
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={[styles.heroDescription, accessibilityLayout && styles.heroTextAccessible]}
+          numberOfLines={2}
+        >
+          {meeting.clubName}
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={[styles.heroMeta, accessibilityLayout && styles.heroTextAccessible]}
+          numberOfLines={2}
+        >
           {formatTime(meeting.meetingTime)} · {meeting.location}
         </Text>
         <View style={styles.heroButton}>
-          <Text style={[styles.heroButtonText, { color: colors.primary }]}>View event</Text>
+          <Text maxFontSizeMultiplier={2} style={[styles.heroButtonText, { color: colors.primary }]}>View event</Text>
         </View>
       </LinearGradient>
     </Pressable>
@@ -158,8 +184,8 @@ function SparseSpotlight({
     >
       <View style={styles.spotlightTop}>
         <View>
-          <Text style={[typography.kicker, { color: accent.tint }]}>FOUNDING CLUB SPOTLIGHT</Text>
-          <Text style={typography.caption}>One community can start a campus tradition.</Text>
+          <Text maxFontSizeMultiplier={2} style={[typography.kicker, { color: accent.tint }]}>FOUNDING CLUB SPOTLIGHT</Text>
+          <Text maxFontSizeMultiplier={2} style={typography.caption}>One community can start a campus tradition.</Text>
         </View>
         <ClubPhoto
           name={club.name}
@@ -168,18 +194,18 @@ function SparseSpotlight({
           size={68}
         />
       </View>
-      <Text style={styles.spotlightTitle}>{club.name}</Text>
-      <Text style={typography.body} numberOfLines={3}>{club.description}</Text>
+      <Text maxFontSizeMultiplier={2} style={styles.spotlightTitle}>{club.name}</Text>
+      <Text maxFontSizeMultiplier={2} style={typography.body} numberOfLines={3}>{club.description}</Text>
       <View style={styles.spotlightMeta}>
         <View style={[styles.metaPill, { backgroundColor: colors.surface }]}>
           <Ionicons name="people-outline" size={14} color={colors.sub} />
-          <Text style={typography.captionSmall}>
+          <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>
             {club.memberCount} member{club.memberCount === 1 ? '' : 's'}
           </Text>
         </View>
         <View style={[styles.metaPill, { backgroundColor: colors.surface }]}>
           <Ionicons name="calendar-outline" size={14} color={colors.sub} />
-          <Text style={typography.captionSmall}>
+          <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>
             {meeting ? formatTime(meeting.meetingTime) : 'Be part of what’s next'}
           </Text>
         </View>
@@ -220,10 +246,10 @@ function MyClubCard({
         uri={membership.club.avatarUrl}
         size={66}
       />
-      <Text style={[typography.subheading, styles.myClubName]} numberOfLines={2}>
+      <Text maxFontSizeMultiplier={2} style={[typography.subheading, styles.myClubName]} numberOfLines={2}>
         {membership.club.name}
       </Text>
-      <Text style={[typography.captionSmall, styles.myClubSignal]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, styles.myClubSignal]} numberOfLines={2}>
         {myClubSignal(membership)}
       </Text>
       {membership.unreadCount ? (
@@ -236,6 +262,8 @@ function MyClubCard({
 function FindYourCornerCard({ onPress }: { onPress: () => void }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
 
   return (
     <Pressable
@@ -244,23 +272,35 @@ function FindYourCornerCard({ onPress }: { onPress: () => void }) {
       accessibilityLabel="Browse clubs"
       style={({ pressed }) => [
         styles.findCornerCard,
+        accessibilityLayout && styles.findCornerCardAccessible,
         { backgroundColor: colors.surface, borderColor: colors.border },
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.findCornerCopy}>
-        <Text style={styles.findCornerTitle}>Find your corner of campus</Text>
-        <Text style={typography.caption}>
+      <View
+        style={[
+          styles.findCornerCopy,
+          accessibilityLayout && styles.findCornerCopyAccessible,
+        ]}
+      >
+        <Text maxFontSizeMultiplier={2} style={styles.findCornerTitle}>Find your corner of campus</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.caption}>
           Join clubs, meet people, and do what you love.
         </Text>
         <View style={styles.findCornerAction}>
-          <Text style={[styles.findCornerActionText, { color: colors.primary }]}>
+          <Text maxFontSizeMultiplier={2} style={[styles.findCornerActionText, { color: colors.primary }]}>
             Browse clubs
           </Text>
           <Ionicons name="arrow-forward" size={16} color={colors.primary} />
         </View>
       </View>
-      <View style={styles.findCornerCollage} pointerEvents="none">
+      <View
+        style={[
+          styles.findCornerCollage,
+          accessibilityLayout && styles.findCornerCollageAccessible,
+        ]}
+        pointerEvents="none"
+      >
         <View style={styles.findCornerPhotoTall}>
           <Image
             source={clubCategoryImageForKey('Music & Entertainment')}
@@ -303,21 +343,30 @@ function DirectoryRow({
 }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
-    <Pressable
-      onPress={onOpen}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${club.name}`}
-      style={({ pressed }) => [styles.directoryRow, pressed && styles.pressed]}
+    <View
+      style={[
+        styles.directoryRow,
+        accessibilityLayout && styles.directoryRowAccessible,
+      ]}
     >
-      <ClubPhoto name={club.name} category={club.category} uri={club.avatarUrl} size={46} />
-      <View style={styles.rowCopy}>
-        <View style={styles.nameLine}>
-          <Text style={[typography.subheading, styles.rowName]} numberOfLines={1}>{club.name}</Text>
-          {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${club.name}`}
+        style={({ pressed }) => [styles.directoryIdentity, pressed && styles.pressed]}
+      >
+        <ClubPhoto name={club.name} category={club.category} uri={club.avatarUrl} size={46} />
+        <View style={styles.rowCopy}>
+          <View style={styles.nameLine}>
+            <Text maxFontSizeMultiplier={2} style={[typography.subheading, styles.rowName]} numberOfLines={2}>{club.name}</Text>
+            {club.isVerified ? <Ionicons name="checkmark-circle" size={14} color={colors.success} /> : null}
+          </View>
+          <Text maxFontSizeMultiplier={2} style={typography.captionSmall} numberOfLines={2}>{signal}</Text>
         </View>
-        <Text style={typography.captionSmall} numberOfLines={1}>{signal}</Text>
-      </View>
+      </Pressable>
       {club.isMember ? (
         <Ionicons name="chevron-forward" size={18} color={colors.sub} />
       ) : (
@@ -335,12 +384,12 @@ function DirectoryRow({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[styles.joinText, { color: colors.onPrimary }]}>
+          <Text maxFontSizeMultiplier={2} style={[styles.joinText, { color: colors.onPrimary }]}>
             {joining ? '…' : 'Join'}
           </Text>
         </Pressable>
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -369,11 +418,11 @@ function TonightMeetingRow({
         size={48}
       />
       <View style={styles.rowCopy}>
-        <Text style={typography.subheading} numberOfLines={1}>{meeting.title}</Text>
-        <Text style={typography.captionSmall} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={typography.subheading} numberOfLines={2}>{meeting.title}</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.captionSmall} numberOfLines={2}>
           {formatTime(meeting.meetingTime)} · {meeting.location}
         </Text>
-        <Text style={[typography.captionSmall, { color: colors.ink }]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.ink }]} numberOfLines={2}>
           {meeting.clubName}
         </Text>
       </View>
@@ -398,14 +447,14 @@ function MissingOrganizationCard({ onPress }: { onPress: () => void }) {
     >
       <View style={styles.missingOrgTop}>
         <View style={styles.rowCopy}>
-          <Text style={typography.heading}>Missing your organization?</Text>
-          <Text style={typography.caption}>Bring your club to Oval and build your community.</Text>
+          <Text maxFontSizeMultiplier={2} style={typography.heading}>Missing your organization?</Text>
+          <Text maxFontSizeMultiplier={2} style={typography.caption}>Bring your club to Oval and build your community.</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.ink} />
       </View>
       <View style={styles.missingOrgAction}>
         <Ionicons name="add" size={19} color={colors.primary} />
-        <Text style={[styles.missingOrgActionText, { color: colors.primary }]}>Bring your club</Text>
+        <Text maxFontSizeMultiplier={2} style={[styles.missingOrgActionText, { color: colors.primary }]}>Bring your club</Text>
       </View>
     </Pressable>
   );
@@ -444,8 +493,8 @@ function CampusEmptyState({
         style={styles.emptyIllustration}
       />
       <View style={styles.emptyCopy}>
-        <Text style={styles.emptyTitle}>Bring campus groups to Oval</Text>
-        <Text style={[typography.body, styles.emptyBody]}>
+        <Text maxFontSizeMultiplier={2} style={styles.emptyTitle}>Bring campus groups to Oval</Text>
+        <Text maxFontSizeMultiplier={2} style={[typography.body, styles.emptyBody]}>
           Be the first to create the clubs that matter to your community.
         </Text>
       </View>
@@ -461,11 +510,11 @@ function CampusEmptyState({
       </View>
 
       <View style={[styles.interestCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={typography.heading}>Popular interests on campus</Text>
+        <Text maxFontSizeMultiplier={2} style={typography.heading}>Popular interests on campus</Text>
         <View style={styles.interestChips}>
           {interestChips.map((chip) => (
             <View key={chip.label} style={[styles.interestChip, { backgroundColor: chip.tint }]}>
-              <Text style={[typography.chip, { color: colors.ink }]}>{chip.label}</Text>
+              <Text maxFontSizeMultiplier={2} style={[typography.chip, { color: colors.ink }]}>{chip.label}</Text>
             </View>
           ))}
         </View>
@@ -478,6 +527,7 @@ function CampusEmptyState({
             );
           }}
           accessibilityRole="button"
+          accessibilityLabel={notified ? 'Disable new club notifications' : 'Notify me about new clubs'}
           accessibilityState={{ selected: notified }}
           style={[
             styles.notifyButton,
@@ -489,7 +539,7 @@ function CampusEmptyState({
             size={15}
             color={notified ? colors.success : colors.primary}
           />
-          <Text style={[styles.notifyText, { color: notified ? colors.success : colors.primary }]}>
+          <Text maxFontSizeMultiplier={2} style={[styles.notifyText, { color: notified ? colors.success : colors.primary }]}>
             {notified ? 'You’ll hear about new clubs' : 'Notify me'}
           </Text>
         </Pressable>
@@ -499,14 +549,15 @@ function CampusEmptyState({
         <Pressable
           onPress={() => togglePanel('how')}
           accessibilityRole="button"
+          accessibilityLabel="How clubs work on Oval"
           accessibilityState={{ expanded: openPanel === 'how' }}
           style={styles.infoRow}
         >
           <Ionicons name="information-circle-outline" size={25} color={colors.ink} />
           <View style={styles.rowCopy}>
-            <Text style={typography.subheading}>How clubs work on Oval</Text>
+            <Text maxFontSizeMultiplier={2} style={typography.subheading}>How clubs work on Oval</Text>
           </View>
-          <Text style={[typography.captionSmall, { color: colors.ink }]}>Learn more</Text>
+          <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.ink }]}>Learn more</Text>
           <Ionicons
             name={openPanel === 'how' ? 'chevron-up' : 'chevron-forward'}
             size={18}
@@ -514,7 +565,7 @@ function CampusEmptyState({
           />
         </Pressable>
         {openPanel === 'how' ? (
-          <Text style={[typography.caption, styles.infoDetail]}>
+          <Text maxFontSizeMultiplier={2} style={[typography.caption, styles.infoDetail]}>
             Clubs bring members, announcements, chat, and campus events together in one verified home.
           </Text>
         ) : null}
@@ -522,13 +573,14 @@ function CampusEmptyState({
         <Pressable
           onPress={() => togglePanel('verified')}
           accessibilityRole="button"
+          accessibilityLabel="Verified organizers, real community"
           accessibilityState={{ expanded: openPanel === 'verified' }}
           style={styles.infoRow}
         >
           <Ionicons name="shield-checkmark-outline" size={25} color={colors.ink} />
           <View style={styles.rowCopy}>
-            <Text style={typography.subheading}>Verified organizers, real community</Text>
-            <Text style={typography.captionSmall}>Clubs are run by verified students and campus organizations.</Text>
+            <Text maxFontSizeMultiplier={2} style={typography.subheading}>Verified organizers, real community</Text>
+            <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>Clubs are run by verified students and campus organizations.</Text>
           </View>
           <Ionicons
             name={openPanel === 'verified' ? 'chevron-up' : 'chevron-forward'}
@@ -537,7 +589,7 @@ function CampusEmptyState({
           />
         </Pressable>
         {openPanel === 'verified' ? (
-          <Text style={[typography.caption, styles.infoDetail]}>
+          <Text maxFontSizeMultiplier={2} style={[typography.caption, styles.infoDetail]}>
             Organizer verification protects campus identity while club controls keep membership and events manageable.
           </Text>
         ) : null}
@@ -558,6 +610,8 @@ export default function ClubsHomeScreen({
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const dockClearance = useDockClearance();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const [clubs, setClubs] = useState<ClubDirectoryEntry[]>(previewData?.clubs ?? []);
   const [myClubs, setMyClubs] = useState<MyClubMembershipRow[]>(previewData?.myClubs ?? []);
   const [meetings, setMeetings] = useState<ClubMeetingToday[]>(previewData?.meetings ?? []);
@@ -689,7 +743,7 @@ export default function ClubsHomeScreen({
         }
       >
         <View style={styles.masthead}>
-          <Text style={styles.title}>Clubs</Text>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={2} style={styles.title}>Clubs</Text>
           <IconButton
             icon="add-circle-outline"
             size={46}
@@ -718,14 +772,20 @@ export default function ClubsHomeScreen({
           >
             {myClubs.length ? (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>My clubs</Text>
+                <View
+                  style={[
+                    styles.sectionHeader,
+                    accessibilityLayout && styles.sectionHeaderAccessible,
+                  ]}
+                >
+                  <Text maxFontSizeMultiplier={2} style={styles.sectionTitle}>My clubs</Text>
                   {myClubs.length > 3 ? (
                     <Pressable
                       onPress={() => setShowAllMine((value) => !value)}
                       accessibilityRole="button"
+                      accessibilityLabel={showAllMine ? 'Show fewer of my clubs' : 'Show all my clubs'}
                     >
-                      <Text style={[styles.sectionAction, { color: colors.primary }]}>
+                      <Text maxFontSizeMultiplier={2} style={[styles.sectionAction, { color: colors.primary }]}>
                         {showAllMine ? 'Show less' : 'See all'}
                       </Text>
                     </Pressable>
@@ -736,7 +796,10 @@ export default function ClubsHomeScreen({
                     <Animated.View
                       key={membership.club.id}
                       entering={FadeInDown.delay(index * motion.stagger).duration(motion.durBase)}
-                      style={styles.myClubGridItem}
+                      style={[
+                        styles.myClubGridItem,
+                        accessibilityLayout && styles.myClubGridItemAccessible,
+                      ]}
                     >
                       <MyClubCard
                         membership={membership}
@@ -774,10 +837,15 @@ export default function ClubsHomeScreen({
             ) : null}
 
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
+              <View
+                style={[
+                  styles.sectionHeader,
+                  accessibilityLayout && styles.sectionHeaderAccessible,
+                ]}
+              >
                 <View>
-                  <Text style={styles.sectionTitle}>Tonight on campus</Text>
-                  <Text style={typography.caption}>
+                  <Text maxFontSizeMultiplier={2} style={styles.sectionTitle}>Tonight on campus</Text>
+                  <Text maxFontSizeMultiplier={2} style={typography.caption}>
                     {meetings.length
                       ? `${meetings.length} club${meetings.length === 1 ? '' : 's'} meeting tonight`
                       : 'See what campus clubs have planned'}
@@ -788,7 +856,7 @@ export default function ClubsHomeScreen({
                   accessibilityRole="button"
                   accessibilityLabel="See all club meetings"
                 >
-                  <Text style={[styles.sectionAction, { color: colors.primary }]}>
+                  <Text maxFontSizeMultiplier={2} style={[styles.sectionAction, { color: colors.primary }]}>
                     {meetings.length ? 'See all' : 'This week'}
                   </Text>
                 </Pressable>
@@ -845,8 +913,8 @@ export default function ClubsHomeScreen({
                     <Ionicons name="calendar-outline" size={23} color={colors.blue} />
                   </View>
                   <View style={styles.rowCopy}>
-                    <Text style={typography.subheading}>No meetings posted for tonight</Text>
-                    <Text style={typography.captionSmall}>Browse the week or check back as clubs add events.</Text>
+                    <Text maxFontSizeMultiplier={2} style={typography.subheading}>No meetings posted for tonight</Text>
+                    <Text maxFontSizeMultiplier={2} style={typography.captionSmall}>Browse the week or check back as clubs add events.</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.sub} />
                 </Pressable>
@@ -857,7 +925,7 @@ export default function ClubsHomeScreen({
               style={styles.section}
               onLayout={(event) => setDiscoverY(event.nativeEvent.layout.y)}
             >
-              <Text style={styles.sectionTitle}>Discover clubs</Text>
+              <Text maxFontSizeMultiplier={2} style={styles.sectionTitle}>Discover clubs</Text>
               <SearchBar
                 value={query}
                 onChangeText={(value) => {
@@ -918,12 +986,12 @@ export default function ClubsHomeScreen({
                     <View style={[styles.noResultsIcon, { backgroundColor: colors.surfaceAlt }]}>
                       <Ionicons name="search" size={22} color={colors.sub} />
                     </View>
-                    <Text style={typography.subheading}>
+                    <Text maxFontSizeMultiplier={2} style={typography.subheading}>
                       {membershipIds.size === clubs.length && clubs.length
                         ? 'You joined every club'
                         : 'No clubs match'}
                     </Text>
-                    <Text style={[typography.caption, styles.noResultsCopy]}>
+                    <Text maxFontSizeMultiplier={2} style={[typography.caption, styles.noResultsCopy]}>
                       {membershipIds.size === clubs.length && clubs.length
                         ? 'Your whole campus directory is already in My clubs.'
                         : 'Try another search or clear the category filter.'}
@@ -949,9 +1017,10 @@ export default function ClubsHomeScreen({
                     <Pressable
                       onPress={() => setShowAllDiscover((value) => !value)}
                       accessibilityRole="button"
+                      accessibilityLabel={showAllDiscover ? 'Show fewer clubs' : `See all ${discover.length} clubs`}
                       style={styles.seeAllRow}
                     >
-                      <Text style={typography.subheading}>
+                      <Text maxFontSizeMultiplier={2} style={typography.subheading}>
                         {showAllDiscover ? 'Show fewer clubs' : `See all ${discover.length} clubs`}
                       </Text>
                       <Ionicons
@@ -1002,6 +1071,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     overflow: 'hidden' as const,
     ...elevation.card,
   },
+  findCornerCardAccessible: {
+    minHeight: 0,
+  },
   findCornerCopy: {
     width: '57%',
     minHeight: 178,
@@ -1009,6 +1081,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     justifyContent: 'center' as const,
     gap: spacing.sm,
     zIndex: 1,
+  },
+  findCornerCopyAccessible: {
+    width: '100%' as const,
+    minHeight: 0,
   },
   findCornerTitle: {
     color: t.colors.ink,
@@ -1036,6 +1112,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     bottom: spacing.sm,
     flexDirection: 'row' as const,
     gap: 5,
+  },
+  findCornerCollageAccessible: {
+    display: 'none' as const,
   },
   findCornerPhoto: {
     flex: 1,
@@ -1068,6 +1147,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     backgroundColor: t.colors.primary,
     ...elevation.card,
   },
+  eventHeroAccessible: {
+    height: 420,
+  },
   eventHeroPhoto: {
     position: 'absolute' as const,
     top: 0,
@@ -1082,6 +1164,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     padding: spacing.lg,
     justifyContent: 'center' as const,
     alignItems: 'flex-start' as const,
+  },
+  eventHeroShadeAccessible: {
+    justifyContent: 'flex-start' as const,
   },
   heroEyebrow: {
     color: t.colors.onPrimary,
@@ -1121,6 +1206,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     marginTop: spacing.lg,
   },
   heroButtonText: { fontSize: 13, lineHeight: 17, fontWeight: '700' as const },
+  heroTextAccessible: {
+    maxWidth: '100%' as const,
+  },
   spotlight: {
     borderWidth: BORDER_W,
     borderRadius: radii.lg,
@@ -1161,6 +1249,11 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
   },
+  sectionHeaderAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start' as const,
+    gap: spacing.sm,
+  },
   sectionTitle: {
     color: t.colors.ink,
     fontSize: 18,
@@ -1178,6 +1271,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
   myClubGridItem: {
     width: '33.333%',
     paddingHorizontal: spacing.xs,
+  },
+  myClubGridItemAccessible: {
+    width: '100%' as const,
   },
   myClubCard: {
     minHeight: 174,
@@ -1218,12 +1314,23 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  directoryRowAccessible: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+  },
+  directoryIdentity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+  },
   rowCopy: { flex: 1, minWidth: 0, gap: 2 },
   nameLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs },
   rowName: { flexShrink: 1 },
   joinButton: {
     minWidth: 62,
-    height: 36,
+    minHeight: 44,
     borderRadius: radii.button,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -1339,7 +1446,7 @@ const useStyles = createThemedStyles((t: Theme) => ({
     paddingVertical: 7,
   },
   notifyButton: {
-    minHeight: 38,
+    minHeight: 44,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     flexDirection: 'row' as const,

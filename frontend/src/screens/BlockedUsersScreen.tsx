@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,8 @@ export default function BlockedUsersScreen({
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const [users, setUsers] = useState<BlockedUser[]>(previewUsers ?? []);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(Boolean(previewUsers));
@@ -90,11 +92,11 @@ export default function BlockedUsersScreen({
         {loadWarning ? <Banner message={loadWarning} kind="error" /> : null}
 
         <Card padded>
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, accessibilityLayout && styles.infoRowLargeText]}>
             <View style={[styles.infoIcon, { backgroundColor: colors.surfaceAlt }]}>
               <Ionicons name="shield-checkmark-outline" size={24} color={colors.ink} />
             </View>
-            <Text style={[typography.caption, { flex: 1 }]}>
+            <Text style={[typography.caption, { flex: 1 }]} maxFontSizeMultiplier={2}>
               Blocked people can’t message you, invite you, or see your profile.
             </Text>
           </View>
@@ -107,7 +109,9 @@ export default function BlockedUsersScreen({
           </>
         ) : (
           <View style={{ gap: spacing.md }}>
-            <Text style={typography.kicker}>BLOCKED ACCOUNTS</Text>
+            <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+              BLOCKED ACCOUNTS
+            </Text>
             {users.length === 0 ? (
               <EmptyState
                 icon="shield-checkmark-outline"
@@ -118,13 +122,21 @@ export default function BlockedUsersScreen({
               <>
                 {users.map((blocked) => (
                   <Card key={blocked.id} padded>
-                    <View style={styles.row}>
+                    <View style={[styles.row, accessibilityLayout && styles.rowLargeText]}>
                       <Avatar name={blocked.name} uri={blocked.avatarUrl} size={48} />
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Text style={typography.heading} numberOfLines={1}>
+                        <Text
+                          style={typography.heading}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {blocked.name}
                         </Text>
-                        <Text style={typography.captionSmall} numberOfLines={1}>
+                        <Text
+                          style={typography.captionSmall}
+                          numberOfLines={accessibilityLayout ? undefined : 1}
+                          maxFontSizeMultiplier={2}
+                        >
                           {[blocked.major, blocked.classYear].filter(Boolean).join(' · ') ||
                             'Ohio State student'}
                         </Text>
@@ -135,13 +147,14 @@ export default function BlockedUsersScreen({
                         variant="secondary"
                         loading={busyId === blocked.id}
                         onPress={() => confirmUnblock(blocked)}
+                        style={accessibilityLayout && styles.fullWidthAction}
                       />
                     </View>
                   </Card>
                 ))}
                 <View style={[styles.note, { backgroundColor: colors.surfaceAlt }]}>
                   <Ionicons name="information-circle-outline" size={18} color={colors.sub} />
-                  <Text style={[typography.captionSmall, { flex: 1 }]}>
+                  <Text style={[typography.captionSmall, { flex: 1 }]} maxFontSizeMultiplier={2}>
                     They won’t be notified if you unblock them.
                   </Text>
                 </View>
@@ -165,6 +178,9 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
   },
+  infoRowLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   infoIcon: {
     width: 44,
     height: 44,
@@ -176,6 +192,13 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
+  },
+  rowLargeText: {
+    alignItems: 'stretch' as const,
+    flexDirection: 'column' as const,
+  },
+  fullWidthAction: {
+    alignSelf: 'stretch' as const,
   },
   note: {
     flexDirection: 'row' as const,

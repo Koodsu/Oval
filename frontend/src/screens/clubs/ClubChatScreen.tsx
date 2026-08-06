@@ -393,6 +393,32 @@ export default function ClubChatScreen({ route, navigation }: Props) {
     }
   };
 
+  const openAnnouncementActions = (item: (typeof announcements)[number]) => {
+    const mine = item.userId === user?.id;
+    Alert.alert(item.user.name, item.content, [
+      {
+        text: 'Copy text',
+        onPress: () => void Clipboard.setStringAsync(item.content).catch(() => {}),
+      },
+      ...(mine || canDelete ? [{
+        text: 'Delete',
+        style: 'destructive' as const,
+        onPress: () => void deleteClubAnnouncement(clubId, item.id)
+          .then(() => setAnnouncements((current) => current.filter((row) => row.id !== item.id))),
+      }] : []),
+      ...(!mine ? [{
+        text: 'Report',
+        onPress: () => void createReport({
+          clubId,
+          clubAnnouncementId: item.id,
+          targetUserId: item.userId,
+          reason: 'OTHER',
+        }),
+      }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
+
   // ── Channel switcher rail ──
   const switcher = channels.length > 1 ? (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.switcherScroll}>
@@ -401,6 +427,11 @@ export default function ClubChatScreen({ route, navigation }: Props) {
           <View key={row.id} style={styles.switcherItem}>
             <Chip
               label={row.name}
+              accessibilityLabel={
+                row.unreadCount > 0 && row.id !== channelId
+                  ? `${row.name}, ${row.unreadCount} unread ${row.unreadCount === 1 ? 'message' : 'messages'}`
+                  : row.name
+              }
               icon={channelIcon(row.kind)}
               selected={row.id === channelId}
               onPress={
@@ -465,34 +496,14 @@ export default function ClubChatScreen({ route, navigation }: Props) {
           ListHeaderComponentStyle={{ marginBottom: spacing.lg }}
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
           renderItem={({ item }) => (
-            <Pressable
-              onLongPress={() => {
-                const mine = item.userId === user?.id;
-                Alert.alert(item.user.name, item.content, [
-                  {
-                    text: 'Copy text',
-                    onPress: () => void Clipboard.setStringAsync(item.content).catch(() => {}),
-                  },
-                  ...(mine || canDelete ? [{
-                    text: 'Delete',
-                    style: 'destructive' as const,
-                    onPress: () => void deleteClubAnnouncement(clubId, item.id)
-                      .then(() => setAnnouncements((current) => current.filter((row) => row.id !== item.id))),
-                  }] : []),
-                  ...(!mine ? [{
-                    text: 'Report',
-                    onPress: () => void createReport({
-                      clubId,
-                      clubAnnouncementId: item.id,
-                      targetUserId: item.userId,
-                      reason: 'OTHER',
-                    }),
-                  }] : []),
-                  { text: 'Cancel', style: 'cancel' },
-                ]);
-              }}
-            >
-              <Card padded>
+            <Card padded>
+              <Pressable
+                onPress={() => openAnnouncementActions(item)}
+                onLongPress={() => openAnnouncementActions(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.user.name}: ${item.content}. ${formatDateTime(item.createdAt)}`}
+                accessibilityHint="Opens announcement actions"
+              >
                 <View style={styles.author}>
                   <Avatar name={item.user.name} uri={item.user.avatarUrl} size={36} />
                   <View style={{ flex: 1 }}>
@@ -502,12 +513,15 @@ export default function ClubChatScreen({ route, navigation }: Props) {
                   <Tag label={item.visibility} />
                 </View>
                 <Text style={[typography.body, { marginTop: spacing.md }]}>{item.content}</Text>
-                {item.meeting ? (
+              </Pressable>
+              {item.meeting ? (
                   <Pressable
                     onPress={() => navigation.navigate('ClubMeeting', {
                       clubId,
                       meetingId: item.meeting!.id,
                     })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open meeting ${item.meeting.title}`}
                     style={({ pressed }) => ({
                       marginTop: spacing.md,
                       padding: spacing.md,
@@ -523,9 +537,8 @@ export default function ClubChatScreen({ route, navigation }: Props) {
                       {formatDateTime(item.meeting.meetingTime)} · {item.meeting.location}
                     </Text>
                   </Pressable>
-                ) : null}
-              </Card>
-            </Pressable>
+              ) : null}
+            </Card>
           )}
           ListEmptyComponent={
             <ClubEmptyState
@@ -618,6 +631,8 @@ export default function ClubChatScreen({ route, navigation }: Props) {
               <Switch
                 value={notifyMembers}
                 onValueChange={setNotifyMembers}
+                accessibilityLabel="Notify members"
+                accessibilityHint="Send an in-app and push notification"
                 trackColor={{ false: colors.surfaceAlt, true: colors.primary }}
               />
             </View>
@@ -672,7 +687,12 @@ export default function ClubChatScreen({ route, navigation }: Props) {
               if (!role) return null;
               const accent = roleAccent(colors, role.color);
               return (
-                <Pressable key={roleId} onPress={() => togglePingRole(roleId)}>
+                <Pressable
+                  key={roleId}
+                  onPress={() => togglePingRole(roleId)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${role.name} mention`}
+                >
                   <Tag label={`@${role.name} ×`} tint={accent.tint} />
                 </Pressable>
               );

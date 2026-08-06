@@ -34,7 +34,7 @@ export default function DeleteAccount() {
 
   return (
     <div className="min-h-screen bg-ink pb-24 pt-20">
-      <main className="mx-auto max-w-3xl px-6 py-12 md:px-10">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-12 md:px-10">
         <div className="mb-12">
           <h1 className="mb-2 font-display text-3xl uppercase tracking-widest text-white">
             Delete Your Account
@@ -78,19 +78,22 @@ export default function DeleteAccount() {
           </p>
 
           {status === 'sent' ? (
-            <p className="rounded-xl border border-white/10 bg-white/[0.04] p-5 text-sm leading-relaxed text-white/75">
+            <p role="status" aria-live="polite" className="rounded-xl border border-white/10 bg-white/[0.04] p-5 text-sm leading-relaxed text-white/75">
               If an Oval account exists for that email, a confirmation link is on its way. Check
               your inbox (and spam folder) and follow the link to finish deletion.
             </p>
           ) : (
             <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row">
+              <label className="sr-only" htmlFor="delete-account-email">Account email</label>
               <input
+                id="delete-account-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@osu.edu"
-                className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-scarlet"
+                aria-describedby={status === 'error' ? 'delete-account-error' : undefined}
+                className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-white/60 outline-none focus:border-scarlet"
               />
               <button
                 type="submit"
@@ -103,7 +106,7 @@ export default function DeleteAccount() {
           )}
 
           {status === 'error' ? (
-            <p className="mt-3 text-sm text-scarlet">
+            <p id="delete-account-error" role="alert" className="mt-3 text-sm text-scarlet">
               Something went wrong. Try again, or email{' '}
               <a className="underline underline-offset-2" href={`mailto:${EMAIL}`}>
                 {EMAIL}

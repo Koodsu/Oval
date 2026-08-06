@@ -8,6 +8,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -94,11 +95,17 @@ function PodFeatureCard({
   onJoin: () => void;
 }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const friendsGoing = pod.members.filter((member) => friendIds.has(member.userId));
   const title = getPodTitle(pod);
 
   return (
-    <Card padded={false} style={styles.featureCard} faceStyle={styles.featureCardFace}>
+    <Card
+      padded={false}
+      style={[styles.featureCard, accessibilityLayout && styles.featureCardAccessible]}
+      faceStyle={styles.featureCardFace}
+    >
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
@@ -112,16 +119,33 @@ function PodFeatureCard({
           style={styles.featureImage}
         />
         <View style={styles.featureCopy}>
-          <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.heading, { color: colors.ink }]}
+            numberOfLines={2}
+          >
             {title}
           </Text>
-          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.captionSmall, { color: colors.sub }]}
+            numberOfLines={2}
+          >
             {pod.location}
           </Text>
-          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.captionSmall, { color: colors.sub }]}
+            numberOfLines={2}
+          >
             {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
           </Text>
-          <View style={styles.featureSocial}>
+          <View
+            style={[
+              styles.featureSocial,
+              accessibilityLayout && styles.featureSocialAccessible,
+            ]}
+          >
             <AvatarStack
               names={pod.members.slice(0, 3).map((member) => ({
                 name: member.user.name,
@@ -130,7 +154,11 @@ function PodFeatureCard({
               overflowCount={Math.max(0, pod.members.length - 3)}
               size={20}
             />
-            <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={[typography.captionSmall, { color: colors.sub }]}
+              numberOfLines={2}
+            >
               {friendsGoing.length
                 ? `${friendsGoing.length} ${
                     friendsGoing.length === 1 ? 'friend' : 'friends'
@@ -166,10 +194,16 @@ function ActivityIdeaCard({
   onDemand: () => void;
 }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const source = activityImageFor(activity);
 
   return (
-    <Card padded={false} style={styles.ideaCard} faceStyle={styles.ideaCardFace}>
+    <Card
+      padded={false}
+      style={[styles.ideaCard, accessibilityLayout && styles.ideaCardAccessible]}
+      faceStyle={styles.ideaCardFace}
+    >
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
@@ -183,10 +217,18 @@ function ActivityIdeaCard({
           style={styles.ideaImage}
         />
         <View style={styles.ideaCopy}>
-          <Text style={[typography.heading, { color: colors.ink }]} numberOfLines={2}>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.heading, { color: colors.ink }]}
+            numberOfLines={2}
+          >
             {activity.title}
           </Text>
-          <Text style={[typography.captionSmall, { color: colors.sub }]} numberOfLines={1}>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.captionSmall, { color: colors.sub }]}
+            numberOfLines={2}
+          >
             {activity.category}
           </Text>
         </View>
@@ -198,8 +240,8 @@ function ActivityIdeaCard({
           accessibilityRole="button"
           accessibilityLabel={
             activity.myDemanded
-              ? `Remove interest in ${activity.title}`
-              : `Interested in ${activity.title}`
+              ? `Remove interest in ${activity.title}, ${activity.demandCount ?? 0} interested`
+              : `Interested in ${activity.title}, ${activity.demandCount ?? 0} interested`
           }
           style={({ pressed }) => [
             styles.demandPill,
@@ -214,7 +256,7 @@ function ActivityIdeaCard({
             size={13}
             color={activity.myDemanded ? colors.accentText : colors.sub}
           />
-          <Text style={[typography.captionSmall, { color: colors.sub }]}>
+          <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]}>
             {busy ? '…' : activity.demandCount ?? 0}
           </Text>
         </Pressable>
@@ -232,6 +274,8 @@ function PromoBanner({
   onPress: () => void;
 }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const invite = kind === 'invite';
   return (
     <Pressable
@@ -240,6 +284,7 @@ function PromoBanner({
       accessibilityLabel={invite ? 'Invite friends' : 'Request an activity'}
       style={({ pressed }) => [
         styles.promo,
+        accessibilityLayout && styles.promoAccessible,
         {
           backgroundColor: invite ? colors.tealSoft : colors.amberSoft,
           borderColor: colors.border,
@@ -248,14 +293,14 @@ function PromoBanner({
       ]}
     >
       <View style={styles.promoCopy}>
-        <Text style={[typography.title, { color: colors.ink }]}>
+        <Text maxFontSizeMultiplier={2} style={[typography.title, { color: colors.ink }]}>
           {invite ? 'Invite friends' : 'Request an activity'}
         </Text>
-        <Text style={[typography.caption, { color: colors.sub }]}>
+        <Text maxFontSizeMultiplier={2} style={[typography.caption, { color: colors.sub }]}>
           {invite ? 'More people means more possibilities.' : "Don't see it? Tell us what you want."}
         </Text>
         <View style={[styles.promoButton, { backgroundColor: colors.surface }]}>
-          <Text style={[typography.button, { color: colors.ink }]}>
+          <Text maxFontSizeMultiplier={2} style={[typography.button, { color: colors.ink }]}>
             {invite ? 'Invite friends' : 'Request activity'}
           </Text>
           <Ionicons
@@ -265,8 +310,13 @@ function PromoBanner({
           />
         </View>
       </View>
-      {invite ? (
-        <Image source={inviteFriendsSpot} resizeMode="contain" style={styles.promoArt} />
+      {accessibilityLayout ? null : invite ? (
+        <Image
+          source={inviteFriendsSpot}
+          resizeMode="contain"
+          accessible={false}
+          style={styles.promoArt}
+        />
       ) : (
         <View style={styles.requestArt} accessibilityElementsHidden>
           <Ionicons name="chatbubble" size={58} color={colors.amber} />
@@ -300,6 +350,8 @@ export default function ExploreScreen({
   const { user } = useAuth();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const dockClearance = useDockClearance();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
   const [query, setQuery] = useState(previewData?.query ?? '');
@@ -554,24 +606,37 @@ export default function ExploreScreen({
   const renderZero = () => (
     <View style={styles.sectionStack}>
       <Card faceStyle={styles.zeroStateCard}>
-        <View style={styles.zeroStateIntro}>
+        <View
+          style={[
+            styles.zeroStateIntro,
+            accessibilityLayout && styles.zeroStateIntroAccessible,
+          ]}
+        >
           <SpotIllustration
             source={exploreZeroSpot}
             accessibilityLabel="A student making the first campus plan"
             height={112}
-            style={styles.zeroStateArt}
+            style={[
+              styles.zeroStateArt,
+              accessibilityLayout && styles.zeroStateArtAccessible,
+            ]}
           />
           <View style={styles.zeroStateCopy}>
-            <Text style={[typography.kicker, { color: colors.sub }]}>Campus starts here</Text>
-            <Text style={[styles.zeroStateTitle, { color: colors.ink }]}>
+            <Text maxFontSizeMultiplier={2} style={[typography.kicker, { color: colors.sub }]}>Campus starts here</Text>
+            <Text maxFontSizeMultiplier={2} style={[styles.zeroStateTitle, { color: colors.ink }]}>
               Be the first plan on the board
             </Text>
-            <Text style={[typography.caption, { color: colors.sub }]}>
+            <Text maxFontSizeMultiplier={2} style={[typography.caption, { color: colors.sub }]}>
               Pick an activity and Oval will turn it into a small group.
             </Text>
           </View>
         </View>
-        <View style={styles.zeroStateActions}>
+        <View
+          style={[
+            styles.zeroStateActions,
+            accessibilityLayout && styles.zeroStateActionsAccessible,
+          ]}
+        >
           <Button
             label="Choose an activity"
             icon="search"
@@ -682,7 +747,13 @@ export default function ExploreScreen({
         }
       >
         <View style={styles.header}>
-          <Text style={[styles.screenTitle, { color: colors.ink }]}>Explore</Text>
+          <Text
+            accessibilityRole="header"
+            maxFontSizeMultiplier={2}
+            style={[styles.screenTitle, { color: colors.ink }]}
+          >
+            Explore
+          </Text>
           {user?.isAdmin ? (
             <Pressable
               onPress={() => navigation.navigate('AdminActivityRequests')}
@@ -716,6 +787,9 @@ export default function ExploreScreen({
         >
           <Pressable
             onPress={() => setCategory(null)}
+            accessibilityRole="button"
+            accessibilityLabel="All categories"
+            accessibilityState={{ selected: !category }}
             style={({ pressed }) => [
               styles.filterPill,
               {
@@ -726,6 +800,7 @@ export default function ExploreScreen({
             ]}
           >
             <Text
+              maxFontSizeMultiplier={2}
               style={[
                 styles.filterLabel,
                 { color: !category ? colors.onPrimary : colors.sub },
@@ -741,6 +816,9 @@ export default function ExploreScreen({
               <Pressable
                 key={value}
                 onPress={() => setCategory(selected ? null : value)}
+                accessibilityRole="button"
+                accessibilityLabel={CATEGORY_META[value]?.label ?? value}
+                accessibilityState={{ selected }}
                 style={({ pressed }) => [
                   styles.filterPill,
                   {
@@ -751,6 +829,7 @@ export default function ExploreScreen({
                 ]}
               >
                 <Text
+                  maxFontSizeMultiplier={2}
                   style={[
                     styles.filterLabel,
                     { color: selected ? colors.onPrimary : colors.ink },
@@ -764,6 +843,9 @@ export default function ExploreScreen({
           {!granted && canAskAgain ? (
             <Pressable
               onPress={explainAndRequestLocation}
+              accessibilityRole="button"
+              accessibilityLabel="Enable nearby results"
+              accessibilityHint="Requests location access"
               style={({ pressed }) => [
                 styles.filterPill,
                 {
@@ -774,7 +856,7 @@ export default function ExploreScreen({
               ]}
             >
               <Ionicons name="location-outline" size={14} color={colors.sub} />
-              <Text style={[styles.filterLabel, { color: colors.sub }]}>Nearby</Text>
+              <Text maxFontSizeMultiplier={2} style={[styles.filterLabel, { color: colors.sub }]}>Nearby</Text>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -842,12 +924,15 @@ export default function ExploreScreen({
               onChangeText={setRequestTitle}
               placeholder="Late-night breakfast"
             />
-            <Text style={typography.caption}>Category</Text>
+            <Text maxFontSizeMultiplier={2} style={typography.caption}>Category</Text>
             <View style={styles.requestCategories}>
               {CATEGORIES.map((value) => (
                 <Pressable
                   key={value}
                   onPress={() => setRequestCategory(value)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={CATEGORY_META[value]?.label ?? value}
+                  accessibilityState={{ checked: requestCategory === value }}
                   style={({ pressed }) => [
                     styles.requestCategory,
                     {
@@ -859,7 +944,7 @@ export default function ExploreScreen({
                     },
                   ]}
                 >
-                  <Text style={[typography.chip, { color: colors.ink }]}>
+                  <Text maxFontSizeMultiplier={2} style={[typography.chip, { color: colors.ink }]}>
                     {CATEGORY_META[value]?.label ?? value}
                   </Text>
                 </Pressable>
@@ -902,8 +987,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   adminButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderWidth: BORDER_W,
     borderRadius: radii.sm,
     alignItems: 'center',
@@ -914,7 +999,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg,
   },
   filterPill: {
-    minHeight: 36,
+    minHeight: 44,
     borderWidth: BORDER_W,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
@@ -942,6 +1027,9 @@ const styles = StyleSheet.create({
   featureCard: {
     width: 172,
   },
+  featureCardAccessible: {
+    width: 292,
+  },
   featureCardFace: {
     overflow: 'hidden',
     paddingBottom: spacing.md,
@@ -955,7 +1043,7 @@ const styles = StyleSheet.create({
   featureCopy: {
     padding: spacing.md,
     paddingBottom: spacing.sm,
-    height: 140,
+    minHeight: 140,
     gap: 3,
   },
   featureSocial: {
@@ -965,11 +1053,17 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: spacing.xs,
   },
+  featureSocialAccessible: {
+    flexWrap: 'wrap',
+  },
   featureButton: {
     marginHorizontal: spacing.md,
   },
   ideaCard: {
     width: 184,
+  },
+  ideaCardAccessible: {
+    width: 292,
   },
   ideaCardFace: {
     overflow: 'hidden',
@@ -984,7 +1078,7 @@ const styles = StyleSheet.create({
   ideaCopy: {
     padding: spacing.md,
     paddingBottom: spacing.sm,
-    height: 88,
+    minHeight: 88,
     gap: 3,
   },
   ideaActions: {
@@ -996,7 +1090,7 @@ const styles = StyleSheet.create({
   },
   demandPill: {
     minWidth: 42,
-    minHeight: 32,
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.pill,
     flexDirection: 'row',
@@ -1019,6 +1113,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
   },
+  promoAccessible: {
+    minHeight: 0,
+  },
   promoCopy: {
     flex: 1,
     zIndex: 2,
@@ -1027,7 +1124,7 @@ const styles = StyleSheet.create({
   },
   promoButton: {
     marginTop: 'auto',
-    minHeight: 38,
+    minHeight: 44,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     flexDirection: 'row',
@@ -1074,9 +1171,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  zeroStateIntroAccessible: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
   zeroStateArt: {
     width: 126,
     flexShrink: 0,
+  },
+  zeroStateArtAccessible: {
+    width: '100%',
   },
   zeroStateCopy: {
     flex: 1,
@@ -1093,6 +1197,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  zeroStateActionsAccessible: {
+    flexDirection: 'column',
+  },
   zeroStateAction: {
     flex: 1,
     minWidth: 0,
@@ -1108,7 +1215,7 @@ const styles = StyleSheet.create({
   requestCategory: {
     borderWidth: BORDER_W,
     borderRadius: radii.pill,
-    minHeight: 34,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',

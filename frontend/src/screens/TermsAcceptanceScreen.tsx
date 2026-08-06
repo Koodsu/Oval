@@ -59,15 +59,21 @@ export default function TermsAcceptanceScreen() {
       >
         <View style={styles.intro}>
           <OvalMark size={48} />
-          <Text style={typography.kicker}>BEFORE YOU CONTINUE</Text>
-          <Text style={styles.title}>A few ground rules</Text>
-          <Text style={[typography.body, styles.sub]}>
+          <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+            BEFORE YOU CONTINUE
+          </Text>
+          <Text accessibilityRole="header" style={styles.title} maxFontSizeMultiplier={2}>
+            A few ground rules
+          </Text>
+          <Text style={[typography.body, styles.sub]} maxFontSizeMultiplier={2}>
             Oval works when everyone feels safe showing up.
           </Text>
         </View>
 
         <Card padded>
-          <Text style={typography.title}>House rules</Text>
+          <Text accessibilityRole="header" style={typography.title} maxFontSizeMultiplier={2}>
+            House rules
+          </Text>
           <View style={{ marginTop: spacing.md }}>
             <RuleRow icon="person-outline" label="Be who you say you are" />
             <RuleRow icon="heart-outline" label="Treat people with respect" />
@@ -89,9 +95,14 @@ export default function TermsAcceptanceScreen() {
           />
           <CheckRow
             checked={termsAccepted}
-            label="I agree to the policies above"
+            label="I agree to the policies above, including the arbitration agreement and class action waiver in the Terms of Use"
             onPress={() => setTermsAccepted((value) => !value)}
           />
+          <Text style={[typography.caption, { color: colors.sub }]} maxFontSizeMultiplier={2}>
+            The Terms of Use require most disputes to be resolved by individual arbitration and waive
+            your right to a jury trial and to join a class action. You can opt out within 30 days by
+            emailing contactus@theovalapp.com.
+          </Text>
         </View>
 
         <Button
@@ -107,7 +118,9 @@ export default function TermsAcceptanceScreen() {
           accessibilityLabel="Sign out instead"
           style={({ pressed }) => [styles.signOut, pressed && { opacity: 0.5 }]}
         >
-          <Text style={[typography.caption, { fontFamily: fonts.bold }]}>Sign out instead</Text>
+          <Text style={[typography.caption, { fontFamily: fonts.bold }]} maxFontSizeMultiplier={2}>
+            Sign out instead
+          </Text>
         </Pressable>
       </ScrollView>
     </AppBackdrop>
@@ -128,7 +141,9 @@ function RuleRow({
       <View style={[styles.ruleIcon, { backgroundColor: colors.surfaceAlt }]}>
         <Ionicons name={icon} size={19} color={colors.ink} />
       </View>
-      <Text style={[typography.body, { flex: 1 }]}>{label}</Text>
+      <Text style={[typography.body, { flex: 1 }]} maxFontSizeMultiplier={2}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -148,7 +163,9 @@ function PolicyLink({ label, url, last = false }: { label: string; url: string; 
         pressed && { opacity: 0.5 },
       ]}
     >
-      <Text style={typography.subheading}>{label}</Text>
+      <Text style={typography.subheading} maxFontSizeMultiplier={2}>
+        {label}
+      </Text>
       <Ionicons name="chevron-forward" size={18} color={colors.sub} />
     </Pressable>
   );
@@ -188,7 +205,9 @@ function CheckRow({
       >
         {checked ? <Ionicons name="checkmark" size={16} color={colors.onPrimary} /> : null}
       </View>
-      <Text style={[typography.body, { flex: 1, fontSize: 14 }]}>{label}</Text>
+      <Text style={[typography.body, { flex: 1, fontSize: 14 }]} maxFontSizeMultiplier={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

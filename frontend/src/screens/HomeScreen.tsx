@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -179,6 +180,8 @@ function CampusPulse({
   planCount: number;
 }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityText = fontScale >= 2;
   const items: Array<{
     label: string;
     value: number;
@@ -193,17 +196,27 @@ function CampusPulse({
 
   return (
     <Card faceStyle={styles.pulseCard}>
-      <Text style={[typography.subheading, styles.pulseTitle, { color: colors.ink }]}>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={[typography.subheading, styles.pulseTitle, { color: colors.ink }]}
+      >
         Campus pulse
       </Text>
-      <View style={styles.pulseMetrics}>
+      <View style={[styles.pulseMetrics, accessibilityText && styles.pulseMetricsAccessible]}>
         {items.map((item, index) => (
           <React.Fragment key={item.label}>
-            {index ? <View style={[styles.pulseDivider, { backgroundColor: colors.border }]} /> : null}
-            <View style={styles.pulseMetric}>
+            {index && !accessibilityText ? (
+              <View style={[styles.pulseDivider, { backgroundColor: colors.border }]} />
+            ) : null}
+            <View style={[styles.pulseMetric, accessibilityText && styles.pulseMetricAccessible]}>
               <Ionicons name={item.icon} size={20} color={item.color} />
-              <Text style={[styles.pulseValue, { color: colors.ink }]}>{item.value}</Text>
-              <Text style={[typography.captionSmall, styles.pulseLabel, { color: colors.sub }]}>
+              <Text maxFontSizeMultiplier={2} style={[styles.pulseValue, { color: colors.ink }]}>
+                {item.value}
+              </Text>
+              <Text
+                maxFontSizeMultiplier={2}
+                style={[typography.captionSmall, styles.pulseLabel, { color: colors.sub }]}
+              >
                 {item.label}
               </Text>
             </View>
@@ -216,6 +229,8 @@ function CampusPulse({
 
 function NextPlanHero({ pod, onOpen }: { pod: Pod; onOpen: () => void }) {
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const progress = Math.min(1, pod.members.length / Math.max(1, pod.maxMembers));
   const title = getPodTitle(pod);
 
@@ -226,28 +241,41 @@ function NextPlanHero({ pod, onOpen }: { pod: Pod; onOpen: () => void }) {
       end={{ x: 1, y: 1 }}
       style={styles.nextPlanHero}
     >
-      <Text style={[typography.kicker, styles.onPrimaryKicker, { color: colors.onPrimary }]}>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={[typography.kicker, styles.onPrimaryKicker, { color: colors.onPrimary }]}
+      >
         NEXT PLAN
       </Text>
-      <Text style={[styles.nextPlanTitle, { color: colors.onPrimary }]} numberOfLines={2}>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={[styles.nextPlanTitle, { color: colors.onPrimary }]}
+        numberOfLines={2}
+      >
         {title}
       </Text>
       <View style={styles.nextPlanMeta}>
         <Ionicons name="time" size={16} color={colors.onPrimary} />
-        <Text style={[styles.onPrimaryMeta, { color: colors.onPrimary }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.onPrimaryMeta, { color: colors.onPrimary }]}>
           {podDayLabel(pod.meetupTime)} · {podTimeLabel(pod.meetupTime)}
         </Text>
       </View>
       <View style={styles.nextPlanMeta}>
         <Ionicons name="location" size={16} color={colors.onPrimary} />
         <Text
+          maxFontSizeMultiplier={2}
           style={[styles.onPrimaryMeta, styles.metaText, { color: colors.onPrimary }]}
-          numberOfLines={1}
+          numberOfLines={2}
         >
           {pod.location}
         </Text>
       </View>
-      <View style={styles.nextPlanSocial}>
+      <View
+        style={[
+          styles.nextPlanSocial,
+          accessibilityLayout && styles.nextPlanSocialAccessible,
+        ]}
+      >
         <AvatarStack
           names={pod.members.slice(0, 4).map((member) => ({
             name: member.user.name,
@@ -257,23 +285,31 @@ function NextPlanHero({ pod, onOpen }: { pod: Pod; onOpen: () => void }) {
           size={27}
           onColor
         />
-        <Text
-          style={[typography.captionSmall, styles.goingText, { color: colors.onPrimary }]}
-          numberOfLines={1}
-        >
-          {pod.members.length} {pod.members.length === 1 ? 'person' : 'people'} going
-        </Text>
-        <Pressable
-          onPress={onOpen}
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${title}`}
-          style={({ pressed }) => [
-            styles.openPlanButton,
-            { backgroundColor: colors.onPrimary, opacity: pressed ? 0.8 : 1 },
+        <View
+          style={[
+            styles.nextPlanSocialActions,
+            accessibilityLayout && styles.nextPlanSocialActionsAccessible,
           ]}
         >
-          <Text style={[styles.openPlanLabel, { color: colors.primary }]}>Open</Text>
-        </Pressable>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={[typography.captionSmall, styles.goingText, { color: colors.onPrimary }]}
+            numberOfLines={2}
+          >
+            {pod.members.length} {pod.members.length === 1 ? 'person' : 'people'} going
+          </Text>
+          <Pressable
+            onPress={onOpen}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${title}`}
+            style={({ pressed }) => [
+              styles.openPlanButton,
+              { backgroundColor: colors.onPrimary, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Text maxFontSizeMultiplier={2} style={[styles.openPlanLabel, { color: colors.primary }]}>Open</Text>
+          </Pressable>
+        </View>
       </View>
       <View style={styles.nextPlanProgressRow}>
         <View style={styles.nextPlanTrack}>
@@ -285,7 +321,7 @@ function NextPlanHero({ pod, onOpen }: { pod: Pod; onOpen: () => void }) {
           />
         </View>
         <Ionicons name="stopwatch-outline" size={15} color={colors.onPrimary} />
-        <Text style={[styles.countdownText, { color: colors.onPrimary }]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.countdownText, { color: colors.onPrimary }]}>
           {countdownLabel(pod.meetupTime)}
         </Text>
       </View>
@@ -301,10 +337,12 @@ function EmptyPlanHero({
   onCreate: () => void;
 }) {
   const { colors, typography, isDark } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityText = fontScale >= 2;
 
   return (
     <Card padded={false} faceStyle={styles.emptyHero}>
-      <View style={styles.emptyHeroArtWrap}>
+      <View style={[styles.emptyHeroArtWrap, accessibilityText && styles.emptyHeroArtWrapAccessible]}>
         <Image
           source={homeHeroArt}
           resizeMode="cover"
@@ -319,9 +357,9 @@ function EmptyPlanHero({
           style={styles.emptyHeroFade}
         />
       </View>
-      <View style={styles.emptyHeroCopy}>
-        <Text style={[styles.emptyHeroTitle, { color: colors.ink }]}>Nothing planned yet</Text>
-        <Text style={[typography.caption, { color: colors.sub }]}>
+      <View style={[styles.emptyHeroCopy, accessibilityText && styles.emptyHeroCopyAccessible]}>
+        <Text maxFontSizeMultiplier={2} style={[styles.emptyHeroTitle, { color: colors.ink }]}>Nothing planned yet</Text>
+        <Text maxFontSizeMultiplier={2} style={[typography.caption, { color: colors.sub }]}>
           Open the door to something new.
         </Text>
       </View>
@@ -367,16 +405,12 @@ function CompactPodRow({
   const socialMembers = friendsGoing.length ? friendsGoing : pod.members;
 
   return (
-    <Pressable
-      onPress={onOpen}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${title}`}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.compactRow,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
-          opacity: pressed ? 0.74 : 1,
         },
       ]}
     >
@@ -412,7 +446,7 @@ function CompactPodRow({
         size="sm"
         style={styles.compactButton}
       />
-    </Pressable>
+    </View>
   );
 }
 
@@ -437,16 +471,12 @@ function MembershipClubRow({
       : `${membership.club.memberCount} members`;
 
   return (
-    <Pressable
-      onPress={onOpen}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${membership.club.name}`}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.clubRow,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
-          opacity: pressed ? 0.74 : 1,
         },
       ]}
     >
@@ -482,7 +512,7 @@ function MembershipClubRow({
         size="sm"
         style={styles.compactButton}
       />
-    </Pressable>
+    </View>
   );
 }
 
@@ -523,6 +553,8 @@ export default function HomeScreen({ previewData }: { previewData?: HomePreviewD
   const navigation = useNavigation<Nav>();
   const { user, token } = useAuth();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityText = fontScale >= 2;
   const insets = useSafeAreaInsets();
   const dockClearance = useDockClearance();
   const { granted, canAskAgain, userLocation, requestLocation } = useLocationPermission();
@@ -702,26 +734,34 @@ export default function HomeScreen({ previewData }: { previewData?: HomePreviewD
           />
         }
       >
-        <View style={styles.masthead}>
+        <View style={[styles.masthead, accessibilityText && styles.mastheadAccessible]}>
           <Pressable
             onPress={() => navigation.navigate('Profile')}
             accessibilityRole="button"
             accessibilityLabel="Open profile"
           >
-            <Avatar name={user?.name ?? 'You'} uri={user?.avatarUrl} size={46} />
+            <Avatar
+              name={user?.name ?? 'You'}
+              uri={user?.avatarUrl}
+              size={accessibilityText ? 40 : 46}
+            />
           </Pressable>
           <View style={styles.mastheadCopy}>
-            <Text style={[typography.subheading, styles.greeting, { color: colors.ink }]}>
+            <Text
+              accessibilityRole="header"
+              maxFontSizeMultiplier={2}
+              style={[typography.subheading, styles.greeting, { color: colors.ink }]}
+            >
               {greetingForNow()}, {firstName(user?.firstName ?? user?.name)} 👋
             </Text>
-            <Text style={[typography.captionSmall, { color: colors.sub }]}>
+            <Text maxFontSizeMultiplier={2} style={[typography.captionSmall, { color: colors.sub }]}>
               {formatClassYear(user?.classYear, 'osu') ?? 'What’s your move today?'}
             </Text>
           </View>
           <Pressable
             onPress={() => navigation.navigate('MainTabs', { screen: 'Inbox' })}
             accessibilityRole="button"
-            accessibilityLabel="Open inbox"
+            accessibilityLabel={summary?.total ? `Open inbox, ${summary.total} unread` : 'Open inbox'}
             style={({ pressed }) => [
               styles.notificationButton,
               { opacity: pressed ? 0.58 : 1 },
@@ -730,12 +770,17 @@ export default function HomeScreen({ previewData }: { previewData?: HomePreviewD
             <Ionicons name="notifications-outline" size={24} color={colors.ink} />
             {summary?.total ? (
               <View
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
                 style={[
                   styles.badge,
                   { backgroundColor: colors.primary, borderColor: colors.surface },
                 ]}
               >
-                <Text style={[styles.badgeText, { color: colors.onPrimary }]}>
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={[styles.badgeText, { color: colors.onPrimary }]}
+                >
                   {summary.total > 9 ? '9+' : summary.total}
                 </Text>
               </View>
@@ -871,6 +916,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  mastheadAccessible: {
+    alignItems: 'flex-start',
+  },
   mastheadCopy: {
     flex: 1,
     minWidth: 0,
@@ -880,20 +928,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   notificationButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   badge: {
+    // Intrinsic height so the count can reach 200% Dynamic Type without
+    // clipping; the pill radius holds the shape at any size.
     position: 'absolute',
     right: 1,
     top: 0,
     minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minHeight: 18,
+    borderRadius: 999,
     borderWidth: 2,
     paddingHorizontal: 4,
+    paddingVertical: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -914,11 +965,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
   },
+  pulseMetricsAccessible: {
+    minHeight: 0,
+    flexWrap: 'wrap',
+  },
   pulseMetric: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,
+  },
+  pulseMetricAccessible: {
+    flexGrow: 0,
+    flexBasis: '50%',
+    minHeight: 96,
+    paddingVertical: spacing.sm,
   },
   pulseDivider: {
     width: StyleSheet.hairlineWidth,
@@ -966,13 +1027,27 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: 2,
   },
+  nextPlanSocialAccessible: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  nextPlanSocialActions: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  nextPlanSocialActionsAccessible: {
+    flex: 0,
+  },
   goingText: {
     flex: 1,
     fontWeight: '700',
   },
   openPlanButton: {
     minWidth: 74,
-    height: 36,
+    minHeight: 44,
     borderRadius: radii.button,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1009,6 +1084,9 @@ const styles = StyleSheet.create({
   emptyHeroArtWrap: {
     height: 184,
   },
+  emptyHeroArtWrapAccessible: {
+    height: 128,
+  },
   emptyHeroImage: {
     width: '100%',
     height: '100%',
@@ -1025,6 +1103,10 @@ const styles = StyleSheet.create({
     gap: 2,
     marginTop: -26,
     paddingHorizontal: spacing.lg,
+  },
+  emptyHeroCopyAccessible: {
+    marginTop: 0,
+    paddingTop: spacing.md,
   },
   emptyHeroTitle: {
     fontSize: 24,

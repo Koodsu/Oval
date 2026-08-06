@@ -25,7 +25,7 @@ export default function Support() {
 
   return (
     <div className="min-h-screen bg-ink pb-24 pt-20">
-      <main className="mx-auto max-w-3xl px-6 py-12 md:px-10">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-12 md:px-10">
         <div className="mb-12">
           <h1 className="mb-2 font-display text-3xl uppercase tracking-widest text-white">
             Oval Support

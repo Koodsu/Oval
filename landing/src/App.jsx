@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import Nav from './components/Nav'
 import Hero from './components/Hero'
 import CampusLife from './components/CampusLife'
@@ -15,6 +16,7 @@ import DeleteAccount from './components/DeleteAccount'
 import PodInvitePage from './components/PodInvitePage'
 import UserProfilePage from './components/UserProfilePage'
 import ClubsPage from './components/ClubsPage'
+import AccessibilityStatement from './components/AccessibilityStatement'
 import { useScrollReveal } from './hooks/useScrollReveal'
 import { useLocation } from './lib/router'
 
@@ -23,7 +25,7 @@ const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 function LandingPage() {
   useScrollReveal()
   return (
-    <main className="bg-void">
+    <main id="main-content" tabIndex={-1} className="bg-void">
       <Hero />
       <CampusLife />
       <HowItWorks />
@@ -61,23 +63,57 @@ function MainSiteLayout({ children }) {
 export default function App() {
   const { pathname } = useLocation()
   const route = pathname.replace(/\/+$/, '') || '/'
+  const previousRoute = useRef(route)
 
-  if (/^\/pod\/[^/]+$/.test(route)) return <PodInvitePage />
-  if (/^\/users\/[^/]+$/.test(route)) return <UserProfilePage />
-  if (route === '/clubs' || /^\/clubs\/[^/]+$/.test(route)) return <ClubsPage />
+  useEffect(() => {
+    const routeTitles = {
+      '/': 'Oval — Campus is happening right now',
+      '/privacy': 'Privacy Policy | Oval',
+      '/terms': 'Terms of Use | Oval',
+      '/community-guidelines': 'Community Guidelines | Oval',
+      '/support': 'Support | Oval',
+      '/accessibility': 'Accessibility | Oval',
+      '/delete-account': 'Delete Your Account | Oval',
+    }
+    document.title = routeTitles[route]
+      ?? (route.startsWith('/clubs')
+        ? 'Oval for Clubs'
+        : route.startsWith('/pod/')
+          ? 'Pod Invite | Oval'
+          : route.startsWith('/users/')
+            ? 'Profile | Oval'
+            : 'Oval — Campus is happening right now')
 
-  const page = {
-    '/': <LandingPage />,
-    '/privacy': <PrivacyPolicy />,
-    '/terms': <TermsOfUse />,
-    '/community-guidelines': <CommunityGuidelines />,
-    '/support': <Support />,
-    '/delete-account': <DeleteAccount />,
-  }[route] ?? <LandingPage />
+    if (previousRoute.current === route) return
+    previousRoute.current = route
+    window.requestAnimationFrame(() => {
+      document.getElementById('main-content')?.focus({ preventScroll: true })
+    })
+  }, [route])
+
+  let content
+
+  if (/^\/pod\/[^/]+$/.test(route)) content = <PodInvitePage />
+  else if (/^\/users\/[^/]+$/.test(route)) content = <UserProfilePage />
+  else if (route === '/clubs' || /^\/clubs\/[^/]+$/.test(route)) content = <ClubsPage />
+  else {
+    const page = {
+      '/': <LandingPage />,
+      '/privacy': <PrivacyPolicy />,
+      '/terms': <TermsOfUse />,
+      '/community-guidelines': <CommunityGuidelines />,
+      '/support': <Support />,
+      '/accessibility': <AccessibilityStatement />,
+      '/delete-account': <DeleteAccount />,
+    }[route] ?? <LandingPage />
+
+    content = <MainSiteLayout>{page}</MainSiteLayout>
+  }
 
   return (
-    <MainSiteLayout>
-      {page}
-    </MainSiteLayout>
+    <>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      {content}
+    </>
   )
 }

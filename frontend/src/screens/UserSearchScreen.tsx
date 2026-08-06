@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, Text, useWindowDimensions, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -54,6 +54,8 @@ export default function UserSearchScreen({
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const [tab, setTab] = useState<PeopleTab>('discover');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FriendUser[]>([]);
@@ -187,7 +189,7 @@ export default function UserSearchScreen({
 
   const renderPerson = (person: FriendUser, action: 'add' | 'view' = 'add') => (
     <Card key={person.id} padded={false}>
-      <View style={styles.personRow}>
+      <View style={[styles.personRow, accessibilityLayout && styles.personRowLargeText]}>
         <Pressable
           style={styles.personIdentity}
           onPress={() => void openProfile(person)}
@@ -196,15 +198,26 @@ export default function UserSearchScreen({
         >
           <Avatar name={person.name} uri={person.avatarUrl} size={48} />
           <View style={styles.personCopy}>
-            <Text style={typography.heading} numberOfLines={1}>
+            <Text
+              style={typography.heading}
+              numberOfLines={accessibilityLayout ? undefined : 1}
+              maxFontSizeMultiplier={2}
+            >
               {person.name}
             </Text>
-            <Text style={typography.captionSmall} numberOfLines={1}>
+            <Text
+              style={typography.captionSmall}
+              numberOfLines={accessibilityLayout ? undefined : 1}
+              maxFontSizeMultiplier={2}
+            >
               {[person.major, person.classYear].filter(Boolean).join(' · ') ||
                 (person.verifiedUniversity ? 'Verified Ohio State student' : 'Student')}
             </Text>
             {person.mutualFriendCount ? (
-              <Text style={[typography.captionSmall, { color: colors.sub }]}>
+              <Text
+                style={[typography.captionSmall, { color: colors.sub }]}
+                maxFontSizeMultiplier={2}
+              >
                 {person.mutualFriendCount} mutual{' '}
                 {person.mutualFriendCount === 1 ? 'friend' : 'friends'}
               </Text>
@@ -228,6 +241,7 @@ export default function UserSearchScreen({
           }
           loading={busyUserId === person.id}
           disabled={sentUserIds.has(person.id)}
+          style={accessibilityLayout && styles.fullWidthAction}
         />
       </View>
     </Card>
@@ -274,7 +288,9 @@ export default function UserSearchScreen({
         ) : hasQuery ? (
           results.length ? (
             <View style={styles.section}>
-              <Text style={typography.kicker}>SEARCH RESULTS</Text>
+              <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                SEARCH RESULTS
+              </Text>
               {results.map((person) =>
                 renderPerson(
                   person,
@@ -296,7 +312,9 @@ export default function UserSearchScreen({
           <>
             {suggestions.length ? (
               <View style={styles.section}>
-                <Text style={typography.kicker}>SUGGESTED FOR YOU</Text>
+                <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                  SUGGESTED FOR YOU
+                </Text>
                 {suggestions.map((person) => renderPerson(person))}
               </View>
             ) : (
@@ -308,16 +326,25 @@ export default function UserSearchScreen({
             )}
             {recent.length ? (
               <View style={styles.section}>
-                <Text style={typography.kicker}>RECENT SEARCHES</Text>
+                <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                  RECENT SEARCHES
+                </Text>
                 <Card padded={false}>
                   {recent.map((person) => (
                     <View key={person.id} style={styles.recentRow}>
                       <Pressable
                         style={styles.recentIdentity}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${person.name}'s profile`}
                         onPress={() => void openProfile(person)}
                       >
                         <Avatar name={person.name} uri={person.avatarUrl} size={34} />
-                        <Text style={[typography.subheading, { flex: 1 }]}>{person.name}</Text>
+                        <Text
+                          style={[typography.subheading, { flex: 1 }]}
+                          maxFontSizeMultiplier={2}
+                        >
+                          {person.name}
+                        </Text>
                       </Pressable>
                       <Pressable
                         onPress={() => void removeRecent(person.id)}
@@ -325,7 +352,12 @@ export default function UserSearchScreen({
                         accessibilityLabel={`Remove ${person.name} from recent searches`}
                         hitSlop={10}
                       >
-                        <Text style={[typography.caption, { color: colors.sub }]}>×</Text>
+                        <Text
+                          style={[typography.caption, { color: colors.sub }]}
+                          maxFontSizeMultiplier={2}
+                        >
+                          ×
+                        </Text>
                       </Pressable>
                     </View>
                   ))}
@@ -337,7 +369,9 @@ export default function UserSearchScreen({
         ) : tab === 'friends' ? (
           filteredFriends.length ? (
             <View style={styles.section}>
-              <Text style={typography.kicker}>YOUR FRIENDS</Text>
+              <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                YOUR FRIENDS
+              </Text>
               {filteredFriends.map((person) => renderPerson(person, 'view'))}
             </View>
           ) : (
@@ -351,7 +385,11 @@ export default function UserSearchScreen({
           )
         ) : requestRows.length ? (
           <View style={styles.section}>
-            {incoming.length ? <Text style={typography.kicker}>INCOMING</Text> : null}
+            {incoming.length ? (
+              <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                INCOMING
+              </Text>
+            ) : null}
             {incoming.map((request) => (
               <RequestRow
                 key={request.id}
@@ -364,7 +402,11 @@ export default function UserSearchScreen({
                 onOpen={(person) => void openProfile(person)}
               />
             ))}
-            {outgoing.length ? <Text style={typography.kicker}>SENT</Text> : null}
+            {outgoing.length ? (
+              <Text style={typography.kicker} maxFontSizeMultiplier={2}>
+                SENT
+              </Text>
+            ) : null}
             {outgoing.map((request) => (
               <RequestRow
                 key={request.id}
@@ -391,16 +433,28 @@ export default function UserSearchScreen({
 function InviteCard({ onPress }: { onPress: () => void }) {
   const styles = useStyles();
   const { colors, typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   return (
-    <Slab onPress={onPress} faceStyle={styles.inviteCard} accessibilityLabel="Invite someone to Oval">
+    <Slab
+      onPress={onPress}
+      faceStyle={[styles.inviteCard, accessibilityLayout && styles.inviteCardLargeText]}
+      accessibilityLabel="Invite someone to Oval"
+    >
       <View style={[styles.inviteIcon, { backgroundColor: colors.primarySoft }]}>
         <Text style={{ color: colors.accentText, fontSize: 24 }}>↗</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={typography.subheading}>Invite someone to Oval</Text>
-        <Text style={typography.captionSmall}>Share a link with a friend.</Text>
+        <Text style={typography.subheading} maxFontSizeMultiplier={2}>
+          Invite someone to Oval
+        </Text>
+        <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+          Share a link with a friend.
+        </Text>
       </View>
-      <Text style={[typography.heading, { color: colors.accentText }]}>Share</Text>
+      <Text style={[typography.heading, { color: colors.accentText }]} maxFontSizeMultiplier={2}>
+        Share
+      </Text>
     </Slab>
   );
 }
@@ -424,23 +478,44 @@ function RequestRow({
 }) {
   const styles = useStyles();
   const { typography } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   if (!person) return null;
   return (
     <Card padded>
       <View style={styles.requestRow}>
-        <Pressable style={styles.recentIdentity} onPress={() => onOpen(person)}>
+        <Pressable
+          style={styles.recentIdentity}
+          onPress={() => onOpen(person)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${person.name}'s profile`}
+        >
           <Avatar name={person.name} uri={person.avatarUrl} size={46} />
           <View style={{ flex: 1 }}>
-            <Text style={typography.heading}>{person.name}</Text>
-            <Text style={typography.captionSmall}>
+            <Text style={typography.heading} maxFontSizeMultiplier={2}>
+              {person.name}
+            </Text>
+            <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
               {[person.major, person.classYear].filter(Boolean).join(' · ') || 'Ohio State student'}
             </Text>
           </View>
         </Pressable>
-        <View style={styles.requestActions}>
-          <Button label={primaryLabel} size="sm" onPress={onPrimary} loading={busy} />
+        <View style={[styles.requestActions, accessibilityLayout && styles.requestActionsLargeText]}>
+          <Button
+            label={primaryLabel}
+            size="sm"
+            onPress={onPrimary}
+            loading={busy}
+            style={accessibilityLayout && styles.fullWidthAction}
+          />
           {secondaryLabel && onSecondary ? (
-            <Button label={secondaryLabel} size="sm" variant="ghost" onPress={onSecondary} />
+            <Button
+              label={secondaryLabel}
+              size="sm"
+              variant="ghost"
+              onPress={onSecondary}
+              style={accessibilityLayout && styles.fullWidthAction}
+            />
           ) : null}
         </View>
       </View>
@@ -462,6 +537,13 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     padding: spacing.md,
+  },
+  personRowLargeText: {
+    alignItems: 'stretch' as const,
+    flexDirection: 'column' as const,
+  },
+  fullWidthAction: {
+    alignSelf: 'stretch' as const,
   },
   personIdentity: {
     flex: 1,
@@ -486,6 +568,10 @@ const useStyles = createThemedStyles((_t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     padding: spacing.md,
+  },
+  inviteCardLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
   },
   inviteIcon: {
     width: 42,
@@ -516,5 +602,8 @@ const useStyles = createThemedStyles((_t: Theme) => ({
   requestActions: {
     flexDirection: 'row' as const,
     gap: spacing.sm,
+  },
+  requestActionsLargeText: {
+    flexDirection: 'column' as const,
   },
 }));

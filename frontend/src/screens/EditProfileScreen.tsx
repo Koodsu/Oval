@@ -199,13 +199,25 @@ export default function EditProfileScreen({ navigation }: Props) {
                 <Ionicons name="camera" size={17} color={colors.ink} />
               </View>
             </Pressable>
-            <Pressable onPress={() => void pickAvatar()} disabled={avatarBusy}>
+            <Pressable
+              onPress={() => void pickAvatar()}
+              disabled={avatarBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+              accessibilityState={{ disabled: avatarBusy, busy: avatarBusy }}
+            >
               <Text style={[typography.subheading, { color: colors.accentText }]}>
                 {avatarBusy ? 'Updating…' : 'Change photo'}
               </Text>
             </Pressable>
             {user?.avatarUrl ? (
-              <Pressable onPress={() => void removeCurrentAvatar()} disabled={avatarBusy}>
+              <Pressable
+                onPress={() => void removeCurrentAvatar()}
+                disabled={avatarBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Remove profile photo"
+                accessibilityState={{ disabled: avatarBusy, busy: avatarBusy }}
+              >
                 <Text style={[typography.captionSmall, { color: colors.sub }]}>Remove photo</Text>
               </Pressable>
             ) : null}

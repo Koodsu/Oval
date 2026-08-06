@@ -37,13 +37,15 @@ export default function WaitlistForm({ dark = false, centered = false, onSuccess
   if (submitted) {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className={`inline-flex items-center gap-3 rounded-full px-6 py-4 text-sm font-semibold ${
           dark
             ? 'border border-green-400/30 bg-green-400/10 text-green-400'
             : 'border border-green-700/30 bg-green-50 text-green-700'
         }`}
       >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none">
           <path d="M3 9l4 4 8-8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         You're in! We'll reach out before launch.
@@ -66,24 +68,26 @@ export default function WaitlistForm({ dark = false, centered = false, onSuccess
           required
           placeholder="your@osu.edu"
           aria-label="Email address"
+          aria-describedby={error ? 'waitlist-error' : undefined}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className={`min-w-0 flex-1 rounded-full border px-5 py-3.5 text-sm font-medium outline-none transition-colors sm:border-0 sm:bg-transparent sm:py-3 ${
             dark
-              ? 'border-white/15 bg-white/[0.06] text-white placeholder:text-white/30 focus:border-flame/50'
+              ? 'border-white/15 bg-white/[0.06] text-white placeholder:text-white/65 focus:border-flame/50'
               : 'border-ink/20 bg-white text-ink placeholder:text-warm-gray focus:border-scarlet'
           }`}
         />
         <button
           type="submit"
           disabled={loading}
+          aria-busy={loading}
           className="group relative flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-full bg-gradient-to-r from-scarlet to-flame px-7 py-3.5 text-sm font-bold tracking-wide text-white transition-transform duration-150 hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 sm:py-3"
           style={{ boxShadow: '0 4px 28px rgba(187,0,0,0.45)' }}
         >
           <span className="relative z-10 flex items-center gap-2">
             {loading ? 'Joining…' : 'Get early access'}
             {!loading && (
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="transition-transform duration-200 group-hover:translate-x-0.5">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" className="transition-transform duration-200 group-hover:translate-x-0.5">
                 <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
@@ -92,7 +96,7 @@ export default function WaitlistForm({ dark = false, centered = false, onSuccess
         </button>
       </form>
       {error && (
-        <p className={`text-xs font-medium ${dark ? 'text-red-400' : 'text-red-600'}`}>
+        <p id="waitlist-error" role="alert" className={`text-xs font-medium ${dark ? 'text-red-400' : 'text-red-600'}`}>
           {error}
         </p>
       )}

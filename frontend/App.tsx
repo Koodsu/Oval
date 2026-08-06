@@ -1,6 +1,6 @@
 import React from 'react';
 import { LinkingOptions } from '@react-navigation/native';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import {
   BottomTabBarProps,
@@ -14,7 +14,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { BlurView } from 'expo-blur';
 import Animated, {
+  ReducedMotionConfig,
+  ReduceMotion,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
@@ -85,6 +88,8 @@ import {
   getUiPreviewMode,
   getUiPreviewNeutralDock,
   getUiPreviewTab,
+  setNativeUiPreviewMode,
+  uiPreviewModeFromUrl,
 } from './src/dev/previewMode';
 import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/components/ui';
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
@@ -285,6 +290,8 @@ function TabItem({
   badge?: number | string;
 }) {
   const { colors, isDark } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const pop = useSharedValue(focused ? 1 : 0);
   const activeTint = isDark ? colors.accentText : colors.primary;
 
@@ -304,7 +311,9 @@ function TabItem({
       }}
       onLongPress={onLongPress}
       accessibilityRole="tab"
-      accessibilityLabel={label}
+      accessibilityLabel={
+        typeof badge === 'number' && badge > 0 ? `${label}, ${badge} unread` : label
+      }
       accessibilityState={{ selected }}
       style={styles.tabSlot}
     >
@@ -319,11 +328,15 @@ function TabItem({
         ) : null}
       </Animated.View>
       <Text
+        // Scales the full 200% required by WCAG 1.4.4. The dock has no fixed
+        // height (see styles.dock), so it grows to fit; wrapping to two lines
+        // at accessibility sizes avoids truncating the label instead.
+        maxFontSizeMultiplier={2}
         style={[
           styles.tabLabel,
           { color: focused ? activeTint : colors.sub },
         ]}
-        numberOfLines={1}
+        numberOfLines={accessibilityLayout ? 2 : 1}
       >
         {label}
       </Text>
@@ -761,12 +774,13 @@ function SecondaryExperiencePreview({ mode }: { mode: string }) {
 }
 
 function AuthedApp() {
+  const reduceMotion = useReducedMotion();
   return (
     <Stack.Navigator
       initialRouteName="MainTabs"
       screenOptions={{
         headerShown: false,
-        animation: Platform.OS === 'ios' ? 'default' : 'slide_from_right',
+        animation: reduceMotion ? 'none' : Platform.OS === 'ios' ? 'default' : 'slide_from_right',
         animationDuration: 280,
       }}
     >
@@ -831,7 +845,22 @@ function AppGate() {
 
 function ThemedApp() {
   const { colors, isDark } = useTheme();
-  const [preview] = React.useState(getUiPreviewMode);
+  const [preview, setPreview] = React.useState(getUiPreviewMode);
+
+  React.useEffect(() => {
+    if (!__DEV__ || Platform.OS === 'web') return undefined;
+
+    const applyPreviewUrl = (url: string | null) => {
+      if (url) {
+        const nextPreview = uiPreviewModeFromUrl(url);
+        setNativeUiPreviewMode(nextPreview);
+        setPreview(nextPreview);
+      }
+    };
+    void Linking.getInitialURL().then(applyPreviewUrl);
+    const subscription = Linking.addEventListener('url', ({ url }) => applyPreviewUrl(url));
+    return () => subscription.remove();
+  }, []);
   const stage2Mode = preview?.startsWith('stage2-')
     ? (preview.replace('stage2-', '') as Stage2PreviewMode)
     : null;
@@ -857,11 +886,11 @@ function ThemedApp() {
     <NavigationContainer theme={navTheme} linking={linking}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {preview?.startsWith('club-') ? (
-        <ClubExperiencePreview mode={preview} />
+        <ClubExperiencePreview key={preview} mode={preview} />
       ) : preview?.startsWith('secondary-') ? (
-        <SecondaryExperiencePreview mode={preview} />
+        <SecondaryExperiencePreview key={preview} mode={preview} />
       ) : preview?.startsWith('ui-') ? (
-        <FormExperiencePreview mode={preview} />
+        <FormExperiencePreview key={preview} mode={preview} />
       ) : preview === 'foundation' ? (
         <FoundationPreviewTabs />
       ) : stage2Mode &&
@@ -906,6 +935,7 @@ function App() {
       <View style={[styles.flex, Platform.OS === 'web' && styles.webShell]}>
         <SafeAreaProvider>
           <ThemeProvider>
+            <ReducedMotionConfig mode={ReduceMotion.System} />
             <ThemeReadyGate>
               <ErrorBoundary>
                 <AuthProvider>

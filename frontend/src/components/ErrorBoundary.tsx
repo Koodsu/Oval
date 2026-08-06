@@ -9,7 +9,7 @@ function Fallback({ onReset }: { onReset: () => void }) {
   return (
     <AppBackdrop>
       <View style={{ flex: 1, justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
-        <Text style={typography.title}>Something went wrong</Text>
+        <Text accessibilityRole="header" style={typography.title}>Something went wrong</Text>
         <Text style={[typography.body, { color: colors.sub }]}>
           The app hit an unexpected error. Try again — if it keeps happening, fully close and reopen
           the app.

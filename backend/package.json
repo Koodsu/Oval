@@ -17,6 +17,7 @@
     "seed:launch": "ts-node prisma/seed-launch.ts",
     "seed:screenshots": "ts-node prisma/seed-screenshots.ts",
     "cleanup:screenshots": "ts-node prisma/cleanup-screenshots.ts",
+    "reseed:screenshots": "./prisma/reseed-screenshots.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "prisma generate"

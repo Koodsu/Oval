@@ -1339,6 +1339,9 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   <Pressable
                     key={officer.userId}
                     onPress={() => setSelectedOfficerId(officer.userId)}
+                    accessibilityRole="radio"
+                    accessibilityLabel={officer.user.name}
+                    accessibilityState={{ checked: selectedOfficer?.userId === officer.userId }}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -1456,6 +1459,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   setPreview(null);
                 }}
                 accessibilityRole="radio"
+                accessibilityLabel={`${title}. ${sub}`}
                 accessibilityState={{ selected: audienceType === value }}
                 style={({ pressed }) => ({
                   minHeight: 64,
@@ -1489,6 +1493,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   setPreview(null);
                 }}
                 accessibilityRole="radio"
+                accessibilityLabel={`No RSVP. ${analytics.nonRsvpCount} recipients for ${meetings[0].title}`}
                 accessibilityState={{ selected: audienceType === 'NON_RSVP' }}
                 style={({ pressed }) => ({
                   minHeight: 64,
@@ -1522,6 +1527,7 @@ export default function ClubManageScreen({ route, navigation }: Props) {
                   setPreview(null);
                 }}
                 accessibilityRole="radio"
+                accessibilityLabel="Roles. Select a member role"
                 accessibilityState={{ selected: audienceType === 'CUSTOM_ROLE' }}
                 style={({ pressed }) => ({
                   minHeight: 64,

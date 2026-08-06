@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
@@ -131,6 +132,8 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const accessibilityLayout = fontScale >= 2;
   const { user } = useAuth();
   const { activity, startCreate } = route.params;
   const [pods, setPods] = useState<Pod[]>([]);
@@ -424,16 +427,22 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
               <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
               <View style={[styles.progressDot, { backgroundColor: colors.sunken }]} />
             </View>
-            <Text style={styles.heroTitle}>Make a plan</Text>
-            <Text style={[typography.body, { color: colors.sub }]}>
+            <Text style={styles.heroTitle} maxFontSizeMultiplier={2}>
+              Make a plan
+            </Text>
+            <Text style={[typography.body, { color: colors.sub }]} maxFontSizeMultiplier={2}>
               Bring people together around something simple.
             </Text>
           </View>
         ) : (
           <View style={styles.heroBlock}>
-            <Text style={styles.heroTitle}>{activity.title}</Text>
+            <Text style={styles.heroTitle} maxFontSizeMultiplier={2}>
+              {activity.title}
+            </Text>
             {activity.description ? (
-              <Text style={[typography.body, { color: colors.sub }]}>{activity.description}</Text>
+              <Text style={[typography.body, { color: colors.sub }]} maxFontSizeMultiplier={2}>
+                {activity.description}
+              </Text>
             ) : null}
           </View>
         )}
@@ -441,15 +450,19 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
         {/* Composer */}
         <Card padded={false} faceStyle={composerExpanded ? styles.composerCard : undefined}>
           <Pressable
-            style={styles.composerToggle}
+            style={[styles.composerToggle, accessibilityLayout && styles.composerToggleLargeText]}
             onPress={toggleComposer}
             accessibilityRole="button"
             accessibilityLabel={composerExpanded ? 'Collapse create pod' : 'Expand create pod'}
           >
             <View>
-              <Text style={typography.title}>{composerExpanded ? 'Pod details' : 'Start a pod'}</Text>
+              <Text style={typography.title} maxFontSizeMultiplier={2}>
+                {composerExpanded ? 'Pod details' : 'Start a pod'}
+              </Text>
               {!composerExpanded ? (
-                <Text style={typography.captionSmall}>Turn {activity.title.toLowerCase()} into a plan.</Text>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                  Turn {activity.title.toLowerCase()} into a plan.
+                </Text>
               ) : null}
             </View>
             <View
@@ -487,7 +500,9 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
               />
 
               <View style={{ gap: 6 }}>
-                <Text style={typography.captionSmall}>Date & time</Text>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                  Date & time
+                </Text>
                 <View
                   style={[
                     styles.dateWell,
@@ -504,13 +519,16 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
               </View>
 
               <View style={{ gap: 6 }}>
-                <Text style={typography.captionSmall}>Where</Text>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                  Where
+                </Text>
                 <Pressable
                   onPress={openLocationSheet}
                   accessibilityRole="button"
                   accessibilityLabel="Choose pod location"
                   style={({ pressed }) => [
                     styles.locationPicker,
+                    accessibilityLayout && styles.locationPickerLargeText,
                     {
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
@@ -525,23 +543,34 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
                     <Text
                       style={[typography.bodyMedium, { color: location ? colors.ink : colors.faint }]}
                       numberOfLines={1}
+                      maxFontSizeMultiplier={2}
                     >
                       {location || 'Choose an address'}
                     </Text>
                     {locationAddress && locationAddress !== location ? (
-                      <Text style={typography.captionSmall} numberOfLines={1}>
+                      <Text
+                        style={typography.captionSmall}
+                        numberOfLines={accessibilityLayout ? undefined : 1}
+                        maxFontSizeMultiplier={2}
+                      >
                         {locationAddress}
                       </Text>
                     ) : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.sub} />
+                  {!accessibilityLayout ? (
+                    <Ionicons name="chevron-forward" size={18} color={colors.sub} />
+                  ) : null}
                 </Pressable>
               </View>
 
-              <View style={styles.memberRow}>
+              <View style={[styles.memberRow, accessibilityLayout && styles.memberRowLargeText]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={typography.captionSmall}>Spots</Text>
-                  <Text style={typography.bodyMedium}>Keep the group small.</Text>
+                  <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                    Spots
+                  </Text>
+                  <Text style={typography.bodyMedium} maxFontSizeMultiplier={2}>
+                    Keep the group small.
+                  </Text>
                 </View>
                 <View style={styles.stepper}>
                   <Pressable
@@ -564,7 +593,9 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
                       color={maxMembers === 2 ? colors.faint : colors.bg}
                     />
                   </Pressable>
-                  <Text style={styles.stepperValue}>{maxMembers}</Text>
+                  <Text style={styles.stepperValue} maxFontSizeMultiplier={2}>
+                    {maxMembers}
+                  </Text>
                   <Pressable
                     style={[
                       styles.stepperButton,
@@ -599,20 +630,26 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
               />
 
               <View style={[styles.preview, { borderColor: colors.border }]}>
-                <View style={styles.previewHeading}>
-                  <Text style={typography.subheading}>Live preview</Text>
+                <View style={[styles.previewHeading, accessibilityLayout && styles.previewHeadingLargeText]}>
+                  <Text style={typography.subheading} maxFontSizeMultiplier={2}>
+                    Live preview
+                  </Text>
                   <Sticker label={activity.category} tint={colors.greenSoft} small />
                 </View>
-                <Text style={typography.captionSmall}>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
                   {formatDateTime(meetupTime.toISOString())}
                 </Text>
-                <Text style={typography.captionSmall}>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
                   {location || 'Choose a meetup spot'} · {maxMembers} spots
                 </Text>
-                <Text style={[typography.title, { marginTop: spacing.sm }]}>
+                <Text style={[typography.title, { marginTop: spacing.sm }]} maxFontSizeMultiplier={2}>
                   {title.trim() || activity.title}
                 </Text>
-                {note.trim() ? <Text style={typography.caption}>{note.trim()}</Text> : null}
+                {note.trim() ? (
+                  <Text style={typography.caption} maxFontSizeMultiplier={2}>
+                    {note.trim()}
+                  </Text>
+                ) : null}
               </View>
 
               <Button
@@ -622,9 +659,11 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
                 disabled={Boolean(liveTitleError || titleServerError)}
                 size="lg"
               />
-              <View style={styles.privateHint}>
+              <View style={[styles.privateHint, accessibilityLayout && styles.privateHintLargeText]}>
                 <Ionicons name="lock-closed-outline" size={14} color={colors.sub} />
-                <Text style={typography.captionSmall}>Only invited members can see private pods.</Text>
+                <Text style={typography.captionSmall} maxFontSizeMultiplier={2}>
+                  Only invited members can see private pods.
+                </Text>
               </View>
             </View>
           ) : null}
@@ -647,9 +686,7 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
               return (
                 <Slab
                   key={pod.id}
-                  onPress={() => navigation.navigate('PodDetail', { podId: pod.id })}
                   faceStyle={styles.podFace}
-                  accessibilityLabel={`Open pod at ${pod.location}`}
                 >
                   <View style={styles.podTop}>
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -807,6 +844,8 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
           <View style={[styles.mapWrap, { borderColor: colors.border }]}>
             <MapView
               provider={PROVIDER_DEFAULT}
+              accessibilityLabel="Campus map showing pod and meetup locations"
+              accessibilityHint="Use the location field or campus spot suggestions to choose a location without the map"
               style={styles.map}
               initialRegion={{ ...OSU_CAMPUS_CENTER, ...OSU_CAMPUS_DELTA }}
               onPress={(event) => void handleMapPress(event)}
@@ -873,6 +912,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  composerToggleLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   composerCard: {
     borderRadius: radii.md,
   },
@@ -919,6 +961,9 @@ const useStyles = createThemedStyles((t: Theme) => ({
     alignItems: 'center' as const,
     gap: spacing.sm,
   },
+  locationPickerLargeText: {
+    alignItems: 'flex-start' as const,
+  },
   locationIcon: {
     width: 36,
     height: 36,
@@ -936,6 +981,10 @@ const useStyles = createThemedStyles((t: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
+  },
+  memberRowLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
   },
   stepper: {
     flexDirection: 'row' as const,
@@ -973,11 +1022,19 @@ const useStyles = createThemedStyles((t: Theme) => ({
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
+  previewHeadingLargeText: {
+    alignItems: 'flex-start' as const,
+    flexDirection: 'column' as const,
+  },
   privateHint: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: spacing.xs,
+  },
+  privateHintLargeText: {
+    alignItems: 'flex-start' as const,
+    justifyContent: 'flex-start' as const,
   },
   locationSheet: {
     gap: spacing.md,
