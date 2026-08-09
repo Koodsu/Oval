@@ -163,14 +163,20 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     headers['Authorization'] = `Bearer ${sentAuthToken}`;
   }
 
-  const shouldUseCache = isGetRequest(options);
+  const isGet = isGetRequest(options);
+  // App data is shared and changes outside this device, so reads are fresh by
+  // default. A genuinely immutable endpoint may explicitly opt into the short
+  // in-memory cache with `cache: 'force-cache'`.
+  const shouldUseCache = isGet && options.cache === 'force-cache';
+  const requestOptions: RequestInit =
+    isGet && options.cache == null ? { ...options, cache: 'no-store' } : options;
   const key = shouldUseCache ? cacheKey(path) : null;
   if (key) {
     const cached = getCache.get(key);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data as T;
     }
-  } else {
+  } else if (!isGet) {
     clearApiCache();
   }
 
@@ -194,7 +200,11 @@ async function request<T>(path: string, options: RequestInit = {}, signal?: Abor
     }
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal: controller.signal });
+      res = await fetch(`${API_BASE}${path}`, {
+        ...requestOptions,
+        headers,
+        signal: controller.signal,
+      });
       if (res.status === 204) {
         data = {};
       } else {
@@ -557,7 +567,11 @@ export interface GetClubOfficerMessagesResponse {
 }
 
 export const getClubMessages = (clubId: string, signal?: AbortSignal) =>
-  request<GetClubMessagesResponse>(`/clubs/${encodeURIComponent(clubId)}/messages`, {}, signal);
+  request<GetClubMessagesResponse>(
+    `/clubs/${encodeURIComponent(clubId)}/messages`,
+    { cache: 'no-store' },
+    signal,
+  );
 
 export const sendClubMessage = (clubId: string, content: string) =>
   request<import('./types').ClubMessage>(`/clubs/${encodeURIComponent(clubId)}/messages`, {
@@ -577,7 +591,7 @@ export const sendClubTyping = (clubId: string) =>
 export const getClubOfficerMessages = (clubId: string, signal?: AbortSignal) =>
   request<GetClubOfficerMessagesResponse>(
     `/clubs/${encodeURIComponent(clubId)}/officer-messages`,
-    {},
+    { cache: 'no-store' },
     signal
   );
 
@@ -747,7 +761,7 @@ export interface GetClubChannelMessagesResponse {
 export const getClubChannelMessages = (clubId: string, channelId: string, signal?: AbortSignal) =>
   request<GetClubChannelMessagesResponse>(
     `/clubs/${encodeURIComponent(clubId)}/channels/${encodeURIComponent(channelId)}/messages`,
-    {},
+    { cache: 'no-store' },
     signal
   );
 
@@ -1018,7 +1032,7 @@ export interface InboxSummary {
 }
 
 export const getInboxSummary = (signal?: AbortSignal) =>
-  request<InboxSummary>('/inbox/summary', {}, signal);
+  request<InboxSummary>('/inbox/summary', { cache: 'no-store' }, signal);
 
 export const getMyPodHistory = () =>
   request<import('./types').Pod[]>('/pods/mine/history');
@@ -1162,7 +1176,11 @@ function messagePageQuery(opts?: MessagePageOptions): string {
 }
 
 export const getMessages = (podId: string, opts?: MessagePageOptions, signal?: AbortSignal) =>
-  request<GetMessagesResponse>(`/pods/${podId}/messages${messagePageQuery(opts)}`, {}, signal);
+  request<GetMessagesResponse>(
+    `/pods/${podId}/messages${messagePageQuery(opts)}`,
+    { cache: 'no-store' },
+    signal,
+  );
 
 export const sendPodTyping = (podId: string) =>
   request<{ ok: boolean }>(`/pods/${podId}/typing`, { method: 'POST' });
@@ -1547,7 +1565,7 @@ export const unfriend = (userId: string) =>
 
 // Direct messages
 export const getMessageThreads = () =>
-  request<import('./types').DirectMessageThread[]>('/messages/threads');
+  request<import('./types').DirectMessageThread[]>('/messages/threads', { cache: 'no-store' });
 
 export const getThreadByUser = (userId: string) =>
   request<{ id: string; otherUser: import('./types').FriendUser; updatedAt: string }>(
@@ -1563,7 +1581,10 @@ export interface GetThreadMessagesResponse {
 }
 
 export const getThreadMessages = (threadId: string, opts?: MessagePageOptions) =>
-  request<GetThreadMessagesResponse>(`/messages/threads/${threadId}${messagePageQuery(opts)}`);
+  request<GetThreadMessagesResponse>(
+    `/messages/threads/${threadId}${messagePageQuery(opts)}`,
+    { cache: 'no-store' },
+  );
 
 export const markDMThreadRead = (threadId: string) =>
   request<{ ok: boolean }>(`/messages/threads/${threadId}/read`, { method: 'PATCH' });

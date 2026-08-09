@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,6 +45,7 @@ import {
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function ProfileScreen() {
+  const sharedStateVersion = useSharedStateVersion('users', 'friends', 'pods', 'clubs');
   const navigation = useNavigation<Nav>();
   const { user, signOut } = useAuth();
   const { colors, typography } = useTheme();
@@ -92,7 +94,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   return (

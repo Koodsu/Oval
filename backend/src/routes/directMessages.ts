@@ -268,7 +268,7 @@ router.post('/threads/:id/typing', async (req: AuthRequest, res: Response): Prom
       return;
     }
     setTyping('dm', threadId, userId);
-    void broadcast(dmTopic(threadId), REALTIME_EVENTS.TYPING);
+    await broadcast(dmTopic(threadId), REALTIME_EVENTS.TYPING, { userId });
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -323,7 +323,7 @@ router.post('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest, r
       create: { directMessageId: msgId, userId, emoji },
       update: {},
     });
-    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
 
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
@@ -377,7 +377,7 @@ router.delete('/threads/:id/messages/:msgId/reactions', async (req: AuthRequest,
     await prisma.directMessageReaction.deleteMany({
       where: { directMessageId: msgId, userId, emoji },
     });
-    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
 
     const updated = await prisma.directMessage.findUnique({
       where: { id: msgId },
@@ -420,7 +420,7 @@ router.delete('/threads/:id/messages/:msgId', async (req: AuthRequest, res: Resp
       return;
     }
     await prisma.directMessage.delete({ where: { id: msgId } });
-    void broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(dmTopic(threadId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
     res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -511,8 +511,10 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
       }),
     ]);
 
-    void broadcast(dmTopic(threadId), REALTIME_EVENTS.NEW_MESSAGE);
-    void broadcast(userTopic(otherId), REALTIME_EVENTS.INBOX_UPDATED);
+    await Promise.all([
+      broadcast(dmTopic(threadId), REALTIME_EVENTS.NEW_MESSAGE, { userId }),
+      broadcast(userTopic(otherId), REALTIME_EVENTS.INBOX_UPDATED),
+    ]);
     NotificationService.notifyDirectMessage(threadId, userId).catch(() => {});
 
     res.status(201).json(formatDmMessage(message));

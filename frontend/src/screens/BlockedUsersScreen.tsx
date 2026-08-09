@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import { getApiErrorMessage, getBlockedUsers, unblockUser } from '../api';
 import { RootStackParamList } from '../../App';
 import {
@@ -26,6 +27,7 @@ export default function BlockedUsersScreen({
   navigation,
   previewUsers,
 }: Props & { previewUsers?: BlockedUser[] }) {
+  const sharedStateVersion = useSharedStateVersion('users', 'friends');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -51,7 +53,7 @@ export default function BlockedUsersScreen({
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const confirmUnblock = (user: BlockedUser) => {

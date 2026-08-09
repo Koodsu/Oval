@@ -24,6 +24,7 @@ import Animated, {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SharedStateInvalidationProvider } from './src/context/SharedStateInvalidationContext';
 import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -95,6 +96,12 @@ import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/com
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 import { REALTIME_INBOX_EVENTS, useRealtimeChannel } from './src/hooks/useRealtimeChannel';
 import { captureReferralFromUrl } from './src/lib/referrals';
+
+// NOTE: Sentry is initialised once, by initMonitoring() above. Do not add a
+// second Sentry.init() here — @sentry/wizard tries to inject one with a
+// hardcoded DSN and sendDefaultPii: true, which would defeat the DSN gating and
+// the anonymous configuration in src/lib/monitoring.ts. If you rerun the wizard,
+// delete what it adds to this file.
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 if (Platform.OS !== 'web') {
@@ -939,7 +946,9 @@ function App() {
             <ThemeReadyGate>
               <ErrorBoundary>
                 <AuthProvider>
-                  <ThemedApp />
+                  <SharedStateInvalidationProvider>
+                    <ThemedApp />
+                  </SharedStateInvalidationProvider>
                 </AuthProvider>
               </ErrorBoundary>
               <ToastHost />

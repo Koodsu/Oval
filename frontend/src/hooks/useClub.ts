@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { clubExperienceFixture } from '../dev/clubExperienceFixtures';
 import { getUiPreviewMode } from '../dev/previewMode';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 
 export const CLUB_PERMISSION_OPTIONS = [
   { value: 'MANAGE_MEMBERS', title: 'Manage members', body: 'Remove members and update roster access.' },
@@ -41,6 +42,7 @@ export function roleRank(role: string | null | undefined) {
 }
 
 export function useClub(clubId: string) {
+  const sharedStateVersion = useSharedStateVersion('clubs', 'messages', 'users');
   const previewMode = useMemo(() => getUiPreviewMode(), []);
   const preview = useMemo(
     () => clubExperienceFixture(previewMode),
@@ -144,8 +146,8 @@ export function useClub(clubId: string) {
 
   useFocusEffect(
     useCallback(() => {
-      void load();
-    }, [load]),
+      void load(true);
+    }, [load, sharedStateVersion]),
   );
 
   const setClub = useCallback(

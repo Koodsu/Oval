@@ -1095,7 +1095,7 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
       return;
     }
     setTyping('pod', podId, userId);
-    void broadcast(podTopic(podId), REALTIME_EVENTS.TYPING);
+    await broadcast(podTopic(podId), REALTIME_EVENTS.TYPING, { userId });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

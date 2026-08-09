@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   API_USER_MESSAGE,
@@ -46,6 +47,7 @@ export default function AdminActivityRequestsScreen({
 }: Props & {
   previewData?: { pending: ActivityRequest[]; reviewed: ActivityRequest[] };
 }) {
+  const sharedStateVersion = useSharedStateVersion('admin', 'activities');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -76,7 +78,7 @@ export default function AdminActivityRequestsScreen({
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const approve = async (request: ActivityRequest) => {

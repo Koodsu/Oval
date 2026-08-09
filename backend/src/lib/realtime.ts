@@ -19,7 +19,10 @@ export const REALTIME_EVENTS = {
   MESSAGE_UPDATE: 'message_update',
   TYPING: 'typing',
   INBOX_UPDATED: 'inbox_updated',
+  STATE_UPDATED: 'state_updated',
 } as const;
+
+export const SHARED_STATE_TOPIC = 'app-state';
 
 export function podTopic(podId: string): string {
   return `pod-${podId}`;
@@ -33,6 +36,31 @@ export function userTopic(userId: string): string {
   return `user-${userId}`;
 }
 
+export function clubChannelTopic(clubId: string, channelId: string): string {
+  return `club-${clubId}-channel-${channelId}`;
+}
+
+export function createBroadcastRequest(
+  key: string,
+  topic: string,
+  event: string,
+  payload: Record<string, unknown>,
+): RequestInit {
+  return {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // Supabase's current publishable/secret keys are opaque rather than JWTs.
+      // Sending an sb_secret_* key as a Bearer token returns 401, while the
+      // apikey header works for both current keys and legacy service_role JWTs.
+      apikey: key,
+    },
+    body: JSON.stringify({
+      messages: [{ topic, event, payload, private: false }],
+    }),
+  };
+}
+
 export async function broadcast(
   topic: string,
   event: string,
@@ -43,22 +71,22 @@ export async function broadcast(
   if (!url || !key) return;
   if (process.env.NODE_ENV === 'test') return;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1_500);
   try {
-    const response = await fetch(`${url}/realtime/v1/api/broadcast`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: key,
-        Authorization: `Bearer ${key}`,
+    const response = await fetch(
+      `${url}/realtime/v1/api/broadcast`,
+      {
+        ...createBroadcastRequest(key, topic, event, payload),
+        signal: controller.signal,
       },
-      body: JSON.stringify({
-        messages: [{ topic, event, payload, private: false }],
-      }),
-    });
+    );
     if (!response.ok) {
       console.error(`[realtime] broadcast failed: ${response.status}`);
     }
   } catch (err) {
     console.error('[realtime] broadcast failed:', err);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

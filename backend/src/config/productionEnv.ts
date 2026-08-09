@@ -2,6 +2,8 @@ const REQUIRED_PRODUCTION_ENV = [
   'DATABASE_URL',
   'JWT_SECRET',
   'CORS_ORIGIN',
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
 ] as const;
 
 const SECRET_ENV = new Set([
@@ -49,14 +51,8 @@ export function validateProductionEnvironment(
     throw new Error(`Invalid production environment:\n- ${errors.join('\n- ')}`);
   }
 
-  // Soft warnings: these degrade features silently rather than breaking the
+  // Soft warnings: these degrade optional features rather than breaking the
   // app, which makes the failure invisible in testing — say so in the logs.
-  if (!env.SUPABASE_URL?.trim() || !env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-    console.warn(
-      '[env] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — realtime broadcasts are ' +
-        'DISABLED; clients will fall back to polling for chat, typing, and inbox badges.',
-    );
-  }
   if (!androidFingerprint) {
     console.warn(
       '[env] ANDROID_SHA256_CERT_FINGERPRINT is not set — Android App Links cannot verify ' +

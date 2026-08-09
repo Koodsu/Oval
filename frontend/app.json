@@ -8,7 +8,14 @@
     "userInterfaceStyle": "automatic",
     "scheme": "oval",
     "plugins": [
-      "@sentry/react-native/expo",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "oval-technologies-llc",
+          "project": "react-native"
+        }
+      ],
       [
         "expo-notifications",
         {

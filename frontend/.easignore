@@ -1,0 +1,39 @@
+# Dependencies are installed by EAS from package-lock.json.
+node_modules/
+
+# Local Expo/build output.
+.expo/
+dist/
+web-build/
+ios/
+android/
+*.tsbuildinfo
+.metro-health-check*
+
+# Editor and OS metadata.
+.idea/
+.vscode/
+.DS_Store
+
+# Tests and local-only developer material are not required in store bundles.
+**/*.test.ts
+**/*.test.tsx
+__mocks__/
+coverage/
+DESIGN_AUDIT.md
+CLAUDE.md
+
+# Local secrets and logs. Public build values come from eas.json / EAS env.
+.env
+.env*.local
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Signing files are supplied by EAS credentials.
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

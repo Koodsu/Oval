@@ -44,16 +44,63 @@ export default function DeleteAccount() {
 
         <section className="mb-10 space-y-3 text-sm leading-relaxed text-white/60">
           <p>
-            Deleting your account permanently removes your profile, messages, pods, club
-            memberships, friend connections, and associated personal data. This cannot be undone.
+            Deleting your Oval account is permanent and cannot be undone.
           </p>
-          <p>
-            Some records may be retained where required for safety or legal reasons (for example,
-            moderation reports are kept in anonymized form). See our{' '}
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-4 border-b border-white/10 pb-3 text-lg font-semibold uppercase tracking-widest text-white">
+            What Is Deleted
+          </h2>
+          <p className="mb-4 text-sm leading-relaxed text-white/60">
+            Removed immediately and permanently when deletion completes:
+          </p>
+          <ul className="ml-5 list-disc space-y-2 text-sm leading-relaxed text-white/60">
+            <li>
+              Your account and profile — name, email address, password, bio, major, class year,
+              Instagram handle, interests and campus zones
+            </li>
+            <li>Your profile photo, deleted from our image storage</li>
+            <li>
+              Every message you sent — pod chats, direct messages, club chats, officer chats and
+              announcements
+            </li>
+            <li>Your pod memberships, club memberships, friend connections and friend requests</li>
+            <li>No-show reports you filed or that were filed about you</li>
+            <li>Your push notification token, so notifications stop</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-4 border-b border-white/10 pb-3 text-lg font-semibold uppercase tracking-widest text-white">
+            What Is Kept, And For How Long
+          </h2>
+          <ul className="ml-5 list-disc space-y-2 text-sm leading-relaxed text-white/60">
+            <li>
+              <span className="text-white/85">Safety and moderation reports</span> — reports you
+              filed, or that were filed about you, are kept so we can keep the community safe. Your
+              identity is unlinked from them at deletion, leaving them anonymized. Once a report is
+              resolved or dismissed it is deleted automatically after{' '}
+              <span className="text-white/85">730 days (2 years)</span>.
+            </li>
+            <li>
+              <span className="text-white/85">Ban records</span> — if your account was banned for a
+              safety violation, we retain a one-way cryptographic hash of your email address
+              indefinitely so the banned account cannot simply be recreated. The hash cannot be
+              reversed into your email address, and no other personal data is kept with it.
+            </li>
+            <li>
+              <span className="text-white/85">Clubs you created</span> — the club itself is not
+              deleted if it still has members. Ownership passes to the most senior remaining member
+              so the group can continue. Your personal messages within it are still deleted.
+            </li>
+          </ul>
+          <p className="mt-4 text-sm leading-relaxed text-white/60">
+            See our{' '}
             <a className="text-scarlet underline underline-offset-2" href="/privacy">
               Privacy Policy
             </a>{' '}
-            for details.
+            for full details.
           </p>
         </section>
 
@@ -114,6 +161,46 @@ export default function DeleteAccount() {
               from your account email.
             </p>
           ) : null}
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-4 border-b border-white/10 pb-3 text-lg font-semibold uppercase tracking-widest text-white">
+            Deleting Some Data Without Deleting Your Account
+          </h2>
+          <p className="mb-4 text-sm leading-relaxed text-white/60">
+            You do not have to delete your whole account to remove data. All of the following are
+            available inside the Oval app and take effect immediately:
+          </p>
+          <ul className="ml-5 list-disc space-y-2 text-sm leading-relaxed text-white/60">
+            <li>
+              <span className="text-white/85">Profile photo</span> — Profile → Edit Profile → remove
+              your photo. It is deleted from our image storage, not just hidden.
+            </li>
+            <li>
+              <span className="text-white/85">Profile details</span> — Profile → Edit Profile. Your
+              bio, major, class year, Instagram handle, interests and campus zones are all optional
+              and can be cleared at any time.
+            </li>
+            <li>
+              <span className="text-white/85">Messages you sent</span> — press and hold any message
+              you sent in a pod chat, direct message or club chat, then choose delete.
+            </li>
+            <li>
+              <span className="text-white/85">Friend connections</span> — open the person&apos;s
+              profile and remove them, which deletes the connection for both of you.
+            </li>
+            <li>
+              <span className="text-white/85">Club memberships</span> — open the club and leave it.
+            </li>
+          </ul>
+          <p className="mt-4 text-sm leading-relaxed text-white/60">
+            If you would prefer we do any of this for you, or you want a copy of your data first,
+            email{' '}
+            <a className="text-scarlet underline underline-offset-2" href={`mailto:${EMAIL}`}>
+              {EMAIL}
+            </a>{' '}
+            from the address connected to your Oval account and tell us what you would like removed.
+          </p>
         </section>
 
         <section>

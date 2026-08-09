@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -94,6 +95,14 @@ const noConversationsIllustration = require('../../assets/illustrations/spot/col
 const caughtUpIllustration = require('../../assets/illustrations/spot/cold-start/10-inbox-all-caught-up.png');
 
 export default function InboxScreen({ previewData }: { previewData?: InboxPreviewData }) {
+  const sharedStateVersion = useSharedStateVersion(
+    'inbox',
+    'messages',
+    'friends',
+    'pods',
+    'clubs',
+    'users',
+  );
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const styles = useStyles();
@@ -188,7 +197,7 @@ export default function InboxScreen({ previewData }: { previewData?: InboxPrevie
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const handleInvite = async (inviteId: string, accept: boolean) => {

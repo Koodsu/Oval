@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Share, Text, useWindowDimensions, View } from 'r
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   acceptFriendRequest,
@@ -51,6 +52,7 @@ export default function UserSearchScreen({
   navigation,
   previewData,
 }: Props & { previewData?: PreviewData }) {
+  const sharedStateVersion = useSharedStateVersion('users', 'friends');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -98,7 +100,7 @@ export default function UserSearchScreen({
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   useEffect(() => {

@@ -1,6 +1,8 @@
 import {
   getApiErrorMessage,
+  getActivities,
   getMessages,
+  getThreadMessages,
   getToken,
   getUserProfileShareUrl,
   setOnUnauthorized,
@@ -147,5 +149,97 @@ describe('request — 401 handling', () => {
     expect(getApiErrorMessage(error)).toBe(
       'Oval hit a server error while trying that. Please try again in a minute.'
     );
+  });
+});
+
+describe('live message reads', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('bypasses app and native caches when realtime refetches a DM thread', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            messages: [],
+            otherUser: { id: 'user-2', name: 'Friend' },
+            typingUserIds: [],
+            otherLastReadAt: null,
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            messages: [{ id: 'message-1', createdAt: '2026-08-08T12:00:00.000Z' }],
+            otherUser: { id: 'user-2', name: 'Friend' },
+            typingUserIds: [],
+            otherLastReadAt: null,
+          }),
+      });
+
+    await getThreadMessages('thread-1', { limit: 50 });
+    const refreshed = await getThreadMessages('thread-1', { limit: 50 });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/messages/threads/thread-1?limit=50'),
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(refreshed.messages).toHaveLength(1);
+  });
+
+  it('also keeps pod message polling uncached', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ messages: [], typingUserIds: [] }),
+    });
+
+    await getMessages('pod-1', { limit: 50 });
+    await getMessages('pod-1', { limit: 50 });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      expect.stringContaining('/pods/pod-1/messages?limit=50'),
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+});
+
+describe('shared app reads', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('does not reuse stale data for ordinary authenticated screens', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 'activity-1', demandCount: 1 }]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 'activity-1', demandCount: 2 }]),
+      });
+
+    await getActivities();
+    const refreshed = await getActivities();
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      expect.stringContaining('/activities'),
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(refreshed[0]?.demandCount).toBe(2);
   });
 });

@@ -58,6 +58,7 @@ import { mergeLatestPage } from '../utils/chat';
 import { REACTION_EMOJIS } from '../constants/reactions';
 import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
 import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
+import { realtimeUserId, useRealtimeTyping } from '../hooks/useRealtimeTyping';
 
 import { toast } from '../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'PodChat'>;
@@ -85,7 +86,6 @@ export default function PodChatScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const [pod, setPod] = useState<Pod | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [messageText, setMessageText] = useState('');
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
@@ -101,6 +101,7 @@ export default function PodChatScreen({ route, navigation }: Props) {
   messagesRef.current = messages;
   const isMemberRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  const { typingUserIds, markTyping, removeTypingUser } = useRealtimeTyping(podId, user?.id);
 
   const refreshMessages = useCallback(async () => {
     if (!isMemberRef.current) return;
@@ -111,7 +112,6 @@ export default function PodChatScreen({ route, navigation }: Props) {
         setHasMore(!!response.hasMore);
         initialLoadDoneRef.current = true;
       }
-      setTypingUserIds(response.typingUserIds);
       setLoadError(null);
     } catch {
       // Keep stale chat visible until the next successful refresh.
@@ -130,9 +130,18 @@ export default function PodChatScreen({ route, navigation }: Props) {
     }
   }, [podId, refreshMessages, user?.id]);
 
-  const realtimeConnected = useRealtimeChannel(`pod-${podId}`, REALTIME_CHAT_EVENTS, () => {
-    void refreshMessages();
-  });
+  const realtimeConnected = useRealtimeChannel(
+    `pod-${podId}`,
+    REALTIME_CHAT_EVENTS,
+    ({ event, payload }) => {
+      if (event === 'typing') {
+        markTyping(payload);
+        return;
+      }
+      if (event === 'new_message') removeTypingUser(realtimeUserId(payload));
+      void refreshMessages();
+    },
+  );
 
   useFocusEffect(
     useCallback(() => {

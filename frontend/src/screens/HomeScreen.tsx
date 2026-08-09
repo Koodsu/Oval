@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -550,6 +551,7 @@ function BringClubRow({ onPress }: { onPress: () => void }) {
 }
 
 export default function HomeScreen({ previewData }: { previewData?: HomePreviewData }) {
+  const sharedStateVersion = useSharedStateVersion('pods', 'clubs', 'friends', 'users');
   const navigation = useNavigation<Nav>();
   const { user, token } = useAuth();
   const { colors, typography } = useTheme();
@@ -627,7 +629,7 @@ export default function HomeScreen({ previewData }: { previewData?: HomePreviewD
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const explainAndRequestLocation = useCallback(() => {

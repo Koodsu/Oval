@@ -96,7 +96,7 @@ router.post('/requests', async (req: AuthRequest, res: Response): Promise<void> 
 
   try {
     const friendRequest = await sendFriendRequest(senderId, receiverId);
-    void broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
     res.status(201).json(friendRequest);
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -115,8 +115,10 @@ router.post('/requests/:id/accept', async (req: AuthRequest, res: Response): Pro
     });
     await acceptFriendRequest(id, userId);
     if (requestRow) {
-      void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
-      void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+      await Promise.all([
+        broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED),
+        broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED),
+      ]);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -131,8 +133,10 @@ router.post('/requests/:id/decline', async (req: AuthRequest, res: Response): Pr
   const { id } = req.params;
   try {
     const requestRow = await declineFriendRequest(id, userId);
-    void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
-    void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await Promise.all([
+      broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED),
+      broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED),
+    ]);
     res.json({ ok: true });
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -146,8 +150,10 @@ router.delete('/requests/:id', async (req: AuthRequest, res: Response): Promise<
   const { id } = req.params;
   try {
     const requestRow = await cancelFriendRequest(id, userId);
-    void broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED);
-    void broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await Promise.all([
+      broadcast(userTopic(requestRow.senderId), REALTIME_EVENTS.INBOX_UPDATED),
+      broadcast(userTopic(requestRow.receiverId), REALTIME_EVENTS.INBOX_UPDATED),
+    ]);
     res.status(204).send();
   } catch (err) {
     const e = err as Error & { status?: number };

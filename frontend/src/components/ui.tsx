@@ -2363,7 +2363,7 @@ function TypingDot({ index, color }: { index: number; color: string }) {
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: 0.35 + progress.value * 0.65,
-    transform: [{ translateY: -2.5 * progress.value }],
+    transform: [{ translateY: -3.5 * progress.value }],
   }));
 
   return (
@@ -2416,21 +2416,21 @@ const typingStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   bubble: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 4,
+    gap: 5,
     borderWidth: BORDER_W,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderBottomLeftRadius: radii.xs,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
