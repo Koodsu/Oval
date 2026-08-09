@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { registerPushToken } from '../api';
 
 export async function registerTokenIfGranted(): Promise<boolean> {
@@ -9,7 +10,9 @@ export async function registerTokenIfGranted(): Promise<boolean> {
   const permission = await Notifications.getPermissionsAsync();
   if (permission.status !== 'granted') return false;
 
-  const tokenData = await Notifications.getExpoPushTokenAsync();
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  if (typeof projectId !== 'string' || !projectId) return false;
+  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
   await registerPushToken(tokenData.data);
   return true;
 }

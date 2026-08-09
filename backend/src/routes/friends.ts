@@ -5,6 +5,7 @@ import { getBlockedUserIds, hasBlockingRelationship } from '../lib/blocks';
 import { normalizeUserPair } from '../lib/friendUtils';
 import { withDisplayName } from '../lib/userNames';
 import { broadcast, REALTIME_EVENTS, userTopic } from '../lib/realtime';
+import { NotificationService } from '../lib/NotificationService';
 import {
   sendFriendRequest,
   acceptFriendRequest,
@@ -97,6 +98,7 @@ router.post('/requests', async (req: AuthRequest, res: Response): Promise<void> 
   try {
     const friendRequest = await sendFriendRequest(senderId, receiverId);
     await broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    NotificationService.notifyFriendRequest(friendRequest.id).catch(() => {});
     res.status(201).json(friendRequest);
   } catch (err) {
     const e = err as Error & { status?: number };

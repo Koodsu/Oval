@@ -19,8 +19,9 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/brand/oval-open-1024-transparent.png",
+          "icon": "./assets/brand/oval-notification-96.png",
           "color": "#EF5A63",
+          "defaultChannel": "messages",
           "sounds": []
         }
       ],

@@ -961,7 +961,13 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
       },
     });
 
-    NotificationService.notifyPodPlanChange(id, userId, 'updated').catch(() => {});
+    NotificationService.notifyPodPlanChange(
+      id,
+      userId,
+      'updated',
+      undefined,
+      Object.keys(data),
+    ).catch(() => {});
 
     res.json(parsePodMembers(updated));
   } catch (err) {

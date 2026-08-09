@@ -515,7 +515,7 @@ router.post('/threads/:id/messages', async (req: AuthRequest, res: Response): Pr
       broadcast(dmTopic(threadId), REALTIME_EVENTS.NEW_MESSAGE, { userId }),
       broadcast(userTopic(otherId), REALTIME_EVENTS.INBOX_UPDATED),
     ]);
-    NotificationService.notifyDirectMessage(threadId, userId).catch(() => {});
+    NotificationService.notifyDirectMessage(threadId, userId, data.content).catch(() => {});
 
     res.status(201).json(formatDmMessage(message));
   } catch {

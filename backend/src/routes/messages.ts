@@ -213,7 +213,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     });
 
     // Fire-and-forget — don't await so message response isn't delayed
-    NotificationService.notifyNewMessage(podId, userId).catch(() => {});
+    NotificationService.notifyNewMessage(podId, userId, trimmed).catch(() => {});
     stampPodReadState(userId, podId).catch(() => {});
     await Promise.all([
       broadcast(podTopic(podId), REALTIME_EVENTS.NEW_MESSAGE, { userId }),

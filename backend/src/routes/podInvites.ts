@@ -6,6 +6,7 @@ import { areFriends } from '../lib/friendUtils';
 import { joinExistingPodMember, parsePodMembers } from '../lib/joinExistingPod';
 import { withDisplayName } from '../lib/userNames';
 import { broadcast, REALTIME_EVENTS, userTopic } from '../lib/realtime';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router();
 
@@ -95,6 +96,7 @@ router.post('/:id/invite', requireAuth, async (req: AuthRequest, res: Response):
       },
     });
     await broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    NotificationService.notifyPodInvite(invite.id).catch(() => {});
 
     res.status(201).json({
       ...invite,

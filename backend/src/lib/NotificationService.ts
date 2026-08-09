@@ -3,54 +3,41 @@ import { Prisma } from '@prisma/client';
 import prisma from '../prisma';
 import { getPublicName } from './userNames';
 import { getInterestCategories } from '../config/interestTags';
+import {
+  PUSH_CHANNELS,
+  clubAnnouncementCopy,
+  clubAttendanceOpenCopy,
+  clubMessageCopy,
+  clubMeetingCreatedCopy,
+  clubOutreachCopy,
+  clubRemovalCopy,
+  clubRoleChangeCopy,
+  clubRsvpCopy,
+  demandConversionCopy,
+  demandPlanCreatedCopy,
+  directMessageCopy,
+  firstPlanNudgeCopy,
+  friendRequestCopy,
+  meetupReminderCopy,
+  podCancelledCopy,
+  podInviteCopy,
+  podJoinCopy,
+  podMessageCopy,
+  podUpdateCopy,
+  recapPromptCopy,
+  waitlistSpotCopy,
+  waitlistTwinCopy,
+  weeklyPlanningCopy,
+} from './notificationCopy';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  parseNotificationPreferences,
+} from './notificationPreferences';
 
 const expo = new Expo();
 
-interface NotificationPreferences {
-  podJoin: boolean;
-  newMessage: boolean;
-  meetupReminder: boolean;
-  recapPrompt: boolean;
-  waitlistSpot: boolean;
-  clubMeetingCreated: boolean;
-  clubAnnouncementCreated: boolean;
-  clubKick: boolean;
-  clubRoleChange: boolean;
-  clubAttendanceOpen: boolean;
-  clubRsvpReminder: boolean;
-  clubOutreach: boolean;
-  clubRolePing: boolean;
-  weeklyRecap: boolean;
-  /** Demand-pool pushes ("6 people want a boba run" / "a pod just went up"). */
-  demandAlerts: boolean;
-}
-
-export const DEFAULT_PREFS: NotificationPreferences = {
-  podJoin: true,
-  newMessage: true,
-  meetupReminder: true,
-  recapPrompt: true,
-  waitlistSpot: true,
-  clubMeetingCreated: true,
-  clubAnnouncementCreated: true,
-  clubKick: true,
-  clubRoleChange: true,
-  clubAttendanceOpen: true,
-  clubRsvpReminder: true,
-  clubOutreach: true,
-  clubRolePing: true,
-  weeklyRecap: true,
-  demandAlerts: true,
-};
-
-export function parsePreferences(raw: string | null | undefined): NotificationPreferences {
-  if (!raw) return { ...DEFAULT_PREFS };
-  try {
-    return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_PREFS };
-  }
-}
+export const DEFAULT_PREFS = DEFAULT_NOTIFICATION_PREFERENCES;
+export const parsePreferences = parseNotificationPreferences;
 
 const MEETUP_REMINDER_EARLY_MS = 30 * 60 * 1000;
 const MEETUP_REMINDER_LATE_MS = 70 * 60 * 1000;
@@ -74,6 +61,10 @@ function threadUrl(threadId: string): string {
   return `oval://thread/${threadId}`;
 }
 
+function inboxUrl(): string {
+  return 'oval://inbox';
+}
+
 function clubUrl(clubId: string): string {
   return `oval://clubs/${clubId}`;
 }
@@ -82,20 +73,21 @@ function clubMeetingUrl(clubId: string, meetingId: string): string {
   return `oval://clubs/${clubId}/events/${meetingId}`;
 }
 
-function discoverUrl(): string {
-  return 'oval://explore';
+function clubChatUrl(clubId: string, channelId: string): string {
+  return `oval://clubs/${clubId}/chat/${channelId}`;
 }
 
-function plansUrl(): string {
-  return 'oval://pods';
+function discoverUrl(): string {
+  return 'oval://explore';
 }
 
 function tokenList(to: ExpoPushMessage['to']): string[] {
   return Array.isArray(to) ? to : [to];
 }
 
-async function send(messages: ExpoPushMessage[]): Promise<void> {
-  if (messages.length === 0) return;
+async function send(messages: ExpoPushMessage[]): Promise<number> {
+  if (messages.length === 0) return 0;
+  let accepted = 0;
   const chunks = expo.chunkPushNotifications(messages);
   for (const chunk of chunks) {
     try {
@@ -105,11 +97,25 @@ async function send(messages: ExpoPushMessage[]): Promise<void> {
       // instances — an in-memory queue is always empty by the time the
       // cron instance runs.
       const rows: Array<{ id: string; token: string }> = [];
+      const deadTokens: string[] = [];
       tickets.forEach((ticket, index) => {
-        if (ticket.status !== 'ok') return;
         const [token] = tokenList(chunk[index].to);
+        if (ticket.status === 'error') {
+          console.error('[NotificationService] Push ticket rejected:', ticket.message, ticket.details);
+          if (ticket.details?.error === 'DeviceNotRegistered' && token) {
+            deadTokens.push(token);
+          }
+          return;
+        }
+        accepted += 1;
         if (token) rows.push({ id: ticket.id, token });
       });
+      if (deadTokens.length > 0) {
+        await prisma.user.updateMany({
+          where: { pushToken: { in: deadTokens } },
+          data: { pushToken: null },
+        });
+      }
       if (rows.length > 0) {
         try {
           await prisma.$executeRaw`
@@ -125,11 +131,11 @@ async function send(messages: ExpoPushMessage[]): Promise<void> {
       console.error('[NotificationService] Push send failed:', err);
     }
   }
+  return accepted;
 }
 
 async function sendAndCount(messages: ExpoPushMessage[]): Promise<number> {
-  await send(messages);
-  return messages.length;
+  return send(messages);
 }
 
 function parseStringList(raw: string | null | undefined): string[] {
@@ -148,18 +154,26 @@ function startOfDay(date: Date): Date {
   return copy;
 }
 
-function startOfWeek(date: Date): Date {
-  const copy = startOfDay(date);
-  copy.setDate(copy.getDate() - copy.getDay());
-  return copy;
-}
-
 function sameLocalDate(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+function formatPlanWhen(date: Date | null | undefined): string {
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatTime(date: Date | null | undefined): string {
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 /** "tonight" / "today" / "tomorrow" / "on Saturday" for push copy. */
@@ -191,7 +205,8 @@ async function sendNonTransactional(
 ): Promise<boolean> {
   if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) return false;
   if (!(await canSpendNonTransactionalBudget(user.id, now))) return false;
-  await send([{ ...message, to: user.pushToken }]);
+  const accepted = await send([{ ...message, to: user.pushToken }]);
+  if (accepted === 0) return false;
   await prisma.analyticsEvent.create({
     data: {
       userId: user.id,
@@ -297,18 +312,92 @@ export const NotificationService = {
 
       const joiner = pod.members.find((m) => m.user.id === joinerId);
       const joinerName = joiner?.user ? getPublicName(joiner.user) : 'Someone';
+      const planTitle = podDisplayTitle(pod, 'your plan');
+      const copy = podJoinCopy(
+        joinerName,
+        planTitle,
+        pod.members.length,
+        pod.maxMembers,
+        formatPlanWhen(pod.meetupTime),
+      );
 
       await send([
         {
           to: pod.creator.pushToken,
-          title: podDisplayTitle(pod, 'Your Pod'),
-          body: `${joinerName} joined your pod!`,
+          ...copy,
           data: { type: 'pod_join', podId, url: podUrl(podId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         },
       ]);
     } catch (err) {
       console.error('[NotificationService] notifyPodJoin error:', err);
+    }
+  },
+
+  /** Notify a user that a friend invited them to a forming plan. */
+  async notifyPodInvite(inviteId: string): Promise<void> {
+    try {
+      const invite = await prisma.podInvite.findUnique({
+        where: { id: inviteId },
+        include: {
+          sender: { select: { name: true, firstName: true, lastName: true } },
+          receiver: { select: { pushToken: true, notificationPreferences: true } },
+          pod: {
+            include: {
+              activity: { select: { title: true } },
+              members: { select: { userId: true } },
+            },
+          },
+        },
+      });
+      if (!invite?.receiver.pushToken || !Expo.isExpoPushToken(invite.receiver.pushToken)) return;
+      const prefs = parsePreferences(invite.receiver.notificationPreferences);
+      if (!prefs.podInvite) return;
+
+      const copy = podInviteCopy(
+        getPublicName(invite.sender),
+        podDisplayTitle(invite.pod, 'a plan'),
+        formatPlanWhen(invite.pod.meetupTime),
+        invite.pod.location,
+        Math.max(0, invite.pod.maxMembers - invite.pod.members.length),
+      );
+      await send([{
+        to: invite.receiver.pushToken,
+        ...copy,
+        data: { type: 'pod_invite', inviteId, podId: invite.podId, url: podUrl(invite.podId) },
+        sound: 'default',
+        channelId: PUSH_CHANNELS.plans,
+      }]);
+    } catch (err) {
+      console.error('[NotificationService] notifyPodInvite error:', err);
+    }
+  },
+
+  /** Notify a user about an incoming friend request. */
+  async notifyFriendRequest(requestId: string): Promise<void> {
+    try {
+      const request = await prisma.friendRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          sender: { select: { id: true, name: true, firstName: true, lastName: true } },
+          receiver: { select: { pushToken: true, notificationPreferences: true } },
+        },
+      });
+      if (!request?.receiver.pushToken || !Expo.isExpoPushToken(request.receiver.pushToken)) return;
+      const prefs = parsePreferences(request.receiver.notificationPreferences);
+      if (!prefs.friendRequest) return;
+      const senderName = getPublicName(request.sender);
+      const copy = friendRequestCopy(senderName);
+      await send([{
+        to: request.receiver.pushToken,
+        ...copy,
+        data: { type: 'friend_request', requestId, userId: request.sender.id, url: inboxUrl() },
+        sound: 'default',
+        channelId: PUSH_CHANNELS.messages,
+      }]);
+    } catch (err) {
+      console.error('[NotificationService] notifyFriendRequest error:', err);
     }
   },
 
@@ -321,7 +410,8 @@ export const NotificationService = {
     podId: string,
     actorId: string,
     kind: 'updated' | 'cancelled',
-    memberUserIds?: string[]
+    memberUserIds?: string[],
+    changedFields: string[] = [],
   ): Promise<void> {
     try {
       const pod = await prisma.pod.findUnique({
@@ -348,11 +438,15 @@ export const NotificationService = {
           })
         : pod.members.map((m) => m.user);
 
-      const title = podDisplayTitle(pod, 'Your pod');
-      const body =
-        kind === 'cancelled'
-          ? 'This pod was cancelled by its creator.'
-          : 'The pod details changed — check the updated plan.';
+      const planTitle = podDisplayTitle(pod, 'Your plan');
+      const copy = kind === 'cancelled'
+        ? podCancelledCopy(planTitle, formatPlanWhen(pod.meetupTime))
+        : podUpdateCopy(
+            planTitle,
+            changedFields,
+            formatPlanWhen(pod.meetupTime),
+            pod.location,
+          );
 
       const messages: ExpoPushMessage[] = [];
       for (const user of recipients) {
@@ -362,10 +456,10 @@ export const NotificationService = {
         if (!prefs.meetupReminder) continue;
         messages.push({
           to: user.pushToken,
-          title,
-          body,
+          ...copy,
           data: { type: kind === 'cancelled' ? 'pod_cancelled' : 'pod_updated', podId, url: podUrl(podId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         });
       }
       await send(messages);
@@ -375,7 +469,7 @@ export const NotificationService = {
   },
 
   /** Notify all other pod members when someone sends a message. */
-  async notifyNewMessage(podId: string, senderId: string): Promise<void> {
+  async notifyNewMessage(podId: string, senderId: string, preview?: string): Promise<void> {
     try {
       const pod = await prisma.pod.findUnique({
         where: { id: podId },
@@ -395,6 +489,7 @@ export const NotificationService = {
 
       const sender = pod.members.find((m) => m.user.id === senderId);
       const senderName = sender?.user ? getPublicName(sender.user) : 'Someone';
+      const copy = podMessageCopy(senderName, podDisplayTitle(pod, 'Your plan'), preview);
 
       const messages: ExpoPushMessage[] = [];
       for (const member of pod.members) {
@@ -404,10 +499,10 @@ export const NotificationService = {
         if (!prefs.newMessage) continue;
         messages.push({
           to: member.user.pushToken,
-          title: podDisplayTitle(pod, 'Pod Message'),
-          body: `${senderName} sent a message`,
+          ...copy,
           data: { type: 'new_message', podId, url: podUrl(podId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.messages,
         });
       }
 
@@ -418,7 +513,7 @@ export const NotificationService = {
   },
 
   /** Notify the other participant when someone sends a DM. */
-  async notifyDirectMessage(threadId: string, senderId: string): Promise<void> {
+  async notifyDirectMessage(threadId: string, senderId: string, preview?: string): Promise<void> {
     try {
       const thread = await prisma.directMessageThread.findUnique({
         where: { id: threadId },
@@ -438,14 +533,15 @@ export const NotificationService = {
       if (!recipient.pushToken || !Expo.isExpoPushToken(recipient.pushToken)) return;
       const prefs = parsePreferences(recipient.notificationPreferences);
       if (!prefs.newMessage) return;
+      const copy = directMessageCopy(getPublicName(sender), preview);
 
       await send([
         {
           to: recipient.pushToken,
-          title: getPublicName(sender),
-          body: 'Sent you a message',
+          ...copy,
           data: { type: 'direct_message', threadId, url: threadUrl(threadId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.messages,
         },
       ]);
     } catch (err) {
@@ -490,12 +586,18 @@ export const NotificationService = {
           if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
           const prefs = parsePreferences(member.user.notificationPreferences);
           if (!prefs.meetupReminder) continue;
+          const copy = meetupReminderCopy(
+            podDisplayTitle(pod, 'Your plan'),
+            formatTime(pod.meetupTime),
+            pod.location,
+            pod.members.length,
+          );
           messages.push({
             to: member.user.pushToken,
-            title: 'Meetup in 1 hour!',
-            body: `${podDisplayTitle(pod, 'Your meetup')} at ${pod.location}`,
+            ...copy,
             data: { type: 'meetup_reminder', podId: pod.id, url: podUrl(pod.id) },
             sound: 'default',
+            channelId: PUSH_CHANNELS.plans,
           });
         }
       }
@@ -540,15 +642,17 @@ export const NotificationService = {
       const messages: ExpoPushMessage[] = [];
       for (const pod of pods) {
         for (const member of pod.members) {
+          if (!member.confirmedAt) continue;
           if (!member.user.pushToken || !Expo.isExpoPushToken(member.user.pushToken)) continue;
           const prefs = parsePreferences(member.user.notificationPreferences);
           if (!prefs.recapPrompt) continue;
+          const copy = recapPromptCopy(podDisplayTitle(pod, 'your plan'));
           messages.push({
             to: member.user.pushToken,
-            title: 'How was it?',
-            body: `Rate your ${podDisplayTitle(pod, 'meetup')} experience`,
+            ...copy,
             data: { type: 'recap_prompt', podId: pod.id, url: podUrl(pod.id) },
             sound: 'default',
+            channelId: PUSH_CHANNELS.plans,
           });
         }
 
@@ -592,6 +696,11 @@ export const NotificationService = {
       if (!newPod || entries.length === 0) return;
 
       const messages: ExpoPushMessage[] = [];
+      const copy = waitlistTwinCopy(
+        podDisplayTitle(newPod, 'plan'),
+        formatPlanWhen(newPod.meetupTime),
+        newPod.location,
+      );
       for (const entry of entries) {
         if (entry.userId === creatorId) continue;
         if (!entry.user.pushToken || !Expo.isExpoPushToken(entry.user.pushToken)) continue;
@@ -599,10 +708,10 @@ export const NotificationService = {
         if (!prefs.waitlistSpot) continue;
         messages.push({
           to: entry.user.pushToken,
-          title: 'A second pod opened',
-          body: `${podDisplayTitle(newPod, 'That plan')} was full, so a twin just went up — grab a spot`,
+          ...copy,
           data: { type: 'waitlist_twin', podId: newPodId, url: podUrl(newPodId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         });
       }
       await send(messages);
@@ -631,14 +740,15 @@ export const NotificationService = {
       if (!entry.user.pushToken || !Expo.isExpoPushToken(entry.user.pushToken)) return;
       const prefs = parsePreferences(entry.user.notificationPreferences);
       if (!prefs.waitlistSpot) return;
+      const copy = waitlistSpotCopy(activityTitle ?? 'your plan');
 
       await send([
         {
           to: entry.user.pushToken,
-          title: 'A spot opened up!',
-          body: `A spot opened up in ${activityTitle ?? 'a pod'} — join now before it fills up`,
+          ...copy,
           data: { type: 'waitlist_spot', podId, url: podUrl(podId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         },
       ]);
     } catch (err) {
@@ -734,21 +844,27 @@ export const NotificationService = {
         const others = Math.max(0, membership.pod.members.length - 1);
         const peopleLine =
           anchorName && others > 1
-            ? `${anchorName} and ${others} others will be there`
+            ? `${anchorName} + ${others - 1} ${others - 1 === 1 ? 'other' : 'others'} are going`
             : anchorName
-              ? `${anchorName} will be there`
-              : `${membership.pod.members.length} people are in`;
+              ? `${anchorName} is going`
+              : "You're the first one in";
         const meetupTime = membership.pod.meetupTime.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
         });
+        const copy = firstPlanNudgeCopy(
+          podDisplayTitle(membership.pod, 'Your plan'),
+          meetupTime,
+          membership.pod.location,
+          peopleLine,
+        );
 
         messages.push({
           to: membership.user.pushToken,
-          title: `Tonight: ${podDisplayTitle(membership.pod, 'your pod')} at ${meetupTime}`,
-          body: peopleLine,
+          ...copy,
           data: { type: 'first_pod_nudge', podId: membership.podId, url: podUrl(membership.podId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         });
       }
 
@@ -817,16 +933,16 @@ export const NotificationService = {
 
         pools += 1;
         attempted += demands.length;
+        const copy = demandConversionCopy(demands.length, activity.title);
         for (const demand of demands) {
           const prefs = parsePreferences(demand.user.notificationPreferences);
           if (!prefs.demandAlerts) continue;
           const didSend = await sendNonTransactional(
             demand.user,
             {
-              title: `${demands.length} people are down`,
-              body: `${demands.length} people want ${activity.title} this week. Start it?`,
+              ...copy,
               data: { type: 'demand_conversion', activityId: activity.id, url: discoverUrl() },
-              sound: 'default',
+              channelId: PUSH_CHANNELS.discovery,
             },
             'demand_conversion',
             now,
@@ -863,7 +979,7 @@ export const NotificationService = {
       const [pod, demands] = await Promise.all([
         prisma.pod.findUnique({
           where: { id: podId },
-          select: { title: true, activity: { select: { title: true } } },
+          select: { title: true, location: true, activity: { select: { title: true } } },
         }),
         prisma.podDemand.findMany({
           where: { activityId, consumedAt: null, expiresAt: { gt: now } },
@@ -874,6 +990,12 @@ export const NotificationService = {
       if (demands.length === 0) return { attempted: 0, sent: 0 };
 
       const dayLabel = meetupTime ? meetupDayLabel(meetupTime, now) : 'this week';
+      const copy = demandPlanCreatedCopy(
+        pod ? podDisplayTitle(pod, 'A plan') : 'A plan',
+        dayLabel,
+        meetupTime ? formatTime(meetupTime) : undefined,
+        pod?.location,
+      );
       let attempted = 0;
       let sent = 0;
       for (const demand of demands) {
@@ -882,12 +1004,11 @@ export const NotificationService = {
         const prefs = parsePreferences(demand.user.notificationPreferences);
         if (!prefs.demandAlerts) continue;
         const didSend = await sendNonTransactional(
-          demand.user,
-          {
-            title: `${pod ? podDisplayTitle(pod, 'A pod') : 'A pod'} just went up`,
-            body: `A plan just opened ${dayLabel}. Grab a spot while it is forming.`,
+            demand.user,
+            {
+            ...copy,
             data: { type: 'demand_pod_created', activityId, podId, url: podUrl(podId) },
-            sound: 'default',
+            channelId: PUSH_CHANNELS.discovery,
           },
           'demand_pod_created',
           now,
@@ -923,16 +1044,20 @@ export const NotificationService = {
     if (now.getDay() !== 0 || now.getHours() < 18) return { attempted: 0, sent: 0 };
 
     try {
-      const weekStart = startOfWeek(now);
-      const nextWeekEnd = new Date(weekStart);
-      nextWeekEnd.setDate(nextWeekEnd.getDate() + 14);
+      const recapStart = new Date(now);
+      recapStart.setDate(recapStart.getDate() - 7);
+      const planningEnd = new Date(now);
+      planningEnd.setDate(planningEnd.getDate() + 7);
       const joinablePods = await prisma.pod.findMany({
         where: {
           status: 'FORMING',
-          meetupTime: { gt: now, lt: nextWeekEnd },
+          meetupTime: { gt: now, lte: planningEnd },
           locationType: { not: 'private' },
         },
-        include: { activity: { select: { category: true } } },
+        include: {
+          activity: { select: { category: true } },
+          members: { select: { userId: true } },
+        },
       });
 
       const users = await prisma.user.findMany({
@@ -954,12 +1079,15 @@ export const NotificationService = {
         const attendedMemberships = await prisma.podMember.findMany({
           where: {
             userId: user.id,
-            confirmedAt: { not: null, gte: weekStart, lte: now },
+            confirmedAt: { not: null, gte: recapStart, lte: now },
           },
           include: {
             pod: {
               include: {
-                members: { select: { userId: true } },
+                members: {
+                  where: { confirmedAt: { not: null } },
+                  select: { userId: true },
+                },
               },
             },
           },
@@ -967,13 +1095,13 @@ export const NotificationService = {
 
         const interestCategories = getInterestCategories(user.interestTags);
         const matchingJoinableCount = joinablePods.filter((pod) => {
+          if (pod.members.some((member) => member.userId === user.id)) return false;
           if (interestCategories.size === 0) return true;
           return interestCategories.has(pod.activity.category);
         }).length;
 
         if (attendedMemberships.length === 0 && matchingJoinableCount === 0) continue;
 
-        attempted += 1;
         const metUserIds = new Set<string>();
         for (const membership of attendedMemberships) {
           for (const member of membership.pod.members) {
@@ -981,13 +1109,45 @@ export const NotificationService = {
           }
         }
 
+        // "New people" means a first co-attendance, not merely everyone in
+        // this week's plans. Exclude anyone the user had already attended a
+        // plan with before the recap window.
+        let newPeopleCount = metUserIds.size;
+        if (metUserIds.size > 0) {
+          const earlierMemberships = await prisma.podMember.findMany({
+            where: { userId: user.id, confirmedAt: { not: null, lt: recapStart } },
+            select: {
+              pod: {
+                select: {
+                  members: {
+                    where: { confirmedAt: { not: null } },
+                    select: { userId: true },
+                  },
+                },
+              },
+            },
+          });
+          const priorCoattendees = new Set<string>();
+          for (const membership of earlierMemberships) {
+            for (const member of membership.pod.members) priorCoattendees.add(member.userId);
+          }
+          newPeopleCount = [...metUserIds].filter((userId) => !priorCoattendees.has(userId)).length;
+        }
+
+        const copy = weeklyPlanningCopy(
+          attendedMemberships.length,
+          newPeopleCount,
+          matchingJoinableCount,
+        );
+        if (!copy) continue;
+        attempted += 1;
+
         const didSend = await sendNonTransactional(
           user,
           {
-            title: 'Your week on Oval',
-            body: `Your week: ${attendedMemberships.length} pods, ${metUserIds.size} new people. ${matchingJoinableCount} pods are forming for this week.`,
-            data: { type: 'weekly_recap', url: matchingJoinableCount > 0 ? discoverUrl() : plansUrl() },
-            sound: 'default',
+            ...copy,
+            data: { type: 'weekly_recap', url: discoverUrl() },
+            channelId: PUSH_CHANNELS.discovery,
           },
           'weekly_recap',
           now,
@@ -1031,6 +1191,12 @@ export const NotificationService = {
       });
 
       const messages: ExpoPushMessage[] = [];
+      const copy = clubMeetingCreatedCopy(
+        meeting.club.name,
+        meeting.title,
+        meetingDate,
+        meeting.location,
+      );
       for (const member of meeting.club.members) {
         if (member.user.id === creatorId) continue;
         if (!canReceiveClubBroadcast(member, meeting.visibility, targetRoleIds)) continue;
@@ -1039,10 +1205,9 @@ export const NotificationService = {
         if (!prefs.clubMeetingCreated) continue;
         messages.push({
           to: member.user.pushToken,
-          title: meeting.club.name,
-          body: `New meeting: ${meeting.title} on ${meetingDate}`,
+          ...copy,
           data: { type: 'club_meeting_created', clubId: meeting.clubId, meetingId, url: clubMeetingUrl(meeting.clubId, meetingId) },
-          sound: 'default',
+          channelId: PUSH_CHANNELS.clubs,
         });
       }
       await send(messages);
@@ -1072,6 +1237,7 @@ export const NotificationService = {
       if (!announcement) return;
 
       const targetRoleIds = parseStringList(announcement.targetRoleIds);
+      const copy = clubAnnouncementCopy(announcement.club.name, announcement.content);
       const messages: ExpoPushMessage[] = [];
       for (const member of announcement.club.members) {
         if (member.user.id === creatorId) continue;
@@ -1081,15 +1247,110 @@ export const NotificationService = {
         if (!prefs.clubAnnouncementCreated) continue;
         messages.push({
           to: member.user.pushToken,
-          title: announcement.club.name,
-          body: announcement.content.length > 120 ? `${announcement.content.slice(0, 117)}...` : announcement.content,
+          ...copy,
           data: { type: 'club_announcement_created', clubId: announcement.clubId, announcementId, url: clubUrl(announcement.clubId) },
-          sound: 'default',
+          channelId: PUSH_CHANNELS.clubs,
         });
       }
       await send(messages);
     } catch (err) {
       console.error('[NotificationService] notifyClubAnnouncementCreated error:', err);
+    }
+  },
+
+  /** Notify eligible members about a club chat message without double-sending role mentions. */
+  async notifyClubMessage(
+    clubId: string,
+    senderId: string,
+    preview: string,
+    options: {
+      channelId?: string | null;
+      channelKind?: 'GENERAL' | 'OFFICERS';
+      mentionedRoleIds?: string[];
+    } = {},
+  ): Promise<void> {
+    try {
+      const [club, channel] = await Promise.all([
+        prisma.club.findUnique({
+          where: { id: clubId },
+          include: {
+            roles: { select: { id: true, name: true } },
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    firstName: true,
+                    lastName: true,
+                    pushToken: true,
+                    notificationPreferences: true,
+                  },
+                },
+                customRoles: { select: { roleId: true } },
+              },
+            },
+          },
+        }),
+        options.channelId
+          ? prisma.clubChannel.findFirst({ where: { id: options.channelId, clubId } })
+          : prisma.clubChannel.findFirst({
+              where: { clubId, kind: options.channelKind ?? 'GENERAL' },
+            }),
+      ]);
+      if (!club || !channel) return;
+
+      const senderMember = club.members.find((member) => member.user.id === senderId);
+      const senderName = senderMember ? getPublicName(senderMember.user) : 'Someone';
+      const allowedRoleIds = parseStringList(channel.allowedRoleIds);
+      const allowedUserIds = parseStringList(channel.allowedUserIds);
+      const mentionedRoleIds = new Set(options.mentionedRoleIds ?? []);
+      const mentionedRoleNames = club.roles
+        .filter((role) => mentionedRoleIds.has(role.id))
+        .map((role) => `@${role.name}`);
+      const mentionLabel = mentionedRoleNames.length === 1 ? mentionedRoleNames[0] : 'your role';
+      const messages: ExpoPushMessage[] = [];
+
+      for (const member of club.members) {
+        const user = member.user;
+        if (user.id === senderId) continue;
+        const memberRoleIds = member.customRoles.map((assignment) => assignment.roleId);
+        const canRead =
+          channel.kind === 'GENERAL' ||
+          (channel.kind === 'OFFICERS' && roleRank(member.role) >= roleRank('OFFICER')) ||
+          (channel.kind === 'CUSTOM' &&
+            ((allowedRoleIds.length === 0 && allowedUserIds.length === 0) ||
+              allowedUserIds.includes(user.id) ||
+              memberRoleIds.some((roleId) => allowedRoleIds.includes(roleId))));
+        if (!canRead) continue;
+        if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) continue;
+
+        const prefs = parsePreferences(user.notificationPreferences);
+        const isMentioned = memberRoleIds.some((roleId) => mentionedRoleIds.has(roleId));
+        if (isMentioned ? !prefs.clubRolePing && !prefs.newMessage : !prefs.newMessage) continue;
+        const copy = clubMessageCopy(
+          senderName,
+          club.name,
+          channel.name,
+          preview,
+          isMentioned && prefs.clubRolePing ? mentionLabel : undefined,
+        );
+        messages.push({
+          to: user.pushToken,
+          ...copy,
+          data: {
+            type: isMentioned && prefs.clubRolePing ? 'club_role_ping' : 'club_message',
+            clubId,
+            channelId: channel.id,
+            url: clubChatUrl(clubId, channel.id),
+          },
+          sound: 'default',
+          channelId: PUSH_CHANNELS.messages,
+        });
+      }
+      await send(messages);
+    } catch (err) {
+      console.error('[NotificationService] notifyClubMessage error:', err);
     }
   },
 
@@ -1126,9 +1387,7 @@ export const NotificationService = {
       const senderName = sender ? getPublicName(sender) : 'Someone';
       const roleNames = Array.from(new Set(holders.map((row) => row.role.name)));
       const mentionLabel = roleNames.length === 1 ? `@${roleNames[0]}` : `${roleIds.length} roles`;
-      const body = `${senderName} pinged ${mentionLabel} in #${channelName}: ${
-        preview.length > 90 ? `${preview.slice(0, 87)}...` : preview
-      }`;
+      const copy = clubMessageCopy(senderName, club.name, channelName, preview, mentionLabel);
 
       const seen = new Set<string>();
       const messages: ExpoPushMessage[] = [];
@@ -1141,10 +1400,10 @@ export const NotificationService = {
         if (!prefs.clubRolePing) continue;
         messages.push({
           to: user.pushToken,
-          title: club.name,
-          body,
+          ...copy,
           data: { type: 'club_role_ping', clubId, url: clubUrl(clubId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.messages,
         });
       }
       await send(messages);
@@ -1167,13 +1426,13 @@ export const NotificationService = {
       if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) return;
       const prefs = parsePreferences(user.notificationPreferences);
       if (!prefs.clubKick) return;
+      const copy = clubRemovalCopy(club.name);
       await send([
         {
           to: user.pushToken,
-          title: club.name,
-          body: `You have been removed from ${club.name}`,
-          data: { type: 'club_kick', clubId, url: clubUrl(clubId) },
-          sound: 'default',
+          ...copy,
+          data: { type: 'club_kick', clubId, url: 'oval://clubs-home' },
+          channelId: PUSH_CHANNELS.clubs,
         },
       ]);
     } catch (err) {
@@ -1195,14 +1454,13 @@ export const NotificationService = {
       if (!user.pushToken || !Expo.isExpoPushToken(user.pushToken)) return;
       const prefs = parsePreferences(user.notificationPreferences);
       if (!prefs.clubRoleChange) return;
-      const roleLabel = newRole === 'OFFICER' ? 'Officer' : 'Member';
+      const copy = clubRoleChangeCopy(club.name, newRole);
       await send([
         {
           to: user.pushToken,
-          title: club.name,
-          body: `Your role in ${club.name} has been updated to ${roleLabel}`,
+          ...copy,
           data: { type: 'club_role_change', clubId, newRole, url: clubUrl(clubId) },
-          sound: 'default',
+          channelId: PUSH_CHANNELS.clubs,
         },
       ]);
     } catch (err) {
@@ -1228,16 +1486,17 @@ export const NotificationService = {
       if (!meeting) return;
 
       const messages: ExpoPushMessage[] = [];
+      const copy = clubAttendanceOpenCopy(meeting.title, meeting.club.name);
       for (const attendee of meeting.attendees) {
         if (!attendee.user.pushToken || !Expo.isExpoPushToken(attendee.user.pushToken)) continue;
         const prefs = parsePreferences(attendee.user.notificationPreferences);
         if (!prefs.clubAttendanceOpen) continue;
         messages.push({
           to: attendee.user.pushToken,
-          title: meeting.club.name,
-          body: `${meeting.club.name} meeting started — check in now!`,
+          ...copy,
           data: { type: 'club_attendance_open', meetingId, url: clubMeetingUrl(meeting.clubId, meetingId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.plans,
         });
       }
       await send(messages);
@@ -1268,6 +1527,7 @@ export const NotificationService = {
         hour: 'numeric',
         minute: '2-digit',
       });
+      const copy = clubRsvpCopy(meeting.title, meeting.club.name, meetingDate);
 
       const messages: ExpoPushMessage[] = [];
       for (const user of users) {
@@ -1276,10 +1536,10 @@ export const NotificationService = {
         if (!prefs.clubRsvpReminder) continue;
         messages.push({
           to: user.pushToken,
-          title: meeting.club.name,
-          body: `RSVP for ${meeting.title} on ${meetingDate}`,
+          ...copy,
           data: { type: 'club_rsvp_reminder', clubId: meeting.club.id, meetingId, url: clubMeetingUrl(meeting.club.id, meetingId) },
           sound: 'default',
+          channelId: PUSH_CHANNELS.clubs,
         });
       }
 
@@ -1300,6 +1560,7 @@ export const NotificationService = {
     try {
       const club = await prisma.club.findUnique({ where: { id: clubId }, select: { name: true } });
       if (!club || recipientIds.length === 0) return { attempted: recipientIds.length, sent: 0 };
+      const copy = clubOutreachCopy(club.name, content);
 
       const users = await prisma.user.findMany({
         where: { id: { in: Array.from(new Set(recipientIds)).filter((id) => id !== senderId) } },
@@ -1313,10 +1574,9 @@ export const NotificationService = {
         if (!prefs.clubOutreach) continue;
         messages.push({
           to: user.pushToken,
-          title: club.name,
-          body: content.length > 120 ? `${content.slice(0, 117)}...` : content,
+          ...copy,
           data: { type: 'club_outreach', clubId, url: clubUrl(clubId) },
-          sound: 'default',
+          channelId: PUSH_CHANNELS.clubs,
         });
       }
 
