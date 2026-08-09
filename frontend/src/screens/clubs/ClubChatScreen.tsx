@@ -56,6 +56,8 @@ import {
 import { MessageComposer, MessageList } from '../../components/messages';
 import { useClub } from '../../hooks/useClub';
 import { useAuth } from '../../context/AuthContext';
+import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../../hooks/useRealtimeChannel';
+import { realtimeUserId, useRealtimeTyping } from '../../hooks/useRealtimeTyping';
 import {
   createThemedStyles,
   spacing,
@@ -66,6 +68,9 @@ import { getUiPreviewMode } from '../../dev/previewMode';
 
 import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubChat'>;
+
+const POLL_REALTIME_MS = 20000;
+const POLL_FALLBACK_MS = 4000;
 
 function previewChatMessages(currentUserId?: string): ClubMessage[] {
   const createdAt = (minutesAgo: number) =>
@@ -147,7 +152,7 @@ export default function ClubChatScreen({ route, navigation }: Props) {
       ? previewChatMessages(user?.id)
       : [],
   );
-  const [typingIds, setTypingIds] = useState<string[]>(
+  const [previewTypingIds] = useState<string[]>(
     () => isClubPreview && previewMode !== 'club-chat-empty'
       ? ['preview-member-2']
       : [],
@@ -178,6 +183,11 @@ export default function ClubChatScreen({ route, navigation }: Props) {
     [channels, channelId],
   );
   const isAnnouncements = channel?.kind === 'ANNOUNCEMENTS';
+  const { typingUserIds: realtimeTypingIds, markTyping, removeTypingUser } = useRealtimeTyping(
+    `${clubId}:${channelId}`,
+    user?.id,
+  );
+  const typingIds = isClubPreview ? previewTypingIds : realtimeTypingIds;
   const canPostAnnouncements = can('POST_ANNOUNCEMENTS');
   const canDelete = club?.myRole === 'OWNER' || club?.myRole === 'ADMIN' || can('DELETE_MESSAGES');
   const canPing = canPostAnnouncements || club?.myRole === 'OFFICER';
@@ -206,7 +216,6 @@ export default function ClubChatScreen({ route, navigation }: Props) {
     try {
       const response = await getClubChannelMessages(clubId, channel.id);
       setMessages(response.messages);
-      setTypingIds(response.typingUserIds);
       setDenied(false);
       clearChannelUnread(channel.id);
     } catch (error) {
@@ -216,10 +225,24 @@ export default function ClubChatScreen({ route, navigation }: Props) {
     }
   }, [channel, clubId, clearChannelUnread, isAnnouncements]);
 
+  const realtimeConnected = useRealtimeChannel(
+    !isClubPreview && channel && !isAnnouncements
+      ? `club-${clubId}-channel-${channel.id}`
+      : null,
+    REALTIME_CHAT_EVENTS,
+    ({ event, payload }) => {
+      if (event === 'typing') {
+        markTyping(payload);
+        return;
+      }
+      if (event === 'new_message') removeTypingUser(realtimeUserId(payload));
+      void loadMessages();
+    },
+  );
+
   useEffect(() => {
     if (isClubPreview) return;
     setMessages([]);
-    setTypingIds([]);
     setDraft('');
     setPendingImageUri(null);
     setReplyTo(null);
@@ -237,9 +260,12 @@ export default function ClubChatScreen({ route, navigation }: Props) {
       return;
     }
     void loadMessages();
-    const interval = setInterval(() => void loadMessages(), 4000);
+    const interval = setInterval(
+      () => void loadMessages(),
+      realtimeConnected ? POLL_REALTIME_MS : POLL_FALLBACK_MS,
+    );
     return () => clearInterval(interval);
-  }, [channel, clubId, clearChannelUnread, isAnnouncements, isClubPreview, loadMessages]);
+  }, [channel, clubId, clearChannelUnread, isAnnouncements, isClubPreview, loadMessages, realtimeConnected]);
 
   const send = async () => {
     if ((!draft.trim() && !pendingImageUri) || !channel) return;

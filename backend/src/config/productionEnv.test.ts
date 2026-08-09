@@ -31,7 +31,16 @@ describe('production environment validation', () => {
       DATABASE_URL: validEnv.DATABASE_URL,
       JWT_SECRET: validEnv.JWT_SECRET,
       CORS_ORIGIN: validEnv.CORS_ORIGIN,
+      SUPABASE_URL: validEnv.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: validEnv.SUPABASE_SERVICE_ROLE_KEY,
     })).not.toThrow();
+  });
+
+  it('rejects missing realtime credentials', () => {
+    expect(() => validateProductionEnvironment({
+      ...validEnv,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+    })).toThrow(/SUPABASE_SERVICE_ROLE_KEY is missing/);
   });
 
   it('rejects missing core values and invalid configured secrets', () => {

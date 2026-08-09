@@ -131,7 +131,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     await stampPodReadState(userId, podId);
     // Reading clears unread — ping the reader's own inbox topic so their tab
     // badge refreshes immediately instead of waiting for the 60s poll.
-    void broadcast(userTopic(userId), REALTIME_EVENTS.INBOX_UPDATED);
+    await broadcast(userTopic(userId), REALTIME_EVENTS.INBOX_UPDATED);
 
     res.json({ messages: messages.map(formatPodMessage), typingUserIds, hasMore });
   } catch (err) {
@@ -213,14 +213,14 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     });
 
     // Fire-and-forget — don't await so message response isn't delayed
-    NotificationService.notifyNewMessage(podId, userId).catch(() => {});
+    NotificationService.notifyNewMessage(podId, userId, trimmed).catch(() => {});
     stampPodReadState(userId, podId).catch(() => {});
-    void broadcast(podTopic(podId), REALTIME_EVENTS.NEW_MESSAGE);
-    for (const member of pod.members) {
-      if (member.userId !== userId) {
-        void broadcast(userTopic(member.userId), REALTIME_EVENTS.INBOX_UPDATED);
-      }
-    }
+    await Promise.all([
+      broadcast(podTopic(podId), REALTIME_EVENTS.NEW_MESSAGE, { userId }),
+      ...pod.members
+        .filter((member) => member.userId !== userId)
+        .map((member) => broadcast(userTopic(member.userId), REALTIME_EVENTS.INBOX_UPDATED)),
+    ]);
 
     res.status(201).json(formatPodMessage(message));
   } catch (err) {
@@ -277,7 +277,7 @@ router.post('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Resp
       create: { messageId: msgId, userId, emoji },
       update: {},
     });
-    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
 
     const updated = await prisma.message.findUnique({
       where: { id: msgId },
@@ -321,7 +321,7 @@ router.delete('/:msgId', requireAuth, async (req: AuthRequest, res: Response): P
       return;
     }
     await prisma.message.delete({ where: { id: msgId } });
-    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
     res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -360,7 +360,7 @@ router.delete('/:msgId/reactions', requireAuth, async (req: AuthRequest, res: Re
     await prisma.messageReaction.deleteMany({
       where: { messageId: msgId, userId, emoji },
     });
-    void broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE);
+    await broadcast(podTopic(podId), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
 
     const updated = await prisma.message.findUnique({
       where: { id: msgId },

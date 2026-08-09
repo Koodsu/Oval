@@ -13,6 +13,7 @@ import {
 import MapView, { Marker, Polygon, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { MapPressEvent } from '../components/CampusMap';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   clearActivityDemand,
   createPod,
+  getActivities,
   getActivityLocations,
   getApiErrorMessage,
   getPodsByActivity,
@@ -129,6 +131,7 @@ const POD_TITLE_EXAMPLES: Record<string, string> = {
 };
 
 export default function ActivityPodsScreen({ route, navigation, preview = false }: Props) {
+  const sharedStateVersion = useSharedStateVersion('pods', 'activities');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -180,20 +183,28 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
       return;
     }
     try {
-      const response = await getPodsByActivity(activity.id);
-      setPods(response);
+      const [podResponse, activityResponse] = await Promise.all([
+        getPodsByActivity(activity.id),
+        getActivities(),
+      ]);
+      setPods(podResponse);
+      const latestActivity = activityResponse.find((item) => item.id === activity.id);
+      if (latestActivity) {
+        setDemandCount(latestActivity.demandCount ?? 0);
+        setMyDemanded(Boolean(latestActivity.myDemanded));
+      }
       setLoadWarning(null);
     } catch {
       setLoadWarning("Couldn't refresh — return to this screen to retry.");
     } finally {
       setLoaded(true);
     }
-  }, [activity.id, preview]);
+  }, [activity.id, preview, sharedStateVersion]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   useEffect(() => {
@@ -212,7 +223,7 @@ export default function ActivityPodsScreen({ route, navigation, preview = false 
     return () => {
       active = false;
     };
-  }, [activity.id, preview]);
+  }, [activity.id, preview, sharedStateVersion]);
 
   const mappablePods = useMemo(
     () => pods.filter((pod) => pod.latitude != null && pod.longitude != null),

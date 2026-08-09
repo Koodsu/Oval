@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../../context/SharedStateInvalidationContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -75,6 +76,7 @@ function headerDateLabel(day: Date): string {
 }
 
 export default function ClubMeetingsTonightScreen({ navigation }: Props) {
+  const sharedStateVersion = useSharedStateVersion('clubs');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -102,7 +104,7 @@ export default function ClubMeetingsTonightScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const byDay = useMemo(() => {

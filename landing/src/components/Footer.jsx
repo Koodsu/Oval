@@ -22,6 +22,7 @@ export default function Footer() {
           <a href="#waitlist" className={`${LINK_CLASS} py-2`}>Waitlist</a>
           <Link to="/clubs" className={`${LINK_CLASS} py-2`}>For Clubs</Link>
           <Link to="/community-guidelines" className={`${LINK_CLASS} py-2`}>Guidelines</Link>
+          <Link to="/child-safety" className={`${LINK_CLASS} py-2`}>Child Safety</Link>
           <Link to="/support" className={`${LINK_CLASS} py-2`}>Support</Link>
           <Link to="/accessibility" className={`${LINK_CLASS} py-2`}>Accessibility</Link>
           <Link to="/privacy" className={`${LINK_CLASS} py-2`}>Privacy</Link>

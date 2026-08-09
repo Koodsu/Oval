@@ -1,5 +1,7 @@
 export interface NotificationPreferences {
   podJoin: boolean;
+  podInvite: boolean;
+  friendRequest: boolean;
   newMessage: boolean;
   meetupReminder: boolean;
   recapPrompt: boolean;
@@ -9,8 +11,11 @@ export interface NotificationPreferences {
   clubKick: boolean;
   clubRoleChange: boolean;
   clubAttendanceOpen: boolean;
+  clubRsvpReminder: boolean;
+  clubOutreach: boolean;
+  clubRolePing: boolean;
   weeklyRecap: boolean;
-  /** Demand-pool pushes ("6 people want a boba run" / "a pod just went up"). */
+  /** Demand-pool pushes ("6 people are up for a boba run" / "a plan just went up"). */
   demandAlerts: boolean;
 }
 

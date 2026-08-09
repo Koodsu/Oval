@@ -16,6 +16,7 @@ import MapView, { Marker, PROVIDER_DEFAULT } from '../components/CampusMap';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cancelPod,
@@ -108,6 +109,7 @@ function statusTint(status: Pod['status'], colors: ThemeColors) {
 }
 
 export default function PodDetailScreen({ route, navigation }: Props) {
+  const sharedStateVersion = useSharedStateVersion('pods', 'messages', 'users', 'friends');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -179,7 +181,7 @@ export default function PodDetailScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const meInPod = pod?.members.some((member) => member.userId === user?.id) ?? false;

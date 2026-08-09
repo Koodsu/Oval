@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../../context/SharedStateInvalidationContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -605,6 +606,7 @@ export default function ClubsHomeScreen({
   embedded?: boolean;
   previewData?: ClubsPreviewData;
 } = {}) {
+  const sharedStateVersion = useSharedStateVersion('clubs', 'messages', 'users');
   const navigation = useNavigation<Nav>();
   const styles = useStyles();
   const { colors, typography } = useTheme();
@@ -656,7 +658,7 @@ export default function ClubsHomeScreen({
     }
   }, [previewData]);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => { void load(); }, [load, sharedStateVersion]));
 
   const membershipIds = useMemo(() => new Set(myClubs.map((row) => row.club.id)), [myClubs]);
   const tonightByClub = useMemo(

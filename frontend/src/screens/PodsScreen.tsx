@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -707,6 +708,7 @@ function PodActions({
 }
 
 export default function PodsScreen({ previewData }: { previewData?: PodsPreviewData }) {
+  const sharedStateVersion = useSharedStateVersion('pods', 'messages', 'users', 'friends');
   const navigation = useNavigation<Nav>();
   const styles = useStyles();
   const { colors } = useTheme();
@@ -765,7 +767,7 @@ export default function PodsScreen({ previewData }: { previewData?: PodsPreviewD
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const currentPods = useMemo(() => sortUpcomingPods(activePods), [activePods]);

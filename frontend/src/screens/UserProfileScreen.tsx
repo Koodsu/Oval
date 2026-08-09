@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type {
   NativeStackNavigationProp,
   NativeStackScreenProps,
@@ -75,6 +76,7 @@ export default function UserProfileScreen({
     relationship: Awaited<ReturnType<typeof getFriendRelationship>>;
   };
 }) {
+  const sharedStateVersion = useSharedStateVersion('users', 'friends', 'pods', 'clubs');
   const styles = useStyles();
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -114,7 +116,7 @@ export default function UserProfileScreen({
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   const interestTags = useMemo(() => profile?.interestTags ?? [], [profile?.interestTags]);

@@ -15,6 +15,8 @@ jest.mock('../api', () => ({
   getNotificationPreferences: jest.fn().mockResolvedValue({
     preferences: {
       podJoin: true,
+      podInvite: true,
+      friendRequest: true,
       newMessage: true,
       meetupReminder: true,
       recapPrompt: true,
@@ -24,7 +26,11 @@ jest.mock('../api', () => ({
       clubKick: true,
       clubRoleChange: true,
       clubAttendanceOpen: true,
+      clubRsvpReminder: true,
+      clubOutreach: true,
+      clubRolePing: true,
       weeklyRecap: true,
+      demandAlerts: true,
     },
   }),
   updateNotificationPreferences: jest.fn(),
@@ -71,7 +77,7 @@ describe('PrivacyDataScreen', () => {
     expect(screen.getByText('Delete account')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Notification controls'));
-    expect(screen.getAllByRole('switch')).toHaveLength(13);
+    expect(screen.getAllByRole('switch')).toHaveLength(19);
     expect(screen.getByText('Weekly planning')).toBeTruthy();
     expect(screen.getByText('Demand alerts')).toBeTruthy();
 

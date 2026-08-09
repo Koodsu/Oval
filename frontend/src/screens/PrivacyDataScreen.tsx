@@ -51,6 +51,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyData'> & {
 
 const PREVIEW_PREFERENCES: NotificationPreferences = {
   podJoin: true,
+  podInvite: true,
+  friendRequest: true,
   newMessage: true,
   meetupReminder: true,
   recapPrompt: true,
@@ -60,6 +62,9 @@ const PREVIEW_PREFERENCES: NotificationPreferences = {
   clubKick: true,
   clubRoleChange: true,
   clubAttendanceOpen: true,
+  clubRsvpReminder: true,
+  clubOutreach: true,
+  clubRolePing: true,
   weeklyRecap: true,
   demandAlerts: true,
 };
@@ -70,11 +75,18 @@ const PREFERENCE_ROWS: Array<{
   body: string;
 }> = [
   { key: 'podJoin', title: 'Pod joins', body: 'When someone joins a pod you created.' },
+  { key: 'podInvite', title: 'Plan invitations', body: 'When a friend invites you to a pod.' },
+  { key: 'friendRequest', title: 'Friend requests', body: 'When someone wants to connect.' },
   { key: 'newMessage', title: 'New messages', body: 'Pod, club, officer, and direct messages.' },
   {
     key: 'meetupReminder',
     title: 'Meetup reminders',
     body: 'Reminders before pods and club meetings.',
+  },
+  {
+    key: 'recapPrompt',
+    title: 'Post-plan check-ins',
+    body: 'A quick rating prompt after plans you attended.',
   },
   { key: 'waitlistSpot', title: 'Waitlist openings', body: 'When a spot opens in a full pod.' },
   {
@@ -99,6 +111,21 @@ const PREFERENCE_ROWS: Array<{
     key: 'clubAttendanceOpen',
     title: 'Attendance check-in',
     body: 'When meeting attendance opens.',
+  },
+  {
+    key: 'clubRsvpReminder',
+    title: 'Club RSVP reminders',
+    body: 'When a club asks whether you are attending.',
+  },
+  {
+    key: 'clubOutreach',
+    title: 'Club leader messages',
+    body: 'Occasional messages sent by club leaders.',
+  },
+  {
+    key: 'clubRolePing',
+    title: 'Club role mentions',
+    body: 'When a role you hold is mentioned in club chat.',
   },
 ];
 
@@ -302,12 +329,12 @@ export default function PrivacyDataScreen({ navigation, preview = false }: Props
             {prefs ? (
               <>
                 <PreferenceSwitch
-                  row={PREFERENCE_ROWS[1]}
+                  row={PREFERENCE_ROWS[3]}
                   value={prefs.newMessage}
                   onChange={(value) => void updatePreference('newMessage', value)}
                 />
                 <PreferenceSwitch
-                  row={PREFERENCE_ROWS[2]}
+                  row={PREFERENCE_ROWS[4]}
                   value={prefs.meetupReminder}
                   onChange={(value) => void updatePreference('meetupReminder', value)}
                   last

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSupabase } from '../lib/supabase';
 
+export interface RealtimeBroadcastEvent {
+  event: string;
+  payload: Record<string, unknown>;
+}
+
 /**
  * Subscribes to a Supabase Realtime broadcast topic and invokes `onEvent`
  * whenever one of `events` fires. Events are content-free pings — callers
@@ -12,7 +17,7 @@ import { getSupabase } from '../lib/supabase';
 export function useRealtimeChannel(
   topic: string | null,
   events: string[],
-  onEvent: (event: string) => void,
+  onEvent: (message: RealtimeBroadcastEvent) => void,
 ): boolean {
   const [connected, setConnected] = useState(false);
   const handlerRef = useRef(onEvent);
@@ -26,7 +31,16 @@ export function useRealtimeChannel(
     const channel = supabase.channel(topic);
     for (const event of eventsKey.split(',')) {
       if (!event) continue;
-      channel.on('broadcast', { event }, () => handlerRef.current(event));
+      channel.on('broadcast', { event }, (message) => {
+        const payload = message?.payload;
+        handlerRef.current({
+          event,
+          payload:
+            payload && typeof payload === 'object' && !Array.isArray(payload)
+              ? (payload as Record<string, unknown>)
+              : {},
+        });
+      });
     }
     channel.subscribe((status) => {
       setConnected(status === 'SUBSCRIBED');

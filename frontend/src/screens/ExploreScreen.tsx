@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSharedStateVersion } from '../context/SharedStateInvalidationContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -346,6 +347,7 @@ export default function ExploreScreen({
   embedded?: boolean;
   previewData?: ExplorePreviewData;
 }) {
+  const sharedStateVersion = useSharedStateVersion('pods', 'activities', 'friends', 'users');
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const { colors, typography } = useTheme();
@@ -413,7 +415,7 @@ export default function ExploreScreen({
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+    }, [load, sharedStateVersion]),
   );
 
   useEffect(() => {

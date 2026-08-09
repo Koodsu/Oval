@@ -18,39 +18,19 @@ import { INTEREST_TAG_SET } from '../config/interestTags';
 import { getFullName, getPublicName, withDisplayName } from '../lib/userNames';
 import { moderateImageContent, moderateTextContent } from '../lib/contentModeration';
 import { isPlatformAdmin } from '../middleware/admin';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  parseNotificationPreferences,
+} from '../lib/notificationPreferences';
 
 const VALID_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'] as const;
 const MAJOR_REGEX = /^[a-zA-Z\s&\/\-,\.\(\)]+$/;
 const INSTAGRAM_REGEX = /^[a-zA-Z0-9._]{1,30}$/;
 const CLUB_REGEX = /^[a-zA-Z\s&\-]+$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DEFAULT_NOTIFICATION_PREFERENCES = {
-  podJoin: true,
-  newMessage: true,
-  meetupReminder: true,
-  recapPrompt: true,
-  waitlistSpot: true,
-  clubMeetingCreated: true,
-  clubAnnouncementCreated: true,
-  clubKick: true,
-  clubRoleChange: true,
-  clubAttendanceOpen: true,
-  weeklyRecap: true,
-  demandAlerts: true,
-};
-
 function parseJsonArray(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try { return JSON.parse(raw); } catch { return []; }
-}
-
-function parseNotificationPreferences(raw: string | null | undefined) {
-  if (!raw) return DEFAULT_NOTIFICATION_PREFERENCES;
-  try {
-    return { ...DEFAULT_NOTIFICATION_PREFERENCES, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_NOTIFICATION_PREFERENCES;
-  }
 }
 
 const router = Router();
@@ -753,6 +733,8 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
   const userId = req.user!.userId;
   const {
     podJoin,
+    podInvite,
+    friendRequest,
     newMessage,
     meetupReminder,
     recapPrompt,
@@ -762,12 +744,17 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
     clubKick,
     clubRoleChange,
     clubAttendanceOpen,
+    clubRsvpReminder,
+    clubOutreach,
+    clubRolePing,
     weeklyRecap,
     demandAlerts,
   } = req.body;
 
   if (
     (podJoin !== undefined && typeof podJoin !== 'boolean') ||
+    (podInvite !== undefined && typeof podInvite !== 'boolean') ||
+    (friendRequest !== undefined && typeof friendRequest !== 'boolean') ||
     (newMessage !== undefined && typeof newMessage !== 'boolean') ||
     (meetupReminder !== undefined && typeof meetupReminder !== 'boolean') ||
     (recapPrompt !== undefined && typeof recapPrompt !== 'boolean') ||
@@ -777,6 +764,9 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
     (clubKick !== undefined && typeof clubKick !== 'boolean') ||
     (clubRoleChange !== undefined && typeof clubRoleChange !== 'boolean') ||
     (clubAttendanceOpen !== undefined && typeof clubAttendanceOpen !== 'boolean') ||
+    (clubRsvpReminder !== undefined && typeof clubRsvpReminder !== 'boolean') ||
+    (clubOutreach !== undefined && typeof clubOutreach !== 'boolean') ||
+    (clubRolePing !== undefined && typeof clubRolePing !== 'boolean') ||
     (weeklyRecap !== undefined && typeof weeklyRecap !== 'boolean') ||
     (demandAlerts !== undefined && typeof demandAlerts !== 'boolean')
   ) {
@@ -795,6 +785,8 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       ...current,
       ...(podJoin !== undefined && { podJoin }),
+      ...(podInvite !== undefined && { podInvite }),
+      ...(friendRequest !== undefined && { friendRequest }),
       ...(newMessage !== undefined && { newMessage }),
       ...(meetupReminder !== undefined && { meetupReminder }),
       ...(recapPrompt !== undefined && { recapPrompt }),
@@ -804,6 +796,9 @@ router.patch('/notifications', requireVerifiedAuth, async (req: AuthRequest, res
       ...(clubKick !== undefined && { clubKick }),
       ...(clubRoleChange !== undefined && { clubRoleChange }),
       ...(clubAttendanceOpen !== undefined && { clubAttendanceOpen }),
+      ...(clubRsvpReminder !== undefined && { clubRsvpReminder }),
+      ...(clubOutreach !== undefined && { clubOutreach }),
+      ...(clubRolePing !== undefined && { clubRolePing }),
       ...(weeklyRecap !== undefined && { weeklyRecap }),
       ...(demandAlerts !== undefined && { demandAlerts }),
     };

@@ -25,6 +25,7 @@ import type { ApplyInfo } from '../../types';
 import { spacing, useTheme } from '../../theme';
 import { clubIdentityImageFor } from '../../constants/contentImages';
 import { getUiPreviewMode } from '../../dev/previewMode';
+import { useSharedStateVersion } from '../../context/SharedStateInvalidationContext';
 
 import { toast } from '../../lib/toast';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClubApply'>;
@@ -84,6 +85,7 @@ function previewApplyInfo(mode?: string): ApplyInfo | null {
 }
 
 export default function ClubApplyScreen({ navigation, route }: Props) {
+  const sharedStateVersion = useSharedStateVersion('clubs');
   const { clubId } = route.params;
   const { colors, typography } = useTheme();
   const [previewMode] = useState(getUiPreviewMode);
@@ -115,7 +117,7 @@ export default function ClubApplyScreen({ navigation, route }: Props) {
     return () => {
       active = false;
     };
-  }, [clubId, previewMode]);
+  }, [clubId, previewMode, sharedStateVersion]);
 
   const submit = async () => {
     if (!info?.openCycle) return;

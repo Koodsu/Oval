@@ -24,6 +24,7 @@ import Animated, {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SharedStateInvalidationProvider } from './src/context/SharedStateInvalidationContext';
 import AuthScreen from './src/screens/AuthScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -95,6 +96,13 @@ import { AppBackdrop, CountBubble, SkeletonBlock, SkeletonCard } from './src/com
 import { CURRENT_TERMS_VERSION } from './src/constants/legal';
 import { REALTIME_INBOX_EVENTS, useRealtimeChannel } from './src/hooks/useRealtimeChannel';
 import { captureReferralFromUrl } from './src/lib/referrals';
+import { trackEvent } from './src/api';
+
+// NOTE: Sentry is initialised once, by initMonitoring() above. Do not add a
+// second Sentry.init() here — @sentry/wizard tries to inject one with a
+// hardcoded DSN and sendDefaultPii: true, which would defeat the DSN gating and
+// the anonymous configuration in src/lib/monitoring.ts. If you rerun the wizard,
+// delete what it adds to this file.
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 if (Platform.OS !== 'web') {
@@ -109,13 +117,42 @@ if (Platform.OS !== 'web') {
   });
 }
 if (Platform.OS === 'android') {
-  // Expo pushes land on the 'default' channel; without registering it with
-  // high importance, Android shows no heads-up banner (silent tray only).
-  void Notifications.setNotificationChannelAsync('default', {
-    name: 'Default',
-    importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default',
-  }).catch(() => {});
+  // Keep urgency honest: reminders and plan changes may interrupt, ordinary
+  // conversations use normal priority, and discovery never makes noise.
+  void Promise.all([
+    Notifications.setNotificationChannelAsync('plans', {
+      name: 'Plans and reminders',
+      description: 'Time-sensitive plan changes, reminders, invitations, and waitlist openings.',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 200, 120, 200],
+    }),
+    Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages and connections',
+      description: 'Direct, pod, and club messages plus connection requests.',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    }),
+    Notifications.setNotificationChannelAsync('clubs', {
+      name: 'Club updates',
+      description: 'Meetings, announcements, roles, and leader updates.',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    }),
+    Notifications.setNotificationChannelAsync('discovery', {
+      name: 'Weekly planning and recommendations',
+      description: 'Low-priority planning suggestions and activity matches.',
+      importance: Notifications.AndroidImportance.LOW,
+      sound: null,
+      vibrationPattern: null,
+    }),
+    // Backward-compatible fallback for older or malformed payloads.
+    Notifications.setNotificationChannelAsync('default', {
+      name: 'Other notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    }),
+  ]).catch(() => {});
 }
 
 export type MainTabParamList = {
@@ -181,7 +218,12 @@ function urlFromNotificationResponse(
   const id = response.notification.request.identifier;
   if (id && lastHandledNotificationId === id) return null;
   if (id) lastHandledNotificationId = id;
-  const url = response.notification.request.content.data?.url;
+  const data = response.notification.request.content.data;
+  const url = data?.url;
+  void trackEvent('notification.opened', {
+    type: typeof data?.type === 'string' ? data.type : 'unknown',
+    notificationId: id || undefined,
+  });
   return typeof url === 'string' && url.length > 0 ? url : null;
 }
 
@@ -939,7 +981,9 @@ function App() {
             <ThemeReadyGate>
               <ErrorBoundary>
                 <AuthProvider>
-                  <ThemedApp />
+                  <SharedStateInvalidationProvider>
+                    <ThemedApp />
+                  </SharedStateInvalidationProvider>
                 </AuthProvider>
               </ErrorBoundary>
               <ToastHost />

@@ -12,6 +12,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from './config/jwt';
 import { inputGuard } from './middleware/inputGuard';
+import { sharedStateInvalidation } from './middleware/sharedStateInvalidation';
 
 import prisma from './prisma';
 import authRoutes from './routes/auth';
@@ -94,6 +95,36 @@ app.use(
 );
 app.options('*', cors());
 
+// Redact user coordinates from logged URLs.
+//
+// Home/Explore pass the device's lat/lng as query params purely to sort pods by
+// proximity — the values are used for that one request and never persisted (no
+// lat/lng column exists on User). Morgan's default `url` token logs the full
+// query string, which would park precise coordinates in retained Vercel logs and
+// make the collection non-ephemeral under Google Play's Data Safety definition.
+// Overriding the token keeps the request path (still useful for debugging) while
+// dropping the coordinates.
+const REDACTED_QUERY_PARAMS = ['lat', 'lng'];
+morgan.token('url', (req: express.Request) => {
+  const original = req.originalUrl || req.url || '';
+  const queryStart = original.indexOf('?');
+  if (queryStart === -1) return original;
+
+  const path = original.slice(0, queryStart);
+  const params = new URLSearchParams(original.slice(queryStart + 1));
+  let changed = false;
+  for (const key of REDACTED_QUERY_PARAMS) {
+    if (params.has(key)) {
+      params.set(key, 'REDACTED');
+      changed = true;
+    }
+  }
+  if (!changed) return original;
+
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+});
+
 // HTTP request logging — skip in test to keep output clean
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
@@ -112,6 +143,10 @@ app.use(express.json({ limit: '64kb' }));
 // Rejects hostile shapes (deep nesting, huge arrays/strings, proto-pollution
 // keys, nested query objects) before they reach handlers or Prisma.
 app.use(inputGuard);
+
+// Content-free realtime invalidations for successful shared-state mutations.
+// Mounted once so new pod/club/friend routes cannot silently become stale.
+app.use(sharedStateInvalidation);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

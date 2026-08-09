@@ -961,7 +961,13 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
       },
     });
 
-    NotificationService.notifyPodPlanChange(id, userId, 'updated').catch(() => {});
+    NotificationService.notifyPodPlanChange(
+      id,
+      userId,
+      'updated',
+      undefined,
+      Object.keys(data),
+    ).catch(() => {});
 
     res.json(parsePodMembers(updated));
   } catch (err) {
@@ -1095,7 +1101,7 @@ router.post('/:id/typing', requireAuth, async (req: AuthRequest, res: Response):
       return;
     }
     setTyping('pod', podId, userId);
-    void broadcast(podTopic(podId), REALTIME_EVENTS.TYPING);
+    await broadcast(podTopic(podId), REALTIME_EVENTS.TYPING, { userId });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

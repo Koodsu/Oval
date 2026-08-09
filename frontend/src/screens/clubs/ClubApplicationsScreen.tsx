@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSharedStateVersion } from '../../context/SharedStateInvalidationContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../../App';
@@ -117,6 +118,7 @@ function previewApplicationData(mode?: string): {
 }
 
 export default function ClubApplicationsScreen({ navigation, route }: Props) {
+  const sharedStateVersion = useSharedStateVersion('clubs');
   const { clubId } = route.params;
   const { colors, typography } = useTheme();
   const [previewMode] = useState(getUiPreviewMode);
@@ -203,7 +205,7 @@ export default function ClubApplicationsScreen({ navigation, route }: Props) {
       return () => {
         active = false;
       };
-    }, [load])
+    }, [load, sharedStateVersion])
   );
 
   const openCycleSubmit = async () => {

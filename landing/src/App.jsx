@@ -17,6 +17,7 @@ import PodInvitePage from './components/PodInvitePage'
 import UserProfilePage from './components/UserProfilePage'
 import ClubsPage from './components/ClubsPage'
 import AccessibilityStatement from './components/AccessibilityStatement'
+import ChildSafetyStandards from './components/ChildSafetyStandards'
 import { useScrollReveal } from './hooks/useScrollReveal'
 import { useLocation } from './lib/router'
 
@@ -73,6 +74,7 @@ export default function App() {
       '/community-guidelines': 'Community Guidelines | Oval',
       '/support': 'Support | Oval',
       '/accessibility': 'Accessibility | Oval',
+      '/child-safety': 'Child Safety Standards | Oval',
       '/delete-account': 'Delete Your Account | Oval',
     }
     document.title = routeTitles[route]
@@ -104,6 +106,7 @@ export default function App() {
       '/community-guidelines': <CommunityGuidelines />,
       '/support': <Support />,
       '/accessibility': <AccessibilityStatement />,
+      '/child-safety': <ChildSafetyStandards />,
       '/delete-account': <DeleteAccount />,
     }[route] ?? <LandingPage />
 

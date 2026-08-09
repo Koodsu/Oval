@@ -12,6 +12,14 @@ const {
   mockReceiptChunk,
   mockGetReceipts,
   mockUserUpdateMany,
+  mockUserFindMany,
+  mockPodMemberFindMany,
+  mockAnalyticsCount,
+  mockAnalyticsCreate,
+  mockPodInviteFindUnique,
+  mockFriendRequestFindUnique,
+  mockClubFindUnique,
+  mockClubChannelFindFirst,
   mockQueryRaw,
   mockExecuteRaw,
 } = vi.hoisted(() => ({
@@ -23,6 +31,14 @@ const {
   mockReceiptChunk: vi.fn((ids: unknown[]) => [ids]),
   mockGetReceipts: vi.fn().mockResolvedValue({}),
   mockUserUpdateMany: vi.fn().mockResolvedValue({ count: 1 }),
+  mockUserFindMany: vi.fn().mockResolvedValue([]),
+  mockPodMemberFindMany: vi.fn().mockResolvedValue([]),
+  mockAnalyticsCount: vi.fn().mockResolvedValue(0),
+  mockAnalyticsCreate: vi.fn().mockResolvedValue({}),
+  mockPodInviteFindUnique: vi.fn(),
+  mockFriendRequestFindUnique: vi.fn(),
+  mockClubFindUnique: vi.fn(),
+  mockClubChannelFindFirst: vi.fn(),
   mockQueryRaw: vi.fn().mockResolvedValue([]),
   mockExecuteRaw: vi.fn().mockResolvedValue(0),
 }));
@@ -48,7 +64,26 @@ vi.mock('../prisma', () => ({
     },
     user: {
       updateMany: (...args: unknown[]) => mockUserUpdateMany(...args),
-      findMany: () => Promise.resolve([]),
+      findMany: (...args: unknown[]) => mockUserFindMany(...args),
+    },
+    podMember: {
+      findMany: (...args: unknown[]) => mockPodMemberFindMany(...args),
+    },
+    analyticsEvent: {
+      count: (...args: unknown[]) => mockAnalyticsCount(...args),
+      create: (...args: unknown[]) => mockAnalyticsCreate(...args),
+    },
+    podInvite: {
+      findUnique: (...args: unknown[]) => mockPodInviteFindUnique(...args),
+    },
+    friendRequest: {
+      findUnique: (...args: unknown[]) => mockFriendRequestFindUnique(...args),
+    },
+    club: {
+      findUnique: (...args: unknown[]) => mockClubFindUnique(...args),
+    },
+    clubChannel: {
+      findFirst: (...args: unknown[]) => mockClubChannelFindFirst(...args),
     },
     $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
@@ -92,6 +127,10 @@ describe('parsePreferences', () => {
 describe('NotificationService.notifyPodJoin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserFindMany.mockResolvedValue([]);
+    mockPodMemberFindMany.mockResolvedValue([]);
+    mockAnalyticsCount.mockResolvedValue(0);
+    mockAnalyticsCreate.mockResolvedValue({});
     mockSend.mockResolvedValue([]);
     mockChunk.mockImplementation((msgs: unknown[]) => [msgs]);
     mockPodUpdateMany.mockResolvedValue({ count: 1 });
@@ -184,6 +223,67 @@ describe('NotificationService.notifyPodJoin', () => {
   });
 });
 
+describe('NotificationService invitation and connection pushes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockChunk.mockImplementation((msgs: unknown[]) => [msgs]);
+    mockSend.mockResolvedValue([{ status: 'ok', id: 'ticket-1' }]);
+  });
+
+  it('sends a pod invitation with useful plan details', async () => {
+    const token = 'ExponentPushToken[inviteinviteinviteinvite]';
+    mockPodInviteFindUnique.mockResolvedValue({
+      id: 'invite-1',
+      podId: 'pod-1',
+      sender: { name: 'Maya Chen', firstName: 'Maya', lastName: 'Chen' },
+      receiver: { pushToken: token, notificationPreferences: null },
+      pod: {
+        id: 'pod-1',
+        title: null,
+        meetupTime: new Date(2026, 7, 14, 19, 0),
+        location: 'RPAC Courts',
+        maxMembers: 6,
+        activity: { title: 'Pickup Basketball' },
+        members: [{ userId: 'sender' }, { userId: 'other' }],
+      },
+    });
+
+    const { NotificationService } = await import('./NotificationService');
+    await NotificationService.notifyPodInvite('invite-1');
+
+    expect(mockChunk).toHaveBeenCalledWith([
+      expect.objectContaining({
+        to: token,
+        title: 'Maya invited you to Pickup Basketball',
+        body: expect.stringContaining('RPAC Courts'),
+        channelId: 'plans',
+        data: expect.objectContaining({ type: 'pod_invite', url: 'oval://pod/pod-1' }),
+      }),
+    ]);
+  });
+
+  it('sends an incoming friend request to the Inbox', async () => {
+    const token = 'ExponentPushToken[friendfriendfriendfriend]';
+    mockFriendRequestFindUnique.mockResolvedValue({
+      id: 'request-1',
+      sender: { id: 'sender-1', name: 'Maya Chen', firstName: 'Maya', lastName: 'Chen' },
+      receiver: { pushToken: token, notificationPreferences: null },
+    });
+
+    const { NotificationService } = await import('./NotificationService');
+    await NotificationService.notifyFriendRequest('request-1');
+
+    expect(mockChunk).toHaveBeenCalledWith([
+      expect.objectContaining({
+        to: token,
+        title: 'Maya sent you a friend request',
+        channelId: 'messages',
+        data: expect.objectContaining({ type: 'friend_request', url: 'oval://inbox' }),
+      }),
+    ]);
+  });
+});
+
 describe('NotificationService.notifyNewMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -270,6 +370,60 @@ describe('NotificationService.notifyNewMessage', () => {
   });
 });
 
+describe('NotificationService.notifyClubMessage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockChunk.mockImplementation((msgs: unknown[]) => [msgs]);
+    mockSend.mockResolvedValue([{ status: 'ok', id: 'club-ticket' }]);
+  });
+
+  it('sends a channel-specific preview to eligible club members', async () => {
+    const token = 'ExponentPushToken[clubclubclubclubclub]';
+    mockClubFindUnique.mockResolvedValue({
+      id: 'club-1',
+      name: 'Coding Club',
+      roles: [],
+      members: [
+        {
+          role: 'OWNER',
+          customRoles: [],
+          user: { id: 'sender', name: 'Maya', firstName: 'Maya', lastName: '', pushToken: null, notificationPreferences: null },
+        },
+        {
+          role: 'MEMBER',
+          customRoles: [],
+          user: { id: 'recipient', name: 'Jordan', firstName: 'Jordan', lastName: '', pushToken: token, notificationPreferences: null },
+        },
+      ],
+    });
+    mockClubChannelFindFirst.mockResolvedValue({
+      id: 'general-1',
+      kind: 'GENERAL',
+      name: 'General',
+      allowedRoleIds: null,
+      allowedUserIds: null,
+    });
+
+    const { NotificationService } = await import('./NotificationService');
+    await NotificationService.notifyClubMessage('club-1', 'sender', 'Room changed to Enarson 204', {
+      channelKind: 'GENERAL',
+    });
+
+    expect(mockChunk).toHaveBeenCalledWith([
+      expect.objectContaining({
+        to: token,
+        title: 'Maya · Coding Club #General',
+        body: 'Room changed to Enarson 204',
+        channelId: 'messages',
+        data: expect.objectContaining({
+          type: 'club_message',
+          url: 'oval://clubs/club-1/chat/general-1',
+        }),
+      }),
+    ]);
+  });
+});
+
 describe('NotificationService.sendMeetupReminders', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -322,7 +476,7 @@ describe('NotificationService.sendMeetupReminders', () => {
       expect.arrayContaining([
         expect.objectContaining({
           to: token,
-          title: 'Meetup in 1 hour!',
+          title: 'Morning Run starts in 1 hour',
           data: expect.objectContaining({ url: 'oval://pod/pod1' }),
         }),
       ])
@@ -358,6 +512,12 @@ describe('NotificationService.sendMeetupReminders', () => {
 describe('NotificationService.sendWeeklyRecaps gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSend.mockResolvedValue([]);
+    mockPodFindMany.mockResolvedValue([]);
+    mockUserFindMany.mockResolvedValue([]);
+    mockPodMemberFindMany.mockResolvedValue([]);
+    mockAnalyticsCount.mockResolvedValue(0);
+    mockAnalyticsCreate.mockResolvedValue({});
   });
 
   it('does nothing on non-Sunday days', async () => {
@@ -382,6 +542,41 @@ describe('NotificationService.sendWeeklyRecaps gate', () => {
     // 21:40 — a cron with arbitrary cadence must still be able to send.
     await NotificationService.sendWeeklyRecaps(new Date(2026, 6, 5, 21, 40));
     expect(mockPodFindMany).toHaveBeenCalled();
+  });
+
+  it('turns a zero-activity week into a useful planning notification without zero stats', async () => {
+    const now = new Date(2026, 6, 5, 18, 15);
+    const token = 'ExponentPushToken[weeklyweeklyweeklyweekly]';
+    mockPodFindMany.mockResolvedValue([
+      { id: 'p1', activity: { category: 'Sports' }, members: [] },
+      { id: 'p2', activity: { category: 'Social' }, members: [] },
+      { id: 'p3', activity: { category: 'Food' }, members: [] },
+    ]);
+    mockUserFindMany.mockResolvedValue([
+      { id: 'u1', pushToken: token, notificationPreferences: null, interestTags: null },
+    ]);
+    mockPodMemberFindMany.mockResolvedValue([]);
+    mockSend.mockResolvedValue([{ status: 'ok', id: 'weekly-ticket' }]);
+
+    const { NotificationService } = await import('./NotificationService');
+    const result = await NotificationService.sendWeeklyRecaps(now);
+
+    expect(result).toEqual({ attempted: 1, sent: 1 });
+    expect(mockPodFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        meetupTime: {
+          gt: now,
+          lte: new Date(2026, 6, 12, 18, 15),
+        },
+      }),
+    }));
+    expect(mockChunk).toHaveBeenCalledWith([
+      expect.objectContaining({
+        title: '3 plans match your interests',
+        body: "See what's forming around campus this week.",
+        channelId: 'discovery',
+      }),
+    ]);
   });
 });
 

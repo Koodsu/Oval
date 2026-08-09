@@ -6,6 +6,7 @@ import { areFriends } from '../lib/friendUtils';
 import { joinExistingPodMember, parsePodMembers } from '../lib/joinExistingPod';
 import { withDisplayName } from '../lib/userNames';
 import { broadcast, REALTIME_EVENTS, userTopic } from '../lib/realtime';
+import { NotificationService } from '../lib/NotificationService';
 
 const router = Router();
 
@@ -94,7 +95,8 @@ router.post('/:id/invite', requireAuth, async (req: AuthRequest, res: Response):
         receiver: { select: { id: true, name: true, firstName: true, lastName: true, avatarUrl: true } },
       },
     });
-    void broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await broadcast(userTopic(receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    NotificationService.notifyPodInvite(invite.id).catch(() => {});
 
     res.status(201).json({
       ...invite,
@@ -250,8 +252,10 @@ router.post('/invites/:id/accept', requireAuth, async (req: AuthRequest, res: Re
       return;
     }
 
-    void broadcast(userTopic(invite.senderId), REALTIME_EVENTS.INBOX_UPDATED);
-    void broadcast(userTopic(invite.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await Promise.all([
+      broadcast(userTopic(invite.senderId), REALTIME_EVENTS.INBOX_UPDATED),
+      broadcast(userTopic(invite.receiverId), REALTIME_EVENTS.INBOX_UPDATED),
+    ]);
     res.status(201).json(parsePodMembers(result.updatedPod));
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -279,8 +283,10 @@ router.post('/invites/:id/decline', requireAuth, async (req: AuthRequest, res: R
       where: { id: inviteId },
       data: { status: 'DECLINED', respondedAt: new Date() },
     });
-    void broadcast(userTopic(invite.senderId), REALTIME_EVENTS.INBOX_UPDATED);
-    void broadcast(userTopic(invite.receiverId), REALTIME_EVENTS.INBOX_UPDATED);
+    await Promise.all([
+      broadcast(userTopic(invite.senderId), REALTIME_EVENTS.INBOX_UPDATED),
+      broadcast(userTopic(invite.receiverId), REALTIME_EVENTS.INBOX_UPDATED),
+    ]);
 
     res.status(204).send();
   } catch {

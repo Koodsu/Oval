@@ -12,6 +12,7 @@ import { isSupabaseStorageConfigured, supabaseStorage } from '../lib/supabaseSto
 import { moderateImageContent, moderateTextContent } from '../lib/contentModeration';
 import { consumeDurableRateLimit } from '../lib/durableRateLimit';
 import { isValidReactionEmoji } from '../lib/reactionEmojis';
+import { broadcast, clubChannelTopic, REALTIME_EVENTS } from '../lib/realtime';
 
 // ── Club avatar upload setup ──────────────────────────────────────────────────
 
@@ -2433,6 +2434,10 @@ router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response
       },
     });
 
+    void NotificationService.notifyClubMessage(clubId, userId, trimmed, {
+      channelKind: CHANNEL_GENERAL,
+    });
+
     res.status(201).json(message);
   } catch (err) {
     console.error(err);
@@ -2558,6 +2563,10 @@ router.post('/:id/officer-messages', requireAuth, async (req: AuthRequest, res: 
     const message = await prisma.clubOfficerMessage.create({
       data: { clubId, userId, content: content.trim() },
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+
+    void NotificationService.notifyClubMessage(clubId, userId, content.trim(), {
+      channelKind: CHANNEL_OFFICERS,
     });
 
     res.status(201).json(message);
@@ -3127,16 +3136,12 @@ router.post('/:id/channels/:channelId/messages', requireAuth, async (req: AuthRe
       create: { channelId: channel.id, userId },
     });
 
-    if (pingRoleIds.length > 0) {
-      void NotificationService.notifyClubRolePing(
-        clubId,
-        userId,
-        pingRoleIds,
-        channel.name,
-        trimmed || 'Shared a photo',
-      );
-    }
+    void NotificationService.notifyClubMessage(clubId, userId, trimmed || 'Shared a photo', {
+      channelId: channel.id,
+      mentionedRoleIds: pingRoleIds,
+    });
 
+    await broadcast(clubChannelTopic(clubId, channel.id), REALTIME_EVENTS.NEW_MESSAGE, { userId });
     res.status(201).json(message);
   } catch (err) {
     console.error(err);
@@ -3199,6 +3204,7 @@ router.post(
           },
         },
       });
+      await broadcast(clubChannelTopic(clubId, channel.id), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
       res.json({ ...updated, mentionRoleIds: parseStringList(updated.mentionRoleIds) });
     } catch (err) {
       console.error(err);
@@ -3257,6 +3263,7 @@ router.delete(
           },
         },
       });
+      await broadcast(clubChannelTopic(clubId, channel.id), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
       res.json({ ...updated, mentionRoleIds: parseStringList(updated.mentionRoleIds) });
     } catch (err) {
       console.error(err);
@@ -3313,6 +3320,7 @@ router.delete(
         await prisma.clubMessage.delete({ where: { id: messageId } });
         await cleanupClubMessageImageUrl(message.imageUrl);
       }
+      await broadcast(clubChannelTopic(clubId, channel.id), REALTIME_EVENTS.MESSAGE_UPDATE, { userId });
       res.json({ ok: true });
     } catch (err) {
       console.error(err);
@@ -3341,6 +3349,7 @@ router.post('/:id/channels/:channelId/typing', requireAuth, async (req: AuthRequ
 
     const typing = typingScopeForChannel(channel);
     setTyping(typing.scope, typing.key, userId);
+    await broadcast(clubChannelTopic(clubId, channel.id), REALTIME_EVENTS.TYPING, { userId });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

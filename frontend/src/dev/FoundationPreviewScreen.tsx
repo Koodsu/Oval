@@ -20,6 +20,7 @@ import {
   useDockClearance,
 } from '../components/ui';
 import { ClubEmptyState, ClubIdentityHero } from '../components/clubs';
+import { captureException, monitoringEnabled } from '../lib/monitoring';
 import { spacing, useTheme } from '../theme';
 
 const welcomeSpot = require('../../assets/illustrations/spot/onboarding/01-welcome.png');
@@ -29,6 +30,61 @@ const welcomeSpot = require('../../assets/illustrations/spot/onboarding/01-welco
  * It contains no production social proof and is reachable only when
  * EXPO_PUBLIC_UI_PREVIEW=foundation is set at build/start time.
  */
+/**
+ * Dev-only Sentry smoke test.
+ *
+ * Renders nothing unless a DSN is configured, so it is inert in normal dev and
+ * in any build without EXPO_PUBLIC_SENTRY_DSN set.
+ *
+ * "Send handled error" goes through captureException() — the same path
+ * ErrorBoundary uses. Appears in Sentry within a few seconds.
+ *
+ * "Throw unhandled error" throws during render, which ErrorBoundary catches and
+ * reports. This is the more realistic test: it exercises the native crash path
+ * and is what a real user-facing crash looks like.
+ *
+ * If nothing arrives in Sentry: confirm the DSN is set, and remember events are
+ * tagged with EXPO_PUBLIC_ENV, so a local run shows up under "development".
+ */
+function SentryTestPanel() {
+  const { typography } = useTheme();
+  const [shouldThrow, setShouldThrow] = React.useState(false);
+
+  if (shouldThrow) {
+    throw new Error('Oval Sentry smoke test — unhandled render error');
+  }
+
+  if (!monitoringEnabled) return null;
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <SectionHeader title="Sentry smoke test (dev only)" />
+      <Text style={typography.caption}>
+        Events report to the environment named by EXPO_PUBLIC_ENV.
+      </Text>
+      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        <Button
+          label="Send handled error"
+          size="sm"
+          onPress={() =>
+            captureException(new Error('Oval Sentry smoke test — handled error'), {
+              source: 'FoundationPreviewScreen',
+            })
+          }
+          style={styles.flex}
+        />
+        <Button
+          label="Throw unhandled error"
+          size="sm"
+          variant="secondary"
+          onPress={() => setShouldThrow(true)}
+          style={styles.flex}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function FoundationPreviewScreen() {
   const { colors, typography, preference, setPreference } = useTheme();
   const dockClearance = useDockClearance();
@@ -60,6 +116,8 @@ export default function FoundationPreviewScreen() {
               White canvas, compact hierarchy, solid surfaces, and scarlet reserved for action.
             </Text>
           </View>
+
+          <SentryTestPanel />
 
           <SectionHeader title="Standardized club system" />
           <ClubIdentityHero

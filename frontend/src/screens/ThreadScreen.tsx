@@ -33,6 +33,7 @@ import { REPORT_REASON_OPTIONS } from '../constants/reportReasons';
 import * as Clipboard from 'expo-clipboard';
 import { mergeLatestPage } from '../utils/chat';
 import { REALTIME_CHAT_EVENTS, useRealtimeChannel } from '../hooks/useRealtimeChannel';
+import { realtimeUserId, useRealtimeTyping } from '../hooks/useRealtimeTyping';
 import { RootStackParamList } from '../../App';
 import { DirectMessage, FriendUser } from '../types';
 import {
@@ -100,7 +101,6 @@ export default function ThreadScreen({
   // person's name from the loaded messages instead of showing "Messages".
   const [messages, setMessages] = useState<DirectMessage[]>(previewData?.messages ?? []);
   const [otherUser, setOtherUser] = useState<FriendUser | null>(previewData?.otherUser ?? null);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>(previewData?.typingUserIds ?? []);
   const [messageText, setMessageText] = useState('');
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
   const [sending, setSending] = useState(false);
@@ -115,6 +115,12 @@ export default function ThreadScreen({
   const messagesRef = useRef<DirectMessage[]>([]);
   messagesRef.current = messages;
   const currentUserId = previewData?.currentUserId ?? user?.id;
+  const {
+    typingUserIds: realtimeTypingUserIds,
+    markTyping,
+    removeTypingUser,
+  } = useRealtimeTyping(threadId, currentUserId);
+  const typingUserIds = previewData?.typingUserIds ?? realtimeTypingUserIds;
   const otherPartyName =
     otherUser?.name ??
     messages.find((message) => message.sender.id !== currentUserId)?.sender.name ??
@@ -129,7 +135,6 @@ export default function ThreadScreen({
         setOtherUser(response.otherUser);
         setMessages((current) => mergeLatestPage(current, response.messages));
         if (!messagesRef.current.length) setHasMore(!!response.hasMore);
-        setTypingUserIds(response.typingUserIds);
         setLoadError(null);
         // Only mark read when something new actually arrived — avoids a
         // write request on every poll tick.
@@ -170,9 +175,18 @@ export default function ThreadScreen({
     }
   }, [loadingEarlier, threadId]);
 
-  const realtimeConnected = useRealtimeChannel(`dm-${threadId}`, REALTIME_CHAT_EVENTS, () => {
-    void load(false);
-  });
+  const realtimeConnected = useRealtimeChannel(
+    `dm-${threadId}`,
+    REALTIME_CHAT_EVENTS,
+    ({ event, payload }) => {
+      if (event === 'typing') {
+        markTyping(payload);
+        return;
+      }
+      if (event === 'new_message') removeTypingUser(realtimeUserId(payload));
+      void load(false);
+    },
+  );
 
   useFocusEffect(
     useCallback(() => {

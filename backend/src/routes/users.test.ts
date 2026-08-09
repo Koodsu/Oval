@@ -250,8 +250,14 @@ describe('GET /users/notifications', () => {
 
     expect(res.body.preferences).toMatchObject({
       podJoin: true,
+      podInvite: true,
+      friendRequest: true,
       newMessage: true,
       meetupReminder: true,
+      recapPrompt: true,
+      clubRsvpReminder: true,
+      clubOutreach: true,
+      clubRolePing: true,
     });
   });
 

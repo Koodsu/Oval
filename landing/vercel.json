@@ -57,6 +57,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/child-safety",
+      "destination": "/index.html"
+    },
+    {
       "source": "/support",
       "destination": "/index.html"
     },

@@ -32,10 +32,41 @@ import { getCoordinatesForLocation } from '../src/config/locations';
 import * as path from 'path';
 import { CURRENT_TERMS_VERSION } from '../src/config/legal';
 
+// Everything in Oval is Columbus time, and this script runs standalone (not
+// through server.ts, which forces the same thing). Must be set before any
+// local-time Date math below.
+process.env.TZ = process.env.TZ || 'America/New_York';
+
 const prisma = new PrismaClient();
 const MANIFEST_PATH = path.join(__dirname, '.screenshot-seed-manifest.json');
 const now = Date.now();
-const hrs = (n: number) => new Date(now + n * 3600 * 1000);
+
+/**
+ * Columbus-local clock time: `days` from today at exactly hh:mm.
+ *
+ * Screenshot content is pinned to whole clock times (7:00, 18:30) rather than
+ * now-plus-N-hours, which inherited the current minute and produced times like
+ * "10:47 PM" in the UI.
+ */
+function atLocal(days: number, hour: number, minute = 0): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
+/**
+ * Same, but rolled forward whole days until it is in the future — keeping the
+ * clock time intact. Pod feeds filter on `meetupTime > now`, so a pod whose
+ * slot has already passed today would vanish from the app entirely. Club
+ * meetings do NOT need this: GET /clubs/today selects the whole local day, so
+ * an earlier-this-evening meeting still shows under "Tonight on campus".
+ */
+function upcomingAtLocal(days: number, hour: number, minute = 0): Date {
+  const d = atLocal(days, hour, minute);
+  while (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+  return d;
+}
 
 const manifest = {
   createdAt: new Date().toISOString(),
@@ -89,6 +120,19 @@ const BIOS = ['Here to meet people and try new things.', 'Down for coffee, runs,
 const INTEREST_POOL = ['Coffee', 'Running', 'Music', 'Coding', 'Soccer', 'Photography', 'Hiking', 'Cooking', 'Art', 'Gaming', 'Volunteering', 'Climbing', 'Boba', 'Reading'];
 
 const POOL_SIZE = 50;
+
+/** Title of the always-tonight showcase meeting; also its rerun dedupe key. */
+const TONIGHT_MEETING_TITLE = 'Build Night';
+
+/**
+ * Clock time for tonight's showcase meeting, Columbus local.
+ *
+ * 17 is the earliest hour that still reads "Tonight" — both the clubs header
+ * (`meetingHour >= 17`) and anchorWindowLabel (`isAfternoon = hour < 17`) flip
+ * at 5pm exactly. Anything earlier renders as "This afternoon".
+ */
+const TONIGHT_MEETING_HOUR = 17;
+const TONIGHT_MEETING_MINUTE = 0;
 
 const SCREENSHOT_ACTIVITY_KEYS = [
   'frisbee',
@@ -195,20 +239,22 @@ async function main() {
   const ovalLat = 39.999;
   const ovalLng = -83.0129;
   // Spread across the next 7 days so the upcoming-week view looks alive.
+  // `day` is days from today, `at` is a fixed Columbus clock time — anything
+  // already past today rolls to the same time tomorrow (see upcomingAtLocal).
   const podSpecs = [
-    { actIdx: 1, location: 'The Lounge – High Street', inHours: 18, size: 4, max: 4, chat: true },
-    { actIdx: 2, location: 'Thompson Library – 11th Floor', inHours: 4, size: 3, max: 5 },
-    { actIdx: 4, location: 'The Oval', inHours: 8, size: 2, max: 4 },
-    { actIdx: 0, location: 'The Oval – South End', inHours: 26, size: 2, max: 6 },
-    { actIdx: 3, location: 'High Street', inHours: 44, size: 3, max: 4 },
-    { actIdx: 5, location: 'Lincoln Tower Fields', inHours: 58, size: 7, max: 10 },
-    { actIdx: 2, location: 'Thompson Library – Reading Room', inHours: 74, size: 4, max: 6 },
-    { actIdx: 4, location: 'The Oval – North End', inHours: 92, size: 3, max: 6 },
-    { actIdx: 1, location: 'The Lounge – High Street', inHours: 110, size: 2, max: 4 },
-    { actIdx: 0, location: 'The Oval', inHours: 122, size: 4, max: 8 },
-    { actIdx: 3, location: 'High Street', inHours: 140, size: 2, max: 4 },
-    { actIdx: 5, location: 'Lincoln Tower Fields', inHours: 152, size: 5, max: 10 },
-    { actIdx: 2, location: 'Thompson Library – 11th Floor', inHours: 164, size: 3, max: 5 },
+    { actIdx: 1, location: 'The Lounge – High Street', day: 1, at: [19, 0], size: 4, max: 4, chat: true },
+    { actIdx: 2, location: 'Thompson Library – 11th Floor', day: 1, at: [10, 0], size: 3, max: 5 },
+    { actIdx: 4, location: 'The Oval', day: 1, at: [16, 30], size: 2, max: 4 },
+    { actIdx: 0, location: 'The Oval – South End', day: 2, at: [12, 0], size: 2, max: 6 },
+    { actIdx: 3, location: 'High Street', day: 2, at: [20, 0], size: 3, max: 4 },
+    { actIdx: 5, location: 'Lincoln Tower Fields', day: 3, at: [17, 30], size: 7, max: 10 },
+    { actIdx: 2, location: 'Thompson Library – Reading Room', day: 3, at: [14, 0], size: 4, max: 6 },
+    { actIdx: 4, location: 'The Oval – North End', day: 4, at: [9, 30], size: 3, max: 6 },
+    { actIdx: 1, location: 'The Lounge – High Street', day: 4, at: [19, 30], size: 2, max: 4 },
+    { actIdx: 0, location: 'The Oval', day: 5, at: [11, 0], size: 4, max: 8 },
+    { actIdx: 3, location: 'High Street', day: 5, at: [18, 0], size: 2, max: 4 },
+    { actIdx: 5, location: 'Lincoln Tower Fields', day: 6, at: [15, 0], size: 5, max: 10 },
+    { actIdx: 2, location: 'Thompson Library – 11th Floor', day: 7, at: [13, 30], size: 3, max: 5 },
   ];
   let chatPodId = '';
   for (let i = 0; i < podSpecs.length; i++) {
@@ -221,7 +267,7 @@ async function main() {
     const pod = await prisma.pod.create({
       data: {
         activityId: activityIds[s.actIdx],
-        meetupTime: hrs(s.inHours),
+        meetupTime: upcomingAtLocal(s.day, s.at[0], s.at[1]),
         location: s.location,
         minMembers: 2,
         maxMembers: s.max,
@@ -305,6 +351,42 @@ async function main() {
     });
     manifest.clubs.push(club.id);
 
+    const rsvpEveryone = async (meetingId: string) => {
+      const going = Math.round(memberUserIds.length * 0.6);
+      const maybe = Math.round(memberUserIds.length * 0.25);
+      const notGoing = Math.round(memberUserIds.length * 0.08);
+      const rows: { meetingId: string; userId: string; status: string }[] = [];
+      let k = 0;
+      for (; k < going && k < memberUserIds.length; k++) rows.push({ meetingId, userId: memberUserIds[k], status: 'GOING' });
+      for (; k < going + maybe && k < memberUserIds.length; k++) rows.push({ meetingId, userId: memberUserIds[k], status: 'MAYBE' });
+      for (; k < going + maybe + notGoing && k < memberUserIds.length; k++) rows.push({ meetingId, userId: memberUserIds[k], status: 'NOT_GOING' });
+      await prisma.clubMeetingAttendee.createMany({ data: rows, skipDuplicates: true });
+    };
+
+    // --- Tonight's meeting (showcase club) ---
+    // Deliberately above the existingClub guard so it is refreshed on every
+    // run: a rerun on a later day would otherwise leave yesterday's "tonight"
+    // meeting in place and the "Tonight on campus" rail would go empty.
+    // 5:00 PM today — GET /clubs/today spans the whole local day and neither
+    // side filters on `now`, so this still shows under "Tonight on campus"
+    // when the seed is run late in the evening.
+    if (c.showcase) {
+      await prisma.clubMeeting.deleteMany({ where: { clubId: club.id, title: TONIGHT_MEETING_TITLE } });
+      const tonight = await prisma.clubMeeting.create({
+        data: {
+          clubId: club.id,
+          title: TONIGHT_MEETING_TITLE,
+          description: 'Weekly build night — bring a laptop and a project, or pair with someone on theirs.',
+          location: 'Engineering Building – Room 266',
+          meetingTime: atLocal(0, TONIGHT_MEETING_HOUR, TONIGHT_MEETING_MINUTE),
+          createdById: ownerId,
+          isPublic: true,
+          visibility: 'PUBLIC',
+        },
+      });
+      await rsvpEveryone(tonight.id);
+    }
+
     // Content below only on first creation — reruns on an existing club would
     // duplicate meetings/announcements/chat.
     if (existingClub) {
@@ -314,36 +396,28 @@ async function main() {
 
     // Meetings (+ RSVP attendees so "X going · Y maybe" looks real)
     const meetingDefs = [
-      { title: `${c.name.split(/[ &]/)[0]} Weekly Meeting`, description: 'Our regular weekly get-together. New members always welcome.', location: 'Student Union – Meeting Room A', inHours: 48 },
+      { title: `${c.name.split(/[ &]/)[0]} Weekly Meeting`, description: 'Our regular weekly get-together. New members always welcome.', location: 'Student Union – Meeting Room A', day: 2, at: [18, 0] },
     ];
     if (c.showcase) {
-      meetingDefs.push({ title: 'Hackathon Prep Night', description: 'Form teams and lock in project ideas before the hackathon.', location: 'Engineering Building – Room 266', inHours: 72 });
+      meetingDefs.push({ title: 'Hackathon Prep Night', description: 'Form teams and lock in project ideas before the hackathon.', location: 'Engineering Building – Room 266', day: 3, at: [19, 0] });
     }
     for (const md of meetingDefs) {
       const meeting = await prisma.clubMeeting.create({
-        data: { clubId: club.id, title: md.title, description: md.description, location: md.location, meetingTime: hrs(md.inHours), createdById: ownerId, isPublic: true },
+        data: { clubId: club.id, title: md.title, description: md.description, location: md.location, meetingTime: upcomingAtLocal(md.day, md.at[0], md.at[1]), createdById: ownerId, isPublic: true, visibility: 'PUBLIC' },
       });
-      const going = Math.round(memberUserIds.length * 0.6);
-      const maybe = Math.round(memberUserIds.length * 0.25);
-      const notGoing = Math.round(memberUserIds.length * 0.08);
-      const rows: { meetingId: string; userId: string; status: string }[] = [];
-      let k = 0;
-      for (; k < going && k < memberUserIds.length; k++) rows.push({ meetingId: meeting.id, userId: memberUserIds[k], status: 'GOING' });
-      for (; k < going + maybe && k < memberUserIds.length; k++) rows.push({ meetingId: meeting.id, userId: memberUserIds[k], status: 'MAYBE' });
-      for (; k < going + maybe + notGoing && k < memberUserIds.length; k++) rows.push({ meetingId: meeting.id, userId: memberUserIds[k], status: 'NOT_GOING' });
-      await prisma.clubMeetingAttendee.createMany({ data: rows, skipDuplicates: true });
+      await rsvpEveryone(meeting.id);
     }
 
     // Announcements
     await prisma.clubAnnouncement.create({ data: { clubId: club.id, userId: ownerId, content: 'Welcome to everyone who signed up this week! Check the meetings tab for our next event. 🎉' } });
     if (c.showcase) {
-      await prisma.clubAnnouncement.create({ data: { clubId: club.id, userId: ownerId, content: 'Build night Thursday at 6pm in Room 266. Pizza provided 🍕 bring a laptop!' } });
+      await prisma.clubAnnouncement.create({ data: { clubId: club.id, userId: ownerId, content: 'Build night tonight at 5pm in Room 266. Pizza provided 🍕 bring a laptop!' } });
       showcaseClubId = club.id;
     }
 
     // General-channel chat (channelId null) — in EVERY club so each has a live chat
     const lines = c.showcase
-      ? ['welcome to everyone who joined at the involvement fair! 👋', 'first build night is this thursday, bring a laptop', 'anyone want to pair on the hackathon project?', "i'm in — i've got some ideas for the frontend", 'we have pizza covered for thursday btw', 'what room are we in again?', 'Room 266, 6pm. see you all there!']
+      ? ['welcome to everyone who joined at the involvement fair! 👋', 'build night is tonight, bring a laptop', 'anyone want to pair on the hackathon project?', "i'm in — i've got some ideas for the frontend", 'we have pizza covered for tonight btw', 'what room are we in again?', 'Room 266, 5pm. see you all there!']
       : Array.from({ length: 7 }, (_, m) => CLUB_CHAT_POOL[(ci * 2 + m) % CLUB_CHAT_POOL.length]);
     for (let m = 0; m < lines.length; m++) {
       await prisma.clubMessage.create({
