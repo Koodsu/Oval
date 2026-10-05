@@ -1,6 +1,6 @@
-# Bridge
+# Oval
 
-Bridge is an OSU-focused social coordination app built around small-group hangouts. Students browse activities, join or create pods, discover clubs, message people they meet, and manage real-world plans from their phone.
+Oval is an OSU-focused social coordination app built around small-group hangouts. Students browse activities, join or create pods, discover clubs, message people they meet, and manage real-world plans from their phone.
 
 This repo contains:
 
@@ -10,9 +10,23 @@ This repo contains:
 
 For a much deeper code-level explanation, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-## What Bridge Does
+## Released App
 
-Bridge combines a few product surfaces into one system:
+Oval is available on the [App Store](https://apps.apple.com/us/app/oval-campus-life/id6782521990). The public listing shows version 1.1.0 with an August 11, 2026 update and requires a verified Ohio State email. Oval is not affiliated with or endorsed by The Ohio State University.
+
+I built the product end to end: product design, the Expo / React Native client, the Express API, the PostgreSQL / Prisma data model, and the release process. Selected engineering entry points:
+
+- [Realtime event broadcasts](./backend/src/lib/realtime.ts) and the [client subscription hook](./frontend/src/hooks/useRealtimeChannel.ts)
+- [Shared pod-join transaction](./backend/src/lib/joinExistingPod.ts) and [waitlist integration tests](./backend/src/routes/podWaitlist.test.ts)
+- [Account-state and session checks](./backend/src/middleware/auth.ts) and [durable rate limiting](./backend/src/lib/durableRateLimit.ts)
+- [Successful August 9, 2026 release check](https://github.com/Koodsu/Oval/actions/runs/31333255754)
+
+These links show specific implementation and release evidence, not measured adoption or production performance. Source changes and historical launch checklists can differ from the currently distributed build; the App Store listing is the public release reference. Legacy environment-variable names remain unchanged.
+
+
+## What Oval Does
+
+Oval combines a few product surfaces into one system:
 
 - **Activity pods**: small meetup groups tied to activities like frisbee, food, studying, or workouts
 - **Club discovery**: public/private clubs, meetings, announcements, club chat, and officer tooling
@@ -52,7 +66,7 @@ There are also stack screens for:
 
 ### Pod system
 
-Pods are the core planning object in Bridge.
+Pods are the core planning object in Oval.
 
 - Users can browse open pods by activity or feed
 - Users can create pods with a time, location, max size, and optional map pin
@@ -142,7 +156,7 @@ Clubs are more persistent communities layered on top of pods.
 ## Repository Layout
 
 ```text
-Bridge/
+Oval/
 ├── backend/
 │   ├── prisma/                # schema, migrations, seed
 │   └── src/
